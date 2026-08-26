@@ -6,13 +6,16 @@ import * as Haptics from "expo-haptics";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors, radii, shadows } from "@/constants/theme";
 
-type ButtonProps = {
+export type ButtonVariant = "primary" | "secondary" | "quiet" | "ghost" | "destructive";
+
+export type ButtonProps = {
   label: string;
   onPress?: () => void;
   disabled?: boolean;
   loading?: boolean;
   icon?: ReactNode;
-  variant?: "primary" | "secondary" | "quiet";
+  variant?: ButtonVariant;
+  tone?: ButtonVariant;
   style?: StyleProp<ViewStyle>;
   accessibilityHint?: string;
 };
@@ -23,18 +26,34 @@ export function Button({
   disabled = false,
   loading = false,
   icon,
-  variant = "primary",
+  variant,
+  tone,
   style,
   accessibilityHint,
 }: ButtonProps) {
-  const isPrimary = variant === "primary";
-  const isQuiet = variant === "quiet";
+  const activeVariant: ButtonVariant = variant ?? tone ?? "primary";
+  const isPrimary = activeVariant === "primary";
+  const isQuiet = activeVariant === "quiet" || activeVariant === "ghost";
+  const isDestructive = activeVariant === "destructive";
+
   const backgroundColor = isPrimary
     ? colors.ink
+    : isDestructive
+    ? "#DC2626"
     : isQuiet
-      ? "transparent"
-      : colors.surface;
-  const foregroundColor = isPrimary ? colors.surface : colors.ink;
+    ? "transparent"
+    : colors.surface;
+
+  const foregroundColor =
+    isPrimary || isDestructive ? "#FFFFFF" : isQuiet ? colors.muted : colors.ink;
+
+  const borderColor = isDestructive
+    ? "#DC2626"
+    : isQuiet
+    ? "transparent"
+    : isPrimary
+    ? colors.ink
+    : colors.line;
 
   return (
     <PressableScale
@@ -49,15 +68,15 @@ export function Button({
       style={{ opacity: disabled ? 0.45 : 1 }}
       containerStyle={[
         {
-          minHeight: 54,
+          minHeight: isQuiet ? 40 : 52,
           borderRadius: radii.pill,
           backgroundColor,
-          borderColor: isQuiet ? "transparent" : isPrimary ? colors.ink : colors.line,
+          borderColor,
           borderWidth: isQuiet ? 0 : 1,
           alignItems: "center",
           justifyContent: "center",
-          paddingHorizontal: 22,
-          ...(isPrimary ? shadows.card : {}),
+          paddingHorizontal: isQuiet ? 14 : 22,
+          ...(isPrimary || isDestructive ? shadows.card : {}),
         },
         style,
       ]}
@@ -67,7 +86,7 @@ export function Button({
         <Text
           style={{
             color: foregroundColor,
-            fontSize: 15,
+            fontSize: isQuiet ? 14 : 15,
             fontWeight: "700",
             letterSpacing: -0.15,
           }}
@@ -78,4 +97,3 @@ export function Button({
     </PressableScale>
   );
 }
-

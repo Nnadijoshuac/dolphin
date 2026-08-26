@@ -18,11 +18,11 @@ export const AGENT_CATEGORY_SLUGS = [
   "yield",
 ] as const satisfies readonly AgentCategory[];
 
-export const AGENT_CATEGORIES: ReadonlyArray<{
+export const AGENT_CATEGORIES: readonly {
   slug: AgentCategory;
   label: string;
   description: string;
-}> = [
+}[] = [
   {
     slug: "monitoring",
     label: "Monitoring",

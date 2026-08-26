@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  ActivityIndicator,
   ScrollView,
   Text,
   TextInput,
@@ -15,9 +14,8 @@ import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
-import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
 import { useAppStore } from "@/store/use-app-store";
 import { useWallet, WalletConnectButton } from "@/wallet/wallet-provider";

@@ -14,7 +14,7 @@ import { PressableScale } from "@/components/pressable-scale";
 import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import { useAgentsByCategory } from "@/hooks/use-agents";
 import type { AgentCategory } from "@/types/agent";
 

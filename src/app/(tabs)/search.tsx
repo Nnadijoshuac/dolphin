@@ -24,11 +24,10 @@ import type { Agent } from "@/types/agent";
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const { data: allAgents, isLoading } = useAgents();
+  const { data: allAgents } = useAgents();
 
   const recentSearches = useAppStore((state) => state.recentSearches);
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
-  const removeRecentSearch = useAppStore((state) => state.removeRecentSearch);
   const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
 
   const searchResults = useMemo(() => {

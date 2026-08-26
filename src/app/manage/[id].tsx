@@ -16,7 +16,7 @@ import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
 import { useAppStore } from "@/store/use-app-store";
 

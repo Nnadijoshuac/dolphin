@@ -13,11 +13,11 @@ export interface HiredAgentSession {
   expiresAt?: string;
   monitoredAddress?: string;
   lastActionAt?: string;
-  recentActivity: Array<{
+  recentActivity: {
     timestamp: string;
     action: string;
     txHash?: string;
-  }>;
+  }[];
 }
 
 export type PreviewHire = Readonly<{

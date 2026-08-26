@@ -11,7 +11,7 @@ import { AgentDetail } from "@/components/agent-detail";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
 import { useAppStore } from "@/store/use-app-store";
 

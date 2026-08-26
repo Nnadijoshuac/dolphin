@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import { useAppStore } from "@/store/use-app-store";
 
 const { width } = Dimensions.get("window");

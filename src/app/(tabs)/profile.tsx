@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -9,13 +8,12 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { SectionHeading } from "@/components/section-heading";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors } from "@/constants/theme";
 import { useAppStore } from "@/store/use-app-store";
 import { useWallet, WalletConnectButton } from "@/wallet/wallet-provider";
 

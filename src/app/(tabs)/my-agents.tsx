@@ -11,7 +11,6 @@ import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
-import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors, radii, shadows } from "@/constants/theme";

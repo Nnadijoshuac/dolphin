@@ -185,7 +185,7 @@ export default function OnboardingScreen() {
               </Text>
 
               <View className="mt-8 gap-4">
-                {item.points.map((pt) => (
+                {item.points.map((pt: { title: string; desc: string }) => (
                   <View
                     key={pt.title}
                     className="rounded-2xl border p-4"

@@ -36,10 +36,10 @@ function NavigationGate() {
   useEffect(() => {
     if (!hasHydrated) return;
 
-    const isOnboarding = segments[0] === "onboarding";
+    const isOnboarding = (segments as readonly string[])[0] === "onboarding";
 
     if (!hasCompletedOnboarding && !isOnboarding) {
-      router.replace("/onboarding");
+      router.replace("/onboarding" as any);
     }
 
     void SplashScreen.hideAsync();

@@ -148,7 +148,7 @@ export default function OnboardingScreen() {
                     >
                       <Image
                         contentFit="contain"
-                        source={require("../../../assets/images/onboarding-dolphin.png")}
+                        source={require("../../../assets/images/SplashScreen.jpeg")}
                         style={{ height: "100%", width: "100%" }}
                       />
                     </View>
@@ -168,8 +168,7 @@ export default function OnboardingScreen() {
                       className="mt-3 text-[15px] leading-6"
                       style={{ color: colors.muted }}
                     >
-                      Explore registered identities across monitoring, trading, risk,
-                      and yield—with unavailable evidence labeled clearly.
+                      Discover onchain helpers that watch, protect, trade, and find yield.
                     </Text>
                   </View>
                 </View>

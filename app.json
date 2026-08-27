@@ -32,8 +32,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#F6F4EE",
-          "image": "./assets/DolphinLogo.png",
-          "imageWidth": 92
+          "image": "./assets/images/SplashScreen.jpeg",
+          "resizeMode": "contain"
         }
       ],
       "expo-secure-store"

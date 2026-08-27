@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 
 import { colors } from "@/constants/theme";
 import { AppProviders } from "@/providers/app-providers";
+import { SplashScreenView } from "@/components/splash-screen-view";
 import { useAppStore } from "@/store/use-app-store";
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -52,6 +53,7 @@ function RootNavigator() {
         />
         <Stack.Screen name="manage/[id]" />
       </Stack>
+      <SplashScreenView />
     </>
   );
 }

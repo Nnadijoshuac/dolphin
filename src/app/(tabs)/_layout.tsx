@@ -38,7 +38,7 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.canvas },
-        tabBarActiveTintColor: colors.ink,
+        tabBarActiveTintColor: colors.goldDark,
         tabBarInactiveTintColor: "#8C8E88",
         tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {

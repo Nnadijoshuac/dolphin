@@ -118,30 +118,8 @@ export default function WalletScreen() {
           className="w-full px-6 pt-2"
           style={{ maxWidth: contentWidth }}
         >
-          {/* Top Bar */}
-          <View className="flex-row items-center justify-between pb-4">
-            <View className="flex-row items-center gap-2.5">
-              <BrandMark size={28} />
-              <View>
-                <Text
-                  className="text-[14px] font-black uppercase tracking-[1.5px]"
-                  style={{ color: colors.ink }}
-                >
-                  DOLPHIN
-                </Text>
-                <Text
-                  className="text-[8px] font-bold uppercase tracking-[1px]"
-                  style={{ color: colors.muted }}
-                >
-                  ERC-8004 AI AGENTS
-                </Text>
-                <View className="mt-0.5">
-                  <BnbBadge label="ON BNB SMART CHAIN" />
-                </View>
-              </View>
-            </View>
-
-            {/* Info button */}
+          {/* Top Bar with Info button */}
+          <View className="flex-row items-center justify-end pb-2">
             <PressableScale
               accessibilityLabel="About Dolphin & security"
               accessibilityRole="button"

@@ -4,7 +4,10 @@ import type { AgentCategory, DataSourceLabel } from "@/types/agent";
 
 export const BSC_CHAIN_ID = 56 as const;
 
-export const BSC_RPC_URL = "https://bsc-dataseed.bnbchain.org";
+const configuredBscRpcUrl = process.env.EXPO_PUBLIC_BSC_RPC_URL?.trim();
+
+export const BSC_RPC_URL =
+  configuredBscRpcUrl || "https://bsc-dataseed.bnbchain.org";
 
 export const ERC8004_REGISTRY_ADDRESSES = {
   identity: "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432" as Address,
@@ -26,22 +29,22 @@ export const AGENT_CATEGORIES: readonly {
   {
     slug: "monitoring",
     label: "Monitoring",
-    description: "Watch markets, wallets, and positions.",
+    description: "Agents that publish market, wallet, or position monitoring.",
   },
   {
     slug: "grid-trading",
     label: "Grid Trading",
-    description: "Automate bounded strategies inside configured ranges.",
+    description: "Range-strategy agents and their available track-record evidence.",
   },
   {
     slug: "health-factor",
     label: "Health Factor",
-    description: "Track lending risk and liquidation buffers.",
+    description: "Lending-risk agents and their published liquidation-buffer data.",
   },
   {
     slug: "yield",
     label: "Yield",
-    description: "Discover and manage on-chain earning opportunities.",
+    description: "Yield agents and their available protocol and performance sources.",
   },
 ];
 

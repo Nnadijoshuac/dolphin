@@ -25,19 +25,27 @@ function renderCompactStat(agent: Agent) {
     case "monitoring":
       return stats.alertFrequency.status === "live"
         ? `Alerts: ${stats.alertFrequency.value}`
-        : "Alert feed active";
+        : stats.alertFrequency.status === "syncing"
+          ? "Stats syncing"
+          : "Stats not reported";
     case "grid-trading":
       return stats.winRate.status === "live"
         ? `Win rate ${stats.winRate.value.toFixed(1)}%`
-        : "Geometric grid";
+        : stats.winRate.status === "syncing"
+          ? "Stats syncing"
+          : "Stats not reported";
     case "health-factor":
       return stats.averageHealthFactor.status === "live"
         ? `Avg Health ${stats.averageHealthFactor.value.toFixed(2)}`
-        : "Venus guardian";
+        : stats.averageHealthFactor.status === "syncing"
+          ? "Stats syncing"
+          : "Stats not reported";
     case "yield":
       return stats.currentApy.status === "live"
         ? `${stats.currentApy.value.toFixed(1)}% APY`
-        : "Auto-compound";
+        : stats.currentApy.status === "syncing"
+          ? "Stats syncing"
+          : "Stats not reported";
   }
 }
 
@@ -185,7 +193,7 @@ export default function CategoriesScreen() {
         {isLoading ? (
           <View className="px-6 py-12">
             <StatePanel
-              body="Fetching verified categories and live on-chain stats..."
+              body="Fetching indexed registry records and their available source labels..."
               state="syncing"
               title="Loading Categories"
             />
@@ -285,7 +293,7 @@ export default function CategoriesScreen() {
 
                           <View className="rounded-full bg-slate-100 px-3.5 py-1.5">
                             <Text className="text-[12px] font-bold text-slate-900">
-                              GET
+                              VIEW
                             </Text>
                           </View>
                         </PressableScale>

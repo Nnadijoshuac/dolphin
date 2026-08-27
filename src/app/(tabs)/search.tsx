@@ -9,12 +9,13 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AgentIcon } from "@/components/agent-icon";
+import { AgentCard } from "@/components/agent-card";
+import { AppHeader } from "@/components/app-header";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
-import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
-import { StatusBadge } from "@/components/status-badge";
+import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors, radii, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import { searchAgentsLocally } from "@/services/agents-api";
@@ -28,7 +29,7 @@ export default function SearchScreen() {
 
   const recentSearches = useAppStore((state) => state.recentSearches);
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
-  const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
+  const removeRecentSearch = useAppStore((state) => state.removeRecentSearch);
 
   const searchResults = useMemo(() => {
     if (!allAgents || !query.trim()) return [];
@@ -46,6 +47,14 @@ export default function SearchScreen() {
     });
   };
 
+  const handleCategoryPress = (slug: string) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({
+      pathname: "/category/[slug]",
+      params: { slug },
+    });
+  };
+
   const handleTagPress = (tag: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setQuery(tag);
@@ -57,9 +66,19 @@ export default function SearchScreen() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      <View className="flex-1 px-6">
-        {/* Title */}
-        <View className="pt-3 pb-3">
+      <ConstellationBg opacity={0.3} />
+
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* App Header */}
+        <AppHeader />
+
+        {/* Search Page Title */}
+        <View className="px-6 pt-1 pb-3">
           <Text
             className="text-[34px] font-extrabold tracking-[-1px]"
             style={{ color: colors.ink }}
@@ -68,206 +87,206 @@ export default function SearchScreen() {
           </Text>
         </View>
 
-        {/* App Store Style Search Bar */}
-        <View
-          className="flex-row items-center rounded-xl bg-slate-200/70 px-3.5 py-2.5"
-          style={{ borderColor: colors.line }}
-        >
-          <CategoryGlyph color={colors.muted} name="search" size={18} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Agents, skills, categories, or protocols"
-            placeholderTextColor={colors.muted}
-            className="ml-2.5 flex-1 text-[15px] font-medium"
-            style={{ color: colors.ink }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-            onSubmitEditing={() => {
-              if (query.trim()) addRecentSearch(query.trim());
+        {/* Clean Rounded Search Bar with Filter */}
+        <View className="px-6 pb-2">
+          <View
+            className="flex-row items-center rounded-2xl border bg-white px-4 py-3"
+            style={{
+              borderColor: colors.line,
+              ...shadows.subtle,
             }}
-          />
-          {query.length > 0 ? (
-            <PressableScale
-              accessibilityLabel="Clear search text"
-              accessibilityRole="button"
-              onPress={() => setQuery("")}
-              containerStyle={{
-                height: 20,
-                width: 20,
-                borderRadius: 10,
-                backgroundColor: colors.muted,
-                alignItems: "center",
-                justifyContent: "center",
+          >
+            <CategoryGlyph color={colors.muted} name="search" size={18} />
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              className="ml-3 flex-1 text-[15px] font-medium"
+              onChangeText={setQuery}
+              onSubmitEditing={() => {
+                if (query.trim()) addRecentSearch(query.trim());
               }}
-            >
-              <Text className="text-[11px] font-bold text-white leading-none">✕</Text>
-            </PressableScale>
-          ) : null}
+              placeholder="Agents, skills, or publishers"
+              placeholderTextColor={colors.muted}
+              returnKeyType="search"
+              style={{ color: colors.ink }}
+              value={query}
+            />
+
+            {query.length > 0 ? (
+              <PressableScale
+                accessibilityLabel="Clear search"
+                accessibilityRole="button"
+                onPress={() => setQuery("")}
+                containerStyle={{ padding: 4 }}
+              >
+                <Text className="text-[13px] font-bold text-slate-400">✕</Text>
+              </PressableScale>
+            ) : null}
+          </View>
         </View>
 
-        <ScrollView
-          className="flex-1 mt-4"
-          contentContainerStyle={{ paddingBottom: 120 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
+        {/* Results or Category Browsing */}
+        <View className="px-6 pt-4">
           {query.trim().length > 0 ? (
-            /* Search Results */
             <View>
-              <Text className="text-[13px] font-bold text-slate-500 mb-3 uppercase tracking-wider">
-                {searchResults.length} {searchResults.length === 1 ? "Result" : "Results"}
+              <Text
+                className="mb-3 text-[12px] font-bold uppercase tracking-wider"
+                style={{ color: colors.muted }}
+              >
+                {searchResults.length}{" "}
+                {searchResults.length === 1 ? "Result" : "Results"}
               </Text>
 
               {searchResults.length > 0 ? (
-                <View className="gap-2.5">
+                <View className="gap-3">
                   {searchResults.map((agent) => (
-                    <PressableScale
+                    <AgentCard
                       key={agent.id}
-                      accessibilityLabel={agent.name}
-                      accessibilityRole="button"
+                      agent={agent}
                       onPress={() => handleAgentPress(agent)}
-                      containerStyle={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        padding: 14,
-                        borderRadius: radii.large,
-                        backgroundColor: colors.surface,
-                        borderWidth: 1,
-                        borderColor: colors.line,
-                        ...shadows.card,
-                      }}
-                    >
-                      <AgentIcon
-                        category={agent.category}
-                        size={48}
-                        uri={agent.iconUrl}
-                      />
-                      <View className="ml-3.5 flex-1 mr-2">
-                        <Text
-                          className="text-[16px] font-bold"
-                          numberOfLines={1}
-                          style={{ color: colors.ink }}
-                        >
-                          {agent.name}
-                        </Text>
-                        <Text
-                          className="text-[12px] leading-4"
-                          numberOfLines={1}
-                          style={{ color: colors.muted }}
-                        >
-                          {agent.tagline}
-                        </Text>
-                        <View className="mt-1.5 flex-row items-center gap-1.5">
-                          <StatusBadge
-                            label={agent.category.replace("-", " ")}
-                            tone="neutral"
-                          />
-                          <StatusBadge
-                            label={agent.recordStatus === "indexed" ? "Indexed" : "Editorial"}
-                            tone={agent.recordStatus === "indexed" ? "indexed" : "neutral"}
-                          />
-                        </View>
-                      </View>
-
-                      <View className="rounded-full bg-slate-100 px-3.5 py-1.5">
-                        <Text className="text-[12px] font-bold text-slate-900">
-                          VIEW
-                        </Text>
-                      </View>
-                    </PressableScale>
+                    />
                   ))}
                 </View>
               ) : (
                 <StatePanel
-                  body={`No agents found matching "${query}". Try searching by category like "yield" or protocol like "Venus".`}
-                  compact
+                  body={`No agents found matching "${query}". Try searching by category or name.`}
                   state="unavailable"
                   title="No Results"
                 />
               )}
             </View>
           ) : (
-            /* Empty State: Recent & Suggested Searches */
-            <View className="gap-6">
-              {recentSearches.length > 0 ? (
-                <View>
-                  <View className="flex-row items-center justify-between mb-3">
-                    <SectionHeading title="Recent Searches" />
+            <View className="gap-7">
+              {/* Browse by Category Section */}
+              <View>
+                <Text
+                  className="mb-3 text-[17px] font-bold tracking-tight"
+                  style={{ color: colors.ink }}
+                >
+                  Browse by category
+                </Text>
+
+                <View className="gap-2.5">
+                  {AGENT_CATEGORIES.map((cat) => (
                     <PressableScale
-                      accessibilityLabel="Clear recent searches"
+                      key={cat.slug}
+                      accessibilityLabel={`Browse ${cat.label}`}
                       accessibilityRole="button"
-                      onPress={clearRecentSearches}
+                      onPress={() => handleCategoryPress(cat.slug)}
+                      containerStyle={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: 14,
+                        borderRadius: radii.large,
+                        backgroundColor: colors.surface,
+                        borderWidth: 1,
+                        borderColor: colors.line,
+                        ...shadows.subtle,
+                      }}
                     >
-                      <Text className="text-[13px] font-semibold text-slate-500">
-                        Clear
-                      </Text>
-                    </PressableScale>
-                  </View>
-                  <View className="flex-row flex-wrap gap-2">
-                    {recentSearches.map((item) => (
-                      <PressableScale
-                        key={item}
-                        accessibilityLabel={`Search for ${item}`}
-                        accessibilityRole="button"
-                        onPress={() => handleTagPress(item)}
-                        containerStyle={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 6,
-                          paddingHorizontal: 14,
-                          paddingVertical: 8,
-                          borderRadius: 16,
-                          backgroundColor: colors.surface,
-                          borderWidth: 1,
-                          borderColor: colors.line,
-                          ...shadows.card,
-                        }}
-                      >
-                        <CategoryGlyph color={colors.muted} name="search" size={12} />
+                      <View className="flex-row items-center gap-3.5">
+                        <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#F5F3EB]">
+                          <CategoryGlyph name={cat.slug} size={18} />
+                        </View>
                         <Text
-                          className="text-[13px] font-medium"
+                          className="text-[15px] font-bold"
                           style={{ color: colors.ink }}
+                        >
+                          {cat.label}
+                        </Text>
+                      </View>
+
+                      <CategoryGlyph
+                        color={colors.muted}
+                        name="chevron-right"
+                        size={16}
+                      />
+                    </PressableScale>
+                  ))}
+                </View>
+              </View>
+
+              {/* Recent Searches */}
+              <View>
+                <Text
+                  className="mb-3 text-[17px] font-bold tracking-tight"
+                  style={{ color: colors.ink }}
+                >
+                  Recent searches
+                </Text>
+
+                <View className="gap-2">
+                  {(recentSearches.length > 0
+                    ? recentSearches
+                    : ["wallet alerts", "liquidation protection"]
+                  ).map((item) => (
+                    <PressableScale
+                      key={item}
+                      accessibilityLabel={`Search ${item}`}
+                      accessibilityRole="button"
+                      onPress={() => handleTagPress(item)}
+                      containerStyle={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingHorizontal: 16,
+                        paddingVertical: 12,
+                        borderRadius: radii.large,
+                        backgroundColor: colors.surface,
+                        borderWidth: 1,
+                        borderColor: colors.line,
+                        ...shadows.subtle,
+                      }}
+                    >
+                      <View className="flex-row items-center gap-3">
+                        <CategoryGlyph color={colors.muted} name="clock" size={16} />
+                        <Text
+                          className="text-[14px] font-medium"
+                          style={{ color: colors.inkSecondary }}
                         >
                           {item}
                         </Text>
-                      </PressableScale>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
+                      </View>
 
-              {/* Trending Discovery Tags */}
-              <View>
-                <SectionHeading title="Suggested Specializations" />
-                <View className="flex-row flex-wrap gap-2">
-                  {["Monitoring", "Grid Trading", "Health Factor", "Yield Farming", "Venus Protocol", "PancakeSwap", "Liquidation Guard"].map(
-                    (tag) => (
                       <PressableScale
-                        key={tag}
-                        accessibilityLabel={`Search tag: ${tag}`}
+                        accessibilityLabel="Remove search"
                         accessibilityRole="button"
-                        onPress={() => handleTagPress(tag)}
-                        containerStyle={{
-                          paddingHorizontal: 14,
-                          paddingVertical: 8,
-                          borderRadius: 16,
-                          backgroundColor: "#F0F2F5",
-                        }}
+                        onPress={() => removeRecentSearch(item)}
+                        containerStyle={{ padding: 4 }}
                       >
-                        <Text className="text-[13px] font-semibold text-slate-700">
-                          {tag}
-                        </Text>
+                        <Text className="text-[13px] font-bold text-slate-400">✕</Text>
                       </PressableScale>
-                    )
-                  )}
+                    </PressableScale>
+                  ))}
                 </View>
+              </View>
+
+              {/* Live registry search ready status card */}
+              <View
+                className="flex-row items-center justify-between rounded-2xl border p-4"
+                style={{
+                  backgroundColor: colors.goldMuted,
+                  borderColor: colors.goldBorder,
+                  ...shadows.subtle,
+                }}
+              >
+                <View className="flex-row items-center gap-3">
+                  <CategoryGlyph color={colors.goldDark} name="sparkle" size={18} />
+                  <Text
+                    className="text-[14px] font-bold"
+                    style={{ color: colors.ink }}
+                  >
+                    Live registry search ready
+                  </Text>
+                </View>
+
+                <CategoryGlyph name="check" size={18} />
               </View>
             </View>
           )}
-        </ScrollView>
-      </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

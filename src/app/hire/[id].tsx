@@ -1,68 +1,44 @@
-import { useState } from "react";
-import {
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
-import { CategoryGlyph } from "@/components/category-glyph";
-import { PressableScale } from "@/components/pressable-scale";
+import { NavigationButton } from "@/components/navigation-button";
 import { StatePanel } from "@/components/state-panel";
+import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
+import {
+  AUTHORIZATION_FACTS,
+  assessAuthorizationCapability,
+} from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
-import { useWallet, WalletConnectButton } from "@/wallet/wallet-provider";
+import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
+
+function shortAddress(value: string | null) {
+  if (!value) return "Not connected";
+  return `${value.slice(0, 7)}…${value.slice(-5)}`;
+}
 
 export default function HireModalRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const wallet = useWallet();
-  const { data: agent, isLoading } = useAgentDetail(id);
+  const { data: agent, isError, isLoading } = useAgentDetail(id);
+  const previewHires = useAppStore((state) => state.previewHires);
+  const savePreviewHire = useAppStore((state) => state.savePreviewHire);
+  const isSaved = previewHires.some(
+    (preview) => preview.agentId === id || preview.agentId === agent?.tokenId,
+  );
 
-  const hireAgent = useAppStore((state) => state.hireAgent);
-
-  // Configuration state
-  const [spendCap, setSpendCap] = useState<number>(500);
-  const [durationDays, setDurationDays] = useState<number>(30);
-  const [targetAddress, setTargetAddress] = useState<string>("");
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [success, setSuccess] = useState<boolean>(false);
-
-  const isMonitoring = agent?.category === "monitoring";
-
-  const handleConfirmHire = async () => {
+  const handlePreview = () => {
     if (!agent) return;
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsSubmitting(true);
-
-    // Simulate safe on-chain session registration / Keystore setup
-    setTimeout(() => {
-      hireAgent({
-        agentId: agent.tokenId,
-        category: agent.category,
-        spendCapUsd: isMonitoring ? undefined : spendCap,
-        durationDays,
-        monitoredAddress: isMonitoring
-          ? (targetAddress.trim() || wallet.address || "0xSelf")
-          : undefined,
-      });
-
-      setIsSubmitting(false);
-      setSuccess(true);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }, 1200);
-  };
-
-  const handleFinish = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.replace("/(tabs)/my-agents");
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    savePreviewHire(agent.tokenId);
+    router.replace({ pathname: "/manage/[id]", params: { id: agent.tokenId } });
   };
 
   return (
@@ -71,261 +47,209 @@ export default function HireModalRoute() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      {/* Modal Header */}
       <View
-        className="flex-row items-center justify-between px-6 pt-3 pb-3 border-b"
+        className="flex-row items-center justify-between border-b px-5 pb-3 pt-2"
         style={{ borderColor: colors.line }}
       >
-        <Text
-          className="text-[17px] font-bold"
-          style={{ color: colors.ink }}
-        >
-          {success ? "Session Activated" : "Authorize Agent"}
-        </Text>
-        <PressableScale
-          accessibilityLabel="Close modal"
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          containerStyle={{
-            padding: 6,
-          }}
-        >
-          <Text className="text-[15px] font-semibold text-slate-500">
-            {success ? "Done" : "Cancel"}
+        <View>
+          <Text className="text-[17px] font-bold" style={{ color: colors.ink }}>
+            Review setup
           </Text>
-        </PressableScale>
+          <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
+            No transaction will be submitted
+          </Text>
+        </View>
+        <NavigationButton kind="close" onPress={() => router.back()} />
       </View>
 
       <ScrollView
-        className="flex-1 px-6"
-        contentContainerStyle={{ paddingBottom: 60 }}
+        className="flex-1 px-5"
+        contentContainerStyle={{ paddingBottom: 48 }}
         showsVerticalScrollIndicator={false}
       >
-        {isLoading || !agent ? (
-          <View className="py-20">
+        {isLoading ? (
+          <View className="py-16">
             <StatePanel
-              body="Loading agent parameters..."
+              body="Resolving identity and capability evidence before setup."
               state="syncing"
-              title="Preparing Authorization"
+              title="Checking agent"
             />
           </View>
-        ) : success ? (
-          /* Success Screen */
-          <View className="py-10 items-center text-center">
-            <View className="h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 border border-emerald-200 mb-6">
-              <Text className="text-[36px]">✓</Text>
-            </View>
-
-            <Text
-              className="text-[26px] font-extrabold text-center tracking-tight"
-              style={{ color: colors.ink }}
-            >
-              {agent.name} is Active
-            </Text>
-            <Text
-              className="mt-2 text-[15px] text-center leading-6"
-              style={{ color: colors.muted }}
-            >
-              {isMonitoring
-                ? "Monitoring agent has begun telemetry inspection. Real-time alert notifications will appear in My Agents."
-                : `Session authorization granted for up to $${spendCap} USD on BNB Smart Chain. You can pause or adjust limits anytime.`}
-            </Text>
-
-            <View className="mt-8 w-full">
-              <Button
-                label="Go to My Agents"
-                onPress={handleFinish}
-                tone="primary"
-              />
-            </View>
+        ) : isError || !agent ? (
+          <View className="py-16">
+            <StatePanel
+              body="This agent could not be resolved from the current registry or editorial fallback."
+              state="unavailable"
+              title="Agent unavailable"
+            />
           </View>
         ) : (
-          /* Step Flow */
-          <View className="mt-5 gap-6">
-            {/* Agent Header Summary */}
-            <View
-              className="flex-row items-center gap-3.5 p-4 rounded-2xl bg-slate-100"
-            >
-              <AgentIcon category={agent.category} size={48} uri={agent.iconUrl} />
-              <View className="flex-1">
-                <Text
-                  className="text-[17px] font-bold"
-                  numberOfLines={1}
-                  style={{ color: colors.ink }}
-                >
-                  {agent.name}
-                </Text>
-                <Text className="text-[12px] text-slate-600 capitalize">
-                  {agent.category.replace("-", " ")} · ERC-8004 #{agent.tokenId}
-                </Text>
-              </View>
-            </View>
-
-            {/* Wallet Requirement Check */}
-            {!wallet.isConnected ? (
-              <Surface>
-                <View className="items-center py-3">
-                  <CategoryGlyph color="#D97706" name="wallet" size={28} />
+          <View className="gap-5 pt-5">
+            <Surface>
+              <View className="flex-row items-center gap-3">
+                <AgentIcon category={agent.category} size={54} uri={agent.iconUrl} />
+                <View className="min-w-0 flex-1">
                   <Text
-                    className="mt-2 text-[16px] font-bold"
+                    className="text-[18px] font-bold"
+                    numberOfLines={1}
                     style={{ color: colors.ink }}
                   >
-                    Connect Wallet to Continue
+                    {agent.name}
                   </Text>
-                  <Text
-                    className="mt-1 text-[13px] text-center text-slate-500"
-                  >
-                    Connect your Web3 wallet via Reown AppKit to grant session permissions.
+                  <Text className="mt-1 text-[12px]" style={{ color: colors.muted }}>
+                    ERC-8004 #{agent.tokenId} · {agent.category.replace("-", " ")}
                   </Text>
-                  <View className="mt-4 w-full">
-                    <WalletConnectButton connectLabel="Connect Wallet" />
-                  </View>
                 </View>
-              </Surface>
-            ) : null}
-
-            {/* Parameterization */}
-            {isMonitoring ? (
-              /* Read-only monitoring config */
-              <Surface>
-                <Text className="text-[15px] font-bold" style={{ color: colors.ink }}>
-                  Target Wallet Address to Watch
-                </Text>
-                <Text className="mt-1 text-[12px] text-slate-500">
-                  Enter a custom BSC address or default to your connected wallet.
-                </Text>
-
-                <TextInput
-                  value={targetAddress}
-                  onChangeText={setTargetAddress}
-                  placeholder={wallet.address ?? "0x... (Public BSC Address)"}
-                  placeholderTextColor={colors.muted}
-                  className="mt-3 p-3.5 rounded-xl bg-slate-100 text-[14px] font-medium"
-                  style={{ color: colors.ink }}
-                  autoCapitalize="none"
-                  autoCorrect={false}
+                <StatusBadge
+                  label={agent.recordStatus === "indexed" ? "Indexed" : "Fallback"}
+                  tone={agent.recordStatus === "indexed" ? "indexed" : "neutral"}
                 />
-
-                <View className="mt-4 pt-3 border-t flex-row items-center justify-between" style={{ borderColor: colors.line }}>
-                  <Text className="text-[12px] text-slate-500">Required Gas / Txs</Text>
-                  <Text className="text-[12px] font-bold text-emerald-700">0 Txs (Read-Only)</Text>
-                </View>
-              </Surface>
-            ) : (
-              /* Action Agent Session Config */
-              <View className="gap-5">
-                {/* Spend Cap Selector */}
-                <Surface>
-                  <Text className="text-[15px] font-bold" style={{ color: colors.ink }}>
-                    Max Spend Cap (USD)
-                  </Text>
-                  <Text className="mt-1 text-[12px] text-slate-500">
-                    The agent can never execute transactions exceeding this cumulative limit.
-                  </Text>
-
-                  <View className="mt-3 flex-row gap-2">
-                    {[100, 250, 500, 1000].map((amount) => (
-                      <PressableScale
-                        key={amount}
-                        accessibilityLabel={`Select $${amount} spend cap`}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setSpendCap(amount);
-                        }}
-                        containerStyle={{
-                          flex: 1,
-                          paddingVertical: 10,
-                          borderRadius: 14,
-                          alignItems: "center",
-                          backgroundColor:
-                            spendCap === amount ? colors.ink : "#F1F3F5",
-                        }}
-                      >
-                        <Text
-                          className="text-[13px] font-bold"
-                          style={{
-                            color: spendCap === amount ? "#FFFFFF" : colors.ink,
-                          }}
-                        >
-                          ${amount}
-                        </Text>
-                      </PressableScale>
-                    ))}
-                  </View>
-                </Surface>
-
-                {/* Duration Selector */}
-                <Surface>
-                  <Text className="text-[15px] font-bold" style={{ color: colors.ink }}>
-                    Session Duration
-                  </Text>
-                  <Text className="mt-1 text-[12px] text-slate-500">
-                    The delegation key automatically expires and becomes void after this time.
-                  </Text>
-
-                  <View className="mt-3 flex-row gap-2">
-                    {[7, 14, 30].map((days) => (
-                      <PressableScale
-                        key={days}
-                        accessibilityLabel={`Select ${days} days`}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setDurationDays(days);
-                        }}
-                        containerStyle={{
-                          flex: 1,
-                          paddingVertical: 10,
-                          borderRadius: 14,
-                          alignItems: "center",
-                          backgroundColor:
-                            durationDays === days ? colors.ink : "#F1F3F5",
-                        }}
-                      >
-                        <Text
-                          className="text-[13px] font-bold"
-                          style={{
-                            color: durationDays === days ? "#FFFFFF" : colors.ink,
-                          }}
-                        >
-                          {days} Days
-                        </Text>
-                      </PressableScale>
-                    ))}
-                  </View>
-                </Surface>
               </View>
-            )}
+            </Surface>
 
-            {/* Safety Guarantee Callout */}
-            <View className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200">
+            <Surface>
+              <Text className="text-[16px] font-bold" style={{ color: colors.ink }}>
+                1. Identity
+              </Text>
+              <Text className="mt-2 text-[13px] leading-5" style={{ color: colors.muted }}>
+                ERC-8004 identifies the publisher and metadata. It does not grant wallet
+                authority or settle payment.
+              </Text>
+              <View className="mt-4 flex-row items-center justify-between border-t pt-4" style={{ borderColor: colors.line }}>
+                <Text className="text-[12px]" style={{ color: colors.muted }}>
+                  Registry check
+                </Text>
+                <StatusBadge
+                  label={agent.registryVerification.registered.status}
+                  tone={agent.registryVerification.registered.status}
+                />
+              </View>
+            </Surface>
+
+            <AccessReview category={agent.category} walletAddress={wallet.address} />
+            <PaymentReview agent={agent} />
+
+            <Surface gradient>
+              <Text className="text-[15px] font-bold" style={{ color: colors.ink }}>
+                Wallet readiness
+              </Text>
+              <Text className="mt-2 text-[13px] leading-5" style={{ color: colors.muted }}>
+                {wallet.isConnected
+                  ? `Connected as ${shortAddress(wallet.address)}. No signature is requested by this preview.`
+                  : wallet.unavailableReason ??
+                    "Connect a BNB Chain wallet to prepare for future verified flows."}
+              </Text>
+              <View className="mt-4">
+                <WalletConnectButton connectLabel="Connect BNB wallet" />
+              </View>
+            </Surface>
+
+            <View className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <Text className="text-[13px] font-bold text-amber-900">
-                Non-Custodial Keystore Guarantee
+                Device preview only
               </Text>
-              <Text className="mt-1 text-[12px] text-amber-800 leading-4">
-                You never transfer private keys. Authorization is registered on BSC with strictly scoped permissions and can be revoked at any time.
+              <Text className="mt-1 text-[12px] leading-5 text-amber-800">
+                Saving adds this agent to My Agents on this device. It does not pay,
+                authorize, start monitoring, create an Altana session, or create an
+                ERC-8183 escrow.
               </Text>
             </View>
 
-            {/* Action CTA */}
-            <View className="mt-2">
-              <Button
-                disabled={isSubmitting}
-                label={
-                  isSubmitting
-                    ? "Confirming On-Chain..."
-                    : isMonitoring
-                    ? "Activate Monitoring"
-                    : `Confirm & Grant Session ($${spendCap})`
-                }
-                onPress={handleConfirmHire}
-                tone="primary"
-              />
-            </View>
+            <Button
+              label={isSaved ? "Open saved preview" : "Save device preview"}
+              onPress={handlePreview}
+            />
           </View>
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function AccessReview({
+  category,
+  walletAddress,
+}: {
+  category: "monitoring" | "grid-trading" | "health-factor" | "yield";
+  walletAddress: string | null;
+}) {
+  const capability =
+    category === "monitoring" ? "read_only_monitoring" : "altana_action_session";
+  const assessment = assessAuthorizationCapability(category, capability);
+
+  return (
+    <Surface>
+      <View className="flex-row items-center justify-between gap-3">
+        <Text className="text-[16px] font-bold" style={{ color: colors.ink }}>
+          2. Access
+        </Text>
+        <StatusBadge
+          label={assessment.available ? "Read-only available" : "Action unavailable"}
+          tone={assessment.available ? "live" : "unavailable"}
+        />
+      </View>
+      <Text className="mt-3 text-[13px] leading-5" style={{ color: colors.muted }}>
+        {assessment.reason}
+      </Text>
+      <Text className="mt-2 text-[12px] leading-5" style={{ color: colors.muted }}>
+        {assessment.nextStep}
+      </Text>
+      {category === "monitoring" ? (
+        <View className="mt-4 flex-row items-center justify-between border-t pt-4" style={{ borderColor: colors.line }}>
+          <Text className="text-[12px]" style={{ color: colors.muted }}>
+            Public address
+          </Text>
+          <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+            {shortAddress(walletAddress)}
+          </Text>
+        </View>
+      ) : (
+        <Text className="mt-4 text-[11px] leading-4" style={{ color: colors.danger }}>
+          Dolphin will never ask you to import a private key as a workaround.
+        </Text>
+      )}
+    </Surface>
+  );
+}
+
+function PaymentReview({ agent }: { agent: NonNullable<ReturnType<typeof useAgentDetail>["data"]> }) {
+  const payment = assessAuthorizationCapability(agent.category, "erc8183_hire");
+  const publishedPrice =
+    agent.priceModel.status === "live" || agent.priceModel.status === "stale"
+      ? `${agent.priceModel.value.amount} ${agent.priceModel.value.token}`
+      : "Not published";
+
+  return (
+    <Surface>
+      <View className="flex-row items-center justify-between gap-3">
+        <Text className="text-[16px] font-bold" style={{ color: colors.ink }}>
+          3. Payment
+        </Text>
+        <StatusBadge label="Unavailable" tone="unavailable" />
+      </View>
+      <Text className="mt-3 text-[13px] leading-5" style={{ color: colors.muted }}>
+        {payment.reason}
+      </Text>
+      <View className="mt-4 gap-3 border-t pt-4" style={{ borderColor: colors.line }}>
+        <View className="flex-row justify-between">
+          <Text className="text-[12px]" style={{ color: colors.muted }}>
+            Published price
+          </Text>
+          <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+            {publishedPrice}
+          </Text>
+        </View>
+        <View className="flex-row justify-between">
+          <Text className="text-[12px]" style={{ color: colors.muted }}>
+            Grant + hire estimate
+          </Text>
+          <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+            {agent.category === "monitoring"
+              ? "Not verified"
+              : `At least ${AUTHORIZATION_FACTS.minimumGrantAndHireTransactions} txs`}
+          </Text>
+        </View>
+      </View>
+    </Surface>
   );
 }

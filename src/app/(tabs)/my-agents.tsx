@@ -1,8 +1,4 @@
-import {
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,32 +11,20 @@ import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors, radii, shadows } from "@/constants/theme";
 import { EDITORIAL_AGENTS } from "@/data/editorial-agents";
-import { useAppStore, type HiredAgentSession } from "@/store/use-app-store";
-
-function calculateTimeRemaining(expiresAt?: string) {
-  if (!expiresAt) return "Permanent / Active";
-  const diff = Date.parse(expiresAt) - Date.now();
-  if (diff <= 0) return "Session Expired";
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  return `${days}d ${hours}h remaining`;
-}
+import { useAgents } from "@/hooks/use-agents";
+import { useAppStore, type PreviewHire } from "@/store/use-app-store";
 
 export default function MyAgentsScreen() {
   const router = useRouter();
-  const hiredAgents = useAppStore((state) => state.hiredAgents);
+  const { data: indexedAgents } = useAgents();
+  const previewHires = useAppStore((state) => state.previewHires);
 
-  const handleManage = (session: HiredAgentSession) => {
+  const handleManage = (preview: PreviewHire) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push({
       pathname: "/manage/[id]",
-      params: { id: session.agentId },
+      params: { id: preview.agentId },
     });
-  };
-
-  const handleExplore = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push("/(tabs)/categories");
   };
 
   return (
@@ -54,44 +38,49 @@ export default function MyAgentsScreen() {
         contentContainerStyle={{ paddingBottom: 110 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Title */}
-        <View className="px-6 pt-3 pb-4">
+        <View className="px-6 pb-5 pt-3">
           <Text
             className="text-[34px] font-extrabold tracking-[-1px]"
             style={{ color: colors.ink }}
           >
             My Agents
           </Text>
-          <Text
-            className="mt-1 text-[15px]"
-            style={{ color: colors.muted }}
-          >
-            Manage active sessions, spend caps, and monitoring
+          <Text className="mt-1 text-[15px] leading-5" style={{ color: colors.muted }}>
+            Saved setup previews on this device
           </Text>
         </View>
 
         <View className="px-6">
-          {hiredAgents.length > 0 ? (
+          {previewHires.length > 0 ? (
             <View className="gap-4">
-              {hiredAgents.map((session) => {
-                const editorialAgent = EDITORIAL_AGENTS.find(
-                  (a) => a.tokenId === session.agentId || a.id === session.agentId
-                );
-                const name = editorialAgent?.name ?? `Agent #${session.agentId}`;
-                const iconUrl = editorialAgent?.iconUrl ?? null;
-                const statusTone =
-                  session.status === "active"
-                    ? "live"
-                    : session.status === "paused"
-                    ? "syncing"
-                    : "unavailable";
+              <View className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <Text className="text-[12px] font-bold text-amber-900">
+                  No active sessions inferred
+                </Text>
+                <Text className="mt-1 text-[12px] leading-4 text-amber-800">
+                  These entries are local previews. Dolphin has not submitted payment,
+                  wallet authorization, or agent execution transactions.
+                </Text>
+              </View>
+
+              {previewHires.map((preview) => {
+                const agent =
+                  indexedAgents?.find(
+                    (candidate) =>
+                      candidate.tokenId === preview.agentId ||
+                      candidate.id === preview.agentId,
+                  ) ??
+                  EDITORIAL_AGENTS.find(
+                    (candidate) =>
+                      candidate.tokenId === preview.agentId ||
+                      candidate.id === preview.agentId,
+                  );
+                const category = agent?.category ?? "monitoring";
 
                 return (
                   <PressableScale
-                    key={session.agentId}
-                    accessibilityLabel={`Manage ${name}`}
+                    accessibilityLabel={`Manage preview for ${agent?.name ?? preview.agentId}`}
                     accessibilityRole="button"
-                    onPress={() => handleManage(session)}
                     containerStyle={{
                       borderRadius: radii.large,
                       backgroundColor: colors.surface,
@@ -100,108 +89,66 @@ export default function MyAgentsScreen() {
                       padding: 16,
                       ...shadows.card,
                     }}
+                    key={preview.agentId}
+                    onPress={() => handleManage(preview)}
                   >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-row items-center gap-3.5 flex-1 mr-2">
-                        <AgentIcon
-                          category={session.category}
-                          size={48}
-                          uri={iconUrl}
-                        />
-                        <View className="flex-1">
-                          <Text
-                            className="text-[17px] font-bold"
-                            numberOfLines={1}
-                            style={{ color: colors.ink }}
-                          >
-                            {name}
-                          </Text>
-                          <Text
-                            className="text-[12px] font-medium capitalize"
-                            style={{ color: colors.muted }}
-                          >
-                            {session.category.replace("-", " ")}
-                          </Text>
+                    <View className="flex-row items-start gap-3.5">
+                      <AgentIcon category={category} size={52} uri={agent?.iconUrl} />
+                      <View className="min-w-0 flex-1">
+                        <Text
+                          className="text-[17px] font-bold"
+                          numberOfLines={1}
+                          style={{ color: colors.ink }}
+                        >
+                          {agent?.name ?? `Agent #${preview.agentId}`}
+                        </Text>
+                        <Text className="mt-1 text-[12px] capitalize" style={{ color: colors.muted }}>
+                          {category.replace("-", " ")}
+                        </Text>
+                        <View className="mt-3">
+                          <StatusBadge label="Device preview" tone="preview" />
                         </View>
                       </View>
-
-                      <StatusBadge
-                        label={session.status.toUpperCase()}
-                        tone={statusTone}
-                      />
                     </View>
 
-                    {/* Session Metrics Bar */}
                     <View
-                      className="mt-4 flex-row items-center justify-between border-t pt-3"
+                      className="mt-4 flex-row items-center justify-between border-t pt-4"
                       style={{ borderColor: colors.line }}
                     >
                       <View>
-                        <Text className="text-[11px] font-medium text-slate-500">
-                          {session.category === "monitoring" ? "Target" : "Spend Cap"}
+                        <Text className="text-[10px] font-bold uppercase tracking-[1px]" style={{ color: colors.faint }}>
+                          Saved
                         </Text>
-                        <Text
-                          className="text-[13px] font-bold"
-                          style={{ color: colors.ink }}
-                        >
-                          {session.category === "monitoring"
-                            ? session.monitoredAddress
-                              ? `${session.monitoredAddress.slice(0, 6)}…${session.monitoredAddress.slice(-4)}`
-                              : "Connected Wallet"
-                            : `$${session.spendCapUsd ?? 500} USD`}
+                        <Text className="mt-1 text-[12px] font-bold" style={{ color: colors.ink }}>
+                          {new Date(preview.savedAt).toLocaleDateString()}
                         </Text>
                       </View>
-
-                      <View className="items-end">
-                        <Text className="text-[11px] font-medium text-slate-500">
-                          Session Status
-                        </Text>
-                        <Text
-                          className="text-[13px] font-bold text-slate-700"
-                        >
-                          {calculateTimeRemaining(session.expiresAt)}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Manage Button */}
-                    <View className="mt-3 flex-row justify-end">
-                      <View className="rounded-full bg-slate-100 px-4 py-1.5">
-                        <Text className="text-[12px] font-bold text-slate-900">
-                          Manage Session →
-                        </Text>
-                      </View>
+                      <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+                        Review setup →
+                      </Text>
                     </View>
                   </PressableScale>
                 );
               })}
             </View>
           ) : (
-            /* Empty State */
-            <View className="py-8 gap-6">
+            <View className="gap-6 py-8">
               <Surface>
-                <View className="items-center py-6 px-4 text-center">
-                  <View className="h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 mb-4">
+                <View className="items-center px-4 py-6">
+                  <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
                     <CategoryGlyph color={colors.ink} name="agents" size={28} />
                   </View>
-                  <Text
-                    className="text-[20px] font-bold text-center"
-                    style={{ color: colors.ink }}
-                  >
-                    No Active Agent Sessions
+                  <Text className="text-center text-[20px] font-bold" style={{ color: colors.ink }}>
+                    No saved previews
                   </Text>
-                  <Text
-                    className="mt-2 text-[14px] text-center leading-5"
-                    style={{ color: colors.muted }}
-                  >
-                    Explore verified BSC agents in Monitoring, Grid Trading, Health Factor, and Yield to hire your first autonomous agent.
+                  <Text className="mt-2 text-center text-[14px] leading-5" style={{ color: colors.muted }}>
+                    Review an agent’s identity, data availability, authorization model,
+                    and payment readiness before saving a setup preview.
                   </Text>
-
                   <View className="mt-6 w-full">
                     <Button
-                      label="Browse Agent Catalog"
-                      onPress={handleExplore}
-                      tone="primary"
+                      label="Browse agent catalog"
+                      onPress={() => router.push("/(tabs)/categories")}
                     />
                   </View>
                 </View>

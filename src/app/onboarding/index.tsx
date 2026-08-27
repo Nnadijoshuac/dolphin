@@ -30,17 +30,17 @@ const slides: Slide[] = [
     id: "1",
     glyph: "discover",
     badge: "BNB Smart Chain · ERC-8004",
-    title: "AI Agents on BNB Chain",
+    title: "AI agents, clearly sourced",
     subtitle:
-      "Autonomous intelligences registered on-chain with verifiable identities, skills, and track records.",
+      "Discover agents published under ERC-8004, with identity and evidence kept separate from publisher claims.",
     points: [
       {
-        title: "Verifiable Identity",
-        desc: "Each agent is minted on the ERC-8004 registry with audited skills and verifiable addresses.",
+        title: "Registry identity",
+        desc: "A BSC token can identify an agent and its publisher. It does not prove the advertised service works.",
       },
       {
-        title: "24/7 Autonomy",
-        desc: "Agents execute algorithmic workflows, monitor feeds, and safeguard positions continuously.",
+        title: "Evidence before claims",
+        desc: "Missing performance, reputation, or activity stays labeled syncing or unavailable—never filled with demo numbers.",
       },
     ],
   },
@@ -48,17 +48,17 @@ const slides: Slide[] = [
     id: "2",
     glyph: "grid-trading",
     badge: "Four Core Categories",
-    title: "Built for Every Need",
+    title: "Find the right evidence",
     subtitle:
-      "Every category provides dedicated on-chain metrics and specialized execution tooling.",
+      "Monitoring, grid trading, health factor, and yield each need different data before you can make an informed call.",
     points: [
       {
-        title: "Monitoring & Health Factor",
-        desc: "Watch real-time risk, liquidation buffers, and market anomalies before they impact you.",
+        title: "Monitoring & health factor",
+        desc: "Review published assets, alert history, lending risk, and response evidence when a source provides it.",
       },
       {
-        title: "Grid Trading & Yield",
-        desc: "Automate range trades on DEXes and compound DeFi yields across top BSC protocols.",
+        title: "Grid trading & yield",
+        desc: "Separate protocol opportunities from an agent’s own audited track record and authorization readiness.",
       },
     ],
   },
@@ -66,17 +66,17 @@ const slides: Slide[] = [
     id: "3",
     glyph: "wallet",
     badge: "Security & Control",
-    title: "Safe, Scoped Hiring",
+    title: "Control starts with honesty",
     subtitle:
-      "You always stay in control. Agents never receive your private key or unbounded custody.",
+      "Dolphin shows what can run today, what still needs integration, and what a saved preview actually does.",
     points: [
       {
-        title: "Zero-Risk Monitoring",
-        desc: "Read-only agents watch public addresses without requiring wallet permissions or transactions.",
+        title: "Read-only first",
+        desc: "A monitoring service can observe a public address without signing authority. Saving a preview does not start that service.",
       },
       {
-        title: "Bounded Spend Caps",
-        desc: "Action agents operate strictly within preset spend limits and expire automatically.",
+        title: "Actions stay unavailable for now",
+        desc: "The tested Altana SDK cannot use this app’s WalletConnect signer. Dolphin will never ask for your private key as a workaround.",
       },
     ],
   },

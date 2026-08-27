@@ -110,7 +110,7 @@ export default function DiscoverScreen() {
         {isLoading ? (
           <View className="px-6 py-12">
             <StatePanel
-              body="Querying ERC-8004 identity registry on BNB Smart Chain..."
+              body="Fetching 8004scan-indexed BSC agent records and source labels..."
               state="syncing"
               title="Loading Agent Registry"
             />

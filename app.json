@@ -4,29 +4,27 @@
     "slug": "Dolphin",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/DolphinLogo.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "dolphin",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F6F4EE",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.nnadijoshuac.dolphin",
       "supportsTablet": true
     },
     "android": {
       "package": "com.nnadijoshuac.dolphin",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/DolphinLogo.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#0A0B0E",
+        "foregroundImage": "./assets/images/icon.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
       "bundler": "metro",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",

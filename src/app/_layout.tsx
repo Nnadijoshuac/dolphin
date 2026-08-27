@@ -1,7 +1,7 @@
 import "../../global.css";
 
 import { useEffect, useState } from "react";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 
@@ -9,17 +9,16 @@ import { colors } from "@/constants/theme";
 import { AppProviders } from "@/providers/app-providers";
 import { useAppStore } from "@/store/use-app-store";
 
-void SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function NavigationGate() {
   const router = useRouter();
   const segments = useSegments();
+  const navigationState = useRootNavigationState();
   const hasCompletedOnboarding = useAppStore(
     (state) => state.hasCompletedOnboarding,
   );
-  const [hasHydrated, setHasHydrated] = useState(
-    useAppStore.persist.hasHydrated(),
-  );
+  const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
     const unsubscribe = useAppStore.persist.onFinishHydration(() => {
@@ -34,7 +33,7 @@ function NavigationGate() {
   }, []);
 
   useEffect(() => {
-    if (!hasHydrated) return;
+    if (!hasHydrated || !navigationState?.key) return;
 
     const isOnboarding = (segments as readonly string[])[0] === "onboarding";
 
@@ -42,10 +41,8 @@ function NavigationGate() {
       router.replace("/onboarding" as any);
     }
 
-    void SplashScreen.hideAsync();
-  }, [hasCompletedOnboarding, hasHydrated, router, segments]);
-
-  if (!hasHydrated) return null;
+    void SplashScreen.hideAsync().catch(() => {});
+  }, [hasCompletedOnboarding, hasHydrated, navigationState?.key, router, segments]);
 
   return (
     <>

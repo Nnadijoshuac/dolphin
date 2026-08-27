@@ -76,33 +76,35 @@ export default function DiscoverScreen() {
 
       {/* Sticky Pinned Top Header */}
       <View style={{ backgroundColor: colors.canvas, zIndex: 10 }}>
-        <AppHeader />
-        <View className="flex-row items-center justify-between px-6 pb-3 pt-0.5">
+        <AppHeader
+          action={
+            <PressableScale
+              accessibilityLabel="View categories"
+              accessibilityRole="button"
+              onPress={() => router.push("/(tabs)/categories")}
+              containerStyle={{
+                alignItems: "center",
+                backgroundColor: "#FFFFFF",
+                borderColor: colors.line,
+                borderRadius: 9999,
+                borderWidth: 1,
+                height: 38,
+                justifyContent: "center",
+                width: 38,
+                ...shadows.subtle,
+              }}
+            >
+              <CategoryGlyph color={colors.ink} name="layers" size={18} />
+            </PressableScale>
+          }
+        />
+        <View className="px-6 pb-3 pt-0.5">
           <Text
-            className="text-[32px] font-black tracking-[-1px]"
+            className="text-[34px] font-black tracking-[-1px]"
             style={{ color: colors.ink }}
           >
             Discover
           </Text>
-
-          <PressableScale
-            accessibilityLabel="View categories"
-            accessibilityRole="button"
-            onPress={() => router.push("/(tabs)/categories")}
-            containerStyle={{
-              alignItems: "center",
-              backgroundColor: "#FFFFFF",
-              borderColor: colors.line,
-              borderRadius: 9999,
-              borderWidth: 1,
-              height: 38,
-              justifyContent: "center",
-              width: 38,
-              ...shadows.subtle,
-            }}
-          >
-            <CategoryGlyph color={colors.ink} name="layers" size={18} />
-          </PressableScale>
         </View>
       </View>
 

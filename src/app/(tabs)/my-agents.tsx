@@ -38,14 +38,14 @@ export default function MyAgentsScreen() {
         contentContainerStyle={{ paddingBottom: 110 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="px-6 pb-5 pt-3">
+        <View className="px-6 pb-4 pt-3">
           <Text
-            className="text-[34px] font-extrabold tracking-[-1px]"
+            className="text-[32px] font-bold tracking-[-0.6px]"
             style={{ color: colors.ink }}
           >
             My Agents
           </Text>
-          <Text className="mt-1 text-[15px] leading-5" style={{ color: colors.muted }}>
+          <Text className="mt-1 text-[14px]" style={{ color: colors.muted }}>
             Saved setup previews on this device
           </Text>
         </View>

@@ -10,7 +10,7 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentCard } from "@/components/agent-card";
-import { AppHeader } from "@/components/app-header";
+
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
@@ -89,38 +89,39 @@ export default function DiscoverScreen() {
           />
         }
       >
-        {/* App Header */}
-        <AppHeader
-          action={
-            <PressableScale
-              accessibilityLabel="View categories"
-              accessibilityRole="button"
-              onPress={() => router.push("/(tabs)/categories")}
-              containerStyle={{
-                height: 38,
-                width: 38,
-                borderRadius: 19,
-                backgroundColor: colors.surface,
-                borderWidth: 1,
-                borderColor: colors.line,
-                alignItems: "center",
-                justifyContent: "center",
-                ...shadows.subtle,
-              }}
+        {/* Discover Header */}
+        <View className="flex-row items-start justify-between px-6 pb-4 pt-3">
+          <View>
+            <Text
+              className="text-[32px] font-bold tracking-[-0.6px]"
+              style={{ color: colors.ink }}
             >
-              <CategoryGlyph color={colors.ink} name="layers" size={17} />
-            </PressableScale>
-          }
-        />
+              Discover
+            </Text>
+            <Text className="mt-1 text-[14px]" style={{ color: colors.muted }}>
+              Registered ERC-8004 AI agents on BNB Chain
+            </Text>
+          </View>
 
-        {/* Discover Page Title */}
-        <View className="px-6 pt-1 pb-3">
-          <Text
-            className="text-[34px] font-extrabold tracking-[-1px]"
-            style={{ color: colors.ink }}
+          <PressableScale
+            accessibilityLabel="View categories"
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/categories")}
+            containerStyle={{
+              alignItems: "center",
+              backgroundColor: colors.surface,
+              borderColor: colors.line,
+              borderRadius: 18,
+              borderWidth: 1,
+              height: 36,
+              justifyContent: "center",
+              marginTop: 4,
+              width: 36,
+              ...shadows.subtle,
+            }}
           >
-            Discover
-          </Text>
+            <CategoryGlyph color={colors.ink} name="layers" size={17} />
+          </PressableScale>
         </View>
 
         {/* Monitoring collection hero */}

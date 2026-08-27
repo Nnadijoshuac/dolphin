@@ -12,7 +12,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BrandMark, BnbBadge } from "@/components/brand-mark";
+
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
@@ -118,8 +118,23 @@ export default function WalletScreen() {
           className="w-full px-6 pt-2"
           style={{ maxWidth: contentWidth }}
         >
-          {/* Top Bar with Info button */}
-          <View className="flex-row items-center justify-end pb-2">
+          {/* Header */}
+          <View className="flex-row items-start justify-between pb-3 pt-1">
+            <View>
+              <Text
+                className="text-[32px] font-bold tracking-[-0.6px]"
+                style={{ color: colors.ink }}
+              >
+                Wallet
+              </Text>
+              <Text
+                className="mt-1 text-[14px]"
+                style={{ color: colors.muted }}
+              >
+                BNB Smart Chain account and authorization
+              </Text>
+            </View>
+
             <PressableScale
               accessibilityLabel="About Dolphin & security"
               accessibilityRole="button"
@@ -136,20 +151,13 @@ export default function WalletScreen() {
                 height: 36,
                 justifyContent: "center",
                 width: 36,
+                marginTop: 4,
                 ...shadows.subtle,
               }}
             >
               <CategoryGlyph color={colors.ink} name="info" size={18} />
             </PressableScale>
           </View>
-
-          {/* Screen Title */}
-          <Text
-            className="text-[34px] font-black tracking-[-1px] mb-2"
-            style={{ color: colors.ink }}
-          >
-            Wallet
-          </Text>
 
           {/* Hero 3D Wallet graphic */}
           <View

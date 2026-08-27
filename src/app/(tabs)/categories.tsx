@@ -10,7 +10,7 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentCard } from "@/components/agent-card";
-import { AppHeader } from "@/components/app-header";
+
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
@@ -64,16 +64,16 @@ export default function CategoriesScreen() {
           />
         }
       >
-        {/* App Header */}
-        <AppHeader />
-
-        {/* Categories Title */}
-        <View className="px-6 pt-1 pb-3">
+        {/* Categories Page Header */}
+        <View className="px-6 pb-3 pt-3">
           <Text
-            className="text-[34px] font-extrabold tracking-[-1px]"
+            className="text-[32px] font-bold tracking-[-0.6px]"
             style={{ color: colors.ink }}
           >
             Categories
+          </Text>
+          <Text className="mt-1 text-[14px]" style={{ color: colors.muted }}>
+            Browse agents by operational domain
           </Text>
         </View>
 

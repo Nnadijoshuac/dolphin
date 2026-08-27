@@ -1,97 +1,81 @@
-import { useState } from "react";
-import {
-  Alert,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
-import { PressableScale } from "@/components/pressable-scale";
+import { NavigationButton } from "@/components/navigation-button";
 import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
-import { colors, shadows } from "@/constants/theme";
+import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
+import {
+  AUTHORIZATION_FACTS,
+  assessAuthorizationCapability,
+} from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
 
 export default function ManageAgentRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { data: agent } = useAgentDetail(id);
-
-  const hiredAgents = useAppStore((state) => state.hiredAgents);
-  const updateAgentStatus = useAppStore((state) => state.updateAgentStatus);
-  const updateAgentSpendCap = useAppStore((state) => state.updateAgentSpendCap);
-  const revokeAgent = useAppStore((state) => state.revokeAgent);
-
-  const session = hiredAgents.find(
-    (h) => h.agentId === id || (agent && h.agentId === agent.tokenId)
+  const { data: agent, isLoading } = useAgentDetail(id);
+  const previewHires = useAppStore((state) => state.previewHires);
+  const removePreviewHire = useAppStore((state) => state.removePreviewHire);
+  const preview = previewHires.find(
+    (item) => item.agentId === id || item.agentId === agent?.tokenId,
   );
 
-  const [isEditingCap, setIsEditingCap] = useState(false);
+  const handleRemove = () => {
+    if (!preview) return;
+    removePreviewHire(preview.agentId);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.replace("/(tabs)/my-agents");
+  };
 
-  if (!session) {
+  if (isLoading) {
     return (
-      <SafeAreaView
-        className="flex-1 px-6 justify-center"
-        style={{ backgroundColor: colors.canvas }}
-      >
-        <StatePanel
-          body="No active session found for this agent in local storage."
-          state="unavailable"
-          title="Session Not Found"
-        />
-        <View className="mt-6">
-          <Button
-            label="Go Back"
-            onPress={() => router.back()}
-            tone="primary"
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
+        <View className="flex-1 justify-center px-5">
+          <StatePanel
+            body="Loading the saved preview and current capability evidence."
+            state="syncing"
+            title="Opening preview"
           />
         </View>
       </SafeAreaView>
     );
   }
 
-  const handleTogglePause = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const newStatus = session.status === "active" ? "paused" : "active";
-    updateAgentStatus(session.agentId, newStatus);
-  };
-
-  const handleRevoke = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    Alert.alert(
-      "Revoke Agent Session",
-      "Are you sure you want to revoke this agent's permissions? This terminates its on-chain session key immediately.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Revoke On-Chain",
-          style: "destructive",
-          onPress: () => {
-            revokeAgent(session.agentId);
-            void Haptics.notificationAsync(
-              Haptics.NotificationFeedbackType.Success
-            );
-          },
-        },
-      ]
+  if (!preview) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
+        <View className="px-5 pt-3">
+          <NavigationButton onPress={() => router.back()} />
+        </View>
+        <View className="flex-1 justify-center px-5">
+          <StatePanel
+            body="No device preview is saved for this agent. No onchain session was inferred."
+            state="empty"
+            title="Preview not found"
+          />
+          <Button
+            label="Browse agents"
+            onPress={() => router.replace("/(tabs)/categories")}
+            style={{ marginTop: 18 }}
+          />
+        </View>
+      </SafeAreaView>
     );
-  };
+  }
 
-  const handleAdjustCap = (newCap: number) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    updateAgentSpendCap(session.agentId, newCap);
-    setIsEditingCap(false);
-  };
-
-  const isMonitoring = session.category === "monitoring";
+  const category = agent?.category ?? "monitoring";
+  const access = assessAuthorizationCapability(
+    category,
+    category === "monitoring" ? "read_only_monitoring" : "altana_action_session",
+  );
 
   return (
     <SafeAreaView
@@ -99,211 +83,124 @@ export default function ManageAgentRoute() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      {/* Navigation Header */}
-      <View
-        className="flex-row items-center justify-between px-6 pt-2 pb-3 border-b"
-        style={{ borderColor: colors.line }}
-      >
-        <PressableScale
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          containerStyle={{
-            height: 38,
-            width: 38,
-            borderRadius: 19,
-            backgroundColor: colors.surface,
-            borderWidth: 1,
-            borderColor: colors.line,
-            alignItems: "center",
-            justifyContent: "center",
-            ...shadows.card,
-          }}
-        >
-          <Text className="text-[17px] font-bold" style={{ color: colors.ink }}>
-            ‹
-          </Text>
-        </PressableScale>
-
-        <Text
-          className="text-[16px] font-bold"
-          numberOfLines={1}
-          style={{ color: colors.ink }}
-        >
-          Manage Session
+      <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
+        <NavigationButton onPress={() => router.back()} />
+        <Text className="text-[16px] font-bold" style={{ color: colors.ink }}>
+          Manage preview
         </Text>
-
-        <View className="h-9 w-9" />
+        <View className="h-[42px] w-[42px]" />
       </View>
 
       <ScrollView
-        className="flex-1 px-6"
-        contentContainerStyle={{ paddingBottom: 60 }}
+        className="flex-1 px-5"
+        contentContainerStyle={{ paddingBottom: 48 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Agent Info Banner */}
-        <View className="mt-5 flex-row items-center gap-4">
-          <AgentIcon
-            category={session.category}
-            size={64}
-            uri={agent?.iconUrl ?? null}
-          />
-          <View className="flex-1">
-            <Text
-              className="text-[20px] font-bold"
-              style={{ color: colors.ink }}
-            >
-              {agent?.name ?? `Agent #${session.agentId}`}
-            </Text>
-            <Text className="text-[12px] text-slate-500 capitalize">
-              {session.category.replace("-", " ")} · BSC Chain ID 56
-            </Text>
-            <View className="mt-2 flex-row items-center gap-2">
-              <StatusBadge
-                label={session.status.toUpperCase()}
-                tone={
-                  session.status === "active"
-                    ? "live"
-                    : session.status === "paused"
-                    ? "syncing"
-                    : "unavailable"
-                }
-              />
+        <Surface gradient>
+          <View className="flex-row items-center gap-4">
+            <AgentIcon category={category} size={62} uri={agent?.iconUrl} />
+            <View className="min-w-0 flex-1">
+              <Text
+                className="text-[20px] font-bold"
+                numberOfLines={1}
+                style={{ color: colors.ink }}
+              >
+                {agent?.name ?? `Agent #${preview.agentId}`}
+              </Text>
+              <Text className="mt-1 text-[12px]" style={{ color: colors.muted }}>
+                Saved {new Date(preview.savedAt).toLocaleDateString()}
+              </Text>
+              <View className="mt-3">
+                <StatusBadge label="Device preview · not onchain" tone="preview" />
+              </View>
             </View>
           </View>
-        </View>
+        </Surface>
 
-        {/* Quick Action Controls */}
-        <View className="mt-6 flex-row gap-3">
-          {session.status !== "revoked" ? (
-            <View className="flex-1">
-              <Button
-                label={session.status === "active" ? "Pause Agent" : "Resume Agent"}
-                onPress={handleTogglePause}
-                tone={session.status === "active" ? "secondary" : "primary"}
-              />
-            </View>
-          ) : null}
-
-          <View className="flex-1">
-            <Button
-              disabled={session.status === "revoked"}
-              label="Revoke Key"
-              onPress={handleRevoke}
-              tone="destructive"
-            />
-          </View>
-        </View>
-
-        {/* Session Parameters */}
         <View className="mt-8">
-          <SectionHeading title="Session Parameters" />
+          <SectionHeading title="Current state" />
           <Surface>
-            <View className="flex-row justify-between py-2 border-b" style={{ borderColor: colors.line }}>
-              <Text className="text-[13px] text-slate-500">Authorization Model</Text>
-              <Text className="text-[13px] font-semibold text-slate-900">
-                {isMonitoring ? "Read-Only Telemetry" : "Scoped Spend Cap"}
-              </Text>
-            </View>
-
-            {!isMonitoring ? (
-              <View className="py-3 border-b" style={{ borderColor: colors.line }}>
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-[13px] text-slate-500">Current Spend Cap</Text>
-                  <View className="flex-row items-center gap-2">
-                    <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                      ${session.spendCapUsd ?? 500} USD
-                    </Text>
-                    {session.status === "active" ? (
-                      <PressableScale
-                        accessibilityLabel="Edit spend cap"
-                        accessibilityRole="button"
-                        onPress={() => setIsEditingCap(!isEditingCap)}
-                      >
-                        <Text className="text-[12px] font-bold text-blue-600">
-                          {isEditingCap ? "Cancel" : "Adjust"}
-                        </Text>
-                      </PressableScale>
-                    ) : null}
-                  </View>
-                </View>
-
-                {isEditingCap ? (
-                  <View className="mt-3 flex-row gap-2">
-                    {[100, 250, 500, 1000].map((cap) => (
-                      <PressableScale
-                        key={cap}
-                        accessibilityLabel={`Set $${cap}`}
-                        accessibilityRole="button"
-                        onPress={() => handleAdjustCap(cap)}
-                        containerStyle={{
-                          flex: 1,
-                          paddingVertical: 6,
-                          borderRadius: 10,
-                          backgroundColor:
-                            session.spendCapUsd === cap ? colors.ink : "#E9ECEF",
-                          alignItems: "center",
-                        }}
-                      >
-                        <Text
-                          className="text-[11px] font-bold"
-                          style={{
-                            color:
-                              session.spendCapUsd === cap ? "#FFF" : colors.ink,
-                          }}
-                        >
-                          ${cap}
-                        </Text>
-                      </PressableScale>
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-            ) : (
-              <View className="flex-row justify-between py-2 border-b" style={{ borderColor: colors.line }}>
-                <Text className="text-[13px] text-slate-500">Monitored Address</Text>
-                <Text className="text-[12px] font-mono text-slate-900">
-                  {session.monitoredAddress ?? "Self"}
-                </Text>
-              </View>
-            )}
-
-            <View className="flex-row justify-between py-2 border-b" style={{ borderColor: colors.line }}>
-              <Text className="text-[13px] text-slate-500">Created At</Text>
-              <Text className="text-[12px] text-slate-700">
-                {session.hiredAt ? new Date(session.hiredAt).toLocaleDateString() : "Active"}
-              </Text>
-            </View>
-
-            <View className="flex-row justify-between py-2">
-              <Text className="text-[13px] text-slate-500">Auto Expiry</Text>
-              <Text className="text-[12px] font-medium text-slate-700">
-                {session.expiresAt ? new Date(session.expiresAt).toLocaleDateString() : "Permanent"}
-              </Text>
-            </View>
-          </Surface>
-        </View>
-
-        {/* On-Chain Activity Log */}
-        <View className="mt-8">
-          <SectionHeading title="Session Activity Log" />
-          <Surface>
-            {session.recentActivity.map((act, index) => (
+            {[
+              ["Monitoring or execution", "Not started"],
+              ["Wallet authorization", "None"],
+              ["Payment or escrow", "None"],
+              ["Onchain activity log", "Unavailable"],
+            ].map(([label, value], index) => (
               <View
-                key={`${act.timestamp}-${index}`}
-                className={index === 0 ? "pb-3" : "py-3 border-t"}
+                className={
+                  index === 0
+                    ? "flex-row justify-between pb-4"
+                    : "flex-row justify-between border-t py-4"
+                }
+                key={label}
                 style={{ borderColor: colors.line }}
               >
-                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
-                  {act.action}
+                <Text className="text-[12px]" style={{ color: colors.muted }}>
+                  {label}
                 </Text>
-                <Text className="mt-0.5 text-[11px] text-slate-500 font-mono">
-                  {act.timestamp}
+                <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+                  {value}
                 </Text>
               </View>
             ))}
           </Surface>
         </View>
+
+        <View className="mt-8">
+          <SectionHeading title="Authorization readiness" />
+          <Surface>
+            <View className="flex-row items-center justify-between gap-3">
+              <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+                {category === "monitoring" ? "Read-only observation" : "Action session"}
+              </Text>
+              <StatusBadge
+                label={access.status}
+                tone={access.available ? "live" : "unavailable"}
+              />
+            </View>
+            <Text className="mt-3 text-[13px] leading-5" style={{ color: colors.muted }}>
+              {access.reason}
+            </Text>
+            <Text className="mt-2 text-[12px] leading-5" style={{ color: colors.muted }}>
+              {access.nextStep}
+            </Text>
+          </Surface>
+        </View>
+
+        <View className="mt-8">
+          <SectionHeading title="Protocol boundaries" />
+          <Surface>
+            {Object.entries(AUTHORIZATION_FACTS.protocols).map(
+              ([protocol, description], index) => (
+                <View
+                  className={index === 0 ? "pb-4" : "border-t py-4"}
+                  key={protocol}
+                  style={{ borderColor: colors.line }}
+                >
+                  <Text
+                    className="text-[11px] font-bold uppercase tracking-[1px]"
+                    style={{ color: colors.muted }}
+                  >
+                    {protocol}
+                  </Text>
+                  <Text className="mt-1 text-[12px] leading-5" style={{ color: colors.ink }}>
+                    {description}
+                  </Text>
+                </View>
+              ),
+            )}
+            <Text className="border-t pt-4 text-[11px] leading-4" style={{ borderColor: colors.line, color: colors.danger }}>
+              Revoking an authorization would not cancel or refund a separate escrow.
+            </Text>
+          </Surface>
+        </View>
+
+        <Button
+          label="Remove device preview"
+          onPress={handleRemove}
+          style={{ marginTop: 28 }}
+          variant="destructive"
+        />
       </ScrollView>
     </SafeAreaView>
   );

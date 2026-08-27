@@ -376,24 +376,7 @@ export default function WalletScreen() {
             </View>
           </View>
 
-          {/* Bottom Security / Status Indicator */}
-          <View className="flex-row items-center justify-center gap-2 pt-2">
-            <CategoryGlyph
-              color={wallet.isConnected ? "#10B981" : colors.muted}
-              name="shield"
-              size={14}
-            />
-            <Text
-              className="text-[12px] font-medium"
-              style={{
-                color: wallet.isConnected ? "#059669" : colors.muted,
-              }}
-            >
-              {wallet.isConnected && wallet.address
-                ? `Connected to BNB Chain (${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)})`
-                : "No wallet connected"}
-            </Text>
-          </View>
+
         </View>
       </ScrollView>
 

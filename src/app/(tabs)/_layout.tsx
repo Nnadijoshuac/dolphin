@@ -74,7 +74,7 @@ export default function TabsLayout() {
         options={{
           title: "Categories",
           tabBarIcon: ({ color, size }) => (
-            <CategoryGlyph color={color} name="grid-trading" size={size} />
+            <CategoryGlyph color={color} name="categories" size={size} />
           ),
         }}
       />
@@ -97,7 +97,7 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="wallet"
         options={{
           title: "Wallet",
           tabBarIcon: ({ color, size }) => (

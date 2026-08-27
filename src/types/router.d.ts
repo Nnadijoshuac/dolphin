@@ -14,7 +14,7 @@ declare module 'expo-router' {
         | { pathname: `/(tabs)/categories`; params?: Router.UnknownInputParams }
         | { pathname: `/(tabs)/search`; params?: Router.UnknownInputParams }
         | { pathname: `/(tabs)/my-agents`; params?: Router.UnknownInputParams }
-        | { pathname: `/(tabs)/profile`; params?: Router.UnknownInputParams }
+        | { pathname: `/(tabs)/wallet`; params?: Router.UnknownInputParams }
         | { pathname: `/onboarding`; params?: Router.UnknownInputParams }
         | { pathname: `/onboarding/index`; params?: Router.UnknownInputParams }
         | { pathname: `/agent/[id]`; params: { id: string } }
@@ -30,7 +30,7 @@ declare module 'expo-router' {
         | { pathname: `/(tabs)/categories`; params?: Router.UnknownOutputParams }
         | { pathname: `/(tabs)/search`; params?: Router.UnknownOutputParams }
         | { pathname: `/(tabs)/my-agents`; params?: Router.UnknownOutputParams }
-        | { pathname: `/(tabs)/profile`; params?: Router.UnknownOutputParams }
+        | { pathname: `/(tabs)/wallet`; params?: Router.UnknownOutputParams }
         | { pathname: `/onboarding`; params?: Router.UnknownOutputParams }
         | { pathname: `/onboarding/index`; params?: Router.UnknownOutputParams }
         | { pathname: `/agent/[id]`; params: { id: string } }
@@ -46,7 +46,7 @@ declare module 'expo-router' {
         | `/(tabs)/categories`
         | `/(tabs)/search`
         | `/(tabs)/my-agents`
-        | `/(tabs)/profile`
+        | `/(tabs)/wallet`
         | `/onboarding`
         | `/onboarding/index`
         | `/agent/${string}`

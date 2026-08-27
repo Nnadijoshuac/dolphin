@@ -124,13 +124,9 @@ export function CategoryGlyph({
 
       {name === "agents" ? (
         <>
-          {/* Bot / Agent face with antenna */}
-          <Rect height="12" rx="3.5" width="16" x="4" y="8" {...common} />
-          <Line x1="12" x2="12" y1="4" y2="8" {...common} />
-          <Circle cx="12" cy="3" fill={color} r="1.5" />
-          <Circle cx="9" cy="13" fill={color} r="1.2" />
-          <Circle cx="15" cy="13" fill={color} r="1.2" />
-          <Line x1="9" x2="15" y1="16" y2="16" {...common} />
+          {/* User outline */}
+          <Circle cx="12" cy="7" r="4" {...common} />
+          <Path d="M4 20c0-3.5 3.5-6 8-6s8 2.5 8 6" {...common} />
         </>
       ) : null}
 

@@ -150,11 +150,11 @@ export default function DiscoverScreen() {
                       <View className="flex-row items-center justify-between">
                         <View className="rounded-full bg-white/15 px-3 py-1">
                           <Text className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                            AGENT OF THE DAY
+                            EDITORIAL SPOTLIGHT
                           </Text>
                         </View>
                         <StatusBadge
-                          label={featuredAgent.recordStatus === "indexed" ? "Live Registry" : "Editorial"}
+                          label={featuredAgent.recordStatus === "indexed" ? "Registry indexed" : "Editorial fallback"}
                           tone={featuredAgent.recordStatus === "indexed" ? "indexed" : "neutral"}
                         />
                       </View>

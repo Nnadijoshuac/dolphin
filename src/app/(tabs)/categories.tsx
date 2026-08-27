@@ -49,10 +49,6 @@ export default function CategoriesScreen() {
     >
       <ConstellationBg opacity={0.3} />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
       {/* Sticky Pinned Top Header with Category Filter Tabs */}
       <View style={{ backgroundColor: colors.canvas, zIndex: 10 }}>
         {/* Categories Page Header */}

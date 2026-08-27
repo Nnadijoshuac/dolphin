@@ -1,11 +1,4 @@
-export const AGENT_CATEGORIES = [
-  "monitoring",
-  "grid_trading",
-  "health_factor",
-  "yield",
-] as const;
-
-export type AgentCategory = (typeof AGENT_CATEGORIES)[number];
+import type { AgentCategory } from "@/types/agent";
 
 export const AUTHORIZATION_CAPABILITIES = [
   "read_only_monitoring",

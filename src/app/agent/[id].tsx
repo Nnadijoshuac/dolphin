@@ -20,14 +20,15 @@ export default function AgentDetailRoute() {
   const router = useRouter();
   const { data: agent, isLoading, isError } = useAgentDetail(id);
 
-  const hiredAgents = useAppStore((state) => state.hiredAgents);
-  const isHired = hiredAgents.some(
-    (h) => h.agentId === id || (agent && h.agentId === agent.tokenId)
+  const previewHires = useAppStore((state) => state.previewHires);
+  const isPreviewSaved = previewHires.some(
+    (preview) =>
+      preview.agentId === id || (agent && preview.agentId === agent.tokenId),
   );
 
   const handleAction = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (isHired) {
+    if (isPreviewSaved) {
       router.push({
         pathname: "/manage/[id]",
         params: { id: id! },
@@ -131,7 +132,7 @@ export default function AgentDetailRoute() {
           </View>
         ) : (
           <AgentDetail
-            actionLabel={isHired ? "Manage Session" : "Hire Agent"}
+            actionLabel={isPreviewSaved ? "Manage preview" : "Review setup"}
             agent={agent}
             onHire={handleAction}
           />

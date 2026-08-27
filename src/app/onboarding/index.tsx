@@ -85,7 +85,7 @@ const slides: Slide[] = [
 export default function OnboardingScreen() {
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
-  const contentWidth = Math.min(windowWidth, 520);
+  const contentWidth = Math.min(windowWidth || 390, 520);
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const setHasCompletedOnboarding = useAppStore(

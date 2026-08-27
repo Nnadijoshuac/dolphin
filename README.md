@@ -21,13 +21,31 @@ authorization, and payment as separate concepts.
 ## Important authorization status
 
 Read-only monitoring can use a public wallet address without signing authority.
-Action-agent activation is intentionally unavailable in this build: testing with
-`@altananetwork/sdk` 0.8 found no injected/WalletConnect signer path, and Dolphin
-will never ask a user to import a private key.
+Action-agent activation is intentionally unavailable in this build. The installed
+`@altananetwork/sdk` 0.8.0 package exposes private-key and passkey constructors,
+but no injected/WalletConnect signer constructor. Dolphin will never ask a user to
+import a private key into the app as a workaround.
 
 ERC-8004 identity, Altana authorization, and ERC-8183 payment escrow are distinct.
 No payment, escrow, session grant, or autonomous execution is simulated. Saving a
 device preview does not start an agent.
+
+### Spike B testnet probe
+
+`scripts/spike-b-auth.mjs` is a real chain-97 lifecycle probe, not a simulation. It
+derives the Altana wallet, grants a one-hour session limited to one harmless
+precompile and a one-wei daily spend cap, executes once, revokes, and confirms the
+revoked session is rejected. Use only a disposable BSC testnet key:
+
+```powershell
+$env:ALTANA_TEST_PRIVATE_KEY = "<disposable-testnet-private-key>"
+npm run spike:altana
+Remove-Item Env:\ALTANA_TEST_PRIVATE_KEY
+```
+
+The first run can stop after printing an unfunded derived address. Fund that
+address from the BSC testnet faucet and run it again. The probe has not been
+reported as passed in this repository without observed testnet receipts.
 
 ## Setup
 

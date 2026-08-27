@@ -1,25 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { AgentCategory } from "@/types/agent";
 
-export interface HiredAgentSession {
-  agentId: string;
-  category: AgentCategory;
-  hiredAt: string;
-  status: "active" | "paused" | "revoked";
-  spendCapUsd?: number;
-  durationDays?: number;
-  expiresAt?: string;
-  monitoredAddress?: string;
-  lastActionAt?: string;
-  recentActivity: {
-    timestamp: string;
-    action: string;
-    txHash?: string;
-  }[];
-}
-
+/** A setup saved only on this device; it is never an onchain hire record. */
 export type PreviewHire = Readonly<{
   agentId: string;
   savedAt: string;
@@ -29,121 +12,81 @@ export type PreviewHire = Readonly<{
 
 interface AppState {
   hasCompletedOnboarding: boolean;
-  hiredAgents: HiredAgentSession[];
   previewHires: PreviewHire[];
   recentSearches: string[];
-  
   setHasCompletedOnboarding: (isComplete: boolean) => void;
-  hireAgent: (session: Omit<HiredAgentSession, "hiredAt" | "status" | "recentActivity">) => void;
-  updateAgentStatus: (agentId: string, status: HiredAgentSession["status"]) => void;
-  updateAgentSpendCap: (agentId: string, spendCapUsd: number) => void;
-  revokeAgent: (agentId: string) => void;
   addRecentSearch: (query: string) => void;
   removeRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
-  
   savePreviewHire: (agentId: string) => void;
   removePreviewHire: (agentId: string) => void;
   clearPreviewHires: () => void;
+}
+
+type LegacyPersistedState = {
+  hasCompletedOnboarding?: unknown;
+  previewHires?: unknown;
+  hiredAgents?: unknown;
+  recentSearches?: unknown;
+};
+
+function isPreviewHire(value: unknown): value is PreviewHire {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PreviewHire>;
+  return (
+    typeof candidate.agentId === "string" &&
+    typeof candidate.savedAt === "string" &&
+    candidate.source === "local_preview" &&
+    candidate.isOnChain === false
+  );
+}
+
+function migratePersistedState(persistedState: unknown): Partial<AppState> {
+  const legacy = (persistedState ?? {}) as LegacyPersistedState;
+  const previews = Array.isArray(legacy.previewHires)
+    ? legacy.previewHires.filter(isPreviewHire)
+    : [];
+  const formerLocalHires = Array.isArray(legacy.hiredAgents)
+    ? legacy.hiredAgents.flatMap((value): PreviewHire[] => {
+        if (!value || typeof value !== "object") return [];
+        const agentId = (value as { agentId?: unknown }).agentId;
+        if (typeof agentId !== "string" || !agentId.trim()) return [];
+        return [
+          {
+            agentId: agentId.trim(),
+            savedAt: new Date().toISOString(),
+            source: "local_preview",
+            isOnChain: false,
+          },
+        ];
+      })
+    : [];
+  const previewHires = [...previews, ...formerLocalHires].filter(
+    (preview, index, collection) =>
+      collection.findIndex((item) => item.agentId === preview.agentId) === index,
+  );
+  const recentSearches = Array.isArray(legacy.recentSearches)
+    ? legacy.recentSearches.filter(
+        (value): value is string =>
+          typeof value === "string" && Boolean(value.trim()),
+      )
+    : [];
+
+  return {
+    hasCompletedOnboarding: legacy.hasCompletedOnboarding === true,
+    previewHires,
+    recentSearches,
+  };
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       hasCompletedOnboarding: false,
-      hiredAgents: [],
       previewHires: [],
-      recentSearches: ["Venus", "PancakeSwap", "Monitoring", "Yield", "BNB"],
-      
+      recentSearches: [],
       setHasCompletedOnboarding: (isComplete) =>
         set({ hasCompletedOnboarding: isComplete }),
-        
-      hireAgent: (session) => {
-        const now = new Date();
-        const durationDays = session.durationDays ?? 30;
-        const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString();
-        
-        set((state) => {
-          const filtered = state.hiredAgents.filter((a) => a.agentId !== session.agentId);
-          const newSession: HiredAgentSession = {
-            ...session,
-            hiredAt: now.toISOString(),
-            status: "active",
-            expiresAt,
-            lastActionAt: now.toISOString(),
-            recentActivity: [
-              {
-                timestamp: now.toISOString().replace("T", " ").slice(0, 19) + " UTC",
-                action: session.category === "monitoring"
-                  ? "Monitoring initialized for target address"
-                  : `Session registered on BSC (Spend Cap: $${session.spendCapUsd ?? 500})`,
-              },
-            ],
-          };
-          return { hiredAgents: [newSession, ...filtered] };
-        });
-      },
-      
-      updateAgentStatus: (agentId, status) => {
-        set((state) => ({
-          hiredAgents: state.hiredAgents.map((agent) =>
-            agent.agentId === agentId
-              ? {
-                  ...agent,
-                  status,
-                  recentActivity: [
-                    {
-                      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC",
-                      action: `Agent status updated to ${status}`,
-                    },
-                    ...agent.recentActivity,
-                  ],
-                }
-              : agent
-          ),
-        }));
-      },
-      
-      updateAgentSpendCap: (agentId, spendCapUsd) => {
-        set((state) => ({
-          hiredAgents: state.hiredAgents.map((agent) =>
-            agent.agentId === agentId
-              ? {
-                  ...agent,
-                  spendCapUsd,
-                  recentActivity: [
-                    {
-                      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC",
-                      action: `Spend cap adjusted to $${spendCapUsd}`,
-                    },
-                    ...agent.recentActivity,
-                  ],
-                }
-              : agent
-          ),
-        }));
-      },
-      
-      revokeAgent: (agentId) => {
-        set((state) => ({
-          hiredAgents: state.hiredAgents.map((agent) =>
-            agent.agentId === agentId
-              ? {
-                  ...agent,
-                  status: "revoked",
-                  recentActivity: [
-                    {
-                      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC",
-                      action: "Session revoked on-chain",
-                    },
-                    ...agent.recentActivity,
-                  ],
-                }
-              : agent
-          ),
-        }));
-      },
-      
       addRecentSearch: (query) => {
         const trimmed = query.trim();
         if (!trimmed) return;
@@ -162,7 +105,6 @@ export const useAppStore = create<AppState>()(
       },
       
       clearRecentSearches: () => set({ recentSearches: [] }),
-      
       savePreviewHire: (agentId) => {
         const normalizedAgentId = agentId.trim();
         if (!normalizedAgentId) return;
@@ -180,24 +122,22 @@ export const useAppStore = create<AppState>()(
           return { previewHires: [...state.previewHires, previewHire] };
         });
       },
-      
       removePreviewHire: (agentId) =>
         set((state) => ({
           previewHires: state.previewHires.filter((h) => h.agentId !== agentId),
         })),
-        
       clearPreviewHires: () => set({ previewHires: [] }),
     }),
     {
-      name: "dolphin-app-state-v2",
+      name: "dolphin-app-state-v3",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         hasCompletedOnboarding: state.hasCompletedOnboarding,
-        hiredAgents: state.hiredAgents,
         previewHires: state.previewHires,
         recentSearches: state.recentSearches,
       }),
-      version: 2,
+      version: 3,
+      migrate: migratePersistedState,
     },
   ),
 );

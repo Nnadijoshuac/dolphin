@@ -18,7 +18,7 @@ This stack is decided. Do not swap in an alternative library because it's more f
 
 If a task seems to require stepping outside this list (a gap only a different library fills), stop and flag it rather than adding a new dependency unilaterally — say what's missing and why the locked stack can't cover it.
 
-The full product/screen spec lives in the build prompt doc — this file governs behavior and stack discipline, not feature scope. Don't copy screen-by-screen detail into this file; if it drifts out of sync with the build doc, fix the build doc, not this one.
+The full product/screen spec, tech stack decisions, and build strategy live in **project-scope.md** — read it before starting any task, and re-read it if scope or architecture questions come up mid-task. This file governs behavior and stack discipline, not feature scope. Don't copy screen-by-screen detail into this file; if it drifts out of sync with project-scope.md, fix project-scope.md, not this one.
 
 ## 2. Hard Rule: Version Truth Before Code
 

@@ -4,7 +4,7 @@
     "slug": "Dolphin",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/DolphinLogo.png",
     "scheme": "dolphin",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F6F4EE",
@@ -17,7 +17,7 @@
       "package": "com.nnadijoshuac.dolphin",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "foregroundImage": "./assets/DolphinLogo.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
@@ -34,7 +34,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#F6F4EE",
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/DolphinLogo.png",
           "imageWidth": 92
         }
       ],

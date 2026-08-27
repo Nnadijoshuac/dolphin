@@ -1,11 +1,38 @@
+import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { colors } from "@/constants/theme";
+import { useAppStore } from "@/store/use-app-store";
 
 export default function TabsLayout() {
+  const hasCompletedOnboarding = useAppStore(
+    (state) => state.hasCompletedOnboarding,
+  );
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = useAppStore.persist.onFinishHydration(() => {
+      setHasHydrated(true);
+    });
+
+    if (useAppStore.persist.hasHydrated()) {
+      setHasHydrated(true);
+    }
+
+    return unsubscribe;
+  }, []);
+
+  if (!hasHydrated) {
+    return null;
+  }
+
+  if (!hasCompletedOnboarding) {
+    return <Redirect href="/onboarding" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -81,4 +108,3 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
-

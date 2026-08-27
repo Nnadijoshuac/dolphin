@@ -76,7 +76,7 @@ const slides: Slide[] = [
       },
       {
         title: "Actions stay unavailable for now",
-        desc: "The tested Altana SDK cannot use this app’s WalletConnect signer. Dolphin will never ask for your private key as a workaround.",
+        desc: "Altana SDK 0.8.0 exposes no injected/WalletConnect signer constructor for this app. Dolphin will never ask for your private key as a workaround.",
       },
     ],
   },

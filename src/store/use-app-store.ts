@@ -129,7 +129,7 @@ export const useAppStore = create<AppState>()(
       clearPreviewHires: () => set({ previewHires: [] }),
     }),
     {
-      name: "dolphin-app-state-v3",
+      name: "dolphin-app-state-v2",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         hasCompletedOnboarding: state.hasCompletedOnboarding,

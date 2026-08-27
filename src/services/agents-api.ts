@@ -39,6 +39,23 @@ function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const candidate = value.trim();
+  if (candidate.length === 0) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(candidate) as unknown;
+  } catch {
+    return value;
+  }
+}
+
 function readString(record: UnknownRecord, key: string): string | null {
   const value = record[key];
   return typeof value === "string" && value.trim().length > 0
@@ -89,7 +106,11 @@ function readHttpUrl(record: UnknownRecord, key: string): string | null {
 }
 
 function readStringArray(record: UnknownRecord, key: string): string[] {
-  const value = record[key];
+  const value = parseJsonValue(record[key]);
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value.trim()];
+  }
 
   if (!Array.isArray(value)) {
     return [];
@@ -130,6 +151,7 @@ function unavailableIndexedMetric<T>(
 
 function decodeServices(value: unknown): AgentService[] {
   const services: AgentService[] = [];
+  const decodedValue = parseJsonValue(value);
 
   const append = (name: string, candidate: unknown) => {
     if (!isRecord(candidate)) {
@@ -148,16 +170,16 @@ function decodeServices(value: unknown): AgentService[] {
     });
   };
 
-  if (Array.isArray(value)) {
-    for (const candidate of value) {
+  if (Array.isArray(decodedValue)) {
+    for (const candidate of decodedValue) {
       if (!isRecord(candidate)) {
         continue;
       }
 
       append(readString(candidate, "name") ?? "Agent service", candidate);
     }
-  } else if (isRecord(value)) {
-    for (const [name, candidate] of Object.entries(value)) {
+  } else if (isRecord(decodedValue)) {
+    for (const [name, candidate] of Object.entries(decodedValue)) {
       append(name, candidate);
     }
   }
@@ -350,12 +372,20 @@ async function fetchIndexedAgent(
   fallback: Agent,
   options: AgentsRequestOptions,
 ): Promise<Agent> {
-  const payload = await fetchJson(
+  const response = await fetchJson(
     `/agents/${BSC_CHAIN_ID}/${encodeURIComponent(fallback.tokenId)}`,
     options,
   );
 
-  return decodeIndexedAgent(payload, fallback);
+  if (!isRecord(response) || !isRecord(response.data)) {
+    throw new AgentsApiError("8004scan returned an invalid response envelope.");
+  }
+
+  if (readBoolean(response, "success") === false) {
+    throw new AgentsApiError("8004scan reported an unsuccessful agent request.");
+  }
+
+  return decodeIndexedAgent(response.data, fallback);
 }
 
 function fallbackCopy(agent: Agent): Agent {

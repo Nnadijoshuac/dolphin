@@ -1,7 +1,7 @@
 import "../../global.css";
 
 import { useEffect, useState } from "react";
-import { Stack, useRootNavigationState, useRouter, useSegments } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 
@@ -11,13 +11,7 @@ import { useAppStore } from "@/store/use-app-store";
 
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
-function NavigationGate() {
-  const router = useRouter();
-  const segments = useSegments();
-  const navigationState = useRootNavigationState();
-  const hasCompletedOnboarding = useAppStore(
-    (state) => state.hasCompletedOnboarding,
-  );
+function RootNavigator() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
@@ -33,16 +27,10 @@ function NavigationGate() {
   }, []);
 
   useEffect(() => {
-    if (!hasHydrated || !navigationState?.key) return;
-
-    const isOnboarding = (segments as readonly string[])[0] === "onboarding";
-
-    if (!hasCompletedOnboarding && !isOnboarding) {
-      router.replace("/onboarding" as any);
+    if (hasHydrated) {
+      void SplashScreen.hideAsync().catch(() => {});
     }
-
-    void SplashScreen.hideAsync().catch(() => {});
-  }, [hasCompletedOnboarding, hasHydrated, navigationState?.key, router, segments]);
+  }, [hasHydrated]);
 
   return (
     <>
@@ -71,7 +59,7 @@ function NavigationGate() {
 export default function RootLayout() {
   return (
     <AppProviders>
-      <NavigationGate />
+      <RootNavigator />
     </AppProviders>
   );
 }

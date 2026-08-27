@@ -146,7 +146,7 @@ export default function ProfileScreen() {
             </Surface>
           </View>
 
-          {/* Safety boundaries verified during Spike B */}
+          {/* Safety boundaries confirmed by SDK and protocol-surface inspection. */}
           <View>
             <SectionHeading title="Current boundaries" />
             <Surface>
@@ -157,7 +157,7 @@ export default function ProfileScreen() {
                 },
                 {
                   title: "Action sessions are unavailable",
-                  desc: "Altana SDK 0.8 does not accept the WalletConnect signer used by this mobile build. Dolphin never falls back to private-key import.",
+                  desc: "Altana SDK 0.8.0 exposes no injected/WalletConnect signer constructor for this mobile build. Dolphin never falls back to private-key import.",
                 },
                 {
                   title: "Authorization and escrow are separate",

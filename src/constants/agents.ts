@@ -49,7 +49,7 @@ export const AGENT_CATEGORIES: readonly {
 ];
 
 export const AGENTS_API = {
-  baseUrl: "https://api.8004scan.io/api/v1",
+  baseUrl: "https://8004scan.io/api/v1/public",
   chainId: BSC_CHAIN_ID,
 } as const;
 

@@ -20,19 +20,12 @@ import { useWallet, WalletConnectButton } from "@/wallet/wallet-provider";
 export default function ProfileScreen() {
   const router = useRouter();
   const wallet = useWallet();
-  const hiredAgents = useAppStore((state) => state.hiredAgents);
+  const previewHires = useAppStore((state) => state.previewHires);
   const setHasCompletedOnboarding = useAppStore(
     (state) => state.setHasCompletedOnboarding
   );
   const clearPreviewHires = useAppStore((state) => state.clearPreviewHires);
-
-  const activeSessionsCount = hiredAgents.filter(
-    (a) => a.status === "active"
-  ).length;
-
-  const totalSpendCapUsd = hiredAgents
-    .filter((a) => a.status === "active")
-    .reduce((sum, a) => sum + (a.spendCapUsd ?? 0), 0);
+  const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
 
   const handleReplayOnboarding = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -43,8 +36,8 @@ export default function ProfileScreen() {
   const handleClearCache = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
-      "Reset Local Session Cache",
-      "This will clear local demo hires and search history. On-chain registry data will remain intact.",
+      "Reset local app data",
+      "This clears device previews and search history. It does not send a transaction or change registry data.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -52,6 +45,7 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: () => {
             clearPreviewHires();
+            clearRecentSearches();
             void Haptics.notificationAsync(
               Haptics.NotificationFeedbackType.Success
             );
@@ -84,7 +78,7 @@ export default function ProfileScreen() {
             className="mt-1 text-[15px]"
             style={{ color: colors.muted }}
           >
-            BNB Smart Chain account and active authorization limits
+            BNB Smart Chain account and authorization readiness
           </Text>
         </View>
 
@@ -125,49 +119,49 @@ export default function ProfileScreen() {
             </View>
           </Surface>
 
-          {/* Active Session Authorizations */}
+          {/* Truthful local and authorization state */}
           <View>
-            <SectionHeading title="Active Spend & Delegation Limits" />
+            <SectionHeading title="Authorization state" />
             <Surface>
               <View className="flex-row justify-between py-2 border-b" style={{ borderColor: colors.line }}>
-                <Text className="text-[13px] text-slate-500">Active Delegations</Text>
+                <Text className="text-[13px] text-slate-500">Saved Device Previews</Text>
                 <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                  {activeSessionsCount} {activeSessionsCount === 1 ? "Agent" : "Agents"}
+                  {previewHires.length}
                 </Text>
               </View>
 
               <View className="flex-row justify-between py-2.5 border-b" style={{ borderColor: colors.line }}>
-                <Text className="text-[13px] text-slate-500">Total Bounded Cap</Text>
+                <Text className="text-[13px] text-slate-500">Verified Active Delegations</Text>
                 <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                  ${totalSpendCapUsd.toLocaleString()} USD
+                  Unavailable
                 </Text>
               </View>
 
               <View className="flex-row justify-between py-2.5">
-                <Text className="text-[13px] text-slate-500">Custody Model</Text>
+                <Text className="text-[13px] text-slate-500">Private Key Handling</Text>
                 <Text className="text-[13px] font-semibold text-emerald-700">
-                  Non-Custodial (Zero Private Keys)
+                  Never requested
                 </Text>
               </View>
             </Surface>
           </View>
 
-          {/* Safety & Protocol Guarantees */}
+          {/* Safety boundaries verified during Spike B */}
           <View>
-            <SectionHeading title="Safety Guarantees" />
+            <SectionHeading title="Current boundaries" />
             <Surface>
               {[
                 {
-                  title: "ERC-8004 Registry Verification",
-                  desc: "All agents are checked against the BSC ERC-8004 identity contract.",
+                  title: "ERC-8004 is identity, not permission",
+                  desc: "Each agent page reports the result of its own registry read; identity does not prove a capability works.",
                 },
                 {
-                  title: "Scoped Session Allowances",
-                  desc: "Action agents can only execute approved contract calls up to your specified spend cap.",
+                  title: "Action sessions are unavailable",
+                  desc: "Altana SDK 0.8 does not accept the WalletConnect signer used by this mobile build. Dolphin never falls back to private-key import.",
                 },
                 {
-                  title: "Instant Revocation",
-                  desc: "You can revoke or pause any agent's authorization in a single on-chain transaction.",
+                  title: "Authorization and escrow are separate",
+                  desc: "Revoking future authority would not cancel or refund a separate ERC-8183 payment escrow.",
                 },
               ].map((item, idx) => (
                 <View
@@ -210,7 +204,7 @@ export default function ProfileScreen() {
               <View className="my-3 border-t" style={{ borderColor: colors.line }} />
 
               <PressableScale
-                accessibilityLabel="Reset local session state"
+                accessibilityLabel="Reset local previews and search history"
                 accessibilityRole="button"
                 onPress={handleClearCache}
                 containerStyle={{
@@ -221,7 +215,7 @@ export default function ProfileScreen() {
                 }}
               >
                 <Text className="text-[14px] font-semibold text-rose-600">
-                  Reset Local Cache
+                  Reset Local App Data
                 </Text>
                 <Text className="text-[12px] font-bold text-rose-600">Clear</Text>
               </PressableScale>

@@ -1,11 +1,11 @@
 import { useState, useRef } from "react";
 import {
-  Dimensions,
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -15,8 +15,6 @@ import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { colors, shadows } from "@/constants/theme";
 import { useAppStore } from "@/store/use-app-store";
-
-const { width } = Dimensions.get("window");
 
 interface Slide {
   id: string;
@@ -86,6 +84,8 @@ const slides: Slide[] = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const contentWidth = Math.min(windowWidth, 520);
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const setHasCompletedOnboarding = useAppStore(
@@ -114,7 +114,7 @@ export default function OnboardingScreen() {
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / width);
+    const index = Math.round(offsetX / contentWidth);
     if (index !== currentIndex && index >= 0 && index < slides.length) {
       setCurrentIndex(index);
     }
@@ -123,8 +123,13 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView
       className="flex-1"
-      style={{ backgroundColor: colors.canvas }}
+      style={{
+        alignItems: "center",
+        backgroundColor: colors.canvas,
+        overflow: "hidden",
+      }}
     >
+      <View style={{ flex: 1, maxWidth: "100%", width: contentWidth }}>
       {/* Top Header with Skip button */}
       <View className="flex-row items-center justify-between px-6 pt-3">
         <View className="flex-row items-center gap-2">
@@ -154,6 +159,11 @@ export default function OnboardingScreen() {
       <FlatList
         ref={flatListRef}
         data={slides}
+        getItemLayout={(_, index) => ({
+          index,
+          length: contentWidth,
+          offset: contentWidth * index,
+        })}
         keyExtractor={(item) => item.id}
         horizontal
         pagingEnabled
@@ -161,7 +171,10 @@ export default function OnboardingScreen() {
         onScroll={handleScroll}
         scrollEventThrottle={16}
         renderItem={({ item }) => (
-          <View style={{ width }} className="flex-1 justify-between px-7 py-6">
+          <View
+            style={{ width: contentWidth }}
+            className="flex-1 justify-between px-7 py-6"
+          >
             <View className="mt-4">
               <View className="mb-4 inline-flex self-start rounded-full bg-slate-200/60 px-3.5 py-1.5">
                 <Text
@@ -213,6 +226,7 @@ export default function OnboardingScreen() {
             </View>
           </View>
         )}
+        style={{ maxWidth: "100%", width: contentWidth }}
       />
 
       {/* Bottom controls */}
@@ -240,6 +254,7 @@ export default function OnboardingScreen() {
           onPress={handleNext}
           tone="primary"
         />
+      </View>
       </View>
     </SafeAreaView>
   );

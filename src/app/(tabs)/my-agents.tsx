@@ -33,23 +33,27 @@ export default function MyAgentsScreen() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
+      {/* Sticky Pinned Top Header */}
+      <View
+        className="px-6 pb-3 pt-2"
+        style={{ backgroundColor: colors.canvas, zIndex: 10 }}
+      >
+        <Text
+          className="text-[32px] font-bold tracking-[-0.6px]"
+          style={{ color: colors.ink }}
+        >
+          My Agents
+        </Text>
+        <Text className="mt-1 text-[14px]" style={{ color: colors.muted }}>
+          Saved setup previews on this device
+        </Text>
+      </View>
+
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 110 }}
+        contentContainerStyle={{ paddingBottom: 110, paddingTop: 4 }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="px-6 pb-4 pt-3">
-          <Text
-            className="text-[32px] font-bold tracking-[-0.6px]"
-            style={{ color: colors.ink }}
-          >
-            My Agents
-          </Text>
-          <Text className="mt-1 text-[14px]" style={{ color: colors.muted }}>
-            Saved setup previews on this device
-          </Text>
-        </View>
-
         <View className="px-6">
           {previewHires.length > 0 ? (
             <View className="gap-4">

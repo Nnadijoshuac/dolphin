@@ -94,9 +94,9 @@ export function AgentCard({ agent, onPress }: AgentCardProps) {
         <View className="flex-row items-center gap-2">
           <View className="flex-row items-center gap-1.5">
             {agent.recordStatus === "indexed" ? (
-              <BnbLogo size={12} />
+              <BnbLogo size={15} />
             ) : (
-              <CategoryGlyph color={colors.muted} name="info" size={12} />
+              <CategoryGlyph color={colors.muted} name="info" size={13} />
             )}
             <Text
               className="text-[11px] font-medium"

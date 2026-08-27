@@ -106,59 +106,69 @@ export default function WalletScreen() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
+      {/* Sticky Pinned Top Header */}
+      <View
+        className="w-full self-center px-6 pb-3 pt-2"
+        style={{
+          backgroundColor: colors.canvas,
+          maxWidth: contentWidth,
+          zIndex: 10,
+        }}
+      >
+        <View className="flex-row items-start justify-between">
+          <View>
+            <Text
+              className="text-[32px] font-bold tracking-[-0.6px]"
+              style={{ color: colors.ink }}
+            >
+              Wallet
+            </Text>
+            <Text
+              className="mt-1 text-[14px]"
+              style={{ color: colors.muted }}
+            >
+              BNB Smart Chain account and authorization
+            </Text>
+          </View>
+
+          <PressableScale
+            accessibilityLabel="About Dolphin & security"
+            accessibilityRole="button"
+            onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setShowInfoModal(true);
+            }}
+            containerStyle={{
+              alignItems: "center",
+              backgroundColor: "#FFFFFF",
+              borderColor: colors.line,
+              borderRadius: 9999,
+              borderWidth: 1,
+              height: 36,
+              justifyContent: "center",
+              marginTop: 4,
+              width: 36,
+              ...shadows.subtle,
+            }}
+          >
+            <CategoryGlyph color={colors.ink} name="info" size={18} />
+          </PressableScale>
+        </View>
+      </View>
+
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
           alignItems: "center",
           paddingBottom: 110,
+          paddingTop: 4,
         }}
         showsVerticalScrollIndicator={false}
       >
         <View
-          className="w-full px-6 pt-2"
+          className="w-full px-6"
           style={{ maxWidth: contentWidth }}
         >
-          {/* Header */}
-          <View className="flex-row items-start justify-between pb-3 pt-1">
-            <View>
-              <Text
-                className="text-[32px] font-bold tracking-[-0.6px]"
-                style={{ color: colors.ink }}
-              >
-                Wallet
-              </Text>
-              <Text
-                className="mt-1 text-[14px]"
-                style={{ color: colors.muted }}
-              >
-                BNB Smart Chain account and authorization
-              </Text>
-            </View>
-
-            <PressableScale
-              accessibilityLabel="About Dolphin & security"
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowInfoModal(true);
-              }}
-              containerStyle={{
-                alignItems: "center",
-                backgroundColor: "#FFFFFF",
-                borderColor: colors.line,
-                borderRadius: 9999,
-                borderWidth: 1,
-                height: 36,
-                justifyContent: "center",
-                width: 36,
-                marginTop: 4,
-                ...shadows.subtle,
-              }}
-            >
-              <CategoryGlyph color={colors.ink} name="info" size={18} />
-            </PressableScale>
-          </View>
-
           {/* Hero 3D Wallet graphic */}
           <View
             className="items-center justify-center py-4 my-2"

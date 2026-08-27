@@ -53,19 +53,10 @@ export default function CategoriesScreen() {
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              void refetch();
-            }}
-            tintColor={colors.ink}
-          />
-        }
-      >
+      {/* Sticky Pinned Top Header with Category Filter Tabs */}
+      <View style={{ backgroundColor: colors.canvas, zIndex: 10 }}>
         {/* Categories Page Header */}
-        <View className="px-6 pb-3 pt-3">
+        <View className="px-6 pb-2 pt-3">
           <Text
             className="text-[32px] font-bold tracking-[-0.6px]"
             style={{ color: colors.ink }}
@@ -78,7 +69,7 @@ export default function CategoriesScreen() {
         </View>
 
         {/* Top Category Filter Tabs with Gold Indicator */}
-        <View className="px-6 pt-1 pb-4">
+        <View className="px-6 pb-2 pt-1">
           <View className="border-b" style={{ borderColor: colors.lineLight }}>
             <ScrollView
               contentContainerStyle={{ gap: 18, paddingRight: 8 }}
@@ -130,7 +121,23 @@ export default function CategoriesScreen() {
             </ScrollView>
           </View>
         </View>
+      </View>
 
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 120, paddingTop: 4 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              void refetch();
+            }}
+            tintColor={colors.ink}
+          />
+        }
+      >
         {/* Agent Cards Listing */}
         <View className="px-6 pt-2">
           {isLoading ? (

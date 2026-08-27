@@ -68,14 +68,10 @@ export default function SearchScreen() {
     >
       <ConstellationBg opacity={0.3} />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 120 }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+      {/* Sticky Pinned Top Header with Search Bar */}
+      <View style={{ backgroundColor: colors.canvas, zIndex: 10 }}>
         {/* Search Page Header */}
-        <View className="px-6 pb-4 pt-3">
+        <View className="px-6 pb-2 pt-3">
           <Text
             className="text-[32px] font-bold tracking-[-0.6px]"
             style={{ color: colors.ink }}
@@ -88,7 +84,7 @@ export default function SearchScreen() {
         </View>
 
         {/* Clean Rounded Search Bar with Filter */}
-        <View className="px-6 pb-2">
+        <View className="px-6 pb-3 pt-1">
           <View
             className="flex-row items-center rounded-2xl border bg-white px-4 py-3"
             style={{
@@ -114,17 +110,24 @@ export default function SearchScreen() {
 
             {query.length > 0 ? (
               <PressableScale
-                accessibilityLabel="Clear search"
+                accessibilityLabel="Clear search input"
                 accessibilityRole="button"
                 onPress={() => setQuery("")}
                 containerStyle={{ padding: 4 }}
               >
-                <Text className="text-[13px] font-bold text-slate-400">✕</Text>
+                <CategoryGlyph color={colors.muted} name="revoke" size={16} />
               </PressableScale>
             ) : null}
           </View>
         </View>
+      </View>
 
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 120, paddingTop: 4 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Results or Category Browsing */}
         <View className="px-6 pt-4">
           {query.trim().length > 0 ? (

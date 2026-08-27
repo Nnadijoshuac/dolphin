@@ -44,7 +44,7 @@ export function BnbLogo({ size = 18 }: { size?: number }) {
 export function BnbBadge({ label = "on BNB Smart Chain" }: { label?: string }) {
   return (
     <View className="flex-row items-center gap-1.5">
-      <BnbLogo size={14} />
+      <BnbLogo size={16} />
       <Text
         className="text-[10px] font-bold uppercase tracking-wider"
         style={{ color: colors.goldDark }}

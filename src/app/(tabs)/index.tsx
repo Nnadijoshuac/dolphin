@@ -80,104 +80,49 @@ export default function DiscoverScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
+        stickyHeaderIndices={[3]}
       >
         {/* Child 0: Top Dolphin Writeup Header (Scrolls up out of view) */}
         <View>
           <AppHeader />
         </View>
 
-        {/* Child 1: Sticky Header (Discover Title + Category Tabs) */}
+        {/* Child 1: Discover Title Bar */}
         <View
+          className="flex-row items-center justify-between px-4 pb-2 pt-1"
           style={{
             backgroundColor: colors.canvas,
-            zIndex: 20,
           }}
         >
-          {/* Discover Title Bar */}
-          <View
-            className="flex-row items-center justify-between px-4 pb-2 pt-1"
-            style={{
-              backgroundColor: colors.canvas,
+          <Text
+            className="text-[32px] font-black tracking-[-1px]"
+            style={{ color: colors.ink }}
+          >
+            Discover
+          </Text>
+
+          <PressableScale
+            accessibilityLabel="View categories"
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/search")}
+            containerStyle={{
+              alignItems: "center",
+              backgroundColor: "#FFFFFF",
+              borderColor: colors.line,
+              borderRadius: 9999,
+              borderWidth: 1,
+              height: 38,
+              justifyContent: "center",
+              width: 38,
+              ...shadows.subtle,
             }}
           >
-            <Text
-              className="text-[28px] font-black tracking-[-1px]"
-              style={{ color: colors.ink }}
-            >
-              Discover
-            </Text>
-
-            <PressableScale
-              accessibilityLabel="View categories"
-              accessibilityRole="button"
-              onPress={() => router.push("/(tabs)/search")}
-              containerStyle={{
-                alignItems: "center",
-                backgroundColor: "#FFFFFF",
-                borderColor: colors.line,
-                borderRadius: 9999,
-                borderWidth: 1,
-                height: 38,
-                justifyContent: "center",
-                width: 38,
-                ...shadows.subtle,
-              }}
-            >
-              <CategoryGlyph color={colors.ink} name="layers" size={18} />
-            </PressableScale>
-          </View>
-
-          {/* Category Filter Tabs */}
-          <View className="px-4 pb-2 pt-1">
-            <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
-              <ScrollView
-                contentContainerStyle={{ gap: 24, paddingRight: 16 }}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              >
-                {AGENT_CATEGORIES.map((cat) => {
-                  const isActive = activeCategory === cat.slug;
-                  return (
-                    <PressableScale
-                      key={cat.slug}
-                      accessibilityLabel={cat.label}
-                      accessibilityRole="tab"
-                      accessibilityState={{ selected: isActive }}
-                      onPress={() => handleSelectCategory(cat.slug)}
-                      containerStyle={{
-                        paddingBottom: 8,
-                        paddingTop: 4,
-                        alignItems: "center",
-                        position: "relative",
-                      }}
-                    >
-                      <Text
-                        className="text-[14px]"
-                        style={{
-                          color: isActive ? colors.ink : "#7A7B7E",
-                          fontWeight: isActive ? "800" : "500",
-                        }}
-                      >
-                        {cat.label}
-                      </Text>
-
-                      {isActive ? (
-                        <View
-                          className="absolute bottom-0 h-1 w-full rounded-full"
-                          style={{ backgroundColor: colors.gold }}
-                        />
-                      ) : null}
-                    </PressableScale>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </View>
+            <CategoryGlyph color={colors.ink} name="layers" size={18} />
+          </PressableScale>
         </View>
 
         {/* Child 2: Compact Featured Hero Card */}
-        <View className="px-2 pb-2 pt-2">
+        <View className="px-2 pb-1 pt-1">
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
             accessibilityRole="button"
@@ -258,7 +203,60 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Child 3: Horizontal Swipeable Category Lists Carousel */}
+        {/* Child 3: Category Filter Tabs Bar (The dock UNDER the card, sticky on scroll!) */}
+        <View
+          className="px-4 pb-2 pt-4"
+          style={{
+            backgroundColor: colors.canvas,
+            zIndex: 10,
+          }}
+        >
+          <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
+            <ScrollView
+              contentContainerStyle={{ gap: 24, paddingRight: 16 }}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            >
+              {AGENT_CATEGORIES.map((cat) => {
+                const isActive = activeCategory === cat.slug;
+                return (
+                  <PressableScale
+                    key={cat.slug}
+                    accessibilityLabel={cat.label}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isActive }}
+                    onPress={() => handleSelectCategory(cat.slug)}
+                    containerStyle={{
+                      paddingBottom: 8,
+                      paddingTop: 4,
+                      alignItems: "center",
+                      position: "relative",
+                    }}
+                  >
+                    <Text
+                      className="text-[14px]"
+                      style={{
+                        color: isActive ? colors.ink : "#7A7B7E",
+                        fontWeight: isActive ? "800" : "500",
+                      }}
+                    >
+                      {cat.label}
+                    </Text>
+
+                    {isActive ? (
+                      <View
+                        className="absolute bottom-0 h-1 w-full rounded-full"
+                        style={{ backgroundColor: colors.gold }}
+                      />
+                    ) : null}
+                  </PressableScale>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+
+        {/* Child 4: Horizontal Swipeable Category Lists Carousel */}
         <ScrollView
           ref={horizontalScrollRef}
           horizontal

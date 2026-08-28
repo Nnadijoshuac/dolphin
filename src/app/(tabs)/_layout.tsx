@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { Redirect, Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -35,10 +35,16 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
           width: "74%",
           maxWidth: 310,
           height: 58,
-          backgroundColor: "rgba(255, 255, 255, 0.92)",
+          backgroundColor:
+            Platform.OS === "ios"
+              ? "rgba(255, 255, 255, 0.45)"
+              : "rgba(255, 255, 255, 0.94)",
           borderRadius: 29,
           borderWidth: 1.2,
-          borderColor: "rgba(17, 18, 20, 0.08)",
+          borderColor:
+            Platform.OS === "ios"
+              ? "rgba(255, 255, 255, 0.75)"
+              : "rgba(17, 18, 20, 0.08)",
           shadowColor: "#111215",
           shadowOffset: { width: 0, height: 8 },
           shadowOpacity: 0.16,
@@ -49,9 +55,9 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
         }}
       >
         <BlurView
-          intensity={85}
+          intensity={95}
           style={StyleSheet.absoluteFill}
-          tint="systemChromeMaterialLight"
+          tint={Platform.OS === "ios" ? "systemThinMaterialLight" : "systemChromeMaterialLight"}
         />
 
         {state.routes.map((route, index) => {

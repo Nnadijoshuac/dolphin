@@ -1,11 +1,7 @@
-import {
-  actionGeneric,
-  internalMutationGeneric,
-  makeFunctionReference,
-  queryGeneric,
-} from "convex/server";
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
+import { action, internalMutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { agentCategoryValidator, agentLiveStatsValidator } from "./categoryStatsValidators";
 import { readGridTradingStats } from "./protocols/pancakeswap";
@@ -13,19 +9,19 @@ import { readHealthFactorStats } from "./protocols/venus";
 import { unavailableMonitoringStats, unavailableYieldStats } from "./protocols/unavailable";
 
 /**
- * Written against the generic (un-codegenned) builders from convex/server
- * rather than the usual `./_generated/server` imports, because this project
- * has not yet run `npx convex dev` (it requires an interactive browser
- * login this environment cannot perform - see the project audit). Once that
- * one-time login has run, `_generated/server` and `_generated/api` will
- * exist; at that point these can be swapped to the idiomatic generated
- * imports, which is purely a local type-inference upgrade; the runtime
- * behavior is identical either way.
+ * `./_generated/server` and the `internal.*`/`api.*` reference objects are
+ * normally produced by `npx convex dev`, which needs an interactive browser
+ * login this environment cannot perform (see the project audit). server.ts
+ * and dataModel.ts here are hand-written to match what codegen produces, so
+ * this typechecks now; running `npx convex dev` once will safely regenerate
+ * them. `internal.categoryStats.*` isn't available without generated
+ * `api.ts`, so the one cross-function call below uses an explicit
+ * makeFunctionReference instead - swap it for `internal.categoryStats.
+ * upsertAgentCategoryStats` once codegen has run, purely for readability.
  */
-
 const upsertRef = makeFunctionReference<"mutation">("categoryStats:upsertAgentCategoryStats");
 
-export const getAgentCategoryStats = queryGeneric({
+export const getAgentCategoryStats = query({
   args: {
     tokenId: v.string(),
     category: agentCategoryValidator,

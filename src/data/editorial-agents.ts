@@ -51,13 +51,22 @@ export function unavailableLiveStats(category: AgentCategory): AgentLiveStats {
         lastAlertAt: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
         falsePositiveRate: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
       };
+    case "rebalancing":
+      return {
+        category,
+        winRate: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
+        activeRange: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
+        currentPnl: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
+        positionCount: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
+        trackRecordPeriod: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
+      };
     case "grid-trading":
       return {
         category,
         winRate: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
         activeRange: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
         currentPnl: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
-        gridCount: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
+        positionCount: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
         trackRecordPeriod: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
       };
     case "health-factor":
@@ -181,7 +190,7 @@ export const EDITORIAL_AGENTS: Agent[] = [
     tokenId: "45650",
     name: "V3 Pools powered by HeyAnon",
     ownerAddress: "0xda977767452c5dd021624511f14df67b6c9c2c1b",
-    category: "grid-trading",
+    category: "rebalancing",
     tagline: "Validates and executes concentrated-liquidity V3 pool positions across several chains, including BSC.",
     description:
       "The publisher describes a safe execution layer for Uniswap V3-style concentrated liquidity (covering PancakeSwap, Uniswap, and other V3-style DEXs) that validates price ranges, estimates tick spacing, and returns pre-validated calldata for creating positions, adjusting liquidity, and collecting fees.",
@@ -229,7 +238,12 @@ export const EDITORIAL_AGENTS: Agent[] = [
     tokenId: "45381",
     name: "Aave powered by HeyAnon",
     ownerAddress: "0xda977767452c5dd021624511f14df67b6c9c2c1b",
-    category: "yield",
+    // Reclassified from "yield": its own description centers on validating
+    // collateral requirements and checking health factors, not moving
+    // capital to yield - and 8004scan's independent keyword classifier
+    // (convex/lib/classification.ts) agrees, tagging this same token
+    // "health-factor" (confirmed, matched "health factor").
+    category: "health-factor",
     tagline: "Validates and executes Aave lending actions across several chains, including BSC.",
     description:
       "The publisher describes a safe execution layer for Aave lending that validates collateral requirements, checks health factors, and verifies token approvals before returning pre-validated calldata for supply, borrow, repay, withdraw, and liquidation actions.",

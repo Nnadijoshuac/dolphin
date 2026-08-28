@@ -7,6 +7,7 @@ import type { AgentCategory } from "@/types/agent";
 
 const backgrounds: Record<AgentCategory, string> = {
   monitoring: colors.blue,
+  rebalancing: colors.blue,
   "grid-trading": colors.goldSoft,
   "health-factor": colors.coral,
   yield: colors.mint,

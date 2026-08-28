@@ -14,6 +14,7 @@ import type { Agent, AgentCategory } from "@/types/agent";
 
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
+  rebalancing: "Rebalancing",
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
@@ -55,6 +56,22 @@ function LiveStats({ agent }: { agent: Agent }) {
             </View>
           </>
         ) : null}
+        {stats.category === "rebalancing" ? (
+          <>
+            <View className="w-1/2 pr-3">
+              <MetricCell format={(value) => `${value.toFixed(1)}%`} label="Rebalance efficiency" metric={stats.winRate} />
+            </View>
+            <View className="w-1/2 pl-3">
+              <MetricCell format={(value) => value} label="Active range" metric={stats.activeRange} />
+            </View>
+            <View className="w-1/2 pr-3">
+              <MetricCell format={(value) => value} label="Current P&L" metric={stats.currentPnl} />
+            </View>
+            <View className="w-1/2 pl-3">
+              <MetricCell format={(value) => value.toLocaleString()} label="LP positions" metric={stats.positionCount} />
+            </View>
+          </>
+        ) : null}
         {stats.category === "grid-trading" ? (
           <>
             <View className="w-1/2 pr-3">
@@ -67,7 +84,7 @@ function LiveStats({ agent }: { agent: Agent }) {
               <MetricCell format={(value) => value} label="Current P&L" metric={stats.currentPnl} />
             </View>
             <View className="w-1/2 pl-3">
-              <MetricCell format={(value) => value.toLocaleString()} label="Grid count" metric={stats.gridCount} />
+              <MetricCell format={(value) => value.toLocaleString()} label="Grid levels" metric={stats.positionCount} />
             </View>
           </>
         ) : null}
@@ -99,7 +116,7 @@ function LiveStats({ agent }: { agent: Agent }) {
               <MetricCell format={(value) => value.join(", ")} label="Protocols" metric={stats.protocolsUsed} />
             </View>
             <View className="w-1/2 pl-3">
-              <MetricCell format={(value) => value} label="Rebalances" metric={stats.rebalanceFrequency} />
+              <MetricCell format={(value) => value} label="Vault rebalance cadence" metric={stats.rebalanceFrequency} />
             </View>
           </>
         ) : null}

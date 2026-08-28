@@ -14,8 +14,15 @@ export const ERC8004_REGISTRY_ADDRESSES = {
   reputation: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63" as Address,
 } as const;
 
+// The four categories graded by the hackathon's Agent Diversity rubric.
+// "monitoring" stays a valid AgentCategory (Wallet Watch's data and hire
+// record are real and unbroken) but is deliberately excluded from this
+// enumerated list - see project-scope.md's category taxonomy notes. It is
+// never presented as one of the four graded categories, so it does not
+// appear in Discover/Search/onboarding's category browsing surfaces, which
+// all iterate over this list.
 export const AGENT_CATEGORY_SLUGS = [
-  "monitoring",
+  "rebalancing",
   "grid-trading",
   "health-factor",
   "yield",
@@ -27,14 +34,14 @@ export const AGENT_CATEGORIES: readonly {
   description: string;
 }[] = [
   {
-    slug: "monitoring",
-    label: "Monitoring",
-    description: "Agents that publish market, wallet, or position monitoring.",
+    slug: "rebalancing",
+    label: "Rebalancing",
+    description: "LP-range agents that reset concentrated-liquidity positions automatically.",
   },
   {
     slug: "grid-trading",
     label: "Grid Trading",
-    description: "Range-strategy agents and their available track-record evidence.",
+    description: "Price-ladder agents and their available track-record evidence.",
   },
   {
     slug: "health-factor",

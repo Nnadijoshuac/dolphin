@@ -23,6 +23,7 @@ import type { Agent, AgentCategory } from "@/types/agent";
 
 const categoryBgColors: Record<AgentCategory, string> = {
   monitoring: "#F5F3EC",
+  rebalancing: "#EAF1FB",
   "grid-trading": "#FAF5E6",
   "health-factor": "#F9F3F0",
   yield: "#F0F7F2",
@@ -30,13 +31,15 @@ const categoryBgColors: Record<AgentCategory, string> = {
 
 const categorySubtitles: Record<AgentCategory, string> = {
   monitoring: "Watch wallets",
-  "grid-trading": "Price ranges",
+  rebalancing: "LP ranges",
+  "grid-trading": "Price ladders",
   "health-factor": "Borrow risk",
   yield: "Find yield",
 };
 
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
+  rebalancing: "Rebalancing",
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",

@@ -66,6 +66,17 @@ export function CategoryGlyph({
         </>
       ) : null}
 
+      {name === "rebalancing" ? (
+        <>
+          {/* Two cycle arrows around a centered LP-range bracket */}
+          <Path d="M6 8a6 6 0 0 1 10.5-3.3" {...common} strokeWidth={2} />
+          <Path d="m16.5 2 1 3-3 .5" {...common} strokeWidth={2} />
+          <Path d="M18 16a6 6 0 0 1-10.5 3.3" {...common} strokeWidth={2} />
+          <Path d="m7.5 22-1-3 3-.5" {...common} strokeWidth={2} />
+          <Line x1="12" x2="12" y1="9" y2="15" {...common} strokeWidth={1.6} />
+        </>
+      ) : null}
+
       {name === "health-factor" ? (
         <>
           <Path d="M11 20s6-3.2 6-8.5V5.5l-6-2.5-6 2.5v6C5 16.8 11 20 11 20Z" {...common} strokeWidth={1.8} />

@@ -68,48 +68,46 @@ export default function DiscoverScreen() {
         backgroundColor: colors.canvas,
       }}
     >
-      <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
-        <ScrollView
-          contentContainerStyle={{ gap: 24, paddingRight: 16 }}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-        >
-          {AGENT_CATEGORIES.map((cat) => {
-            const isActive = activeCategory === cat.slug;
-            return (
-              <PressableScale
-                key={cat.slug}
-                accessibilityLabel={cat.label}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: isActive }}
-                onPress={() => handleSelectCategory(cat.slug)}
-                containerStyle={{
-                  paddingBottom: 8,
-                  paddingTop: 4,
-                  alignItems: "center",
-                  position: "relative",
+      <View
+        className="flex-row items-center justify-between border-b"
+        style={{ borderColor: "rgba(17,18,20,0.06)" }}
+      >
+        {AGENT_CATEGORIES.map((cat) => {
+          const isActive = activeCategory === cat.slug;
+          return (
+            <PressableScale
+              key={cat.slug}
+              accessibilityLabel={cat.label}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              onPress={() => handleSelectCategory(cat.slug)}
+              containerStyle={{
+                paddingBottom: 8,
+                paddingTop: 4,
+                paddingHorizontal: 2,
+                alignItems: "center",
+                position: "relative",
+              }}
+            >
+              <Text
+                className="text-[13px]"
+                style={{
+                  color: isActive ? colors.ink : "#7A7B7E",
+                  fontWeight: isActive ? "800" : "500",
                 }}
               >
-                <Text
-                  className="text-[14px]"
-                  style={{
-                    color: isActive ? colors.ink : "#7A7B7E",
-                    fontWeight: isActive ? "800" : "500",
-                  }}
-                >
-                  {cat.label}
-                </Text>
+                {cat.label}
+              </Text>
 
-                {isActive ? (
-                  <View
-                    className="absolute bottom-0 h-1 w-full rounded-full"
-                    style={{ backgroundColor: colors.gold }}
-                  />
-                ) : null}
-              </PressableScale>
-            );
-          })}
-        </ScrollView>
+              {isActive ? (
+                <View
+                  className="absolute bottom-0 h-1 w-full rounded-full"
+                  style={{ backgroundColor: colors.gold }}
+                />
+              ) : null}
+            </PressableScale>
+          );
+        })}
       </View>
     </View>
   );

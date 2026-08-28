@@ -135,9 +135,13 @@ interface Agents {
 
 ---
 
-## 6. Agents Authorization Model — Open Question, Resolve by Testing First
+## 6. Agents Authorization Model — Partially Resolved by Testing (2026-08-28)
 
-**Unresolved and must be settled by direct testing before any hire-flow code is written**: does an Altana session key delegate control over the user's *existing* wallet (no funding step), or does Altana provision a *separate* smart wallet that must hold/receive the managed assets (a funding step required)? Two independent research passes disagree, citing different (partially unverifiable) primary sources. This is not resolvable by further reading — it resolves in about an hour of direct testing.
+**Custody mechanic — resolved for the private-key signer path**: `@altananetwork/sdk` 0.8.0's `createWallet` upgrades the signer's own EOA in place via EIP-7702 (`setCode`) rather than provisioning a separate funded wallet. Confirmed directly against the installed package (`internal/passkey.d.ts` doc comments describe the EIP-7702 upgrade mechanism) and empirically via `scripts/spike-b-auth.mjs`'s preflight, which reported `Wallet equals signer EOA: true` for a freshly generated disposable testnet key — the Altana wallet address was identical to the signer's address, with **no separate funding step required**. This means, for whichever signer type ends up connected, the "no funding step" branch of §7's hire flow is the one this SDK actually implements.
+
+**Signer availability — a new, more fundamental blocker discovered**: the resolved custody question turns out not to be the blocking one. `@altananetwork/sdk` 0.8.0 ships exactly three signer constructors — `signerFromPrivateKey`/`createPrivateKeySigner` (raw key, server-side/CLI), and `createPasskey`/`signerFromPasskey` (browser WebAuthn only — `createPasskey` explicitly throws in non-browser environments per its own doc comment). **There is no injected-wallet (EIP-1193/WalletConnect/MetaMask-style) signer in this SDK version**, despite an internal comment (`internal/signer.d.ts`) describing `signerFromInjected` as a planned adapter — it is not implemented or exported. This means a user's Reown-AppKit-connected wallet (§3's locked wallet-connection method) **cannot currently drive an Altana session at all** — not because of a funding-step question, but because the SDK has no signer type compatible with an external wallet connection. Dolphin's own code already fails this closed correctly (`src/services/authorization.ts` reports every action-capability as unavailable, never falls back to asking for a private key).
+
+**Path forward, being evaluated**: WebAuthn passkeys are the only non-custodial signer path this SDK version supports, but `createPasskey`/`createHeadlessPasskey` are hard-coded to browser `navigator.credentials` and throw outside a browser — React Native has no built-in WebAuthn. A React Native passkey library (e.g. `react-native-passkeys`) could perform the platform passkey ceremony (iOS/Android native Credential Manager APIs) and the resulting credential could potentially be reshaped into Altana's `PasskeyCredential`/`signerFromPasskey` format by hand, bypassing `createPasskey` — but this needs its own spike to confirm the public-key encoding lines up (Altana expects a flat P256 `x || y` key; RN passkey libraries commonly return other encodings) before committing engineering time. If no clear path is confirmed shortly, the fallback is to keep the current honest "device preview" / testnet-demo framing for the real signer-driven flow specifically, while everything else (marketplace, identity, category data) proceeds as planned.
 
 **Spike sequence (run in this order, before UI work depends on any of them):**
 
@@ -246,7 +250,8 @@ app/
 - Altana session-key model (allowlist + spend cap + expiry + on-chain Keystore + revocation) is real and integrated into BNB Agents Studio — not hackathon vaporware
 
 **Still open, resolve via Spikes A/B/C before depending on them:**
-- Exact custody mechanic (§6) — the one open item that actually blocks hire-flow UI work
+- Custody mechanic (§6) is resolved for the private-key signer path (no funding step — EIP-7702 upgrades the signer's own EOA). The actual blocker is signer availability: `@altananetwork/sdk` 0.8.0 has no injected-wallet signer, only private-key and browser-only WebAuthn passkey. See §6 for the RN-passkey path being evaluated.
+- No backend exists in the repository as of 2026-08-28. `agents-api.ts` calls 8004scan directly from the client (anonymous, no proxy/API key); `chain.ts` reads BSC mainnet directly via viem from the client. §3's "thin Node/Express (or Convex)" backend for aggregation, Altana hosting, and x402 seller integration has not been started.
 - Altana SDK's confirmed runtime compatibility (mitigated by keeping it backend-only regardless of the answer)
 - Exact hire-flow transaction count
 - 8004scan's rate limits/latency at mobile-app scale (mitigated by backend caching regardless)

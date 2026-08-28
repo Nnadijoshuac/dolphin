@@ -11,12 +11,15 @@ type PressableScaleProps = PropsWithChildren<
   PressableProps & {
     containerStyle?: StyleProp<ViewStyle>;
     pressedScale?: number;
+    className?: string;
   }
 >;
 
 export function PressableScale({
   children,
   containerStyle,
+  style,
+  className,
   onPressIn,
   onPressOut,
   pressedScale = 0.98,
@@ -30,6 +33,8 @@ export function PressableScale({
   return (
     <Pressable
       {...props}
+      className={className}
+      style={style}
       onPressIn={(event) => {
         scale.value = withSpring(pressedScale, { damping: 18, stiffness: 260 });
         onPressIn?.(event);
@@ -43,4 +48,5 @@ export function PressableScale({
     </Pressable>
   );
 }
+
 

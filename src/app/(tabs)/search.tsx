@@ -23,9 +23,16 @@ import type { Agent, AgentCategory } from "@/types/agent";
 
 const categoryBgColors: Record<AgentCategory, string> = {
   monitoring: "#F5F3EC",
-  "grid-trading": "#F5F3EC",
-  "health-factor": "#F5F3EC",
-  yield: "#F5F3EC",
+  "grid-trading": "#FAF5E6",
+  "health-factor": "#F9F3F0",
+  yield: "#F0F7F2",
+};
+
+const categorySubtitles: Record<AgentCategory, string> = {
+  monitoring: "Watch wallets",
+  "grid-trading": "Price ranges",
+  "health-factor": "Borrow risk",
+  yield: "Find yield",
 };
 
 const categoryLabels: Record<AgentCategory, string> = {
@@ -338,52 +345,123 @@ export default function SearchScreen() {
 
             {/* Explore Categories */}
             <View>
-              <Text className="text-[14px] font-bold pb-2" style={{ color: colors.ink }}>
+              <Text className="text-[14px] font-bold pb-2.5" style={{ color: colors.ink }}>
                 Explore Categories
               </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {AGENT_CATEGORIES.map((cat) => (
-                  <PressableScale
-                    key={cat.slug}
-                    accessibilityLabel={cat.label}
-                    accessibilityRole="button"
-                    onPress={() => handleTagPress(cat.label)}
-                    containerStyle={{
-                      alignItems: "center",
-                      backgroundColor: "#FFFFFF",
-                      borderColor: "rgba(17,18,20,0.05)",
-                      borderRadius: 14,
-                      borderWidth: 1,
-                      flexDirection: "row",
-                      gap: 8,
-                      paddingHorizontal: 11,
-                      paddingVertical: 9,
-                      width: "48.5%",
-                      ...shadows.subtle,
-                    }}
-                  >
-                    <View
-                      className="h-8 w-8 items-center justify-center rounded-lg overflow-hidden"
-                      style={{ backgroundColor: categoryBgColors[cat.slug] ?? "#F5F3EC" }}
+              <View className="gap-2.5">
+                {/* Row 1 */}
+                <View className="flex-row gap-2.5">
+                  {[AGENT_CATEGORIES[0], AGENT_CATEGORIES[1]].map((cat) => (
+                    <PressableScale
+                      key={cat.slug}
+                      accessibilityLabel={cat.label}
+                      accessibilityRole="button"
+                      className="flex-1"
+                      onPress={() => handleTagPress(cat.label)}
+                      style={{ flex: 1 }}
+                      containerStyle={{
+                        alignItems: "center",
+                        backgroundColor: "#FFFFFF",
+                        borderColor: "rgba(17,18,20,0.06)",
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        flexDirection: "row",
+                        gap: 10,
+                        paddingHorizontal: 12,
+                        paddingVertical: 12,
+                        ...shadows.subtle,
+                      }}
                     >
-                      <CategoryGlyph
-                        color={colors.ink}
-                        name={cat.slug}
-                        size={16}
-                        strokeWidth={1.8}
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <Text
-                        className="text-[12.5px] font-bold"
-                        numberOfLines={1}
-                        style={{ color: colors.ink }}
+                      <View
+                        className="h-10 w-10 items-center justify-center rounded-xl overflow-hidden"
+                        style={{
+                          backgroundColor: categoryBgColors[cat.slug] ?? "#F5F3EC",
+                          borderColor: "rgba(17,18,20,0.04)",
+                          borderWidth: 1,
+                        }}
                       >
-                        {cat.label}
-                      </Text>
-                    </View>
-                  </PressableScale>
-                ))}
+                        <CategoryGlyph
+                          color={colors.ink}
+                          name={cat.slug}
+                          size={20}
+                          strokeWidth={2}
+                        />
+                      </View>
+                      <View className="flex-1">
+                        <Text
+                          className="text-[13.5px] font-bold"
+                          numberOfLines={1}
+                          style={{ color: colors.ink }}
+                        >
+                          {cat.label}
+                        </Text>
+                        <Text
+                          className="text-[11px] text-zinc-500 mt-0.5 font-medium"
+                          numberOfLines={1}
+                        >
+                          {categorySubtitles[cat.slug]}
+                        </Text>
+                      </View>
+                    </PressableScale>
+                  ))}
+                </View>
+
+                {/* Row 2 */}
+                <View className="flex-row gap-2.5">
+                  {[AGENT_CATEGORIES[2], AGENT_CATEGORIES[3]].map((cat) => (
+                    <PressableScale
+                      key={cat.slug}
+                      accessibilityLabel={cat.label}
+                      accessibilityRole="button"
+                      className="flex-1"
+                      onPress={() => handleTagPress(cat.label)}
+                      style={{ flex: 1 }}
+                      containerStyle={{
+                        alignItems: "center",
+                        backgroundColor: "#FFFFFF",
+                        borderColor: "rgba(17,18,20,0.06)",
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        flexDirection: "row",
+                        gap: 10,
+                        paddingHorizontal: 12,
+                        paddingVertical: 12,
+                        ...shadows.subtle,
+                      }}
+                    >
+                      <View
+                        className="h-10 w-10 items-center justify-center rounded-xl overflow-hidden"
+                        style={{
+                          backgroundColor: categoryBgColors[cat.slug] ?? "#F5F3EC",
+                          borderColor: "rgba(17,18,20,0.04)",
+                          borderWidth: 1,
+                        }}
+                      >
+                        <CategoryGlyph
+                          color={colors.ink}
+                          name={cat.slug}
+                          size={20}
+                          strokeWidth={2}
+                        />
+                      </View>
+                      <View className="flex-1">
+                        <Text
+                          className="text-[13.5px] font-bold"
+                          numberOfLines={1}
+                          style={{ color: colors.ink }}
+                        >
+                          {cat.label}
+                        </Text>
+                        <Text
+                          className="text-[11px] text-zinc-500 mt-0.5 font-medium"
+                          numberOfLines={1}
+                        >
+                          {categorySubtitles[cat.slug]}
+                        </Text>
+                      </View>
+                    </PressableScale>
+                  ))}
+                </View>
               </View>
             </View>
 
@@ -393,7 +471,7 @@ export default function SearchScreen() {
                 <Text className="text-[14px] font-bold pb-2.5" style={{ color: colors.ink }}>
                   Suggested for you
                 </Text>
-                <View className="gap-2">
+                <View className="gap-2.5">
                   {allAgents.slice(0, 4).map((agent) => (
                     <PressableScale
                       key={agent.id}
@@ -402,17 +480,17 @@ export default function SearchScreen() {
                       onPress={() => handleAgentPress(agent)}
                       containerStyle={{
                         backgroundColor: "#FFFFFF",
-                        borderColor: "rgba(17,18,20,0.05)",
-                        borderRadius: 16,
+                        borderColor: "rgba(17,18,20,0.06)",
+                        borderRadius: 18,
                         borderWidth: 1,
-                        padding: 11,
+                        padding: 13,
                         ...shadows.subtle,
                       }}
                     >
                       <View className="flex-row items-center gap-3">
                         {/* Compact App Icon */}
                         <View
-                          className="h-11 w-11 items-center justify-center rounded-xl overflow-hidden"
+                          className="h-12 w-12 items-center justify-center rounded-2xl overflow-hidden"
                           style={{
                             backgroundColor: categoryBgColors[agent.category] ?? "#F5F3EC",
                             borderColor: "rgba(17,18,20,0.04)",
@@ -422,22 +500,22 @@ export default function SearchScreen() {
                           <CategoryGlyph
                             color={colors.ink}
                             name={agent.category}
-                            size={20}
-                            strokeWidth={1.8}
+                            size={22}
+                            strokeWidth={2}
                           />
                         </View>
 
                         {/* Title & info */}
                         <View className="flex-1 pr-2">
                           <Text
-                            className="text-[14px] font-bold tracking-tight"
+                            className="text-[14.5px] font-bold tracking-tight"
                             numberOfLines={1}
                             style={{ color: colors.ink }}
                           >
                             {agent.name}
                           </Text>
                           <Text
-                            className="mt-0.5 text-[11.5px] text-zinc-500"
+                            className="mt-0.5 text-[12px] text-zinc-500"
                             numberOfLines={1}
                           >
                             {categoryLabels[agent.category]} · {agent.tagline}
@@ -446,14 +524,14 @@ export default function SearchScreen() {
 
                         {/* View CTA */}
                         <View
-                          className="items-center justify-center rounded-lg px-3 py-1.5"
+                          className="items-center justify-center rounded-xl px-3.5 py-1.5"
                           style={{
                             backgroundColor: colors.gold,
-                            minWidth: 50,
+                            minWidth: 54,
                             ...shadows.subtle,
                           }}
                         >
-                          <Text className="text-[12px] font-bold text-black">
+                          <Text className="text-[12.5px] font-bold text-black">
                             View
                           </Text>
                         </View>

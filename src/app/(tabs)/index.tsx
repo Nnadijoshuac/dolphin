@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -15,40 +16,20 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
+import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors, radii, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
 
-const categoriesOverview: Array<{
-  slug: AgentCategory;
-  title: string;
-  desc: string;
-}> = [
-  {
-    slug: "monitoring",
-    title: "Monitoring",
-    desc: "Watch markets and positions in real time.",
-  },
-  {
-    slug: "grid-trading",
-    title: "Grid trading",
-    desc: "Automate grids. Capture every swing.",
-  },
-  {
-    slug: "health-factor",
-    title: "Health factor",
-    desc: "Stay protected. Agents that guard your risk.",
-  },
-  {
-    slug: "yield",
-    title: "Yield",
-    desc: "Maximize returns across DeFi opportunities.",
-  },
-];
-
 export default function DiscoverScreen() {
   const router = useRouter();
+  const [activeCategory, setActiveCategory] = useState<AgentCategory>("monitoring");
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
+
+  const filteredAgents = useMemo(() => {
+    if (!agents) return [];
+    return agents.filter((agent) => agent.category === activeCategory);
+  }, [agents, activeCategory]);
 
   const handleAgentPress = (agent: Agent) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -58,12 +39,9 @@ export default function DiscoverScreen() {
     });
   };
 
-  const handleCategoryPress = (slug: string) => {
+  const handleSelectCategory = (slug: AgentCategory) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({
-      pathname: "/category/[slug]",
-      params: { slug },
-    });
+    setActiveCategory(slug);
   };
 
   return (
@@ -90,7 +68,7 @@ export default function DiscoverScreen() {
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[1]}
       >
-        {/* Child 0: Top Dolphin Writeup (scrolls up and away) */}
+        {/* Child 0: Top Dolphin Writeup Header */}
         <View>
           <AppHeader />
         </View>
@@ -135,7 +113,7 @@ export default function DiscoverScreen() {
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
             accessibilityRole="button"
-            onPress={() => handleCategoryPress("monitoring")}
+            onPress={() => setActiveCategory("monitoring")}
             containerStyle={{
               backgroundColor: "#0E0F12",
               borderColor: "rgba(255,255,255,0.08)",
@@ -203,112 +181,61 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Section: Built for every move */}
-        <View className="mt-7 px-6">
-          <Text
-            className="text-[19px] font-bold tracking-tight"
-            style={{ color: colors.ink }}
-          >
-            Built for every move
-          </Text>
-          <Text
-            className="mt-0.5 text-[12px]"
-            style={{ color: colors.muted }}
-          >
-            Four agent types. One marketplace. Endless possibilities.
-          </Text>
-        </View>
-
-        {/* 4 Category Cards Horizontal Carousel */}
-        <View className="mt-3.5">
-          <ScrollView
-            contentContainerStyle={{
-              gap: 10,
-              paddingHorizontal: 24,
-            }}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          >
-            {categoriesOverview.map((item) => (
-              <PressableScale
-                key={item.slug}
-                accessibilityLabel={`Category: ${item.title}`}
-                accessibilityRole="button"
-                onPress={() => handleCategoryPress(item.slug)}
-                containerStyle={{
-                  alignItems: "center",
-                  backgroundColor: "#FFFFFF",
-                  borderColor: colors.line,
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  justifyContent: "space-between",
-                  minHeight: 165,
-                  paddingHorizontal: 10,
-                  paddingVertical: 14,
-                  width: 114,
-                  ...shadows.subtle,
-                }}
-              >
-                {/* Centered Circular Icon */}
-                <View
-                  className="h-12 w-12 items-center justify-center rounded-full border"
-                  style={{
-                    backgroundColor: "#FAFAFA",
-                    borderColor: colors.lineLight,
-                  }}
-                >
-                  <CategoryGlyph name={item.slug} size={22} />
-                </View>
-
-                {/* Title and Description */}
-                <View className="items-center">
-                  <Text
-                    className="text-[13px] font-bold text-center"
-                    style={{ color: colors.ink }}
-                  >
-                    {item.title}
-                  </Text>
-                  <Text
-                    className="mt-1 text-[10px] text-center leading-3.5"
-                    style={{ color: colors.muted }}
-                  >
-                    {item.desc}
-                  </Text>
-                </View>
-              </PressableScale>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Section: Curated BSC Agents */}
-        <View className="mt-8 px-6">
-          <View className="flex-row items-center justify-between pb-3">
-            <Text
-              className="text-[19px] font-bold tracking-tight"
-              style={{ color: colors.ink }}
+        {/* Category Filter Tabs Bar */}
+        <View className="px-6 pt-5 pb-3">
+          <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
+            <ScrollView
+              contentContainerStyle={{ gap: 24, paddingRight: 16 }}
+              horizontal
+              showsHorizontalScrollIndicator={false}
             >
-              Curated BSC Agents
-            </Text>
-            <PressableScale
-              accessibilityLabel="View all agents"
-              accessibilityRole="button"
-              onPress={() => router.push("/(tabs)/search")}
-            >
-              <Text
-                className="text-[13px] font-bold"
-                style={{ color: colors.goldDark }}
-              >
-                View all
-              </Text>
-            </PressableScale>
+              {AGENT_CATEGORIES.map((cat) => {
+                const isActive = activeCategory === cat.slug;
+                return (
+                  <PressableScale
+                    key={cat.slug}
+                    accessibilityLabel={cat.label}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isActive }}
+                    onPress={() => handleSelectCategory(cat.slug)}
+                    containerStyle={{
+                      paddingBottom: 8,
+                      paddingTop: 4,
+                      alignItems: "center",
+                      position: "relative",
+                    }}
+                  >
+                    <Text
+                      className="text-[14px]"
+                      style={{
+                        color: isActive ? colors.ink : "#7A7B7E",
+                        fontWeight: isActive ? "800" : "500",
+                      }}
+                    >
+                      {cat.label}
+                    </Text>
+
+                    {isActive ? (
+                      <View
+                        className="absolute bottom-0 h-1 w-full rounded-full"
+                        style={{ backgroundColor: colors.gold }}
+                      />
+                    ) : null}
+                  </PressableScale>
+                );
+              })}
+            </ScrollView>
           </View>
+        </View>
 
+        {/* Agent Cards Listing for Category */}
+        <View className="px-6 pt-2">
           {isLoading ? (
             <View className="py-8">
               <StatePanel
                 body="Fetching 8004scan-indexed BSC agent records..."
                 state="syncing"
-                title="Loading Agent Registry"
+                title="Loading Agents"
               />
             </View>
           ) : isError ? (
@@ -319,9 +246,17 @@ export default function DiscoverScreen() {
                 title="Sync Failed"
               />
             </View>
+          ) : filteredAgents.length === 0 ? (
+            <View className="py-8">
+              <StatePanel
+                body="No agents found in this category. Check back soon."
+                state="unavailable"
+                title="No Agents Found"
+              />
+            </View>
           ) : (
             <View className="gap-3.5">
-              {agents?.map((agent) => (
+              {filteredAgents.map((agent) => (
                 <AgentCard
                   key={agent.id}
                   agent={agent}

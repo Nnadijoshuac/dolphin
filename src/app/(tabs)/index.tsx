@@ -1,3 +1,6 @@
+import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { useMemo, useState } from "react";
 import {
   RefreshControl,
@@ -5,9 +8,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
-import { useVideoPlayer, VideoView } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentCard } from "@/components/agent-card";
@@ -17,7 +17,7 @@ import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
 
@@ -31,6 +31,7 @@ export default function DiscoverScreen() {
   const coinPlayer = useVideoPlayer(coinVideoSource, (player) => {
     player.loop = true;
     player.muted = true;
+    player.playbackRate = 0.55;
     player.play();
   });
 
@@ -83,7 +84,7 @@ export default function DiscoverScreen() {
 
         {/* Child 1: Sticky Discover Title Bar with Categories Icon */}
         <View
-          className="flex-row items-center justify-between px-6 pb-3 pt-1"
+          className="flex-row items-center justify-between px-4 pb-3 pt-1"
           style={{
             backgroundColor: colors.canvas,
             zIndex: 10,
@@ -116,19 +117,19 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Featured Hero Card */}
-        <View className="px-6 pb-2 pt-1">
+        {/* Compact Featured Hero Card - Wider Layout */}
+        <View className="px-2 pb-1 pt-1">
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
             accessibilityRole="button"
             onPress={() => setActiveCategory("monitoring")}
             containerStyle={{
-              backgroundColor: "#0E0F12",
+              backgroundColor: "#000000",
               borderColor: "rgba(255,255,255,0.08)",
-              borderRadius: 28,
+              borderRadius: 24,
               borderWidth: 1,
               overflow: "hidden",
-              padding: 20,
+              padding: 16,
               ...shadows.floating,
             }}
           >
@@ -137,10 +138,10 @@ export default function DiscoverScreen() {
               pointerEvents="none"
               style={{
                 position: "absolute",
-                right: -25,
+                right: -60,
                 top: -10,
                 bottom: -10,
-                width: 220,
+                width: 230,
                 opacity: 0.95,
                 justifyContent: "center",
                 alignItems: "center",
@@ -160,52 +161,45 @@ export default function DiscoverScreen() {
             <View style={{ zIndex: 10 }}>
               {/* Category Tag */}
               <View
-                className="self-start rounded-full px-3 py-1 mb-3 border"
+                className="self-start rounded-full px-2.5 py-0.5 mb-2 border"
                 style={{
                   backgroundColor: "#2A2415",
                   borderColor: "rgba(245, 179, 0, 0.35)",
                 }}
               >
-                <Text className="text-[10px] font-bold uppercase tracking-[1.5px] text-[#F5B300]">
+                <Text className="text-[9.5px] font-bold uppercase tracking-[1.5px] text-[#F5B300]">
                   MONITORING
                 </Text>
               </View>
 
               {/* Text Column */}
-              <View style={{ maxWidth: "60%" }}>
-                <Text className="text-[26px] font-black text-white leading-[30px] tracking-tight">
-                  Agents that{"\n"}watch while{"\n"}you sleep
+              <View style={{ maxWidth: "68%" }}>
+                <Text className="text-[22px] font-black text-white leading-[26px] tracking-tight">
+                  Agents that watch{"\n"}while you sleep
                 </Text>
 
-                <Text className="mt-2.5 text-[12px] leading-[18px] text-zinc-400">
+                <Text className="mt-1.5 text-[11.5px] leading-[16px] text-zinc-400">
                   Autonomous agents that track markets and safeguard your positions 24/7.
                 </Text>
 
-                <View className="mt-4 flex-row items-center gap-1.5">
-                  <Text className="text-[13px] font-bold text-[#F5B300]">
+                <View className="mt-3 flex-row items-center gap-1.5">
+                  <Text className="text-[12.5px] font-bold text-[#F5B300]">
                     Explore collection
                   </Text>
                   <CategoryGlyph
                     color="#F5B300"
                     name="arrow-right"
-                    size={14}
+                    size={13}
                     strokeWidth={2.5}
                   />
                 </View>
               </View>
             </View>
-
-            {/* Carousel Pagination Dots */}
-            <View className="mt-4 flex-row items-center justify-center gap-1.5" style={{ zIndex: 10 }}>
-              <View className="h-1 w-6 rounded-full bg-[#F5B300]" />
-              <View className="h-1 w-4 rounded-full bg-zinc-700" />
-              <View className="h-1 w-4 rounded-full bg-zinc-700" />
-            </View>
           </PressableScale>
         </View>
 
         {/* Category Filter Tabs Bar */}
-        <View className="px-6 pt-5 pb-3">
+        <View className="px-4 pt-5 pb-3">
           <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
             <ScrollView
               contentContainerStyle={{ gap: 24, paddingRight: 16 }}
@@ -252,7 +246,7 @@ export default function DiscoverScreen() {
         </View>
 
         {/* Agent Cards Listing for Category */}
-        <View className="px-6 pt-2">
+        <View className="px-4 pt-2">
           {isLoading ? (
             <View className="py-8">
               <StatePanel

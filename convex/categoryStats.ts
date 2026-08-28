@@ -1,6 +1,6 @@
-import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
+import { internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { agentCategoryValidator, agentLiveStatsValidator } from "./categoryStatsValidators";
@@ -8,19 +8,6 @@ import { readYieldStats } from "./protocols/aave";
 import { readGridTradingStats } from "./protocols/pancakeswap";
 import { unavailableMonitoringStats } from "./protocols/unavailable";
 import { readHealthFactorStats } from "./protocols/venus";
-
-/**
- * `./_generated/server` and the `internal.*`/`api.*` reference objects are
- * normally produced by `npx convex dev`, which needs an interactive browser
- * login this environment cannot perform (see the project audit). server.ts
- * and dataModel.ts here are hand-written to match what codegen produces, so
- * this typechecks now; running `npx convex dev` once will safely regenerate
- * them. `internal.categoryStats.*` isn't available without generated
- * `api.ts`, so the one cross-function call below uses an explicit
- * makeFunctionReference instead - swap it for `internal.categoryStats.
- * upsertAgentCategoryStats` once codegen has run, purely for readability.
- */
-const upsertRef = makeFunctionReference<"mutation">("categoryStats:upsertAgentCategoryStats");
 
 export const getAgentCategoryStats = query({
   args: {
@@ -93,7 +80,7 @@ export const refreshAgentCategoryStats = action({
       }
     })();
 
-    await ctx.runMutation(upsertRef, {
+    await ctx.runMutation(internal.categoryStats.upsertAgentCategoryStats, {
       tokenId,
       category,
       agentWallet,

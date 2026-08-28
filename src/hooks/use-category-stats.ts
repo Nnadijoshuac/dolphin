@@ -1,32 +1,10 @@
 import { useEffect, useRef } from "react";
-import { anyApi, type FunctionReference } from "convex/server";
 import { useAction, useQuery } from "convex/react";
 
-import type { AgentCategory, AgentLiveStats } from "@/types/agent";
+import { api } from "../../convex/_generated/api";
+import type { AgentCategory } from "@/types/agent";
 
 const REFRESH_INTERVAL_MS = 60_000;
-
-/**
- * References convex/categoryStats.ts functions by string path via `anyApi`
- * instead of the generated `api` object, because this project hasn't run
- * `npx convex dev` yet - see that file's top comment for why. Swap these two
- * lines for `api.categoryStats.getAgentCategoryStats` /
- * `api.categoryStats.refreshAgentCategoryStats` once codegen has run; the
- * cast is only needed until then.
- */
-const getAgentCategoryStatsRef = anyApi.categoryStats.getAgentCategoryStats as FunctionReference<
-  "query",
-  "public",
-  { tokenId: string; category: AgentCategory },
-  { stats: AgentLiveStats; checkedAt: string; agentWallet: string | null } | null
->;
-const refreshAgentCategoryStatsRef = anyApi.categoryStats
-  .refreshAgentCategoryStats as FunctionReference<
-  "action",
-  "public",
-  { tokenId: string; category: AgentCategory; agentWallet: string | null },
-  AgentLiveStats
->;
 
 /**
  * Backend-aggregated live stats for one agent's category (Venus health
@@ -50,10 +28,10 @@ export function useAgentCategoryStats(
 ) {
   const isEnabled = Boolean(tokenId && category);
   const cached = useQuery(
-    getAgentCategoryStatsRef,
+    api.categoryStats.getAgentCategoryStats,
     isEnabled ? { tokenId: tokenId as string, category: category as AgentCategory } : "skip",
   );
-  const refresh = useAction(refreshAgentCategoryStatsRef);
+  const refresh = useAction(api.categoryStats.refreshAgentCategoryStats);
   const lastRefreshedKey = useRef<string | null>(null);
 
   useEffect(() => {

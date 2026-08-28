@@ -80,7 +80,7 @@ export default function DiscoverScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[3]}
+        stickyHeaderIndices={[1]}
       >
         {/* Child 0: Top Dolphin Writeup Header (Scrolls up out of view) */}
         <View>

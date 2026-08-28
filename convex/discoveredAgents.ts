@@ -62,10 +62,23 @@ interface RawAgentListItem {
   created_at: string | null;
 }
 
+// 8004scan's unauthenticated rate limit (30/min, 1000/day) is easy for one
+// bulk sync (searches + up to BULK_SCAN_PAGES paginated pages) to trip,
+// which is the most likely explanation for the intermittent 500/502/524s
+// this module already tolerates (see the fail-soft handling below). An
+// API key (set via `npx convex env set SCAN8004_API_KEY ...` - never
+// committed, never bundled into the client) raises this to 600/min,
+// 100000/day. Falls back to unauthenticated if the key isn't configured
+// in a given deployment, rather than failing the whole sync.
+function scan8004Headers(): HeadersInit {
+  const apiKey = process.env.SCAN8004_API_KEY;
+  return apiKey ? { Accept: "application/json", "X-API-Key": apiKey } : { Accept: "application/json" };
+}
+
 async function fetchAgentsList(params: string): Promise<RawAgentListItem[]> {
   const url = `${AGENTS_URL}?chain_id=${BSC_CHAIN_ID}&is_testnet=false&${params}`;
   const response = await fetch(url, {
-    headers: { Accept: "application/json" },
+    headers: scan8004Headers(),
     signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT_MS),
   });
 

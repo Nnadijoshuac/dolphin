@@ -178,6 +178,18 @@ export const EDITORIAL_AGENTS: Agent[] = [
     reportedSkills: ["Geometric grid planning", "PancakeSwap range maker"],
   }),
   createEditorialAgent({
+    tokenId: "45650",
+    name: "V3 Pools powered by HeyAnon",
+    ownerAddress: "0xda977767452c5dd021624511f14df67b6c9c2c1b",
+    category: "grid-trading",
+    tagline: "Validates and executes concentrated-liquidity V3 pool positions across several chains, including BSC.",
+    description:
+      "The publisher describes a safe execution layer for Uniswap V3-style concentrated liquidity (covering PancakeSwap, Uniswap, and other V3-style DEXs) that validates price ranges, estimates tick spacing, and returns pre-validated calldata for creating positions, adjusting liquidity, and collecting fees.",
+    iconUrl: "https://api.8004scan.io/api/v1/media/agents/56/45650/image",
+    registeredAt: "2026-03-18T15:16:36Z",
+    reportedSkills: ["Concentrated liquidity position management", "Multi-DEX range execution"],
+  }),
+  createEditorialAgent({
     tokenId: "292058",
     name: "Liquidation Guard",
     ownerAddress: "0xa09991fc5d8637bb4245737c3ebf26e24d653962",
@@ -190,6 +202,18 @@ export const EDITORIAL_AGENTS: Agent[] = [
     reportedSkills: ["Venus position analysis", "Liquidation prevention"],
   }),
   createEditorialAgent({
+    tokenId: "302257",
+    name: "Brain on BNB — Venus Health Factor Monitor",
+    ownerAddress: "0x73809f69916fcf7ddc5bb1315fbdf96a569a5963",
+    category: "health-factor",
+    tagline: "Reads Venus lending positions and reports the real health factor before liquidation risk.",
+    description:
+      "The publisher describes an agent that reads a Venus lending position market by market on BNB Chain and returns its health factor, the collateral drawdown that would trigger liquidation, and a stress table cross-checked against Venus's own getAccountLiquidity call - self-declared as health-factor-monitoring in its own on-chain metadata.",
+    iconUrl: "https://api.8004scan.io/api/v1/media/agents/56/302257/image",
+    registeredAt: "2026-08-25T11:09:12Z",
+    reportedSkills: ["Venus health factor calculation", "Liquidation stress testing"],
+  }),
+  createEditorialAgent({
     tokenId: "12046",
     name: "Yield Maximizer",
     ownerAddress: "0x7b65b716bc7d3ba0ccdda9694ba50fd03036c088",
@@ -200,6 +224,30 @@ export const EDITORIAL_AGENTS: Agent[] = [
     iconUrl: "https://api.8004scan.io/api/v1/media/agents/56/12046/image",
     registeredAt: "2026-03-02T07:32:20Z",
     reportedSkills: ["Yield opportunity discovery", "Auto-compounding"],
+  }),
+  createEditorialAgent({
+    tokenId: "45381",
+    name: "Aave powered by HeyAnon",
+    ownerAddress: "0xda977767452c5dd021624511f14df67b6c9c2c1b",
+    category: "yield",
+    tagline: "Validates and executes Aave lending actions across several chains, including BSC.",
+    description:
+      "The publisher describes a safe execution layer for Aave lending that validates collateral requirements, checks health factors, and verifies token approvals before returning pre-validated calldata for supply, borrow, repay, withdraw, and liquidation actions.",
+    iconUrl: "https://api.8004scan.io/api/v1/media/agents/56/45381/image",
+    registeredAt: "2026-03-18T11:43:14Z",
+    reportedSkills: ["Aave lending execution", "Collateral and health factor validation"],
+  }),
+  createEditorialAgent({
+    tokenId: "45422",
+    name: "Beefy powered by HeyAnon",
+    ownerAddress: "0xda977767452c5dd021624511f14df67b6c9c2c1b",
+    category: "yield",
+    tagline: "Validates and executes Beefy vault deposits and withdrawals across several chains, including BSC.",
+    description:
+      "The publisher describes a safe execution layer for Beefy classic vaults and CLM pools that validates vault compatibility and deposit limits, handles token approvals, and returns pre-validated calldata for deposits, withdrawals, staking, and reward claims.",
+    iconUrl: "https://api.8004scan.io/api/v1/media/agents/56/45422/image",
+    registeredAt: "2026-03-18T12:05:55Z",
+    reportedSkills: ["Beefy vault execution", "CLM pool staking"],
   }),
 ];
 

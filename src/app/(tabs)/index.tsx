@@ -31,7 +31,7 @@ export default function DiscoverScreen() {
   const coinPlayer = useVideoPlayer(coinVideoSource, (player) => {
     player.loop = true;
     player.muted = true;
-    player.playbackRate = 0.55;
+    player.playbackRate = 1.0;
     player.play();
   });
 
@@ -126,10 +126,11 @@ export default function DiscoverScreen() {
             containerStyle={{
               backgroundColor: "#000000",
               borderColor: "rgba(255,255,255,0.08)",
-              borderRadius: 24,
+              borderRadius: 26,
               borderWidth: 1,
               overflow: "hidden",
-              padding: 16,
+              paddingHorizontal: 20,
+              paddingVertical: 24,
               ...shadows.floating,
             }}
           >
@@ -139,9 +140,9 @@ export default function DiscoverScreen() {
               style={{
                 position: "absolute",
                 right: -60,
-                top: -10,
-                bottom: -10,
-                width: 230,
+                top: -15,
+                bottom: -15,
+                width: 250,
                 opacity: 0.95,
                 justifyContent: "center",
                 alignItems: "center",
@@ -161,7 +162,7 @@ export default function DiscoverScreen() {
             <View style={{ zIndex: 10 }}>
               {/* Category Tag */}
               <View
-                className="self-start rounded-full px-2.5 py-0.5 mb-2 border"
+                className="self-start rounded-full px-2.5 py-1 mb-2.5 border"
                 style={{
                   backgroundColor: "#2A2415",
                   borderColor: "rgba(245, 179, 0, 0.35)",

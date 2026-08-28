@@ -66,37 +66,23 @@ export default function DiscoverScreen() {
     >
       <ConstellationBg opacity={0.3} />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 120 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              void refetch();
-            }}
-            tintColor={colors.ink}
-          />
-        }
-        showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1, 3]}
+      {/* Pinned Top Header Layer */}
+      <View
+        style={{
+          backgroundColor: colors.canvas,
+          zIndex: 30,
+        }}
       >
-        {/* Child 0: Top Dolphin Writeup Header */}
-        <View>
-          <AppHeader />
-        </View>
+        <AppHeader compact />
 
-        {/* Child 1: Sticky Discover Title Bar with Categories Icon */}
         <View
-          className="flex-row items-center justify-between px-4 pb-3 pt-1"
+          className="flex-row items-center justify-between px-4 pb-2.5 pt-0.5"
           style={{
             backgroundColor: colors.canvas,
-            zIndex: 10,
           }}
         >
           <Text
-            className="text-[32px] font-black tracking-[-1px]"
+            className="text-[28px] font-black tracking-[-1px]"
             style={{ color: colors.ink }}
           >
             Discover
@@ -121,8 +107,25 @@ export default function DiscoverScreen() {
             <CategoryGlyph color={colors.ink} name="layers" size={18} />
           </PressableScale>
         </View>
+      </View>
 
-        {/* Child 2: Compact Featured Hero Card - Wider Layout */}
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              void refetch();
+            }}
+            tintColor={colors.ink}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[1]}
+      >
+        {/* Child 0: Compact Featured Hero Card */}
         <View className="px-2 pb-1 pt-1">
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
@@ -204,12 +207,12 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Child 3: Category Filter Tabs Bar */}
+        {/* Child 1: Category Filter Tabs Bar (Sticks right under Header Layer!) */}
         <View
-          className="px-4 pt-4 pb-2"
+          className="px-4 pt-3 pb-2"
           style={{
             backgroundColor: colors.canvas,
-            zIndex: 10,
+            zIndex: 20,
           }}
         >
           <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
@@ -257,7 +260,7 @@ export default function DiscoverScreen() {
           </View>
         </View>
 
-        {/* Horizontal Swipeable Category Lists Carousel */}
+        {/* Child 2: Horizontal Swipeable Category Lists Carousel */}
         <ScrollView
           ref={horizontalScrollRef}
           horizontal

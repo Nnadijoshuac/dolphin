@@ -132,22 +132,47 @@ export default function DiscoverScreen() {
               ...shadows.floating,
             }}
           >
-            {/* Category Tag */}
+            {/* Absolute Background Video */}
             <View
-              className="self-start rounded-full px-3 py-1 mb-3 border"
+              pointerEvents="none"
               style={{
-                backgroundColor: "#2A2415",
-                borderColor: "rgba(245, 179, 0, 0.35)",
+                position: "absolute",
+                right: -25,
+                top: -10,
+                bottom: -10,
+                width: 220,
+                opacity: 0.95,
+                justifyContent: "center",
+                alignItems: "center",
               }}
             >
-              <Text className="text-[10px] font-bold uppercase tracking-[1.5px] text-[#F5B300]">
-                MONITORING
-              </Text>
+              <VideoView
+                allowsFullscreen={false}
+                allowsPictureInPicture={false}
+                contentFit="contain"
+                nativeControls={false}
+                player={coinPlayer}
+                style={{ height: "100%", width: "100%" }}
+              />
             </View>
 
-            <View className="flex-row items-center justify-between">
-              {/* Left Column */}
-              <View className="flex-1 pr-2">
+            {/* Foreground Content */}
+            <View style={{ zIndex: 10 }}>
+              {/* Category Tag */}
+              <View
+                className="self-start rounded-full px-3 py-1 mb-3 border"
+                style={{
+                  backgroundColor: "#2A2415",
+                  borderColor: "rgba(245, 179, 0, 0.35)",
+                }}
+              >
+                <Text className="text-[10px] font-bold uppercase tracking-[1.5px] text-[#F5B300]">
+                  MONITORING
+                </Text>
+              </View>
+
+              {/* Text Column */}
+              <View style={{ maxWidth: "60%" }}>
                 <Text className="text-[26px] font-black text-white leading-[30px] tracking-tight">
                   Agents that{"\n"}watch while{"\n"}you sleep
                 </Text>
@@ -168,22 +193,10 @@ export default function DiscoverScreen() {
                   />
                 </View>
               </View>
-
-              {/* Right 3D Coin Video Graphic */}
-              <View className="h-44 w-40 items-center justify-center -mr-2 overflow-hidden rounded-2xl">
-                <VideoView
-                  allowsFullscreen={false}
-                  allowsPictureInPicture={false}
-                  contentFit="contain"
-                  nativeControls={false}
-                  player={coinPlayer}
-                  style={{ height: "100%", width: "100%" }}
-                />
-              </View>
             </View>
 
             {/* Carousel Pagination Dots */}
-            <View className="mt-4 flex-row items-center justify-center gap-1.5">
+            <View className="mt-4 flex-row items-center justify-center gap-1.5" style={{ zIndex: 10 }}>
               <View className="h-1 w-6 rounded-full bg-[#F5B300]" />
               <View className="h-1 w-4 rounded-full bg-zinc-700" />
               <View className="h-1 w-4 rounded-full bg-zinc-700" />

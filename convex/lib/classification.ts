@@ -26,10 +26,13 @@ const SPAM_MARKERS = [
   "an evoevo ai agent",
   "· ensoul", // third-party persona/"digital twin" products impersonating real public figures/brands
   " ensoul",
+  "yi he nexus", // gamified NFT collectibles using real DeFi jargon as flavor text (e.g. "BORT Yield Weaver #10922")
+  "3d interactive agent",
 ];
 
 const REPEATED_TOKEN_SPAM = /(.{3,})\1{2,}/i; // e.g. "ONEAIONEAIONEAI", "biuaibiuaibiuai"
 const TEST_MARKER = /\btest\b/i;
+const NFT_EDITION_MARKER = /\bedition\s+\d+\s*\/\s*\d+\b/i; // "Edition 47/150" - collectible numbering, not a service
 
 export function isLikelySpamOrUnsuitable(name: string, description: string): boolean {
   const nameText = (name ?? "").trim();
@@ -46,6 +49,9 @@ export function isLikelySpamOrUnsuitable(name: string, description: string): boo
     return true;
   }
   if (TEST_MARKER.test(nameText)) {
+    return true;
+  }
+  if (NFT_EDITION_MARKER.test(combined)) {
     return true;
   }
   return false;

@@ -9,10 +9,11 @@ import { agentCategoryValidator } from "./categoryStatsValidators";
 // 8004scan's public discovery API - see project-scope.md SS3, "8004scan
 // Developer API as the primary discovery/listing source - do not build a
 // registry event-scanning indexer from scratch." This calls its real,
-// documented full-text search (`/agents?search=...`), not a from-scratch
-// scan of the ~287k agents registered on BSC mainnet, most of which are
-// spam (see convex/lib/classification.ts's header comment).
-const SEARCH_BASE_URL = "https://api.8004scan.io/api/v1/agents";
+// documented full-text search AND list endpoints (`/agents?search=...` and
+// `/agents?sort_by=...`), never a from-scratch scan of the ~287k agents
+// registered on BSC mainnet, most of which are spam (see
+// convex/lib/classification.ts's header comment).
+const AGENTS_URL = "https://api.8004scan.io/api/v1/agents";
 const RESULTS_PER_QUERY = 30;
 
 // One natural-language query per category, built from the same terms
@@ -25,6 +26,16 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string> = {
   yield: "yield vault farm apy compound",
 };
 
+// 8004scan's own search relevance ranking doesn't reliably surface every
+// on-topic agent - manual testing found real, clearly-classifiable agents
+// (e.g. "Beefy powered by HeyAnon", description literally says "vault")
+// that none of the search queries above returned. A bulk scan sorted by
+// score, classified with OUR OWN substring matching rather than their
+// search relevance, catches those. Bounded to 2 pages (200 agents) so a
+// sync stays a handful of HTTP calls, not a scan of the full registry.
+const BULK_SCAN_PAGES = 5;
+const BULK_SCAN_PAGE_SIZE = 100;
+
 interface RawAgentListItem {
   token_id: string;
   name: string;
@@ -35,16 +46,26 @@ interface RawAgentListItem {
   created_at: string | null;
 }
 
-async function searchAgents(query: string): Promise<RawAgentListItem[]> {
-  const url = `${SEARCH_BASE_URL}?chain_id=${BSC_CHAIN_ID}&is_testnet=false&search=${encodeURIComponent(query)}&limit=${RESULTS_PER_QUERY}`;
+async function fetchAgentsList(params: string): Promise<RawAgentListItem[]> {
+  const url = `${AGENTS_URL}?chain_id=${BSC_CHAIN_ID}&is_testnet=false&${params}`;
   const response = await fetch(url, { headers: { Accept: "application/json" } });
 
   if (!response.ok) {
-    throw new Error(`8004scan search failed (${response.status}) for query "${query}"`);
+    throw new Error(`8004scan request failed (${response.status}): ${params}`);
   }
 
   const payload = (await response.json()) as { items?: RawAgentListItem[] };
   return Array.isArray(payload.items) ? payload.items : [];
+}
+
+function searchAgents(query: string): Promise<RawAgentListItem[]> {
+  return fetchAgentsList(`search=${encodeURIComponent(query)}&limit=${RESULTS_PER_QUERY}`);
+}
+
+function listByScore(offset: number): Promise<RawAgentListItem[]> {
+  return fetchAgentsList(
+    `sort_by=total_score&sort_order=desc&limit=${BULK_SCAN_PAGE_SIZE}&offset=${offset}`,
+  );
 }
 
 /**
@@ -66,6 +87,19 @@ export const syncDiscoveredAgents = internalAction({
     for (const query of Object.values(CATEGORY_SEARCH_QUERIES)) {
       try {
         const results = await searchAgents(query);
+        for (const item of results) {
+          if (!seen.has(item.token_id)) {
+            seen.set(item.token_id, item);
+          }
+        }
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+
+    for (let page = 0; page < BULK_SCAN_PAGES; page++) {
+      try {
+        const results = await listByScore(page * BULK_SCAN_PAGE_SIZE);
         for (const item of results) {
           if (!seen.has(item.token_id)) {
             seen.set(item.token_id, item);

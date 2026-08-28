@@ -3,7 +3,7 @@ import type { Address } from "viem";
 import { bscPublicClient } from "../lib/bscClient";
 import { CATEGORY_DATA_SOURCES } from "../lib/dataSources";
 import { liveMetricValue, unavailableMetricValue } from "../lib/liveMetric";
-import type { GridTradingLiveStats } from "./types";
+import type { RebalancingLiveStats } from "./types";
 
 /**
  * PancakeSwap V3 NonfungiblePositionManager on BSC mainnet. Verified against
@@ -79,27 +79,27 @@ const NO_TRACK_RECORD_REASON =
   "PancakeSwap V3 position reads give the current tick range and liquidity, not historical fee income or holding duration - there is no on-chain feed for those yet.";
 
 /**
- * Reads a wallet's real PancakeSwap V3 LP positions. gridCount and
+ * Reads a wallet's real PancakeSwap V3 LP positions. positionCount and
  * activeRange are genuine on-chain reads; winRate/currentPnl/
  * trackRecordPeriod require historical fee-accrual and cost-basis data this
  * backend does not compute yet, so they stay honestly unavailable rather
  * than being estimated from a single snapshot.
  */
-export async function readGridTradingStats(
+export async function readRebalancingStats(
   agentWallet: string | null,
   checkedAt: string,
-): Promise<GridTradingLiveStats> {
+): Promise<RebalancingLiveStats> {
   const source = CATEGORY_DATA_SOURCES.pancakeswapV3;
   const noTrackRecord = unavailableMetricValue(NO_TRACK_RECORD_REASON, source, checkedAt);
 
   if (!agentWallet) {
     const reason = "No verified on-chain agent wallet is available to read LP positions for.";
     return {
-      category: "grid-trading",
+      category: "rebalancing",
       winRate: unavailableMetricValue(reason, source, checkedAt),
       activeRange: unavailableMetricValue(reason, source, checkedAt),
       currentPnl: unavailableMetricValue(reason, source, checkedAt),
-      gridCount: unavailableMetricValue(reason, source, checkedAt),
+      positionCount: unavailableMetricValue(reason, source, checkedAt),
       trackRecordPeriod: unavailableMetricValue(reason, source, checkedAt),
     };
   }
@@ -119,11 +119,11 @@ export async function readGridTradingStats(
     if (positionCount === 0) {
       const reason = "This wallet holds no PancakeSwap V3 liquidity position NFTs.";
       return {
-        category: "grid-trading",
+        category: "rebalancing",
         winRate: unavailableMetricValue(reason, source, checkedAt),
         activeRange: unavailableMetricValue(reason, source, checkedAt),
         currentPnl: unavailableMetricValue(reason, source, checkedAt),
-        gridCount: liveMetricValue(0, checkedAt, source),
+        positionCount: liveMetricValue(0, checkedAt, source),
         trackRecordPeriod: unavailableMetricValue(reason, source, checkedAt),
       };
     }
@@ -169,21 +169,21 @@ export async function readGridTradingStats(
     );
 
     return {
-      category: "grid-trading",
+      category: "rebalancing",
       winRate: noTrackRecord,
       activeRange,
       currentPnl: noTrackRecord,
-      gridCount: liveMetricValue(positionCount, checkedAt, source),
+      positionCount: liveMetricValue(positionCount, checkedAt, source),
       trackRecordPeriod: noTrackRecord,
     };
   } catch (error) {
     const reason = `PancakeSwap V3 position read failed: ${error instanceof Error ? error.message : String(error)}`;
     return {
-      category: "grid-trading",
+      category: "rebalancing",
       winRate: unavailableMetricValue(reason, source, checkedAt),
       activeRange: unavailableMetricValue(reason, source, checkedAt),
       currentPnl: unavailableMetricValue(reason, source, checkedAt),
-      gridCount: unavailableMetricValue(reason, source, checkedAt),
+      positionCount: unavailableMetricValue(reason, source, checkedAt),
       trackRecordPeriod: unavailableMetricValue(reason, source, checkedAt),
     };
   }

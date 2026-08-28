@@ -5,8 +5,8 @@ import { action, internalMutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { agentCategoryValidator, agentLiveStatsValidator } from "./categoryStatsValidators";
 import { readYieldStats } from "./protocols/aave";
-import { readGridTradingStats } from "./protocols/pancakeswap";
-import { unavailableMonitoringStats } from "./protocols/unavailable";
+import { readRebalancingStats } from "./protocols/pancakeswap";
+import { unavailableGridTradingStats, unavailableMonitoringStats } from "./protocols/unavailable";
 import { readHealthFactorStats } from "./protocols/venus";
 
 export const getAgentCategoryStats = query({
@@ -71,8 +71,10 @@ export const refreshAgentCategoryStats = action({
       switch (category) {
         case "health-factor":
           return readHealthFactorStats(agentWallet, checkedAt);
+        case "rebalancing":
+          return readRebalancingStats(agentWallet, checkedAt);
         case "grid-trading":
-          return readGridTradingStats(agentWallet, checkedAt);
+          return unavailableGridTradingStats(checkedAt);
         case "monitoring":
           return unavailableMonitoringStats(checkedAt);
         case "yield":

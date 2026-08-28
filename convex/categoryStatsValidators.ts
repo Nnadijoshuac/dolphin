@@ -15,12 +15,21 @@ export const monitoringStatsValidator = v.object({
   falsePositiveRate: liveMetric(v.number()),
 });
 
+export const rebalancingStatsValidator = v.object({
+  category: v.literal("rebalancing"),
+  winRate: liveMetric(v.number()),
+  activeRange: liveMetric(v.string()),
+  currentPnl: liveMetric(v.string()),
+  positionCount: liveMetric(v.number()),
+  trackRecordPeriod: liveMetric(v.string()),
+});
+
 export const gridTradingStatsValidator = v.object({
   category: v.literal("grid-trading"),
   winRate: liveMetric(v.number()),
   activeRange: liveMetric(v.string()),
   currentPnl: liveMetric(v.string()),
-  gridCount: liveMetric(v.number()),
+  positionCount: liveMetric(v.number()),
   trackRecordPeriod: liveMetric(v.string()),
 });
 
@@ -42,6 +51,7 @@ export const yieldStatsValidator = v.object({
 
 export const agentLiveStatsValidator = v.union(
   monitoringStatsValidator,
+  rebalancingStatsValidator,
   gridTradingStatsValidator,
   healthFactorStatsValidator,
   yieldStatsValidator,
@@ -49,6 +59,7 @@ export const agentLiveStatsValidator = v.union(
 
 export const agentCategoryValidator = v.union(
   v.literal("monitoring"),
+  v.literal("rebalancing"),
   v.literal("grid-trading"),
   v.literal("health-factor"),
   v.literal("yield"),

@@ -2,6 +2,7 @@ import type { Address } from "viem";
 
 export type AgentCategory =
   | "monitoring"
+  | "rebalancing"
   | "grid-trading"
   | "health-factor"
   | "yield";
@@ -72,12 +73,32 @@ export interface MonitoringLiveStats {
   falsePositiveRate: LiveMetric<number>;
 }
 
+/**
+ * LP-range management: resets/rebalances a concentrated-liquidity position
+ * automatically (e.g. PancakeSwap V3). Renamed from what this codebase used
+ * to call "grid-trading" - that name was substance-wrong (see
+ * GridTradingLiveStats below for the actual price-ladder definition).
+ */
+export interface RebalancingLiveStats {
+  category: "rebalancing";
+  winRate: LiveMetric<number>;
+  activeRange: LiveMetric<string>;
+  currentPnl: LiveMetric<string>;
+  positionCount: LiveMetric<number>;
+  trackRecordPeriod: LiveMetric<string>;
+}
+
+/**
+ * True price-ladder grid trading: buy/sell orders placed across a fixed
+ * range. Distinct from RebalancingLiveStats above (LP-range management) -
+ * see project-scope.md's category taxonomy notes for the split's history.
+ */
 export interface GridTradingLiveStats {
   category: "grid-trading";
   winRate: LiveMetric<number>;
   activeRange: LiveMetric<string>;
   currentPnl: LiveMetric<string>;
-  gridCount: LiveMetric<number>;
+  positionCount: LiveMetric<number>;
   trackRecordPeriod: LiveMetric<string>;
 }
 
@@ -99,6 +120,7 @@ export interface YieldLiveStats {
 
 export type AgentLiveStats =
   | MonitoringLiveStats
+  | RebalancingLiveStats
   | GridTradingLiveStats
   | HealthFactorLiveStats
   | YieldLiveStats;

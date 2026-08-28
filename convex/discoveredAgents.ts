@@ -49,7 +49,10 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string> = {
 // the whole sync - it just counts as a failed page, same as any other
 // fetch error.
 const PER_REQUEST_TIMEOUT_MS = 15_000;
-const BULK_SCAN_PAGES = 8;
+// Raised from 8 (2026-08-29) now that SCAN8004_API_KEY lifts the request
+// budget to 600/min - each page is still independently timeout-boxed, so a
+// slow/hung page beyond this count just fails soft, same as before.
+const BULK_SCAN_PAGES = 20;
 const BULK_SCAN_PAGE_SIZE = 100;
 
 interface RawAgentListItem {
@@ -101,6 +104,41 @@ function listByScore(offset: number): Promise<RawAgentListItem[]> {
 }
 
 /**
+ * Real liveness gate, added 2026-08-29 after two already-added agents
+ * ("V3 Pools powered by HeyAnon", "BNB LP Range Rebalancer") were flagged
+ * as not live. Investigation found both were actually fine by every check
+ * available (8004scan `is_active: true`, on-chain ownerOf/getAgentWallet
+ * resolved, and their claimed MCP/A2A endpoints answered live) - so the
+ * report likely traced to the dev client's stale TanStack Query cache
+ * (see HANDOFF.md's "Fast Refresh doesn't invalidate the query cache"
+ * gotcha) rather than a real data problem. Even so, this gate is worth
+ * having: the list/search endpoints used above never return `is_active`
+ * at all (checked - it's absent from the list item shape), so nothing in
+ * this pipeline was ever actually checking it before upserting. This adds
+ * one per-agent detail fetch, but only for candidates that already
+ * survived the spam filter and classification - a handful per sync, not
+ * hundreds - so it stays cheap even before the SCAN8004_API_KEY quota
+ * bump made a wider check affordable.
+ */
+async function verifyAgentIsActive(tokenId: string): Promise<boolean> {
+  const url = `${AGENTS_URL}/${BSC_CHAIN_ID}/${encodeURIComponent(tokenId)}`;
+  try {
+    const response = await fetch(url, {
+      headers: scan8004Headers(),
+      signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const payload = (await response.json()) as { is_active?: unknown; data?: { is_active?: unknown } };
+    const isActive = payload.data?.is_active ?? payload.is_active;
+    return isActive === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Pulls candidate agents from 8004scan (one search per category), filters
  * spam/unsuitable entries, classifies survivors by keyword match, and
  * upserts them. A failed search for one category just skips that
@@ -145,6 +183,7 @@ export const syncDiscoveredAgents = internalAction({
     let upserted = 0;
     let rejectedSpam = 0;
     let rejectedUnclassified = 0;
+    let rejectedNotActive = 0;
 
     for (const item of seen.values()) {
       const name = item.name ?? "";
@@ -158,6 +197,12 @@ export const syncDiscoveredAgents = internalAction({
       const classification = classifyAgent(name, description);
       if (!classification) {
         rejectedUnclassified++;
+        continue;
+      }
+
+      const isActive = await verifyAgentIsActive(item.token_id);
+      if (!isActive) {
+        rejectedNotActive++;
         continue;
       }
 
@@ -177,7 +222,7 @@ export const syncDiscoveredAgents = internalAction({
       upserted++;
     }
 
-    return { upserted, rejectedSpam, rejectedUnclassified, candidatesSeen: seen.size, errors };
+    return { upserted, rejectedSpam, rejectedUnclassified, rejectedNotActive, candidatesSeen: seen.size, errors };
   },
 });
 

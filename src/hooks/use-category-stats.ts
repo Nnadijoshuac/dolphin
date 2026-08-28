@@ -32,9 +32,16 @@ const refreshAgentCategoryStatsRef = anyApi.categoryStats
  * Backend-aggregated live stats for one agent's category (Venus health
  * factor, PancakeSwap V3 positions, Aave TVL - see convex/protocols/).
  * Returns undefined until the Convex client has data, null if nothing has
- * been cached yet. Requires EXPO_PUBLIC_CONVEX_URL to be configured; callers
- * should treat a missing/undefined result the same as any other "syncing"
- * state rather than erroring.
+ * been cached yet. Treat a missing/undefined result the same as any other
+ * "syncing" state rather than erroring.
+ *
+ * Precondition: only call this from a subtree actually mounted under a
+ * configured ConvexClientProvider (see src/providers/convex-provider.tsx).
+ * When EXPO_PUBLIC_CONVEX_URL is unset, ConvexClientProvider renders no
+ * provider at all - convex/react's hooks throw without one - so a caller
+ * must check `convexClient !== null` before rendering any component that
+ * uses this hook, the same way WalletConnectButton checks
+ * `wallet.isAvailable` before enabling itself.
  */
 export function useAgentCategoryStats(
   tokenId: string | null | undefined,

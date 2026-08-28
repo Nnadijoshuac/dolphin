@@ -38,7 +38,7 @@ export const getAgentCategoryStats = query({
   },
 });
 
-export const upsertAgentCategoryStats = internalMutationGeneric({
+export const upsertAgentCategoryStats = internalMutation({
   args: {
     tokenId: v.string(),
     category: agentCategoryValidator,
@@ -70,7 +70,7 @@ export const upsertAgentCategoryStats = internalMutationGeneric({
  * client, or an equivalent server-side verification) - never trust an
  * unverified publisher-reported address for a financial read.
  */
-export const refreshAgentCategoryStats = actionGeneric({
+export const refreshAgentCategoryStats = action({
   args: {
     tokenId: v.string(),
     category: agentCategoryValidator,

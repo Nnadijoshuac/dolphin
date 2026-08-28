@@ -58,6 +58,62 @@ export default function DiscoverScreen() {
     }
   };
 
+  const [isTabsSticky, setIsTabsSticky] = useState(false);
+  const [heroBottom, setHeroBottom] = useState(330);
+
+  const renderCategoryTabs = () => (
+    <View
+      className="px-4 pb-2 pt-2"
+      style={{
+        backgroundColor: colors.canvas,
+      }}
+    >
+      <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
+        <ScrollView
+          contentContainerStyle={{ gap: 24, paddingRight: 16 }}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {AGENT_CATEGORIES.map((cat) => {
+            const isActive = activeCategory === cat.slug;
+            return (
+              <PressableScale
+                key={cat.slug}
+                accessibilityLabel={cat.label}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+                onPress={() => handleSelectCategory(cat.slug)}
+                containerStyle={{
+                  paddingBottom: 8,
+                  paddingTop: 4,
+                  alignItems: "center",
+                  position: "relative",
+                }}
+              >
+                <Text
+                  className="text-[14px]"
+                  style={{
+                    color: isActive ? colors.ink : "#7A7B7E",
+                    fontWeight: isActive ? "800" : "500",
+                  }}
+                >
+                  {cat.label}
+                </Text>
+
+                {isActive ? (
+                  <View
+                    className="absolute bottom-0 h-1 w-full rounded-full"
+                    style={{ backgroundColor: colors.gold }}
+                  />
+                ) : null}
+              </PressableScale>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView
       className="flex-1"
@@ -69,6 +125,14 @@ export default function DiscoverScreen() {
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 120 }}
+        onScroll={(e) => {
+          const scrollY = e.nativeEvent.contentOffset.y;
+          const shouldStick = scrollY >= heroBottom - 48;
+          if (shouldStick !== isTabsSticky) {
+            setIsTabsSticky(shouldStick);
+          }
+        }}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
@@ -87,42 +151,70 @@ export default function DiscoverScreen() {
           <AppHeader />
         </View>
 
-        {/* Child 1: Discover Title Bar */}
+        {/* Child 1: Sticky Discover Title Bar (With Docked Tabs attached underneath on scroll) */}
         <View
-          className="flex-row items-center justify-between px-4 pb-2 pt-1"
           style={{
             backgroundColor: colors.canvas,
+            zIndex: 30,
           }}
         >
-          <Text
-            className="text-[32px] font-black tracking-[-1px]"
-            style={{ color: colors.ink }}
-          >
-            Discover
-          </Text>
-
-          <PressableScale
-            accessibilityLabel="View categories"
-            accessibilityRole="button"
-            onPress={() => router.push("/(tabs)/search")}
-            containerStyle={{
-              alignItems: "center",
-              backgroundColor: "#FFFFFF",
-              borderColor: colors.line,
-              borderRadius: 9999,
-              borderWidth: 1,
-              height: 38,
-              justifyContent: "center",
-              width: 38,
-              ...shadows.subtle,
+          <View
+            className="flex-row items-center justify-between px-4 pb-2 pt-1"
+            style={{
+              backgroundColor: colors.canvas,
             }}
           >
-            <CategoryGlyph color={colors.ink} name="layers" size={18} />
-          </PressableScale>
+            <Text
+              className="text-[32px] font-black tracking-[-1px]"
+              style={{ color: colors.ink }}
+            >
+              Discover
+            </Text>
+
+            <PressableScale
+              accessibilityLabel="View categories"
+              accessibilityRole="button"
+              onPress={() => router.push("/(tabs)/search")}
+              containerStyle={{
+                alignItems: "center",
+                backgroundColor: "#FFFFFF",
+                borderColor: colors.line,
+                borderRadius: 9999,
+                borderWidth: 1,
+                height: 38,
+                justifyContent: "center",
+                width: 38,
+                ...shadows.subtle,
+              }}
+            >
+              <CategoryGlyph color={colors.ink} name="layers" size={18} />
+            </PressableScale>
+          </View>
+
+          {/* Floating Category Tabs Dock: sticks directly under Discover when scrolled past hero */}
+          <View
+            pointerEvents={isTabsSticky ? "auto" : "none"}
+            style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              right: 0,
+              opacity: isTabsSticky ? 1 : 0,
+              backgroundColor: colors.canvas,
+              zIndex: 29,
+            }}
+          >
+            {renderCategoryTabs()}
+          </View>
         </View>
 
         {/* Child 2: Compact Featured Hero Card */}
-        <View className="px-2 pb-1 pt-1">
+        <View
+          className="px-2 pb-1 pt-1"
+          onLayout={(e) => {
+            setHeroBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
+          }}
+        >
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
             accessibilityRole="button"
@@ -203,57 +295,9 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Child 3: Category Filter Tabs Bar (The dock UNDER the card, sticky on scroll!) */}
-        <View
-          className="px-4 pb-2 pt-4"
-          style={{
-            backgroundColor: colors.canvas,
-            zIndex: 10,
-          }}
-        >
-          <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
-            <ScrollView
-              contentContainerStyle={{ gap: 24, paddingRight: 16 }}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            >
-              {AGENT_CATEGORIES.map((cat) => {
-                const isActive = activeCategory === cat.slug;
-                return (
-                  <PressableScale
-                    key={cat.slug}
-                    accessibilityLabel={cat.label}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: isActive }}
-                    onPress={() => handleSelectCategory(cat.slug)}
-                    containerStyle={{
-                      paddingBottom: 8,
-                      paddingTop: 4,
-                      alignItems: "center",
-                      position: "relative",
-                    }}
-                  >
-                    <Text
-                      className="text-[14px]"
-                      style={{
-                        color: isActive ? colors.ink : "#7A7B7E",
-                        fontWeight: isActive ? "800" : "500",
-                      }}
-                    >
-                      {cat.label}
-                    </Text>
-
-                    {isActive ? (
-                      <View
-                        className="absolute bottom-0 h-1 w-full rounded-full"
-                        style={{ backgroundColor: colors.gold }}
-                      />
-                    ) : null}
-                  </PressableScale>
-                );
-              })}
-            </ScrollView>
-          </View>
+        {/* Child 3: Category Filter Tabs Dock (In-flow position under hero card) */}
+        <View>
+          {renderCategoryTabs()}
         </View>
 
         {/* Child 4: Horizontal Swipeable Category Lists Carousel */}
@@ -317,7 +361,5 @@ export default function DiscoverScreen() {
             );
           })}
         </ScrollView>
-      </ScrollView>
-    </SafeAreaView>
   );
 }

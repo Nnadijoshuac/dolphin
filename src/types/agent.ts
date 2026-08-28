@@ -40,7 +40,18 @@ export type LiveMetric<T> =
 export type AgentClassificationSource =
   | "editorial-explicit-metadata"
   | "registry-metadata"
-  | "oasf-metadata";
+  | "oasf-metadata"
+  | "heuristic-keyword-match";
+
+/**
+ * How sure the category assignment is, for agents classified by
+ * convex/lib/classification.ts's keyword heuristic rather than a human.
+ * "confirmed" = an unambiguous, category-specific phrase matched and no
+ * other category also matched. "likely" = a weaker/generic term matched
+ * for exactly one category. Absent (undefined) means classification was
+ * not heuristic - editorial/registry/oasf sources are implicitly certain.
+ */
+export type ClassificationConfidence = "confirmed" | "likely";
 
 export interface AgentSkill {
   name: string;
@@ -135,6 +146,7 @@ export interface Agent {
   publisherAddress: Address | null;
   category: AgentCategory;
   classificationSource: AgentClassificationSource;
+  classificationConfidence?: ClassificationConfidence;
   tagline: string;
   description: string;
   iconUrl: string | null;

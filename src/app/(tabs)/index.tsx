@@ -1,12 +1,13 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -25,7 +26,9 @@ const coinVideoSource = require("../../../assets/videos/Coin.mp4");
 
 export default function DiscoverScreen() {
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
   const [activeCategory, setActiveCategory] = useState<AgentCategory>("monitoring");
+  const horizontalScrollRef = useRef<ScrollView>(null);
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
 
   const coinPlayer = useVideoPlayer(coinVideoSource, (player) => {
@@ -34,11 +37,6 @@ export default function DiscoverScreen() {
     player.playbackRate = 1.0;
     player.play();
   });
-
-  const filteredAgents = useMemo(() => {
-    if (!agents) return [];
-    return agents.filter((agent) => agent.category === activeCategory);
-  }, [agents, activeCategory]);
 
   const handleAgentPress = (agent: Agent) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -51,6 +49,13 @@ export default function DiscoverScreen() {
   const handleSelectCategory = (slug: AgentCategory) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setActiveCategory(slug);
+    const index = AGENT_CATEGORIES.findIndex((c) => c.slug === slug);
+    if (index !== -1) {
+      horizontalScrollRef.current?.scrollTo({
+        x: index * screenWidth,
+        animated: true,
+      });
+    }
   };
 
   return (
@@ -122,7 +127,7 @@ export default function DiscoverScreen() {
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
             accessibilityRole="button"
-            onPress={() => setActiveCategory("monitoring")}
+            onPress={() => handleSelectCategory("monitoring")}
             containerStyle={{
               backgroundColor: "#000000",
               borderColor: "rgba(255,255,255,0.08)",
@@ -246,44 +251,67 @@ export default function DiscoverScreen() {
           </View>
         </View>
 
-        {/* Agent Cards Listing for Category */}
-        <View className="px-4 pt-2">
-          {isLoading ? (
-            <View className="py-8">
-              <StatePanel
-                body="Fetching 8004scan-indexed BSC agent records..."
-                state="syncing"
-                title="Loading Agents"
-              />
-            </View>
-          ) : isError ? (
-            <View className="py-8">
-              <StatePanel
-                body="Unable to connect to registry API. Please check your network connection."
-                state="unavailable"
-                title="Sync Failed"
-              />
-            </View>
-          ) : filteredAgents.length === 0 ? (
-            <View className="py-8">
-              <StatePanel
-                body="No agents found in this category. Check back soon."
-                state="unavailable"
-                title="No Agents Found"
-              />
-            </View>
-          ) : (
-            <View className="gap-3.5">
-              {filteredAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onPress={() => handleAgentPress(agent)}
-                />
-              ))}
-            </View>
-          )}
-        </View>
+        {/* Horizontal Swipeable Category Lists Carousel */}
+        <ScrollView
+          ref={horizontalScrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const nextIndex = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+            if (nextIndex >= 0 && nextIndex < AGENT_CATEGORIES.length) {
+              const nextCategory = AGENT_CATEGORIES[nextIndex].slug;
+              if (nextCategory !== activeCategory) {
+                setActiveCategory(nextCategory);
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+            }
+          }}
+          scrollEventThrottle={16}
+        >
+          {AGENT_CATEGORIES.map((cat) => {
+            const categoryAgents = agents?.filter((agent) => agent.category === cat.slug) ?? [];
+            return (
+              <View key={cat.slug} style={{ width: screenWidth }} className="px-4 pt-2">
+                {isLoading ? (
+                  <View className="py-8">
+                    <StatePanel
+                      body="Fetching 8004scan-indexed BSC agent records..."
+                      state="syncing"
+                      title="Loading Agents"
+                    />
+                  </View>
+                ) : isError ? (
+                  <View className="py-8">
+                    <StatePanel
+                      body="Unable to connect to registry API. Please check your network connection."
+                      state="unavailable"
+                      title="Sync Failed"
+                    />
+                  </View>
+                ) : categoryAgents.length === 0 ? (
+                  <View className="py-8">
+                    <StatePanel
+                      body="No agents found in this category. Check back soon."
+                      state="unavailable"
+                      title="No Agents Found"
+                    />
+                  </View>
+                ) : (
+                  <View className="gap-3.5">
+                    {categoryAgents.map((agent) => (
+                      <AgentCard
+                        key={agent.id}
+                        agent={agent}
+                        onPress={() => handleAgentPress(agent)}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
       </ScrollView>
     </SafeAreaView>
   );

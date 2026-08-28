@@ -13,7 +13,7 @@ import { useAppStore } from "@/store/use-app-store";
 
 function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const bottomOffset = insets.bottom > 0 ? insets.bottom + 6 : 20;
+  const bottomOffset = insets.bottom > 0 ? insets.bottom + 8 : 20;
 
   return (
     <View
@@ -31,15 +31,15 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
         style={{
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
-          width: "74%",
-          maxWidth: 310,
-          height: 58,
+          justifyContent: "space-around",
+          width: "86%",
+          maxWidth: 345,
+          height: 62,
           backgroundColor:
             Platform.OS === "ios"
               ? "rgba(255, 255, 255, 0.45)"
               : "rgba(255, 255, 255, 0.94)",
-          borderRadius: 29,
+          borderRadius: 31,
           borderWidth: 1.2,
           borderColor:
             Platform.OS === "ios"
@@ -50,7 +50,7 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
           shadowOpacity: 0.16,
           shadowRadius: 20,
           elevation: 12,
-          paddingHorizontal: 8,
+          paddingHorizontal: 6,
           overflow: "hidden",
         }}
       >
@@ -103,13 +103,13 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
               style={{ flex: 1, alignItems: "center", justifyContent: "center", height: "100%" }}
               containerStyle={{ alignItems: "center", justifyContent: "center" }}
             >
-              <CategoryGlyph color={color} name={glyphName as any} size={20} strokeWidth={isFocused ? 2.2 : 1.8} />
+              <CategoryGlyph color={color} name={glyphName as any} size={21} strokeWidth={isFocused ? 2.2 : 1.8} />
               <Text
                 style={{
                   color,
-                  fontSize: 9.5,
+                  fontSize: 10,
                   fontWeight: isFocused ? "800" : "600",
-                  marginTop: 1,
+                  marginTop: 2,
                 }}
               >
                 {String(label)}

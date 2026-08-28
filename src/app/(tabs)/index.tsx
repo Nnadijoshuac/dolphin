@@ -29,9 +29,6 @@ import type { Agent, AgentCategory } from "@/types/agent";
 
 const coinVideoSource = require("../../../assets/videos/Coin.mp4");
 
-const DISCOVER_HEADER_HEIGHT = 48;
-const CATEGORY_DOCK_HEIGHT = 44;
-
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
@@ -39,15 +36,21 @@ export default function DiscoverScreen() {
   const horizontalScrollRef = useRef<ScrollView>(null);
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
 
-  const [appHeaderHeight, setAppHeaderHeight] = useState(64);
-  const [heroHeight, setHeroHeight] = useState(210);
-
   const scrollY = useSharedValue(0);
+  const tabsNaturalY = useSharedValue(320);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
     },
+  });
+
+  const categoryTabsAnimatedStyle = useAnimatedStyle(() => {
+    const threshold = tabsNaturalY.value - 46;
+    const translateY = scrollY.value > threshold ? scrollY.value - threshold : 0;
+    return {
+      transform: [{ translateY }],
+    };
   });
 
   const coinPlayer = useVideoPlayer(coinVideoSource, (player) => {
@@ -77,138 +80,14 @@ export default function DiscoverScreen() {
     }
   };
 
-  // Discover header translates from its position below AppHeader up to y=0, then sticks at y=0
-  const discoverAnimatedStyle = useAnimatedStyle(() => {
-    const translateY = Math.max(0, appHeaderHeight - scrollY.value);
-    return {
-      transform: [{ translateY }],
-    };
-  });
-
-  // Category dock translates from below Hero Card up to y=48 (under Discover), then sticks at y=48
-  const dockAnimatedStyle = useAnimatedStyle(() => {
-    const dockInitialY = appHeaderHeight + DISCOVER_HEADER_HEIGHT + heroHeight;
-    const translateY = Math.max(DISCOVER_HEADER_HEIGHT, dockInitialY - scrollY.value);
-    return {
-      transform: [{ translateY }],
-    };
-  });
-
   return (
     <SafeAreaView
       className="flex-1"
       edges={["top", "left", "right"]}
-      style={{ backgroundColor: colors.canvas, position: "relative" }}
+      style={{ backgroundColor: colors.canvas }}
     >
       <ConstellationBg opacity={0.3} />
 
-      {/* Floating Animated Tier 1: Discover Header (Hits top first and sticks at y=0) */}
-      <Animated.View
-        style={[
-          discoverAnimatedStyle,
-          {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: DISCOVER_HEADER_HEIGHT,
-            backgroundColor: colors.canvas,
-            zIndex: 30,
-          },
-        ]}
-      >
-        <View className="flex-row items-center justify-between px-4 pb-2 pt-1">
-          <Text
-            className="text-[30px] font-black tracking-[-1px]"
-            style={{ color: colors.ink }}
-          >
-            Discover
-          </Text>
-
-          <PressableScale
-            accessibilityLabel="View categories"
-            accessibilityRole="button"
-            onPress={() => router.push("/(tabs)/search")}
-            containerStyle={{
-              alignItems: "center",
-              backgroundColor: "#FFFFFF",
-              borderColor: colors.line,
-              borderRadius: 9999,
-              borderWidth: 1,
-              height: 38,
-              justifyContent: "center",
-              width: 38,
-              ...shadows.subtle,
-            }}
-          >
-            <CategoryGlyph color={colors.ink} name="layers" size={18} />
-          </PressableScale>
-        </View>
-      </Animated.View>
-
-      {/* Floating Animated Tier 2: Category Tabs Dock (Hits under Discover and sticks at y=48) */}
-      <Animated.View
-        style={[
-          dockAnimatedStyle,
-          {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: CATEGORY_DOCK_HEIGHT,
-            backgroundColor: colors.canvas,
-            zIndex: 29,
-          },
-        ]}
-      >
-        <View className="px-4 pb-1 pt-1">
-          <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
-            <ScrollView
-              contentContainerStyle={{ gap: 24, paddingRight: 16 }}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            >
-              {AGENT_CATEGORIES.map((cat) => {
-                const isActive = activeCategory === cat.slug;
-                return (
-                  <PressableScale
-                    key={cat.slug}
-                    accessibilityLabel={cat.label}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: isActive }}
-                    onPress={() => handleSelectCategory(cat.slug)}
-                    containerStyle={{
-                      paddingBottom: 8,
-                      paddingTop: 4,
-                      alignItems: "center",
-                      position: "relative",
-                    }}
-                  >
-                    <Text
-                      className="text-[14px]"
-                      style={{
-                        color: isActive ? colors.ink : "#7A7B7E",
-                        fontWeight: isActive ? "800" : "500",
-                      }}
-                    >
-                      {cat.label}
-                    </Text>
-
-                    {isActive ? (
-                      <View
-                        className="absolute bottom-0 h-1 w-full rounded-full"
-                        style={{ backgroundColor: colors.gold }}
-                      />
-                    ) : null}
-                  </PressableScale>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* Main Scroll Content */}
       <Animated.ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 120 }}
@@ -225,28 +104,56 @@ export default function DiscoverScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[1]}
       >
-        {/* Child 0: Top Dolphin Writeup Header (Measures height for smooth scroll-off) */}
-        <View
-          onLayout={(e) => {
-            const h = e.nativeEvent.layout.height;
-            if (h > 0 && h !== appHeaderHeight) setAppHeaderHeight(h);
-          }}
-        >
+        {/* Child 0: Top Dolphin Writeup Header (Scrolls up out of view) */}
+        <View>
           <AppHeader />
         </View>
 
-        {/* Child 1: Spacer for Discover Title Bar */}
-        <View style={{ height: DISCOVER_HEADER_HEIGHT }} />
-
-        {/* Child 2: Compact Featured Hero Card */}
+        {/* Child 1: Sticky Discover Title Bar */}
         <View
-          className="px-2 pb-1 pt-1"
-          onLayout={(e) => {
-            const h = e.nativeEvent.layout.height;
-            if (h > 0 && h !== heroHeight) setHeroHeight(h);
+          style={{
+            backgroundColor: colors.canvas,
+            zIndex: 20,
           }}
         >
+          <View
+            className="flex-row items-center justify-between px-4 pb-2.5 pt-1"
+            style={{
+              backgroundColor: colors.canvas,
+            }}
+          >
+            <Text
+              className="text-[30px] font-black tracking-[-1px]"
+              style={{ color: colors.ink }}
+            >
+              Discover
+            </Text>
+
+            <PressableScale
+              accessibilityLabel="View categories"
+              accessibilityRole="button"
+              onPress={() => router.push("/(tabs)/search")}
+              containerStyle={{
+                alignItems: "center",
+                backgroundColor: "#FFFFFF",
+                borderColor: colors.line,
+                borderRadius: 9999,
+                borderWidth: 1,
+                height: 38,
+                justifyContent: "center",
+                width: 38,
+                ...shadows.subtle,
+              }}
+            >
+              <CategoryGlyph color={colors.ink} name="layers" size={18} />
+            </PressableScale>
+          </View>
+        </View>
+
+        {/* Child 2: Compact Featured Hero Card */}
+        <View className="px-2 pb-1 pt-1">
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
             accessibilityRole="button"
@@ -327,8 +234,65 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Child 3: Spacer for Category Tabs Dock */}
-        <View style={{ height: CATEGORY_DOCK_HEIGHT }} />
+        {/* Child 3: Category Filter Tabs Bar (Reanimated 60fps Zero-Glitch Docking) */}
+        <Animated.View
+          onLayout={(e) => {
+            tabsNaturalY.value = e.nativeEvent.layout.y;
+          }}
+          style={[
+            {
+              backgroundColor: colors.canvas,
+              zIndex: 15,
+            },
+            categoryTabsAnimatedStyle,
+          ]}
+        >
+          <View className="px-4 pt-2 pb-2">
+            <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
+              <ScrollView
+                contentContainerStyle={{ gap: 24, paddingRight: 16 }}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+              >
+                {AGENT_CATEGORIES.map((cat) => {
+                  const isActive = activeCategory === cat.slug;
+                  return (
+                    <PressableScale
+                      key={cat.slug}
+                      accessibilityLabel={cat.label}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: isActive }}
+                      onPress={() => handleSelectCategory(cat.slug)}
+                      containerStyle={{
+                        paddingBottom: 8,
+                        paddingTop: 4,
+                        alignItems: "center",
+                        position: "relative",
+                      }}
+                    >
+                      <Text
+                        className="text-[14px]"
+                        style={{
+                          color: isActive ? colors.ink : "#7A7B7E",
+                          fontWeight: isActive ? "800" : "500",
+                        }}
+                      >
+                        {cat.label}
+                      </Text>
+
+                      {isActive ? (
+                        <View
+                          className="absolute bottom-0 h-1 w-full rounded-full"
+                          style={{ backgroundColor: colors.gold }}
+                        />
+                      ) : null}
+                    </PressableScale>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        </Animated.View>
 
         {/* Child 4: Horizontal Swipeable Category Lists Carousel */}
         <ScrollView

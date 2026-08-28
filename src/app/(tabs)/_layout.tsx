@@ -1,7 +1,7 @@
+import { BlurView } from "expo-blur";
+import { Redirect, Tabs } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
-import { Redirect, Tabs } from "expo-router";
-import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -35,7 +35,7 @@ export default function TabsLayout() {
     return <Redirect href="/onboarding" />;
   }
 
-  const bottomOffset = insets.bottom > 0 ? insets.bottom + 2 : 16;
+  const bottomOffset = insets.bottom > 0 ? insets.bottom + 6 : 18;
 
   return (
     <Tabs
@@ -46,30 +46,30 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: "#8C8E88",
         tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 9.5,
           fontWeight: "700",
           marginTop: -2,
         },
         tabBarItemStyle: {
-          paddingVertical: 6,
+          paddingVertical: 5,
         },
         tabBarStyle: {
           position: "absolute",
-          left: 40,
-          right: 40,
+          left: 54,
+          right: 54,
           bottom: bottomOffset,
-          height: 60,
-          borderRadius: 30,
+          height: 58,
+          borderRadius: 29,
           borderWidth: 1.2,
           borderColor: "rgba(17,18,20,0.08)",
-          backgroundColor: "rgba(255,255,255,0.85)",
+          backgroundColor: "rgba(255,255,255,0.92)",
           overflow: "hidden",
           shadowColor: "#111215",
-          shadowOffset: { width: 0, height: 10 },
-          shadowOpacity: 0.12,
-          shadowRadius: 24,
-          elevation: 8,
-          paddingHorizontal: 4,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.14,
+          shadowRadius: 20,
+          elevation: 10,
+          paddingHorizontal: 2,
         },
         tabBarBackground: () => (
           <BlurView
@@ -85,7 +85,7 @@ export default function TabsLayout() {
         options={{
           title: "Discover",
           tabBarIcon: ({ color }) => (
-            <CategoryGlyph color={color} name="discover" size={22} />
+            <CategoryGlyph color={color} name="discover" size={20} />
           ),
         }}
       />
@@ -94,7 +94,7 @@ export default function TabsLayout() {
         options={{
           title: "Search",
           tabBarIcon: ({ color }) => (
-            <CategoryGlyph color={color} name="search" size={22} />
+            <CategoryGlyph color={color} name="search" size={20} />
           ),
         }}
       />
@@ -103,7 +103,7 @@ export default function TabsLayout() {
         options={{
           title: "My Agents",
           tabBarIcon: ({ color }) => (
-            <CategoryGlyph color={color} name="agents" size={22} />
+            <CategoryGlyph color={color} name="agents" size={20} />
           ),
         }}
       />
@@ -112,7 +112,7 @@ export default function TabsLayout() {
         options={{
           title: "Wallet",
           tabBarIcon: ({ color }) => (
-            <CategoryGlyph color={color} name="wallet" size={22} />
+            <CategoryGlyph color={color} name="wallet" size={20} />
           ),
         }}
       />

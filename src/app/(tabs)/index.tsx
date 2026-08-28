@@ -5,9 +5,9 @@ import {
   Text,
   View,
 } from "react-native";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentCard } from "@/components/agent-card";
@@ -21,10 +21,18 @@ import { colors, radii, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
 
+const coinVideoSource = require("../../../assets/videos/Coin.mp4");
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState<AgentCategory>("monitoring");
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
+
+  const coinPlayer = useVideoPlayer(coinVideoSource, (player) => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
 
   const filteredAgents = useMemo(() => {
     if (!agents) return [];
@@ -161,12 +169,14 @@ export default function DiscoverScreen() {
                 </View>
               </View>
 
-              {/* Right Graphic */}
-              <View className="h-44 w-40 items-center justify-center -mr-2">
-                <Image
+              {/* Right 3D Coin Video Graphic */}
+              <View className="h-44 w-40 items-center justify-center -mr-2 overflow-hidden rounded-2xl">
+                <VideoView
+                  allowsFullscreen={false}
+                  allowsPictureInPicture={false}
                   contentFit="contain"
-                  priority="high"
-                  source={require("../../../assets/images/hero-bnb-orbit.png")}
+                  nativeControls={false}
+                  player={coinPlayer}
                   style={{ height: "100%", width: "100%" }}
                 />
               </View>

@@ -9,11 +9,6 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import Animated, {
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentCard } from "@/components/agent-card";
@@ -35,24 +30,6 @@ export default function DiscoverScreen() {
   const [activeCategory, setActiveCategory] = useState<AgentCategory>("monitoring");
   const horizontalScrollRef = useRef<ScrollView>(null);
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
-
-  const scrollY = useSharedValue(0);
-  const tabsNaturalY = useSharedValue(320);
-
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      scrollY.value = event.contentOffset.y;
-    },
-  });
-
-  const tabsOverlayAnimatedStyle = useAnimatedStyle(() => {
-    const threshold = tabsNaturalY.value - 48;
-    const isVisible = scrollY.value >= threshold;
-    return {
-      opacity: isVisible ? 1 : 0,
-      pointerEvents: isVisible ? "auto" : "none",
-    };
-  });
 
   const coinPlayer = useVideoPlayer(coinVideoSource, (player) => {
     player.loop = true;
@@ -81,8 +58,16 @@ export default function DiscoverScreen() {
     }
   };
 
-  const renderCategoryTabs = () => (
-    <View className="px-4 pt-2 pb-2" style={{ backgroundColor: colors.canvas }}>
+  const [isTabsSticky, setIsTabsSticky] = useState(false);
+  const [heroBottom, setHeroBottom] = useState(320);
+
+  const categoryTabsElement = (
+    <View
+      className="px-4 pt-2 pb-2"
+      style={{
+        backgroundColor: colors.canvas,
+      }}
+    >
       <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
         <ScrollView
           contentContainerStyle={{ gap: 24, paddingRight: 16 }}
@@ -137,10 +122,16 @@ export default function DiscoverScreen() {
     >
       <ConstellationBg opacity={0.3} />
 
-      <Animated.ScrollView
+      <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 120 }}
-        onScroll={scrollHandler}
+        onScroll={(e) => {
+          const scrollY = e.nativeEvent.contentOffset.y;
+          const shouldStick = scrollY >= heroBottom - 50;
+          if (shouldStick !== isTabsSticky) {
+            setIsTabsSticky(shouldStick);
+          }
+        }}
         scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
@@ -155,12 +146,12 @@ export default function DiscoverScreen() {
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[1]}
       >
-        {/* Child 0: Top Dolphin Writeup Header (Scrolls up naturally) */}
+        {/* Child 0: Top Dolphin Writeup Header (Scrolls up out of view) */}
         <View>
           <AppHeader />
         </View>
 
-        {/* Child 1: Sticky Discover Header Layer with Rock-Solid Docked Tabs Overlay */}
+        {/* Child 1: Sticky Header Container (Discover title + docked Category Tabs) */}
         <View
           style={{
             backgroundColor: colors.canvas,
@@ -201,26 +192,17 @@ export default function DiscoverScreen() {
             </PressableScale>
           </View>
 
-          {/* Absolute Docked Category Tabs Overlay (100% Rock-Solid Zero-Vibration) */}
-          <Animated.View
-            style={[
-              {
-                position: "absolute",
-                top: 48,
-                left: 0,
-                right: 0,
-                backgroundColor: colors.canvas,
-                zIndex: 25,
-              },
-              tabsOverlayAnimatedStyle,
-            ]}
-          >
-            {renderCategoryTabs()}
-          </Animated.View>
+          {/* Docked Category Tabs when scrolled past Hero */}
+          {isTabsSticky ? categoryTabsElement : null}
         </View>
 
         {/* Child 2: Compact Featured Hero Card */}
-        <View className="px-2 pb-1 pt-1">
+        <View
+          className="px-2 pb-1 pt-1"
+          onLayout={(e) => {
+            setHeroBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
+          }}
+        >
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
             accessibilityRole="button"
@@ -301,18 +283,12 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Child 3: In-flow Category Filter Tabs Bar */}
-        <View
-          onLayout={(e) => {
-            tabsNaturalY.value = e.nativeEvent.layout.y;
-          }}
-          style={{
-            backgroundColor: colors.canvas,
-            zIndex: 10,
-          }}
-        >
-          {renderCategoryTabs()}
-        </View>
+        {/* Child 3: Category Filter Tabs Bar (In-flow position) */}
+        {isTabsSticky ? (
+          <View style={{ height: 48 }} />
+        ) : (
+          categoryTabsElement
+        )}
 
         {/* Child 4: Horizontal Swipeable Category Lists Carousel */}
         <ScrollView
@@ -375,7 +351,7 @@ export default function DiscoverScreen() {
             );
           })}
         </ScrollView>
-      </Animated.ScrollView>
+      </ScrollView>
     </SafeAreaView>
   );
 }

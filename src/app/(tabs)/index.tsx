@@ -45,11 +45,12 @@ export default function DiscoverScreen() {
     },
   });
 
-  const categoryTabsAnimatedStyle = useAnimatedStyle(() => {
-    const threshold = tabsNaturalY.value - 46;
-    const translateY = scrollY.value > threshold ? scrollY.value - threshold : 0;
+  const tabsOverlayAnimatedStyle = useAnimatedStyle(() => {
+    const threshold = tabsNaturalY.value - 48;
+    const isVisible = scrollY.value >= threshold;
     return {
-      transform: [{ translateY }],
+      opacity: isVisible ? 1 : 0,
+      pointerEvents: isVisible ? "auto" : "none",
     };
   });
 
@@ -80,6 +81,54 @@ export default function DiscoverScreen() {
     }
   };
 
+  const renderCategoryTabs = () => (
+    <View className="px-4 pt-2 pb-2" style={{ backgroundColor: colors.canvas }}>
+      <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
+        <ScrollView
+          contentContainerStyle={{ gap: 24, paddingRight: 16 }}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {AGENT_CATEGORIES.map((cat) => {
+            const isActive = activeCategory === cat.slug;
+            return (
+              <PressableScale
+                key={cat.slug}
+                accessibilityLabel={cat.label}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+                onPress={() => handleSelectCategory(cat.slug)}
+                containerStyle={{
+                  paddingBottom: 8,
+                  paddingTop: 4,
+                  alignItems: "center",
+                  position: "relative",
+                }}
+              >
+                <Text
+                  className="text-[14px]"
+                  style={{
+                    color: isActive ? colors.ink : "#7A7B7E",
+                    fontWeight: isActive ? "800" : "500",
+                  }}
+                >
+                  {cat.label}
+                </Text>
+
+                {isActive ? (
+                  <View
+                    className="absolute bottom-0 h-1 w-full rounded-full"
+                    style={{ backgroundColor: colors.gold }}
+                  />
+                ) : null}
+              </PressableScale>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView
       className="flex-1"
@@ -106,18 +155,19 @@ export default function DiscoverScreen() {
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[1]}
       >
-        {/* Child 0: Top Dolphin Writeup Header (Scrolls up out of view) */}
+        {/* Child 0: Top Dolphin Writeup Header (Scrolls up naturally) */}
         <View>
           <AppHeader />
         </View>
 
-        {/* Child 1: Sticky Discover Title Bar */}
+        {/* Child 1: Sticky Discover Header Layer with Rock-Solid Docked Tabs Overlay */}
         <View
           style={{
             backgroundColor: colors.canvas,
             zIndex: 20,
           }}
         >
+          {/* Discover Title Bar */}
           <View
             className="flex-row items-center justify-between px-4 pb-2.5 pt-1"
             style={{
@@ -150,6 +200,23 @@ export default function DiscoverScreen() {
               <CategoryGlyph color={colors.ink} name="layers" size={18} />
             </PressableScale>
           </View>
+
+          {/* Absolute Docked Category Tabs Overlay (100% Rock-Solid Zero-Vibration) */}
+          <Animated.View
+            style={[
+              {
+                position: "absolute",
+                top: 48,
+                left: 0,
+                right: 0,
+                backgroundColor: colors.canvas,
+                zIndex: 25,
+              },
+              tabsOverlayAnimatedStyle,
+            ]}
+          >
+            {renderCategoryTabs()}
+          </Animated.View>
         </View>
 
         {/* Child 2: Compact Featured Hero Card */}
@@ -234,65 +301,18 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Child 3: Category Filter Tabs Bar (Reanimated 60fps Zero-Glitch Docking) */}
-        <Animated.View
+        {/* Child 3: In-flow Category Filter Tabs Bar */}
+        <View
           onLayout={(e) => {
             tabsNaturalY.value = e.nativeEvent.layout.y;
           }}
-          style={[
-            {
-              backgroundColor: colors.canvas,
-              zIndex: 15,
-            },
-            categoryTabsAnimatedStyle,
-          ]}
+          style={{
+            backgroundColor: colors.canvas,
+            zIndex: 10,
+          }}
         >
-          <View className="px-4 pt-2 pb-2">
-            <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
-              <ScrollView
-                contentContainerStyle={{ gap: 24, paddingRight: 16 }}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              >
-                {AGENT_CATEGORIES.map((cat) => {
-                  const isActive = activeCategory === cat.slug;
-                  return (
-                    <PressableScale
-                      key={cat.slug}
-                      accessibilityLabel={cat.label}
-                      accessibilityRole="tab"
-                      accessibilityState={{ selected: isActive }}
-                      onPress={() => handleSelectCategory(cat.slug)}
-                      containerStyle={{
-                        paddingBottom: 8,
-                        paddingTop: 4,
-                        alignItems: "center",
-                        position: "relative",
-                      }}
-                    >
-                      <Text
-                        className="text-[14px]"
-                        style={{
-                          color: isActive ? colors.ink : "#7A7B7E",
-                          fontWeight: isActive ? "800" : "500",
-                        }}
-                      >
-                        {cat.label}
-                      </Text>
-
-                      {isActive ? (
-                        <View
-                          className="absolute bottom-0 h-1 w-full rounded-full"
-                          style={{ backgroundColor: colors.gold }}
-                        />
-                      ) : null}
-                    </PressableScale>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </View>
-        </Animated.View>
+          {renderCategoryTabs()}
+        </View>
 
         {/* Child 4: Horizontal Swipeable Category Lists Carousel */}
         <ScrollView

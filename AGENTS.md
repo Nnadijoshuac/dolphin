@@ -63,3 +63,33 @@ The full product/screen spec, tech stack decisions, and build strategy live in *
 
 - Do only what the current task asks. Don't refactor unrelated files, don't "clean up" adjacent code, don't upgrade unrelated dependencies as a drive-by — each of those is a separate task with its own review.
 - Keep commits/diffs scoped to one logical change so regressions are traceable.
+
+## 9. Convex Backend Conventions
+
+The backend (`convex/`) follows patterns already established in the codebase — match them, don't invent parallel ones:
+
+- **Live-data metrics use the `LiveMetric<T>` shape everywhere**, mirrored between `src/types/agent.ts` (client) and `convex/lib/liveMetric.ts` (server validator) by hand — Convex validators aren't generated from TypeScript types, so when one changes, update the other in the same change and say so in the commit.
+- **Category stat shapes live in `convex/categoryStatsValidators.ts`**, one validator per `AgentCategory`, field-for-field matching the corresponding type in `src/types/agent.ts`. Same manual-sync rule as above.
+- **Protocol reads live one file per protocol under `convex/protocols/`** (`venus.ts`, `pancakeswap.ts`, `aave.ts`, etc.), each exporting a single `readXStats(agentWallet, checkedAt)` function that returns the category's live-stats shape. A protocol with no wired read yet gets an explicit function in `unavailable.ts`, not a TODO left in the real module.
+- **Never hardcode a contract address without independent verification.** Before writing an address into a protocols module: check it against the protocol's own official GitHub deployments file or docs (not just a search snippet), cross-reference a second source where possible, and say in a code comment where it came from and what confidence level it has. This project has already been burned by how costly a wrong address would be if presented as "real, live, on-chain" — treat every new address with the same suspicion as the ones already verified in the codebase.
+- **A metric with no live source yet is `unavailableMetricValue(reason, source, checkedAt)`, never a fabricated number.** This is the Convex-side enforcement of Rule 5 (Data Integrity) — it applies exactly the same to backend aggregation code as to the client.
+- **`_generated/` is real Convex codegen output once `npx convex dev` has run** — do not hand-write stand-ins for it going forward. If you find code still referencing `anyApi` or a hand-rolled `makeFunctionReference` call, that's a leftover from before codegen existed and should be swapped to the generated `api`/`internal` imports as a matter of course, not treated as a design choice to preserve.
+
+## 10. Commit Discipline
+
+- Commit after every file you create, edit, or delete — not batched at the end of a session.
+- One logical change per commit. A new endpoint plus its types plus its hook can be one commit; unrelated changes never share one.
+- Write a clear, conventional commit message: short imperative summary (`feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`), with a body when the change needs context a diff alone won't give a future reader.
+- Never leave uncommitted changes at the end of a task or session.
+- Before committing anything that touches config, env files, or permission/settings files, check it doesn't contain a secret (private key, API token) — these have leaked into `.claude/settings.json` before via approved command strings. If you spot one, flag it and remove it in its own commit rather than letting it ride along with unrelated work.
+
+## 11. UI/Frontend Boundary
+
+Unless a specific task explicitly says otherwise, treat the UI/frontend layer as off-limits — the person builds it directly and in parallel. This means, by default:
+
+- No screen/route files under `app/(tabs)/`, `app/agent/`, `app/category/`, `app/hire/`, `app/manage/`, `app/onboarding/`
+- No component whose primary purpose is rendering UI (layout, styling, NativeWind classes, navigation structure, animations, icons), and no design-system primitives
+- If a task seems to need a UI change, build the underlying logic/data/hook so it's ready to consume, note what UI-side integration will eventually be needed, and stop there — do not make the UI change yourself
+- If unsure whether a file is "logic" or "UI," default to not touching it and flag it
+
+This boundary lifts only when a task explicitly says so for that task. It is not a one-time instruction from a single prompt — treat it as standing unless told otherwise.

@@ -1,14 +1,14 @@
-# Project Scope: BSC Agents Marketplace (App-Store-Style Mobile App)
+# Project Scope: BSC Agent Marketplace (App-Store-Style Mobile App)
 
-This is the single source of truth for the build. It supersedes the earlier build-prompt and research-findings docs — those were working documents; this is the consolidated result. Agents.md governs *how* the coding Agents behaves; this file governs *what* gets built and why.
+This is the single source of truth for the build. It supersedes the earlier build-prompt and research-findings docs — those were working documents; this is the consolidated result. AGENT.md governs *how* the coding agent behaves; this file governs *what* gets built and why.
 
-Hackathon: BNB Chain "Build the Era" — deadline Sep 9, 2026. Judged on **Functionality** (zero-knowledge user completes land → find → understand → hire with no dead ends), **Data Quality** (real, live, accurate data — not just Agents counts), and **Agents Diversity** (four categories, equal depth). Optional Altana bounty: Agentss that transact for themselves within user-set limits, verified via live on-chain transactions.
+Hackathon: BNB Chain "Build the Era" — deadline Sep 9, 2026. Judged on **Functionality** (zero-knowledge user completes land → find → understand → hire with no dead ends), **Data Quality** (real, live, accurate data — not just agent counts), and **Agent Diversity** (four categories, equal depth). Optional Altana bounty: agents that transact for themselves within user-set limits, verified via live on-chain transactions.
 
 ---
 
 ## 1. Project Summary
 
-A mobile marketplace for discovering, comparing, and hiring AI Agentss registered on BNB Smart Chain (BSC) under ERC-8004. UX model: **Apple's App Store app** — Today-style Discover tab, Categories/Apps-style browse grid, a rich per-Agents "product page," live search, bottom tab bar. Not a generic crypto dashboard.
+A mobile marketplace for discovering, comparing, and hiring AI agents registered on BNB Smart Chain (BSC) under ERC-8004. UX model: **Apple's App Store app** — Today-style Discover tab, Categories/Apps-style browse grid, a rich per-agent "product page," live search, bottom tab bar. Not a generic crypto dashboard.
 
 Four required categories, equal visual and functional depth:
 1. **Monitoring** — watches markets, wallets, positions
@@ -20,23 +20,23 @@ Four required categories, equal visual and functional depth:
 
 ## 2. Build Strategy — What's Fully Real vs. Simplified
 
-Two independent research passes agreed: attempting four fully autonomous, independently-executing Agents runtimes in two weeks is too much failure surface. The stronger, better-judged strategy is **marketplace-first**: make discovery, trust, and data depth extraordinary and fully real everywhere, and make **one** action-taking category genuinely live end-to-end (session grant → real scoped on-chain execution → revoke) rather than spreading thin across four.
+Two independent research passes agreed: attempting four fully autonomous, independently-executing agent runtimes in two weeks is too much failure surface. The stronger, better-judged strategy is **marketplace-first**: make discovery, trust, and data depth extraordinary and fully real everywhere, and make **one** action-taking category genuinely live end-to-end (session grant → real scoped on-chain execution → revoke) rather than spreading thin across four.
 
 **Build fully real, no exceptions:**
-- Marketplace UI (Discover, Categories, Search, Agents Details, My Agentss, Wallet, onboarding)
-- ERC-8004 identity data — real BSC mainnet Agents IDs, owners, registry reads, reputation
+- Marketplace UI (Discover, Categories, Search, Agent Details, My Agents, Wallet, onboarding)
+- ERC-8004 identity data — real BSC mainnet agent IDs, owners, registry reads, reputation
 - All four categories as marketplace entries backed by real live data (see §5 for per-category stats)
-- Monitoring Agentss end-to-end (read-only, no authorization complexity — do this one first, it's the lowest-risk full path)
+- Monitoring agents end-to-end (read-only, no authorization complexity — do this one first, it's the lowest-risk full path)
 
 **Build fully real for exactly one action-taking category:**
 - Recommended pick: **Health Factor** — cleanest demo story (before/after health factor, small bounded action like a repay), easiest permission scope to explain to a zero-knowledge user
-- Full path: real session grant (call allowlist + spend cap + expiry) → real scoped on-chain testnet transaction → visible in My Agentss sourced from actual transaction history → one-tap revoke
+- Full path: real session grant (call allowlist + spend cap + expiry) → real scoped on-chain testnet transaction → visible in My Agents sourced from actual transaction history → one-tap revoke
 
 **Simplify/defer for the other two action-taking categories (grid trading, yield):**
 - Real historical data, real strategy parameters, real current state (P&L, APY, TVL, protocol)
 - Activation routes into the same authorization architecture (§6) but can be labeled "Session authorization available" / testnet demo rather than a fully independent live runtime — don't fake mainnet activity, just be honest about depth
 
-This split protects all three judging criteria simultaneously: Functionality and Data Quality get built to full depth everywhere; Agents Diversity is satisfied because all four categories are real marketplace categories with real data; engineering risk concentrates on one well-tested path instead of four unproven ones.
+This split protects all three judging criteria simultaneously: Functionality and Data Quality get built to full depth everywhere; Agent Diversity is satisfied because all four categories are real marketplace categories with real data; engineering risk concentrates on one well-tested path instead of four unproven ones.
 
 ---
 
@@ -51,7 +51,7 @@ This split protects all three judging criteria simultaneously: Functionality and
 - **Reown AppKit for React Native** (`@reown/appkit-react-native`) for wallet connection — confirmed current, actively maintained, Expo SDK 53+ compatible with documented babel config for `valtio`. Known Expo Router Android quirk: `<AppKit />` may need wrapping in an absolutely-positioned `View` — put this on the integration checklist for day 1, not day 12
 - BSC RPC via `.env` (`EXPO_PUBLIC_BSC_RPC_URL`)
 
-**Agents discovery/data**: **8004scan Developer API** (`8004scan.io/developers`) as the primary discovery/listing source — do not build a registry event-scanning indexer from scratch. Use direct `viem` RPC reads against the ERC-8004 registry for verification of individual Agentss (ownership, URI, on-chain proof), not for bulk discovery.
+**Agent discovery/data**: **8004scan Developer API** (`8004scan.io/developers`) as the primary discovery/listing source — do not build a registry event-scanning indexer from scratch. Use direct `viem` RPC reads against the ERC-8004 registry for verification of individual agents (ownership, URI, on-chain proof), not for bulk discovery.
 
 **Authorization**: Altana SDK, kept **server-side/backend only** — not bundled into the Expo app. Mobile app talks to your own backend; your backend talks to Altana. This sidesteps the unresolved RN-compatibility question entirely (see §6) and is standard, low-risk architecture regardless of which custody mechanic Altana turns out to use.
 
@@ -67,10 +67,9 @@ This split protects all three judging criteria simultaneously: Functionality and
 
 ## 4. Design Direction — "App Store" Visual Language
 
-- **Bottom tab bar** (4–5 tabs, blurred/translucent, consistent line-icon set — Phosphor or Lucide): **Discover**, **Categories**, **Search**, **My Agentss**, **Wallet/Profile**
-- **Discover** = "Today" tab: full-bleed hero cards, spring-sheet transitions into detail pages
-- **Categories** = "Apps" tab: 4 category chips always visible, equal weight, no category visually favored; Agents cards below with icon, name, tagline, one compact live stat
-- **Agents detail page** = App Store product page, repurposed:
+- **Bottom tab bar — 4 items, decided** (Discover, Search, My Agents, Wallet/Profile). Categories is not a separate tab. Category browsing (all four categories, equal weight) lives inside **Discover** as always-visible category chips/pills that route into the existing `category/[slug]` full-listing page — the page and its equal-weight requirement are unchanged, only its entry point moved from a dedicated tab to a Discover-surfaced link. This keeps the nav shallow (App Store's own nav is 5 tabs max, but not every screen needs to be a tab) without dropping the "all four categories equal depth" non-negotiable in §11.
+- **Discover** = "Today" tab: full-bleed hero cards, spring-sheet transitions into detail pages, plus the category chip row described above
+- **Agent detail page** = App Store product page, repurposed:
   - Icon, name, publisher (onchain identity/operator), category badge
   - Sticky **"Hire"** CTA (App Store "Get" styling — pill, colored, becomes progress/connected state)
   - Screenshot carousel → **live performance charts** (equity curve, APY history, liquidation buffer)
@@ -79,7 +78,7 @@ This split protects all three judging criteria simultaneously: Functionality and
   - "Information" block → onchain trust data: ERC-8004 identity address, registration date, reputation score, chain, verified skills — labeled by source (**on-chain verified** vs. **marketplace-derived**, see §5)
   - Reviews → **track record**: win rate, volume, uptime — verifiable, not star ratings
 - **Search**: live-filtering, recent searches, trending when empty
-- **My Agentss**: hired/active list, live status, session expiry countdown, tap through to Manage (pause/adjust/revoke)
+- **My Agents**: hired/active list, live status, session expiry countdown, tap through to Manage (pause/adjust/revoke)
 - **Wallet/Profile**: connect wallet, active sessions, spend caps granted, one-tap revoke
 
 **Style**: neutral background (near-white/near-black by mode), one confident accent color, platform-default system font, 16–20pt padding, 16–20px rounded corners, shadow only on pressable cards.
@@ -88,16 +87,16 @@ This split protects all three judging criteria simultaneously: Functionality and
 
 ## 5. Data Layer
 
-**Normalized `Agents` type:**
+**Normalized `Agent` type:**
 
 ```ts
-type AgentsCategory = "monitoring" | "grid_trading" | "health_factor" | "yield";
+type AgentCategory = "monitoring" | "grid_trading" | "health_factor" | "yield";
 
-interface Agents {
+interface Agent {
   id: string;                    // ERC-8004 onchain identity / registry ID
   name: string;
   publisher: string;             // operator address or ENS/name
-  category: AgentsCategory;
+  category: AgentCategory;
   tagline: string;
   description: string;
   iconUrl: string;
@@ -127,50 +126,52 @@ interface Agents {
 
 **Sourcing:**
 1. 8004scan Developer API → identity/reputation/discovery listing
-2. Direct `viem` RPC reads → verification of individual Agentss (ownership, URI)
+2. Direct `viem` RPC reads → verification of individual agents (ownership, URI)
 3. Backend aggregation → category-specific live stats pulled from real protocols
-4. TanStack Query hooks (`useAgents(id)`, `useAgentssByCategory`, `useSearchAgentss`) — longer `staleTime` for identity data, frequent refetch (30–60s) for live stats
+4. TanStack Query hooks (`useAgent(id)`, `useAgentsByCategory`, `useSearchAgents`) — longer `staleTime` for identity data, frequent refetch (30–60s) for live stats
 
-**Hard rule**: no hardcoded/fake numeric data presented as live. If a metric isn't wired yet, show a clearly labeled "syncing" state. Don't headline vanity numbers ("278,044 Agentss registered") — headline something like "Live Agents Activity" with source + timestamp per metric (e.g. "Health Factor 1.84 — Venus — updated 8 sec ago"). This is what makes Data Quality read as real rather than asserted.
+**Hard rule**: no hardcoded/fake numeric data presented as live. If a metric isn't wired yet, show a clearly labeled "syncing" state. Don't headline vanity numbers ("278,044 agents registered") — headline something like "Live Agent Activity" with source + timestamp per metric (e.g. "Health Factor 1.84 — Venus — updated 8 sec ago"). This is what makes Data Quality read as real rather than asserted.
 
 ---
 
-## 6. Agents Authorization Model — Partially Resolved by Testing (2026-08-28)
+## 6. Agent Authorization Model — Partially Resolved by Testing (2026-08-28)
 
-**Custody mechanic — resolved for the private-key signer path**: `@altananetwork/sdk` 0.8.0's `createWallet` upgrades the signer's own EOA in place via EIP-7702 (`setCode`) rather than provisioning a separate funded wallet. Confirmed directly against the installed package (`internal/passkey.d.ts` doc comments describe the EIP-7702 upgrade mechanism) and empirically via `scripts/spike-b-auth.mjs`'s preflight, which reported `Wallet equals signer EOA: true` for a freshly generated disposable testnet key — the Altana wallet address was identical to the signer's address, with **no separate funding step required**. This means, for whichever signer type ends up connected, the "no funding step" branch of §7's hire flow is the one this SDK actually implements.
+**Custody mechanic — resolved for the private-key signer path**: `@altananetwork/sdk` 0.8.0's `createWallet` upgrades the signer's own EOA in place via EIP-7702 (`setCode`) rather than provisioning a separate funded wallet. Confirmed both by the installed package's own doc comments (`internal/passkey.d.ts` describes the EIP-7702 upgrade mechanism) and empirically: `scripts/spike-b-auth.mjs`'s preflight against a freshly generated disposable testnet key reported `Wallet equals signer EOA: true` - the Altana wallet address was identical to the signer's address, no separate funding step. So whichever signer type ends up connected, the "no funding step" branch of §7's hire flow is the one this SDK actually implements.
 
-**Signer availability — a new, more fundamental blocker discovered**: the resolved custody question turns out not to be the blocking one. `@altananetwork/sdk` 0.8.0 ships exactly three signer constructors — `signerFromPrivateKey`/`createPrivateKeySigner` (raw key, server-side/CLI), and `createPasskey`/`signerFromPasskey` (browser WebAuthn only — `createPasskey` explicitly throws in non-browser environments per its own doc comment). **There is no injected-wallet (EIP-1193/WalletConnect/MetaMask-style) signer in this SDK version**, despite an internal comment (`internal/signer.d.ts`) describing `signerFromInjected` as a planned adapter — it is not implemented or exported. This means a user's Reown-AppKit-connected wallet (§3's locked wallet-connection method) **cannot currently drive an Altana session at all** — not because of a funding-step question, but because the SDK has no signer type compatible with an external wallet connection. Dolphin's own code already fails this closed correctly (`src/services/authorization.ts` reports every action-capability as unavailable, never falls back to asking for a private key).
+**Signer availability - a more fundamental blocker than custody**: `@altananetwork/sdk` 0.8.0 ships exactly three signer constructors - `signerFromPrivateKey`/`createPrivateKeySigner` (raw key, server-side/CLI), and `createPasskey`/`signerFromPasskey` (browser-only WebAuthn - `createPasskey` explicitly throws outside a browser). **There is no injected-wallet (EIP-1193/WalletConnect/MetaMask-style) signer in this SDK version**, despite an internal comment describing `signerFromInjected` as a planned adapter - it isn't implemented or exported. A user's Reown-AppKit-connected wallet (§3's locked wallet-connection method) cannot currently drive an Altana session at all - not a funding-step question, a missing-signer-type one. The app's own authorization code already fails this closed correctly (never falls back to asking for a private key).
 
-**Path forward, being evaluated**: WebAuthn passkeys are the only non-custodial signer path this SDK version supports, but `createPasskey`/`createHeadlessPasskey` are hard-coded to browser `navigator.credentials` and throw outside a browser — React Native has no built-in WebAuthn. A React Native passkey library (e.g. `react-native-passkeys`) could perform the platform passkey ceremony (iOS/Android native Credential Manager APIs) and the resulting credential could potentially be reshaped into Altana's `PasskeyCredential`/`signerFromPasskey` format by hand, bypassing `createPasskey` — but this needs its own spike to confirm the public-key encoding lines up (Altana expects a flat P256 `x || y` key; RN passkey libraries commonly return other encodings) before committing engineering time. If no clear path is confirmed shortly, the fallback is to keep the current honest "device preview" / testnet-demo framing for the real signer-driven flow specifically, while everything else (marketplace, identity, category data) proceeds as planned.
+**React Native passkey path - evaluated, not pursued**: the only non-custodial signer path this SDK version supports is browser WebAuthn. A React Native passkey library (`react-native-passkeys`, `react-native-passkey`) could in principle drive the platform Credential Manager APIs and be reshaped into Altana's `PasskeyCredential` format by hand, but none of the available libraries publicly document their public-key encoding (needed to confirm compatibility with Altana's flat P256 `x || y` format), and passkeys separately require a verified domain hosting `apple-app-site-association`/`assetlinks.json`, which this project doesn't have. Not pursued given the hackathon timeline. **Current status: the signer-driven hire flow stays in its honest device-preview/testnet-demo framing** until either Altana ships an injected-wallet signer or the passkey path gets a real spike.
+
+Spike B's live testnet lifecycle (grant → scoped execute → revoke → confirm rejection) remains unrun pending funding of the disposable probe address - see §12.
 
 **Spike sequence (run in this order, before UI work depends on any of them):**
 
-- **Spike A** — `Expo → Reown AppKit → BSC → viem → ERC-8004 → read one real Agents`. Validates the read-only path end to end. Low risk, do first.
+- **Spike A** — `Expo → Reown AppKit → BSC → viem → ERC-8004 → read one real agent`. Validates the read-only path end to end. Low risk, do first.
 - **Spike B** — standalone Node/Bun script (not inside the Expo app): Altana SDK against BSC testnet — create/register wallet identity → grant session (allowlist + spend cap + expiry) → execute one scoped call → revoke. **This settles the custody question directly** — observe whether the session acts on funds the tester already had, or only after a separate deposit. Also incidentally answers whether the SDK runs cleanly in a Node/Bun runtime at all (relevant to §3's backend-only decision, though the plan doesn't depend on the answer either way since Altana stays server-side regardless).
-- **Spike C** — only after A and B pass: `Altana session → hireErc8183Agents → real BSC testnet job`, if pursuing the ERC-8183/Agents-hiring-Agents direction.
+- **Spike C** — only after A and B pass: `Altana session → hireErc8183Agent → real BSC testnet job`, if pursuing the ERC-8183/agent-hiring-agent direction.
 
 **Design the flow to work under either Spike B outcome** — this is why the plan doesn't wait on the answer to keep moving:
 
-- **Read-only Agentss (monitoring)**: unaffected either way. No authorization needed, just the user's public wallet address. Build fully real regardless.
-- **Action-taking Agentss**: Hire sheet includes a step that's conditionally shown based on Spike B's confirmed result —
-  - No funding step needed → straight to permission-grant screen ("Allow this Agents to swap BNB↔BUSD, up to $500, for 30 days") → one signature → done
-  - Funding step needed → explicit, clearly-labeled "Fund this Agents's session wallet" step before the permission grant, amount fully user-controlled and revocable, framed as a bounded allocation, not a blind deposit
-- Either way: the Agents never receives a private key or unscoped custody. Session is always scoped (allowlist + spend cap + expiry), registered on-chain in Keystore, revocable in one transaction from Manage.
-- My Agentss activity is sourced from **actual BSC transaction history for the Agents's address, cross-referenced against the Keystore session record** — not assumed to be a complete log inside Keystore itself.
+- **Read-only agents (monitoring)**: unaffected either way. No authorization needed, just the user's public wallet address. Build fully real regardless.
+- **Action-taking agents**: Hire sheet includes a step that's conditionally shown based on Spike B's confirmed result —
+  - No funding step needed → straight to permission-grant screen ("Allow this agent to swap BNB↔BUSD, up to $500, for 30 days") → one signature → done
+  - Funding step needed → explicit, clearly-labeled "Fund this agent's session wallet" step before the permission grant, amount fully user-controlled and revocable, framed as a bounded allocation, not a blind deposit
+- Either way: the agent never receives a private key or unscoped custody. Session is always scoped (allowlist + spend cap + expiry), registered on-chain in Keystore, revocable in one transaction from Manage.
+- My Agents activity is sourced from **actual BSC transaction history for the agent's address, cross-referenced against the Keystore session record** — not assumed to be a complete log inside Keystore itself.
 - Don't promise "one transaction to hire" in any UI copy until Spike B confirms the actual transaction count.
 
 ---
 
 ## 7. Hire Flow (Critical Path — Judged on Friction)
 
-1. User taps **Hire** on Agents detail page
+1. User taps **Hire** on agent detail page
 2. Bottom sheet slides up (App Store "Get" → install flow feel):
    - Wallet not connected → Reown AppKit modal → connect
-   - Read-only Agentss: show data access + any subscription payment, done — no session step
-   - Action-taking Agentss: plain-language terms, user confirms/adjusts spend cap and duration, shows funding step only if Spike B confirmed it's needed
+   - Read-only agents: show data access + any subscription payment, done — no session step
+   - Action-taking agents: plain-language terms, user confirms/adjusts spend cap and duration, shows funding step only if Spike B confirmed it's needed
    - Confirm → sign the transaction(s) — count determined by Spike B, not assumed
-   - Success → Agents appears in **My Agentss**, CTA becomes "Manage"
-3. Action-taking Agentss then operate within granted scope without further per-action prompts; all activity visible in My Agentss per §6's sourcing rule
+   - Success → agent appears in **My Agents**, CTA becomes "Manage"
+3. Action-taking agents then operate within granted scope without further per-action prompts; all activity visible in My Agents per §6's sourcing rule
 4. All failure states (insufficient funds, rejected signature, network error) handled inline with clear, non-technical copy
 
 ---
@@ -178,12 +179,12 @@ interface Agents {
 ## 8. Onboarding (Do Not Skip)
 
 3–4 screen first-launch carousel, plain language, no jargon:
-1. What an onchain AI Agents is
+1. What an onchain AI agent is
 2. What the four categories mean
 3. How hiring works (wallet, session, spend cap — reassure on safety/control, emphasize non-custodial design)
 4. CTA into Discover
 
-This directly serves the "zero Agents Studio knowledge" judging requirement — don't skip it under time pressure.
+This directly serves the "zero Agent Studio knowledge" judging requirement — don't skip it under time pressure.
 
 ---
 
@@ -192,19 +193,18 @@ This directly serves the "zero Agents Studio knowledge" judging requirement — 
 ```
 app/
   (tabs)/
-    index.tsx              -> Discover
-    categories.tsx          -> Categories browse
+    index.tsx              -> Discover (includes category chip row, see §4)
     search.tsx               -> Search
-    my-Agentss.tsx            -> Hired/active Agentss
+    my-agents.tsx            -> Hired/active agents
     profile.tsx               -> Wallet + profile
-  Agents/
-    [id].tsx                  -> Agents detail
+  agent/
+    [id].tsx                  -> Agent detail
   category/
-    [slug].tsx                 -> Full category listing
+    [slug].tsx                 -> Full category listing (reached from Discover's chips, not a tab)
   hire/
     [id].tsx                    -> Hire flow modal/sheet
   manage/
-    [id].tsx                     -> Manage active Agents
+    [id].tsx                     -> Manage active agent
   onboarding/
     index.tsx                     -> First-launch explainer
 ```
@@ -215,14 +215,14 @@ app/
 
 1. Scaffold navigation shell (tabs + stack), confirm App Store-style tab bar on iOS and Android
 2. **Run Spike A and Spike B** (standalone, outside the app) — settles the read path and the custody question before hire-flow work begins; can run in parallel with step 3–5
-3. Build generic `AgentsCard`/`AgentsDetail` components against mock data matching the `Agents` type
+3. Build generic `AgentCard`/`AgentDetail` components against mock data matching the `Agent` type
 4. Wire NativeWind design system: colors, spacing, typography, shared `Card`/`Pill`/`Button`
 5. Build Discover, Categories, Search screens against mock data
 6. Integrate `viem` + BSC RPC + 8004scan Developer API, replace mock identity/discovery data with real reads
 7. Build backend aggregation endpoints for category-specific live stats, wire TanStack Query hooks, replace remaining mock data
 8. Integrate Reown AppKit for wallet connection
 9. Build the Hire flow end-to-end against testnet, using the authorization shape Spike B confirmed — start with monitoring (no auth complexity), then the one chosen action-taking category (Health Factor)
-10. Build My Agentss / Manage screens with real hired-Agents state
+10. Build My Agents / Manage screens with real hired-agent state
 11. Build onboarding carousel
 12. Polish: haptics, transitions, empty states, error states, App Store-style shimmer loading skeletons
 13. Run **Spike C** if time remains (ERC-8183 hiring flow)
@@ -235,7 +235,7 @@ app/
 - All four categories equal visual weight and equal *data* depth — no category looks like a placeholder, even where activation is simplified per §2
 - No dead ends anywhere in the primary flow (browse → detail → hire)
 - Real, live, accurate data wherever technically possible; label anything not yet live rather than faking it — never a fabricated number presented as live
-- Understandable and usable by someone who has never heard of BNB Agents Studio before opening the app
+- Understandable and usable by someone who has never heard of BNB Agent Studio before opening the app
 - Non-custodial design communicated clearly in UI copy, not just true under the hood — this is both a trust feature and directly what the Altana bounty judges on
 
 ---
@@ -247,11 +247,12 @@ app/
 - Reown AppKit for React Native — current package, Expo-compatible, active maintenance
 - x402 has real buyer/seller SDK split; seller-side confirmed server-only
 - 8004scan is a live indexing product with a developer API
-- Altana session-key model (allowlist + spend cap + expiry + on-chain Keystore + revocation) is real and integrated into BNB Agents Studio — not hackathon vaporware
+- Altana session-key model (allowlist + spend cap + expiry + on-chain Keystore + revocation) is real and integrated into BNB Agent Studio — not hackathon vaporware
 
 **Still open, resolve via Spikes A/B/C before depending on them:**
-- Custody mechanic (§6) is resolved for the private-key signer path (no funding step — EIP-7702 upgrades the signer's own EOA). The actual blocker is signer availability: `@altananetwork/sdk` 0.8.0 has no injected-wallet signer, only private-key and browser-only WebAuthn passkey. See §6 for the RN-passkey path being evaluated.
-- No backend exists in the repository as of 2026-08-28. `agents-api.ts` calls 8004scan directly from the client (anonymous, no proxy/API key); `chain.ts` reads BSC mainnet directly via viem from the client. §3's "thin Node/Express (or Convex)" backend for aggregation, Altana hosting, and x402 seller integration has not been started.
+- Custody mechanic (§6) is resolved for the private-key signer path (no funding step - EIP-7702 upgrades the signer's own EOA). The actual blocker is signer availability: `@altananetwork/sdk` 0.8.0 has no injected-wallet signer, only private-key and browser-only WebAuthn passkey. See §6.
+- Spike B's live testnet lifecycle (grant → execute → revoke) has not run end-to-end: the preflight succeeded and produced the custody finding above, but the disposable probe address (`0x5593B7eaBF45e121C0e9870c528C7B80D0F2331D`, chain 97) is unfunded and the public faucet hasn't been reachable to fund it. Not a blocker - the custody question it exists to answer is already settled from the preflight alone.
+- A Convex backend now exists (`convex/`) for category-stats aggregation (Venus health factor, PancakeSwap V3 positions, Aave TVL - real reads, verified contract addresses) - see README.md's "Backend (Convex)" section. Monitoring stats, Aave APY, and Lista DAO reads are explicitly not wired up yet, not faked.
 - Altana SDK's confirmed runtime compatibility (mitigated by keeping it backend-only regardless of the answer)
 - Exact hire-flow transaction count
 - 8004scan's rate limits/latency at mobile-app scale (mitigated by backend caching regardless)

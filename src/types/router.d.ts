@@ -11,7 +11,6 @@ declare module 'expo-router' {
         | { pathname: Router.ExternalPathString; params?: Router.UnknownInputParams }
         | { pathname: `/`; params?: Router.UnknownInputParams }
         | { pathname: `/(tabs)`; params?: Router.UnknownInputParams }
-        | { pathname: `/(tabs)/categories`; params?: Router.UnknownInputParams }
         | { pathname: `/(tabs)/search`; params?: Router.UnknownInputParams }
         | { pathname: `/(tabs)/my-agents`; params?: Router.UnknownInputParams }
         | { pathname: `/(tabs)/wallet`; params?: Router.UnknownInputParams }
@@ -27,7 +26,6 @@ declare module 'expo-router' {
         | { pathname: Router.ExternalPathString; params?: Router.UnknownOutputParams }
         | { pathname: `/`; params?: Router.UnknownOutputParams }
         | { pathname: `/(tabs)`; params?: Router.UnknownOutputParams }
-        | { pathname: `/(tabs)/categories`; params?: Router.UnknownOutputParams }
         | { pathname: `/(tabs)/search`; params?: Router.UnknownOutputParams }
         | { pathname: `/(tabs)/my-agents`; params?: Router.UnknownOutputParams }
         | { pathname: `/(tabs)/wallet`; params?: Router.UnknownOutputParams }
@@ -43,7 +41,6 @@ declare module 'expo-router' {
         | Router.ExternalPathString
         | `/`
         | `/(tabs)`
-        | `/(tabs)/categories`
         | `/(tabs)/search`
         | `/(tabs)/my-agents`
         | `/(tabs)/wallet`

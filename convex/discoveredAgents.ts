@@ -31,9 +31,17 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string> = {
 // (e.g. "Beefy powered by HeyAnon", description literally says "vault")
 // that none of the search queries above returned. A bulk scan sorted by
 // score, classified with OUR OWN substring matching rather than their
-// search relevance, catches those. Bounded to 2 pages (200 agents) so a
-// sync stays a handful of HTTP calls, not a scan of the full registry.
-const BULK_SCAN_PAGES = 5;
+// search relevance, catches those. Bounded so a sync stays a handful of
+// HTTP calls, not a scan of the full ~287k-agent registry.
+//
+// Deep pagination (high offset) has been observed to hang rather than
+// error on 8004scan's end (a 524 Cloudflare timeout on one request during
+// testing, and a full sync that never returned at BULK_SCAN_PAGES=15
+// before this timeout was added). Bounded so one slow page can never hang
+// the whole sync - it just counts as a failed page, same as any other
+// fetch error.
+const PER_REQUEST_TIMEOUT_MS = 15_000;
+const BULK_SCAN_PAGES = 8;
 const BULK_SCAN_PAGE_SIZE = 100;
 
 interface RawAgentListItem {
@@ -48,7 +56,10 @@ interface RawAgentListItem {
 
 async function fetchAgentsList(params: string): Promise<RawAgentListItem[]> {
   const url = `${AGENTS_URL}?chain_id=${BSC_CHAIN_ID}&is_testnet=false&${params}`;
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT_MS),
+  });
 
   if (!response.ok) {
     throw new Error(`8004scan request failed (${response.status}): ${params}`);

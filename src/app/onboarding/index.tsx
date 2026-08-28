@@ -196,7 +196,7 @@ export default function OnboardingScreen() {
 
                     {/* 2x2 Grid */}
                     <View className="mt-5 flex-row flex-wrap gap-3">
-                      {/* Monitoring */}
+                      {/* Rebalancing */}
                       <View
                         className="rounded-3xl border bg-white p-4"
                         style={{
@@ -205,20 +205,20 @@ export default function OnboardingScreen() {
                           ...shadows.subtle,
                         }}
                       >
-                        <View className="h-10 w-10 items-center justify-center rounded-2xl bg-[#F5F3EB]">
-                          <CategoryGlyph name="monitoring" size={22} />
+                        <View className="h-10 w-10 items-center justify-center rounded-2xl bg-[#EAF1FB]">
+                          <CategoryGlyph name="rebalancing" size={22} />
                         </View>
                         <Text
                           className="mt-3 text-[15px] font-bold"
                           style={{ color: colors.ink }}
                         >
-                          Monitoring
+                          Rebalancing
                         </Text>
                         <Text
                           className="mt-1 text-[12px] leading-4"
                           style={{ color: colors.muted }}
                         >
-                          Watch wallets and markets
+                          Reset LP ranges automatically
                         </Text>
                       </View>
 
@@ -244,7 +244,7 @@ export default function OnboardingScreen() {
                           className="mt-1 text-[12px] leading-4"
                           style={{ color: colors.muted }}
                         >
-                          Work inside a price range
+                          Place orders across a price ladder
                         </Text>
                       </View>
 
@@ -424,9 +424,9 @@ export default function OnboardingScreen() {
                           className="flex-1 items-center justify-center rounded-2xl border bg-white p-4"
                           style={{ borderColor: colors.line, ...shadows.subtle }}
                         >
-                          <CategoryGlyph name="monitoring" size={24} />
+                          <CategoryGlyph name="rebalancing" size={24} />
                           <Text className="mt-2 text-[13px] font-bold" style={{ color: colors.ink }}>
-                            Monitoring
+                            Rebalancing
                           </Text>
                         </View>
                         <View

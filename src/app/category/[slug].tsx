@@ -21,7 +21,7 @@ import type { AgentCategory } from "@/types/agent";
 export default function CategoryDetailRoute() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
-  const categorySlug = (slug as AgentCategory) || "monitoring";
+  const categorySlug = (slug as AgentCategory) || "rebalancing";
   
   const categoryInfo =
     AGENT_CATEGORIES.find((c) => c.slug === categorySlug) ??

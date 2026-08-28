@@ -27,7 +27,7 @@ const coinVideoSource = require("../../../assets/videos/Coin.mp4");
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
-  const [activeCategory, setActiveCategory] = useState<AgentCategory>("monitoring");
+  const [activeCategory, setActiveCategory] = useState<AgentCategory>("rebalancing");
   const horizontalScrollRef = useRef<ScrollView>(null);
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
 
@@ -202,9 +202,9 @@ export default function DiscoverScreen() {
           }}
         >
           <PressableScale
-            accessibilityLabel="Explore Monitoring Agents collection"
+            accessibilityLabel="Explore Rebalancing Agents collection"
             accessibilityRole="button"
-            onPress={() => handleSelectCategory("monitoring")}
+            onPress={() => handleSelectCategory("rebalancing")}
             containerStyle={{
               backgroundColor: "#000000",
               borderColor: "rgba(255,255,255,0.08)",
@@ -251,18 +251,18 @@ export default function DiscoverScreen() {
                 }}
               >
                 <Text className="text-[9.5px] font-bold uppercase tracking-[1.5px] text-[#F5B300]">
-                  MONITORING
+                  REBALANCING
                 </Text>
               </View>
 
               {/* Text Column */}
               <View style={{ maxWidth: "68%" }}>
                 <Text className="text-[22px] font-black text-white leading-[26px] tracking-tight">
-                  Agents that watch{"\n"}while you sleep
+                  Agents that reset{"\n"}your LP range
                 </Text>
 
                 <Text className="mt-1.5 text-[11.5px] leading-[16px] text-zinc-400">
-                  Autonomous agents that track markets and safeguard your positions 24/7.
+                  Autonomous agents that manage concentrated-liquidity positions 24/7.
                 </Text>
 
                 <View className="mt-3 flex-row items-center gap-1.5">

@@ -113,7 +113,7 @@ export default function DiscoverScreen() {
           <PressableScale
             accessibilityLabel="View categories"
             accessibilityRole="button"
-            onPress={() => router.push("/(tabs)/settings")}
+            onPress={() => router.push("/(tabs)/categories")}
             containerStyle={{
               alignItems: "center",
               backgroundColor: "#FFFFFF",
@@ -292,7 +292,7 @@ export default function DiscoverScreen() {
             <PressableScale
               accessibilityLabel="View all agents"
               accessibilityRole="button"
-              onPress={() => router.push("/(tabs)/settings")}
+              onPress={() => router.push("/(tabs)/categories")}
             >
               <Text
                 className="text-[13px] font-bold"

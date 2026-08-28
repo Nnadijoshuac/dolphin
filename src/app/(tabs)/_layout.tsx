@@ -70,11 +70,11 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="categories"
         options={{
-          title: "Settings",
+          title: "Categories",
           tabBarIcon: ({ color, size }) => (
-            <CategoryGlyph color={color} name="settings" size={size} />
+            <CategoryGlyph color={color} name="categories" size={size} />
           ),
         }}
       />

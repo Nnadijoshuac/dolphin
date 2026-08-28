@@ -63,7 +63,7 @@ export default function ManageAgentRoute() {
           />
           <Button
             label="Browse agents"
-            onPress={() => router.replace("/(tabs)")}
+            onPress={() => router.replace("/(tabs)/categories")}
             style={{ marginTop: 18 }}
           />
         </View>

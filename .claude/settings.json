@@ -4,7 +4,12 @@
       "WebSearch",
       "Bash(node -e ' *)",
       "Bash(export ALTANA_TEST_PRIVATE_KEY=\"0x16d088b7b5b4126c7440249b4a565c4507b5ada754d72541ffa63d17415035b8\")",
-      "Bash(unset ALTANA_TEST_PRIVATE_KEY)"
+      "Bash(unset ALTANA_TEST_PRIVATE_KEY)",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebFetch(domain:docs.convex.dev)",
+      "Bash(git commit -m ' *)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)"
     ]
   },
   "enabledPlugins": {

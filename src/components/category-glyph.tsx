@@ -45,55 +45,51 @@ export function CategoryGlyph({
     <Svg height={size} viewBox="0 0 24 24" width={size}>
       {name === "monitoring" ? (
         <>
-          {/* Radar / Target Orbit Icon */}
-          <Circle cx="12" cy="12" r="9" {...common} />
-          <Circle cx="12" cy="12" r="5" {...common} />
-          <Circle cx="12" cy="12" fill={color} r="2" />
-          <Path d="M12 3v3M12 18v3M3 12h3M18 12h3" {...common} />
+          {/* Eye with radar waves & lens */}
+          <Path d="M2 13s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" {...common} strokeWidth={2} />
+          <Circle cx="12" cy="13" fill={color} r="3" />
+          {/* Radar waves above */}
+          <Path d="M15 4c2 .8 3.5 2.2 4.5 4" {...common} strokeWidth={1.8} />
+          <Path d="M18 2c2.5 1.2 4.5 3.2 5.5 5.5" {...common} strokeWidth={1.8} />
+          {/* Handle */}
+          <Path d="M18 19l4 4" {...common} strokeWidth={2.8} />
         </>
       ) : null}
 
       {name === "grid-trading" ? (
         <>
-          {/* Financial Candlesticks */}
-          <Rect height="8" rx="1" width="3" x="5" y="8" {...common} />
-          <Line x1="6.5" x2="6.5" y1="4" y2="8" {...common} />
-          <Line x1="6.5" x2="6.5" y1="16" y2="20" {...common} />
-
-          <Rect height="10" rx="1" width="3" x="10.5" y="6" {...common} fill={color} />
-          <Line x1="12" x2="12" y1="3" y2="6" {...common} />
-          <Line x1="12" x2="12" y1="16" y2="21" {...common} />
-
-          <Rect height="6" rx="1" width="3" x="16" y="9" {...common} />
-          <Line x1="17.5" x2="17.5" y1="5" y2="9" {...common} />
-          <Line x1="17.5" x2="17.5" y1="15" y2="19" {...common} />
+          {/* Vertical brackets */}
+          <Line x1="4" x2="4" y1="5" y2="19" {...common} strokeWidth={2.8} />
+          <Line x1="20" x2="20" y1="5" y2="19" {...common} strokeWidth={2.8} />
+          {/* Dashed boundary lines */}
+          <Line strokeDasharray="3,2" x1="4" x2="20" y1="7" y2="7" {...common} strokeWidth={1.5} />
+          <Line strokeDasharray="3,2" x1="4" x2="20" y1="17" y2="17" {...common} strokeWidth={1.5} />
+          {/* Oscillating wave */}
+          <Path d="M4 12c2.5-6 5.5-6 8 0s5.5 6 8 0" {...common} strokeWidth={2.4} />
         </>
       ) : null}
 
       {name === "health-factor" ? (
         <>
-          {/* Shield with Pulse / Vitals Line */}
-          <Path
-            d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11Z"
-            {...common}
-          />
-          <Path d="M8 12h2.5l1.5-3.5 2 7 1.5-3.5H16" {...common} />
+          {/* Shield */}
+          <Path d="M12 21s7-3.8 7-9.5V5l-7-3-7 3v6.5C5 17.2 12 21 12 21Z" {...common} strokeWidth={2} />
+          {/* Sword */}
+          <Line x1="12" x2="12" y1="6" y2="15" {...common} strokeWidth={2.2} />
+          <Line x1="9" x2="15" y1="9" y2="9" {...common} strokeWidth={2.2} />
+          {/* Exclamation badge */}
+          <Circle cx="18" cy="18" fill="#111215" r="4.5" />
+          <Line stroke="#FFFFFF" strokeLinecap="round" strokeWidth={1.8} x1="18" x2="18" y1="15" y2="18" />
+          <Circle cx="18" cy="20.2" fill="#FFFFFF" r="0.8" />
         </>
       ) : null}
 
       {name === "yield" ? (
         <>
           {/* Sprout seedling with growth arrow */}
-          <Path
-            d="M12 21v-7c0-4 4-6 9-6-1 5-3 9-9 9"
-            {...common}
-          />
-          <Path
-            d="M12 14c0-3-3-5-7-5 1 4 3 7 7 7"
-            {...common}
-          />
-          <Path d="M19 4l2 2-2 2" {...common} />
-          <Path d="M16 6h5" {...common} />
+          <Path d="M12 21v-7c0-4 4-6 9-6-1 5-3 9-9 9" {...common} strokeWidth={2} />
+          <Path d="M12 14c0-3-3-5-7-5 1 4 3 7 7 7" {...common} strokeWidth={2} />
+          <Path d="M19 4l2 2-2 2" {...common} strokeWidth={2} />
+          <Path d="M16 6h5" {...common} strokeWidth={2} />
         </>
       ) : null}
 

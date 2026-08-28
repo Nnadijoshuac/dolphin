@@ -19,7 +19,7 @@ import { colors } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
 
-export default function SearchScreen() {
+export default function CategoriesScreen() {
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState<AgentCategory>("monitoring");
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();

@@ -1,9 +1,6 @@
 import { Text, View } from "react-native";
-import { AgentIcon } from "@/components/agent-icon";
-import { BnbLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
-import { StatusBadge } from "@/components/status-badge";
 import { colors, radii, shadows } from "@/constants/theme";
 import type { Agent, AgentCategory } from "@/types/agent";
 
@@ -12,6 +9,13 @@ const categoryLabels: Record<AgentCategory, string> = {
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
+};
+
+const categoryBgColors: Record<AgentCategory, string> = {
+  monitoring: "#F5F3EC",
+  "grid-trading": "#F5F3EC",
+  "health-factor": "#F5F3EC",
+  yield: "#F5F3EC",
 };
 
 type AgentCardProps = {
@@ -27,92 +31,83 @@ export function AgentCard({ agent, onPress }: AgentCardProps) {
       accessibilityRole="button"
       onPress={onPress}
       containerStyle={{
-        borderRadius: radii.large,
+        backgroundColor: "#FFFFFF",
+        borderColor: "rgba(17,18,20,0.06)",
+        borderRadius: 24,
         borderWidth: 1,
-        borderColor: colors.line,
-        backgroundColor: colors.surface,
         padding: 16,
-        ...shadows.card,
+        ...shadows.subtle,
       }}
     >
-      <View className="flex-row items-start justify-between">
-        <View className="flex-row items-start gap-3.5 flex-1 pr-3">
-          <AgentIcon category={agent.category} size={58} uri={agent.iconUrl} />
-          <View className="flex-1 pt-0.5">
-            <Text
-              className="text-[17px] font-bold tracking-tight"
-              numberOfLines={1}
-              style={{ color: colors.ink }}
-            >
-              {agent.name}
-            </Text>
-            <Text
-              className="mt-1 text-[13px] leading-[18px]"
-              numberOfLines={2}
-              style={{ color: colors.muted }}
-            >
-              {agent.tagline}
-            </Text>
-          </View>
-        </View>
-
+      <View className="flex-row items-start gap-4">
+        {/* Large Rounded Icon Box */}
         <View
-          className="items-center justify-center"
+          className="h-20 w-20 items-center justify-center rounded-2xl"
           style={{
-            backgroundColor: colors.gold,
-            borderRadius: radii.pill,
-            minHeight: 34,
-            minWidth: 68,
-            paddingHorizontal: 14,
-            ...shadows.goldGlow,
+            backgroundColor: categoryBgColors[agent.category] ?? "#F5F3EC",
+            borderColor: "rgba(17,18,20,0.04)",
+            borderWidth: 1,
           }}
         >
+          <CategoryGlyph
+            color={colors.ink}
+            name={agent.category}
+            size={38}
+            strokeWidth={2.2}
+          />
+        </View>
+
+        {/* Middle Info Column */}
+        <View className="flex-1">
           <Text
-            className="text-[13px] font-bold"
+            className="text-[17px] font-bold tracking-tight"
+            numberOfLines={1}
             style={{ color: colors.ink }}
           >
-            View
+            {agent.name}
           </Text>
-        </View>
-      </View>
 
-      {/* Meta tags footer */}
-      <View
-        className="mt-3.5 flex-row items-center justify-between gap-2 border-t pt-3"
-        style={{ borderColor: colors.lineLight }}
-      >
-        <View className="flex-row items-center gap-1.5">
-          <CategoryGlyph color={colors.muted} name={agent.category} size={14} />
           <Text
-            className="text-[12px] font-medium"
-            style={{ color: colors.inkSecondary }}
+            className="mt-1 text-[13px] leading-[18px]"
+            numberOfLines={2}
+            style={{ color: "#4A4B4F" }}
           >
-            {categoryLabels[agent.category]}
+            {agent.tagline}
           </Text>
-        </View>
 
-        <View className="flex-row items-center gap-2">
-          <View className="flex-row items-center gap-1.5">
-            {agent.recordStatus === "indexed" ? (
-              <BnbLogo size={15} />
-            ) : (
-              <CategoryGlyph color={colors.muted} name="info" size={13} />
-            )}
-            <Text
-              className="text-[11px] font-medium"
-              style={{ color: colors.muted }}
-            >
-              {agent.recordStatus === "indexed"
-                ? "Registry indexed"
-                : "Editorial fallback"}
+          {/* Category Tag */}
+          <View className="mt-2.5 flex-row items-center gap-1.5">
+            <View className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+            <Text className="text-[12px] font-medium text-zinc-500">
+              {categoryLabels[agent.category]}
             </Text>
           </View>
-          <StatusBadge
-            label={agent.endpointStatus.status}
-            tone={agent.endpointStatus.status}
-          />
+
+          {/* Bottom Status & View CTA */}
+          <View className="mt-2 flex-row items-center justify-between">
+            <View className="flex-row items-center gap-1.5">
+              <CategoryGlyph color="#8C8E88" name="sparkle" size={13} />
+              <Text className="text-[11.5px] font-medium text-zinc-500">
+                Syncing BSC data
+              </Text>
+            </View>
+
+            <View
+              className="items-center justify-center rounded-xl px-4 py-1.5"
+              style={{
+                backgroundColor: colors.gold,
+                minWidth: 64,
+                ...shadows.subtle,
+              }}
+            >
+              <Text className="text-[13px] font-bold text-black">
+                View
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
     </PressableScale>
   );
 }
+

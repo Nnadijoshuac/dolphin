@@ -15,7 +15,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import { searchAgentsLocally } from "@/services/agents-api";
 import { useAppStore } from "@/store/use-app-store";
@@ -36,19 +36,19 @@ const categoryLabels: Record<AgentCategory, string> = {
 };
 
 const POPULAR_SEARCHES = [
-  "PancakeSwap Grid",
-  "Venus Liquidation",
+  "PancakeSwap",
+  "Venus",
   "Wallet Watch",
-  "Yield Farming",
-  "Auto-compounding",
-  "Risk Management",
+  "Yield",
+  "Liquidation",
+  "Grid Trading",
 ];
 
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const { data: allAgents, isLoading } = useAgents();
+  const { data: allAgents } = useAgents();
 
   const recentSearches = useAppStore((state) => state.recentSearches);
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
@@ -83,42 +83,42 @@ export default function SearchScreen() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      {/* Sticky Google Play Store Search Bar */}
+      {/* Sleek Compact Search Bar */}
       <View
-        className="px-5 pt-2 pb-3"
+        className="px-4 pt-1.5 pb-2.5"
         style={{
           backgroundColor: colors.canvas,
           zIndex: 20,
         }}
       >
         <View
-          className="flex-row items-center rounded-full bg-white px-4 py-2.5"
+          className="flex-row items-center rounded-full bg-white px-3.5 h-[42px]"
           style={{
             borderColor: isFocused ? colors.goldDark : "rgba(17,18,20,0.08)",
-            borderWidth: 1.5,
+            borderWidth: 1.2,
             ...shadows.subtle,
           }}
         >
           {isFocused && query.length > 0 ? (
             <PressableScale
-              accessibilityLabel="Back"
+              accessibilityLabel="Dismiss search focus"
               accessibilityRole="button"
               onPress={() => {
                 Keyboard.dismiss();
                 setIsFocused(false);
               }}
-              containerStyle={{ marginRight: 8, padding: 2 }}
+              containerStyle={{ marginRight: 6, padding: 2 }}
             >
-              <CategoryGlyph color={colors.ink} name="arrow-right" size={18} strokeWidth={2.2} />
+              <CategoryGlyph color={colors.ink} name="arrow-right" size={16} strokeWidth={2.2} />
             </PressableScale>
           ) : (
-            <CategoryGlyph color={isFocused ? colors.ink : "#71727A"} name="search" size={18} />
+            <CategoryGlyph color={isFocused ? colors.ink : "#8C8E88"} name="search" size={16} />
           )}
 
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
-            className="ml-3 flex-1 text-[15px] font-medium"
+            className="ml-2.5 flex-1 text-[14px] font-medium h-full"
             onBlur={() => setIsFocused(false)}
             onChangeText={setQuery}
             onFocus={() => setIsFocused(true)}
@@ -139,7 +139,7 @@ export default function SearchScreen() {
               onPress={() => setQuery("")}
               containerStyle={{ padding: 4 }}
             >
-              <CategoryGlyph color="#8C8E88" name="revoke" size={16} />
+              <CategoryGlyph color="#8C8E88" name="revoke" size={14} />
             </PressableScale>
           ) : null}
         </View>
@@ -152,16 +152,16 @@ export default function SearchScreen() {
         showsVerticalScrollIndicator={false}
       >
         {query.trim().length > 0 ? (
-          /* Search Results (Google Play Store Style App Rows) */
-          <View className="px-5 pt-2">
-            <View className="flex-row items-center justify-between pb-3">
-              <Text className="text-[13px] font-bold uppercase tracking-wider text-zinc-500">
+          /* Live Results */
+          <View className="px-4 pt-1">
+            <View className="pb-2.5">
+              <Text className="text-[12px] font-bold uppercase tracking-wider text-zinc-500">
                 {searchResults.length} {searchResults.length === 1 ? "Agent found" : "Agents found"}
               </Text>
             </View>
 
             {searchResults.length > 0 ? (
-              <View className="gap-2.5">
+              <View className="gap-2">
                 {searchResults.map((agent) => (
                   <PressableScale
                     key={agent.id}
@@ -170,17 +170,17 @@ export default function SearchScreen() {
                     onPress={() => handleAgentPress(agent)}
                     containerStyle={{
                       backgroundColor: "#FFFFFF",
-                      borderColor: "rgba(17,18,20,0.06)",
-                      borderRadius: 20,
+                      borderColor: "rgba(17,18,20,0.05)",
+                      borderRadius: 16,
                       borderWidth: 1,
-                      padding: 14,
+                      padding: 12,
                       ...shadows.subtle,
                     }}
                   >
-                    <View className="flex-row items-center gap-3.5">
-                      {/* Play Store App Icon */}
+                    <View className="flex-row items-center gap-3">
+                      {/* Compact App Icon */}
                       <View
-                        className="h-16 w-16 items-center justify-center rounded-2xl"
+                        className="h-12 w-12 items-center justify-center rounded-xl overflow-hidden"
                         style={{
                           backgroundColor: categoryBgColors[agent.category] ?? "#F5F3EC",
                           borderColor: "rgba(17,18,20,0.04)",
@@ -190,44 +190,44 @@ export default function SearchScreen() {
                         <CategoryGlyph
                           color={colors.ink}
                           name={agent.category}
-                          size={32}
-                          strokeWidth={2}
+                          size={22}
+                          strokeWidth={1.8}
                         />
                       </View>
 
-                      {/* App Title & Details */}
+                      {/* App Info */}
                       <View className="flex-1 pr-2">
                         <Text
-                          className="text-[16px] font-bold tracking-tight"
+                          className="text-[15px] font-bold tracking-tight"
                           numberOfLines={1}
                           style={{ color: colors.ink }}
                         >
                           {agent.name}
                         </Text>
                         <Text
-                          className="mt-0.5 text-[12px] text-zinc-500"
+                          className="mt-0.5 text-[11.5px] text-zinc-500"
                           numberOfLines={1}
                         >
-                          {categoryLabels[agent.category]} · ERC-8004
+                          {categoryLabels[agent.category]} · {agent.tagline}
                         </Text>
-                        <View className="mt-1.5 flex-row items-center gap-1.5">
-                          <BnbLogo size={13} />
-                          <Text className="text-[11px] font-semibold text-amber-800">
-                            BNB Smart Chain
+                        <View className="mt-1 flex-row items-center gap-1">
+                          <BnbLogo size={12} />
+                          <Text className="text-[10.5px] font-semibold text-amber-800">
+                            BNB Chain
                           </Text>
                         </View>
                       </View>
 
-                      {/* Play Store 'View' / 'Get' CTA Button */}
+                      {/* View Button */}
                       <View
-                        className="items-center justify-center rounded-xl px-4 py-1.5"
+                        className="items-center justify-center rounded-lg px-3 py-1.5"
                         style={{
                           backgroundColor: colors.gold,
-                          minWidth: 62,
+                          minWidth: 54,
                           ...shadows.subtle,
                         }}
                       >
-                        <Text className="text-[13px] font-bold text-black">
+                        <Text className="text-[12px] font-bold text-black">
                           View
                         </Text>
                       </View>
@@ -238,7 +238,7 @@ export default function SearchScreen() {
             ) : (
               <View className="pt-8">
                 <StatePanel
-                  body={`No agents found matching "${query}". Try searching by category, protocol (Venus, PancakeSwap), or skill.`}
+                  body={`No agents found matching "${query}". Try searching by category, protocol, or skill.`}
                   state="unavailable"
                   title="No results found"
                 />
@@ -246,13 +246,13 @@ export default function SearchScreen() {
             )}
           </View>
         ) : (
-          /* Play Store Default Search Home (Discovery & History) */
-          <View className="px-5 pt-1 gap-6">
-            {/* Recent Searches (History rows) */}
+          /* Seamless Discovery Home */
+          <View className="px-4 pt-1 gap-5">
+            {/* Recent Searches */}
             {recentSearches.length > 0 ? (
               <View>
                 <View className="flex-row items-center justify-between pb-2">
-                  <Text className="text-[15px] font-bold" style={{ color: colors.ink }}>
+                  <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
                     Recent searches
                   </Text>
                   {clearRecentSearches ? (
@@ -261,27 +261,27 @@ export default function SearchScreen() {
                       accessibilityRole="button"
                       onPress={() => clearRecentSearches()}
                     >
-                      <Text className="text-[12px] font-bold text-zinc-400">
+                      <Text className="text-[11px] font-bold text-zinc-400">
                         Clear all
                       </Text>
                     </PressableScale>
                   ) : null}
                 </View>
 
-                <View className="rounded-2xl bg-white border border-black/5 overflow-hidden divide-y divide-black/5">
-                  {recentSearches.slice(0, 5).map((item) => (
+                <View className="rounded-xl bg-white border border-black/5 overflow-hidden divide-y divide-black/5">
+                  {recentSearches.slice(0, 4).map((item) => (
                     <View
                       key={item}
-                      className="flex-row items-center justify-between px-4 py-3"
+                      className="flex-row items-center justify-between px-3.5 py-2.5"
                     >
                       <PressableScale
                         accessibilityLabel={`Search ${item}`}
                         accessibilityRole="button"
-                        className="flex-1 flex-row items-center gap-3"
+                        className="flex-1 flex-row items-center gap-2.5"
                         onPress={() => handleTagPress(item)}
                       >
-                        <CategoryGlyph color="#8C8E88" name="clock" size={16} />
-                        <Text className="text-[14px] font-medium text-zinc-800">
+                        <CategoryGlyph color="#8C8E88" name="clock" size={14} />
+                        <Text className="text-[13.5px] font-medium text-zinc-800">
                           {item}
                         </Text>
                       </PressableScale>
@@ -292,7 +292,7 @@ export default function SearchScreen() {
                         onPress={() => removeRecentSearch(item)}
                         containerStyle={{ padding: 4 }}
                       >
-                        <CategoryGlyph color="#A0A0A0" name="revoke" size={14} />
+                        <CategoryGlyph color="#A0A0A0" name="revoke" size={13} />
                       </PressableScale>
                     </View>
                   ))}
@@ -300,12 +300,12 @@ export default function SearchScreen() {
               </View>
             ) : null}
 
-            {/* Trending / Popular Searches */}
+            {/* Trending on BNB Chain */}
             <View>
-              <Text className="text-[15px] font-bold pb-2.5" style={{ color: colors.ink }}>
+              <Text className="text-[14px] font-bold pb-2" style={{ color: colors.ink }}>
                 Trending on BNB Chain
               </Text>
-              <View className="flex-row flex-wrap gap-2">
+              <View className="flex-row flex-wrap gap-1.5">
                 {POPULAR_SEARCHES.map((term, index) => (
                   <PressableScale
                     key={term}
@@ -319,16 +319,16 @@ export default function SearchScreen() {
                       borderRadius: 9999,
                       borderWidth: 1,
                       flexDirection: "row",
-                      gap: 6,
-                      paddingHorizontal: 14,
-                      paddingVertical: 7,
+                      gap: 5,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
                       ...shadows.subtle,
                     }}
                   >
-                    <Text className="text-[12px] font-bold text-amber-700">
+                    <Text className="text-[11px] font-bold text-amber-700">
                       #{index + 1}
                     </Text>
-                    <Text className="text-[13px] font-medium text-zinc-800">
+                    <Text className="text-[12.5px] font-medium text-zinc-800">
                       {term}
                     </Text>
                   </PressableScale>
@@ -336,12 +336,12 @@ export default function SearchScreen() {
               </View>
             </View>
 
-            {/* Explore Categories (Play Store Style Category Cards) */}
+            {/* Explore Categories */}
             <View>
-              <Text className="text-[15px] font-bold pb-2.5" style={{ color: colors.ink }}>
+              <Text className="text-[14px] font-bold pb-2" style={{ color: colors.ink }}>
                 Explore Categories
               </Text>
-              <View className="flex-row flex-wrap gap-2.5">
+              <View className="flex-row flex-wrap gap-2">
                 {AGENT_CATEGORIES.map((cat) => (
                   <PressableScale
                     key={cat.slug}
@@ -351,31 +351,31 @@ export default function SearchScreen() {
                     containerStyle={{
                       alignItems: "center",
                       backgroundColor: "#FFFFFF",
-                      borderColor: "rgba(17,18,20,0.06)",
-                      borderRadius: 16,
+                      borderColor: "rgba(17,18,20,0.05)",
+                      borderRadius: 14,
                       borderWidth: 1,
                       flexDirection: "row",
-                      gap: 10,
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                      width: "48%",
+                      gap: 8,
+                      paddingHorizontal: 11,
+                      paddingVertical: 9,
+                      width: "48.5%",
                       ...shadows.subtle,
                     }}
                   >
                     <View
-                      className="h-10 w-10 items-center justify-center rounded-xl"
+                      className="h-8 w-8 items-center justify-center rounded-lg overflow-hidden"
                       style={{ backgroundColor: categoryBgColors[cat.slug] ?? "#F5F3EC" }}
                     >
                       <CategoryGlyph
                         color={colors.ink}
                         name={cat.slug}
-                        size={20}
-                        strokeWidth={2}
+                        size={16}
+                        strokeWidth={1.8}
                       />
                     </View>
                     <View className="flex-1">
                       <Text
-                        className="text-[13px] font-bold"
+                        className="text-[12.5px] font-bold"
                         numberOfLines={1}
                         style={{ color: colors.ink }}
                       >
@@ -387,13 +387,13 @@ export default function SearchScreen() {
               </View>
             </View>
 
-            {/* Recommended Agents (Play Store Style "Suggested for you") */}
+            {/* Suggested for you */}
             {allAgents && allAgents.length > 0 ? (
               <View className="pb-4">
-                <Text className="text-[15px] font-bold pb-3" style={{ color: colors.ink }}>
+                <Text className="text-[14px] font-bold pb-2.5" style={{ color: colors.ink }}>
                   Suggested for you
                 </Text>
-                <View className="gap-2.5">
+                <View className="gap-2">
                   {allAgents.slice(0, 4).map((agent) => (
                     <PressableScale
                       key={agent.id}
@@ -402,17 +402,17 @@ export default function SearchScreen() {
                       onPress={() => handleAgentPress(agent)}
                       containerStyle={{
                         backgroundColor: "#FFFFFF",
-                        borderColor: "rgba(17,18,20,0.06)",
-                        borderRadius: 18,
+                        borderColor: "rgba(17,18,20,0.05)",
+                        borderRadius: 16,
                         borderWidth: 1,
-                        padding: 13,
+                        padding: 11,
                         ...shadows.subtle,
                       }}
                     >
-                      <View className="flex-row items-center gap-3.5">
-                        {/* Rounded App Icon */}
+                      <View className="flex-row items-center gap-3">
+                        {/* Compact App Icon */}
                         <View
-                          className="h-14 w-14 items-center justify-center rounded-2xl"
+                          className="h-11 w-11 items-center justify-center rounded-xl overflow-hidden"
                           style={{
                             backgroundColor: categoryBgColors[agent.category] ?? "#F5F3EC",
                             borderColor: "rgba(17,18,20,0.04)",
@@ -422,22 +422,22 @@ export default function SearchScreen() {
                           <CategoryGlyph
                             color={colors.ink}
                             name={agent.category}
-                            size={28}
-                            strokeWidth={2}
+                            size={20}
+                            strokeWidth={1.8}
                           />
                         </View>
 
-                        {/* Title & Category info */}
+                        {/* Title & info */}
                         <View className="flex-1 pr-2">
                           <Text
-                            className="text-[15px] font-bold tracking-tight"
+                            className="text-[14px] font-bold tracking-tight"
                             numberOfLines={1}
                             style={{ color: colors.ink }}
                           >
                             {agent.name}
                           </Text>
                           <Text
-                            className="mt-0.5 text-[12px] text-zinc-500"
+                            className="mt-0.5 text-[11.5px] text-zinc-500"
                             numberOfLines={1}
                           >
                             {categoryLabels[agent.category]} · {agent.tagline}
@@ -446,14 +446,14 @@ export default function SearchScreen() {
 
                         {/* View CTA */}
                         <View
-                          className="items-center justify-center rounded-xl px-3.5 py-1.5"
+                          className="items-center justify-center rounded-lg px-3 py-1.5"
                           style={{
                             backgroundColor: colors.gold,
-                            minWidth: 56,
+                            minWidth: 50,
                             ...shadows.subtle,
                           }}
                         >
-                          <Text className="text-[12.5px] font-bold text-black">
+                          <Text className="text-[12px] font-bold text-black">
                             View
                           </Text>
                         </View>

@@ -45,51 +45,44 @@ export function CategoryGlyph({
     <Svg height={size} viewBox="0 0 24 24" width={size}>
       {name === "monitoring" ? (
         <>
-          {/* Eye with radar waves & lens */}
-          <Path d="M2 13s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" {...common} strokeWidth={2} />
-          <Circle cx="12" cy="13" fill={color} r="3" />
-          {/* Radar waves above */}
-          <Path d="M15 4c2 .8 3.5 2.2 4.5 4" {...common} strokeWidth={1.8} />
-          <Path d="M18 2c2.5 1.2 4.5 3.2 5.5 5.5" {...common} strokeWidth={1.8} />
-          {/* Handle */}
-          <Path d="M18 19l4 4" {...common} strokeWidth={2.8} />
+          {/* Eye shape centered */}
+          <Path d="M3 13s3.2-5.5 9-5.5 9 5.5 9 5.5-3.2 5.5-9 5.5-9-5.5-9-5.5Z" {...common} strokeWidth={1.8} />
+          <Circle cx="12" cy="13" fill={color} r="2.6" />
+          {/* Radar waves above centered */}
+          <Path d="M14 4.5c1.8.8 3 2 3.8 3.5" {...common} strokeWidth={1.5} />
+          <Path d="M16 2.5c2.5 1.2 4.2 3 5 5" {...common} strokeWidth={1.5} />
+          {/* Magnifying handle */}
+          <Path d="M17 18l3.5 3.5" {...common} strokeWidth={2.2} />
         </>
       ) : null}
 
       {name === "grid-trading" ? (
         <>
-          {/* Vertical brackets */}
-          <Line x1="4" x2="4" y1="5" y2="19" {...common} strokeWidth={2.8} />
-          <Line x1="20" x2="20" y1="5" y2="19" {...common} strokeWidth={2.8} />
-          {/* Dashed boundary lines */}
-          <Line strokeDasharray="3,2" x1="4" x2="20" y1="7" y2="7" {...common} strokeWidth={1.5} />
-          <Line strokeDasharray="3,2" x1="4" x2="20" y1="17" y2="17" {...common} strokeWidth={1.5} />
-          {/* Oscillating wave */}
-          <Path d="M4 12c2.5-6 5.5-6 8 0s5.5 6 8 0" {...common} strokeWidth={2.4} />
+          <Line x1="4.5" x2="4.5" y1="5.5" y2="18.5" {...common} strokeWidth={2.2} />
+          <Line x1="19.5" x2="19.5" y1="5.5" y2="18.5" {...common} strokeWidth={2.2} />
+          <Line strokeDasharray="3,2" x1="4.5" x2="19.5" y1="7.5" y2="7.5" {...common} strokeWidth={1.2} />
+          <Line strokeDasharray="3,2" x1="4.5" x2="19.5" y1="16.5" y2="16.5" {...common} strokeWidth={1.2} />
+          <Path d="M4.5 12c2.5-5.5 5-5.5 7.5 0s5 5.5 7.5 0" {...common} strokeWidth={2} />
         </>
       ) : null}
 
       {name === "health-factor" ? (
         <>
-          {/* Shield */}
-          <Path d="M12 21s7-3.8 7-9.5V5l-7-3-7 3v6.5C5 17.2 12 21 12 21Z" {...common} strokeWidth={2} />
-          {/* Sword */}
-          <Line x1="12" x2="12" y1="6" y2="15" {...common} strokeWidth={2.2} />
-          <Line x1="9" x2="15" y1="9" y2="9" {...common} strokeWidth={2.2} />
-          {/* Exclamation badge */}
-          <Circle cx="18" cy="18" fill="#111215" r="4.5" />
-          <Line stroke="#FFFFFF" strokeLinecap="round" strokeWidth={1.8} x1="18" x2="18" y1="15" y2="18" />
-          <Circle cx="18" cy="20.2" fill="#FFFFFF" r="0.8" />
+          <Path d="M11 20s6-3.2 6-8.5V5.5l-6-2.5-6 2.5v6C5 16.8 11 20 11 20Z" {...common} strokeWidth={1.8} />
+          <Line x1="11" x2="11" y1="6.5" y2="14.5" {...common} strokeWidth={1.8} />
+          <Line x1="8.5" x2="13.5" y1="9" y2="9" {...common} strokeWidth={1.8} />
+          <Circle cx="17.5" cy="17.5" fill="#111215" r="3.8" />
+          <Line stroke="#FFFFFF" strokeLinecap="round" strokeWidth={1.4} x1="17.5" x2="17.5" y1="15.5" y2="17.5" />
+          <Circle cx="17.5" cy="19.4" fill="#FFFFFF" r="0.6" />
         </>
       ) : null}
 
       {name === "yield" ? (
         <>
-          {/* Sprout seedling with growth arrow */}
-          <Path d="M12 21v-7c0-4 4-6 9-6-1 5-3 9-9 9" {...common} strokeWidth={2} />
-          <Path d="M12 14c0-3-3-5-7-5 1 4 3 7 7 7" {...common} strokeWidth={2} />
-          <Path d="M19 4l2 2-2 2" {...common} strokeWidth={2} />
-          <Path d="M16 6h5" {...common} strokeWidth={2} />
+          <Path d="M11 20v-6.5c0-3.5 3.5-5.5 8-5.5-1 4.5-2.5 8-8 8" {...common} strokeWidth={1.8} />
+          <Path d="M11 13.5c0-2.8-2.8-4.5-6.5-4.5 1 3.8 2.8 6.5 6.5 6.5" {...common} strokeWidth={1.8} />
+          <Path d="M17.5 3.5l2 2-2 2" {...common} strokeWidth={1.8} />
+          <Path d="M14.5 5.5h5" {...common} strokeWidth={1.8} />
         </>
       ) : null}
 

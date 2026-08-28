@@ -13,9 +13,10 @@ export default defineSchema({
     checkedAt: v.string(),
   }).index("by_agent_category", ["chainId", "tokenId", "category"]),
 
-  monitoringHires: defineTable({
+  agentHires: defineTable({
     chainId: v.number(),
     tokenId: v.string(),
+    category: agentCategoryValidator,
     walletAddress: v.string(),
     status: v.union(v.literal("active"), v.literal("cancelled")),
     hiredAt: v.string(),

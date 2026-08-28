@@ -12,7 +12,7 @@ import { Surface } from "@/components/surface";
 import { colors, radii, shadows } from "@/constants/theme";
 import { EDITORIAL_AGENTS } from "@/data/editorial-agents";
 import { useAgents } from "@/hooks/use-agents";
-import { useHiredMonitoringAgents } from "@/hooks/use-hire-monitoring-agent";
+import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import { useAppStore } from "@/store/use-app-store";
 import type { Agent } from "@/types/agent";
 import { useWallet } from "@/wallet/wallet-provider";
@@ -22,8 +22,8 @@ export default function MyAgentsScreen() {
   const wallet = useWallet();
   const { data: indexedAgents } = useAgents();
   const previewHires = useAppStore((state) => state.previewHires);
-  const hiredMonitoringAgents = useHiredMonitoringAgents(wallet.address);
-  const hasHires = Boolean(hiredMonitoringAgents && hiredMonitoringAgents.length > 0);
+  const hiredAgents = useHiredAgents(wallet.address);
+  const hasHires = Boolean(hiredAgents && hiredAgents.length > 0);
   const hasPreviews = previewHires.length > 0;
 
   const findAgent = (tokenId: string) =>
@@ -79,11 +79,11 @@ export default function MyAgentsScreen() {
                     </Text>
                     <Text className="mt-1 text-[12px] leading-4 text-emerald-800">
                       Saved to Dolphin&apos;s backend for this wallet. Not an onchain
-                      transaction, and not yet wired to live alerting.
+                      transaction, and not yet wired to live activity.
                     </Text>
                   </View>
 
-                  {hiredMonitoringAgents?.map((hire) => (
+                  {hiredAgents?.map((hire) => (
                     <AgentListCard
                       agent={findAgent(hire.tokenId)}
                       badgeLabel="Hired"

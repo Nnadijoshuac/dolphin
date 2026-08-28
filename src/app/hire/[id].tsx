@@ -12,11 +12,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
-import { useHireMonitoringAgent, useHiredMonitoringAgents } from "@/hooks/use-hire-monitoring-agent";
-import {
-  AUTHORIZATION_FACTS,
-  assessAuthorizationCapability,
-} from "@/services/authorization";
+import { useHireReadOnlyAgent, useHiredAgents } from "@/hooks/use-hire-read-only-agent";
+import { assessAuthorizationCapability } from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
@@ -148,34 +145,30 @@ export default function HireModalRoute() {
               </View>
             </Surface>
 
-            {agent.category === "monitoring" ? (
-              <MonitoringHireAction
-                agent={agent}
-                isWalletConnected={wallet.isConnected}
-                onHired={() =>
-                  router.replace({ pathname: "/manage/[id]", params: { id: agent.tokenId } })
-                }
-                walletAddress={wallet.address}
-              />
-            ) : (
-              <>
-                <View className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                  <Text className="text-[13px] font-bold text-amber-900">
-                    Device preview only
-                  </Text>
-                  <Text className="mt-1 text-[12px] leading-5 text-amber-800">
-                    Saving adds this agent to My Agents on this device. It does not pay,
-                    authorize, start monitoring, create an Altana session, or create an
-                    ERC-8183 escrow.
-                  </Text>
-                </View>
+            <ReadOnlyHireAction
+              agent={agent}
+              isWalletConnected={wallet.isConnected}
+              onHired={() =>
+                router.replace({ pathname: "/manage/[id]", params: { id: agent.tokenId } })
+              }
+              walletAddress={wallet.address}
+            />
 
-                <Button
-                  label={isSaved ? "Open saved preview" : "Save device preview"}
-                  onPress={handlePreview}
-                />
-              </>
-            )}
+            <View className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <Text className="text-[13px] font-bold text-amber-900">
+                Device preview only
+              </Text>
+              <Text className="mt-1 text-[12px] leading-5 text-amber-800">
+                Saving adds this agent to My Agents on this device. It does not pay,
+                authorize, start execution, create an Altana session, or create an
+                ERC-8183 escrow.
+              </Text>
+            </View>
+
+            <Button
+              label={isSaved ? "Open saved preview" : "Save device preview"}
+              onPress={handlePreview}
+            />
           </View>
         )}
       </ScrollView>
@@ -187,12 +180,13 @@ function AccessReview({
   category,
   walletAddress,
 }: {
-  category: "monitoring" | "grid-trading" | "health-factor" | "yield";
+  category: "monitoring" | "rebalancing" | "grid-trading" | "health-factor" | "yield";
   walletAddress: string | null;
 }) {
-  const capability =
-    category === "monitoring" ? "read_only_monitoring" : "altana_action_session";
-  const assessment = assessAuthorizationCapability(category, capability);
+  // Every category's real capability today is a read-only backend hire - no
+  // category currently has a live action-session flow (Altana is blocked on
+  // a missing WalletConnect-compatible signer, see authorization.ts).
+  const assessment = assessAuthorizationCapability(category, "read_only_hire");
 
   return (
     <Surface>
@@ -211,7 +205,7 @@ function AccessReview({
       <Text className="mt-2 text-[12px] leading-5" style={{ color: colors.muted }}>
         {assessment.nextStep}
       </Text>
-      {category === "monitoring" ? (
+      {assessment.available ? (
         <View className="mt-4 flex-row items-center justify-between border-t pt-4" style={{ borderColor: colors.line }}>
           <Text className="text-[12px]" style={{ color: colors.muted }}>
             Public address
@@ -261,9 +255,7 @@ function PaymentReview({ agent }: { agent: AgentDetail }) {
             Grant + hire estimate
           </Text>
           <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
-            {agent.category === "monitoring"
-              ? "Not verified"
-              : `At least ${AUTHORIZATION_FACTS.minimumGrantAndHireTransactions} txs`}
+            Not verified
           </Text>
         </View>
       </View>
@@ -271,10 +263,10 @@ function PaymentReview({ agent }: { agent: AgentDetail }) {
   );
 }
 
-type MonitoringBannerTone = "amber" | "coral" | "mint";
+type HireBannerTone = "amber" | "coral" | "mint";
 
-const MONITORING_BANNER_STYLES: Record<
-  MonitoringBannerTone,
+const HIRE_BANNER_STYLES: Record<
+  HireBannerTone,
   { border: string; background: string; title: string; body: string }
 > = {
   amber: {
@@ -298,14 +290,16 @@ const MONITORING_BANNER_STYLES: Record<
 };
 
 /**
- * Real hire action for monitoring agents - backed by
- * convex/monitoringHires.ts, not a device-only preview. Monitoring hires are
- * read-only subscriptions (project-scope.md SS6/SS7): no session, spend cap,
- * or signature, just a wallet address. A non-zero priceModel is left
- * disabled rather than faked - see hireMonitoringAgent's own rejection for
- * why (no x402 seller-side integration is wired up yet).
+ * Real hire action for any category - backed by convex/agentHires.ts, not a
+ * device-only preview. Generalized from a monitoring-only component: the
+ * underlying hire is a read-only subscription (project-scope.md SS6/SS7) for
+ * every category today, since no category has a live action-session flow
+ * built yet. No session, spend cap, or signature, just a wallet address. A
+ * non-zero priceModel is left disabled rather than faked - see
+ * hireReadOnlyAgent's own rejection for why (no x402 seller-side integration
+ * is wired up yet).
  */
-function MonitoringHireAction({
+function ReadOnlyHireAction({
   agent,
   walletAddress,
   isWalletConnected,
@@ -316,8 +310,8 @@ function MonitoringHireAction({
   isWalletConnected: boolean;
   onHired: () => void;
 }) {
-  const hireMonitoringAgent = useHireMonitoringAgent();
-  const hiredAgents = useHiredMonitoringAgents(walletAddress);
+  const hireReadOnlyAgent = useHireReadOnlyAgent();
+  const hiredAgents = useHiredAgents(walletAddress);
   const [status, setStatus] = useState<"idle" | "hiring" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -334,7 +328,7 @@ function MonitoringHireAction({
     setStatus("hiring");
     setErrorMessage(null);
     try {
-      await hireMonitoringAgent(agent.tokenId, walletAddress, priceModel);
+      await hireReadOnlyAgent(agent.tokenId, agent.category, walletAddress, priceModel);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onHired();
     } catch (error) {
@@ -346,7 +340,7 @@ function MonitoringHireAction({
     }
   };
 
-  let tone: MonitoringBannerTone;
+  let tone: HireBannerTone;
   let title: string;
   let body: string;
 
@@ -354,12 +348,12 @@ function MonitoringHireAction({
     tone = "mint";
     title = "Already hired";
     body =
-      "This wallet is recorded as watching this agent. Dolphin does not yet run live alerting for it - see Manage.";
+      "This wallet is recorded as having hired this agent. Dolphin does not yet run live activity for it - see Manage.";
   } else if (!isWalletConnected) {
     tone = "amber";
     title = "Connect a wallet to hire";
     body =
-      "Hiring a monitoring agent only needs your public wallet address - no signature, spend cap, or session is created.";
+      "Hiring this agent only needs your public wallet address - no signature, spend cap, or session is created.";
   } else if (priceModel === null) {
     tone = "amber";
     title = "Waiting on published price";
@@ -376,10 +370,10 @@ function MonitoringHireAction({
     tone = "mint";
     title = "Free to hire";
     body =
-      "This saves a real record of this wallet watching this agent. It does not create a wallet session, spend cap, or execute any transaction.";
+      "This saves a real record of this wallet hiring this agent. It does not create a wallet session, spend cap, or execute any transaction.";
   }
 
-  const bannerStyle = MONITORING_BANNER_STYLES[tone];
+  const bannerStyle = HIRE_BANNER_STYLES[tone];
   const disabled = alreadyHired ? false : !isWalletConnected || priceModel === null || priceBlocksHire;
 
   return (

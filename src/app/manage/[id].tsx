@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
-import { useHiredMonitoringAgents } from "@/hooks/use-hire-monitoring-agent";
+import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import {
   AUTHORIZATION_FACTS,
   assessAuthorizationCapability,
@@ -34,8 +34,8 @@ export default function ManageAgentRoute() {
   const preview = previewHires.find(
     (item) => item.agentId === id || item.agentId === agent?.tokenId,
   );
-  const hiredMonitoringAgents = useHiredMonitoringAgents(wallet.address);
-  const realHire = hiredMonitoringAgents?.find(
+  const hiredAgents = useHiredAgents(wallet.address);
+  const realHire = hiredAgents?.find(
     (hire) => hire.tokenId === id || hire.tokenId === agent?.tokenId,
   );
 
@@ -83,10 +83,9 @@ export default function ManageAgentRoute() {
   }
 
   const category = agent?.category ?? "monitoring";
-  const access = assessAuthorizationCapability(
-    category,
-    category === "monitoring" ? "read_only_monitoring" : "altana_action_session",
-  );
+  // Every category's real capability today is a read-only backend hire - no
+  // category has a live action-session flow built yet (see authorization.ts).
+  const access = assessAuthorizationCapability(category, "read_only_hire");
 
   if (realHire) {
     return (
@@ -134,9 +133,9 @@ export default function ManageAgentRoute() {
             <Surface>
               {[
                 ["Hire record", "Saved — backend subscription, not an onchain transaction"],
-                ["Wallet watched", shortAddress(realHire.walletAddress)],
+                ["Wallet hired", shortAddress(realHire.walletAddress)],
                 ["Payment", "Free (no charge)"],
-                ["Live alerting", "Not yet wired — no generic monitoring feed exists yet"],
+                ["Live activity", "Not yet wired — no generic per-category activity feed exists yet"],
               ].map(([label, value], index) => (
                 <View
                   className={
@@ -240,7 +239,7 @@ export default function ManageAgentRoute() {
           <SectionHeading title="Current state" />
           <Surface>
             {[
-              ["Monitoring or execution", "Not started"],
+              ["Activity", "Not started"],
               ["Wallet authorization", "None"],
               ["Payment or escrow", "None"],
               ["Onchain activity log", "Unavailable"],
@@ -270,7 +269,7 @@ export default function ManageAgentRoute() {
           <Surface>
             <View className="flex-row items-center justify-between gap-3">
               <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                {category === "monitoring" ? "Read-only observation" : "Action session"}
+                Read-only observation
               </Text>
               <StatusBadge
                 label={access.status}

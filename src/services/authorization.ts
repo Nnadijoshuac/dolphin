@@ -1,7 +1,7 @@
 import type { AgentCategory } from "@/types/agent";
 
 export const AUTHORIZATION_CAPABILITIES = [
-  "read_only_monitoring",
+  "read_only_hire",
   "altana_action_session",
   "erc8183_hire",
 ] as const;
@@ -58,13 +58,18 @@ export function assessAuthorizationCapability(
     revocationCancelsEscrow: AUTHORIZATION_FACTS.revocationCancelsEscrow,
   };
 
-  if (category === "monitoring" && capability === "read_only_monitoring") {
+  if (capability === "read_only_hire") {
+    // Generalized from a monitoring-only capability: hireReadOnlyAgent
+    // (convex/agentHires.ts) has no category-specific logic, so any
+    // category's free-tier agent can be hired the same no-session,
+    // no-spend-cap way. Availability is gated by price resolving free at
+    // the call site, not by category.
     return {
       ...common,
       status: "available",
       available: true,
       reason:
-        "Read-only monitoring only needs a public wallet address and grants no signing or spending authority.",
+        "A read-only hire only needs a public wallet address and grants no signing or spending authority.",
       nextStep: "Choose the public wallet address this agent should watch.",
       minimumTransactions: 0,
     };
@@ -79,10 +84,7 @@ export function assessAuthorizationCapability(
         "ERC-8183 hiring is a separate payment escrow, and its WalletConnect transaction path has not been verified in this build.",
       nextStep:
         "Keep Hire unavailable until escrow funding and settlement pass an end-to-end WalletConnect test.",
-      minimumTransactions:
-        category === "monitoring"
-          ? 1
-          : AUTHORIZATION_FACTS.minimumGrantAndHireTransactions,
+      minimumTransactions: AUTHORIZATION_FACTS.minimumGrantAndHireTransactions,
     };
   }
 
@@ -93,7 +95,7 @@ export function assessAuthorizationCapability(
     reason:
       capability === "altana_action_session"
         ? unavailableActionReason
-        : "This category requires action authority and cannot run as a read-only monitoring agent.",
+        : "This category requires action authority and cannot run as a read-only hire.",
     nextStep:
       "Keep activation unavailable until Altana supports a WalletConnect-compatible signer. Dolphin will never ask for a private key.",
     minimumTransactions:

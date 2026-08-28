@@ -12,20 +12,31 @@ import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
+import { useHiredMonitoringAgents } from "@/hooks/use-hire-monitoring-agent";
 import {
   AUTHORIZATION_FACTS,
   assessAuthorizationCapability,
 } from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
+import { useWallet } from "@/wallet/wallet-provider";
+
+function shortAddress(value: string) {
+  return `${value.slice(0, 7)}…${value.slice(-5)}`;
+}
 
 export default function ManageAgentRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const wallet = useWallet();
   const { data: agent, isLoading } = useAgentDetail(id);
   const previewHires = useAppStore((state) => state.previewHires);
   const removePreviewHire = useAppStore((state) => state.removePreviewHire);
   const preview = previewHires.find(
     (item) => item.agentId === id || item.agentId === agent?.tokenId,
+  );
+  const hiredMonitoringAgents = useHiredMonitoringAgents(wallet.address);
+  const realHire = hiredMonitoringAgents?.find(
+    (hire) => hire.tokenId === id || hire.tokenId === agent?.tokenId,
   );
 
   const handleRemove = () => {
@@ -49,7 +60,7 @@ export default function ManageAgentRoute() {
     );
   }
 
-  if (!preview) {
+  if (!preview && !realHire) {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
         <View className="px-5 pt-3">
@@ -57,9 +68,9 @@ export default function ManageAgentRoute() {
         </View>
         <View className="flex-1 justify-center px-5">
           <StatePanel
-            body="No device preview is saved for this agent. No onchain session was inferred."
+            body="No hire or device preview is on record for this agent and wallet."
             state="empty"
-            title="Preview not found"
+            title="Nothing to manage"
           />
           <Button
             label="Browse agents"
@@ -76,6 +87,114 @@ export default function ManageAgentRoute() {
     category,
     category === "monitoring" ? "read_only_monitoring" : "altana_action_session",
   );
+
+  if (realHire) {
+    return (
+      <SafeAreaView
+        className="flex-1"
+        edges={["top", "left", "right"]}
+        style={{ backgroundColor: colors.canvas }}
+      >
+        <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
+          <NavigationButton onPress={() => router.back()} />
+          <Text className="text-[16px] font-bold" style={{ color: colors.ink }}>
+            Manage hire
+          </Text>
+          <View className="h-[42px] w-[42px]" />
+        </View>
+
+        <ScrollView
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingBottom: 48 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Surface gradient>
+            <View className="flex-row items-center gap-4">
+              <AgentIcon category={category} size={62} uri={agent?.iconUrl} />
+              <View className="min-w-0 flex-1">
+                <Text
+                  className="text-[20px] font-bold"
+                  numberOfLines={1}
+                  style={{ color: colors.ink }}
+                >
+                  {agent?.name ?? `Agent #${realHire.tokenId}`}
+                </Text>
+                <Text className="mt-1 text-[12px]" style={{ color: colors.muted }}>
+                  Hired {new Date(realHire.hiredAt).toLocaleDateString()}
+                </Text>
+                <View className="mt-3">
+                  <StatusBadge label="Hired · backend record" tone="live" />
+                </View>
+              </View>
+            </View>
+          </Surface>
+
+          <View className="mt-8">
+            <SectionHeading title="Current state" />
+            <Surface>
+              {[
+                ["Hire record", "Saved — backend subscription, not an onchain transaction"],
+                ["Wallet watched", shortAddress(realHire.walletAddress)],
+                ["Payment", "Free (no charge)"],
+                ["Live alerting", "Not yet wired — no generic monitoring feed exists yet"],
+              ].map(([label, value], index) => (
+                <View
+                  className={
+                    index === 0
+                      ? "flex-row justify-between pb-4"
+                      : "flex-row justify-between border-t py-4"
+                  }
+                  key={label}
+                  style={{ borderColor: colors.line }}
+                >
+                  <Text className="text-[12px]" style={{ color: colors.muted }}>
+                    {label}
+                  </Text>
+                  <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+                    {value}
+                  </Text>
+                </View>
+              ))}
+            </Surface>
+          </View>
+
+          <View className="mt-8">
+            <SectionHeading title="Authorization readiness" />
+            <Surface>
+              <View className="flex-row items-center justify-between gap-3">
+                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+                  Read-only observation
+                </Text>
+                <StatusBadge
+                  label={access.status}
+                  tone={access.available ? "live" : "unavailable"}
+                />
+              </View>
+              <Text className="mt-3 text-[13px] leading-5" style={{ color: colors.muted }}>
+                {access.reason}
+              </Text>
+            </Surface>
+          </View>
+
+          <View className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <Text className="text-[12px] font-bold text-amber-900">
+              Cancelling isn&apos;t available yet
+            </Text>
+            <Text className="mt-1 text-[12px] leading-4 text-amber-800">
+              There&apos;s no un-hire action wired up in this build. This record will stay
+              until that&apos;s built.
+            </Text>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (!preview) {
+    // Unreachable: the guard above already returned unless preview || realHire,
+    // and the realHire branch above already returned. Narrows the type below.
+    return null;
+  }
 
   return (
     <SafeAreaView

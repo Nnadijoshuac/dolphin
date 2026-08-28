@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -11,12 +12,15 @@ import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
+import { useHireMonitoringAgent, useHiredMonitoringAgents } from "@/hooks/use-hire-monitoring-agent";
 import {
   AUTHORIZATION_FACTS,
   assessAuthorizationCapability,
 } from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
+
+type AgentDetail = NonNullable<ReturnType<typeof useAgentDetail>["data"]>;
 
 function shortAddress(value: string | null) {
   if (!value) return "Not connected";
@@ -144,21 +148,34 @@ export default function HireModalRoute() {
               </View>
             </Surface>
 
-            <View className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <Text className="text-[13px] font-bold text-amber-900">
-                Device preview only
-              </Text>
-              <Text className="mt-1 text-[12px] leading-5 text-amber-800">
-                Saving adds this agent to My Agents on this device. It does not pay,
-                authorize, start monitoring, create an Altana session, or create an
-                ERC-8183 escrow.
-              </Text>
-            </View>
+            {agent.category === "monitoring" ? (
+              <MonitoringHireAction
+                agent={agent}
+                isWalletConnected={wallet.isConnected}
+                onHired={() =>
+                  router.replace({ pathname: "/manage/[id]", params: { id: agent.tokenId } })
+                }
+                walletAddress={wallet.address}
+              />
+            ) : (
+              <>
+                <View className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <Text className="text-[13px] font-bold text-amber-900">
+                    Device preview only
+                  </Text>
+                  <Text className="mt-1 text-[12px] leading-5 text-amber-800">
+                    Saving adds this agent to My Agents on this device. It does not pay,
+                    authorize, start monitoring, create an Altana session, or create an
+                    ERC-8183 escrow.
+                  </Text>
+                </View>
 
-            <Button
-              label={isSaved ? "Open saved preview" : "Save device preview"}
-              onPress={handlePreview}
-            />
+                <Button
+                  label={isSaved ? "Open saved preview" : "Save device preview"}
+                  onPress={handlePreview}
+                />
+              </>
+            )}
           </View>
         )}
       </ScrollView>
@@ -212,7 +229,7 @@ function AccessReview({
   );
 }
 
-function PaymentReview({ agent }: { agent: NonNullable<ReturnType<typeof useAgentDetail>["data"]> }) {
+function PaymentReview({ agent }: { agent: AgentDetail }) {
   const payment = assessAuthorizationCapability(agent.category, "erc8183_hire");
   const publishedPrice =
     agent.priceModel.status === "live" || agent.priceModel.status === "stale"
@@ -251,5 +268,133 @@ function PaymentReview({ agent }: { agent: NonNullable<ReturnType<typeof useAgen
         </View>
       </View>
     </Surface>
+  );
+}
+
+type MonitoringBannerTone = "amber" | "coral" | "mint";
+
+const MONITORING_BANNER_STYLES: Record<
+  MonitoringBannerTone,
+  { border: string; background: string; title: string; body: string }
+> = {
+  amber: {
+    border: "border-amber-200",
+    background: "bg-amber-50",
+    title: "text-amber-900",
+    body: "text-amber-800",
+  },
+  coral: {
+    border: "border-red-200",
+    background: "bg-red-50",
+    title: "text-red-900",
+    body: "text-red-800",
+  },
+  mint: {
+    border: "border-emerald-200",
+    background: "bg-emerald-50",
+    title: "text-emerald-900",
+    body: "text-emerald-800",
+  },
+};
+
+/**
+ * Real hire action for monitoring agents - backed by
+ * convex/monitoringHires.ts, not a device-only preview. Monitoring hires are
+ * read-only subscriptions (project-scope.md SS6/SS7): no session, spend cap,
+ * or signature, just a wallet address. A non-zero priceModel is left
+ * disabled rather than faked - see hireMonitoringAgent's own rejection for
+ * why (no x402 seller-side integration is wired up yet).
+ */
+function MonitoringHireAction({
+  agent,
+  walletAddress,
+  isWalletConnected,
+  onHired,
+}: {
+  agent: AgentDetail;
+  walletAddress: string | null;
+  isWalletConnected: boolean;
+  onHired: () => void;
+}) {
+  const hireMonitoringAgent = useHireMonitoringAgent();
+  const hiredAgents = useHiredMonitoringAgents(walletAddress);
+  const [status, setStatus] = useState<"idle" | "hiring" | "error">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const alreadyHired = hiredAgents?.some((hire) => hire.tokenId === agent.tokenId) ?? false;
+  const priceModel =
+    agent.priceModel.status === "live" || agent.priceModel.status === "stale"
+      ? agent.priceModel.value
+      : null;
+  const priceIsFree = priceModel !== null && Number(priceModel.amount) === 0;
+  const priceBlocksHire = priceModel !== null && !priceIsFree;
+
+  const handleHire = async () => {
+    if (!walletAddress) return;
+    setStatus("hiring");
+    setErrorMessage(null);
+    try {
+      await hireMonitoringAgent(agent.tokenId, walletAddress, priceModel);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onHired();
+    } catch (error) {
+      setStatus("error");
+      setErrorMessage(
+        error instanceof Error ? error.message : "Could not complete the hire.",
+      );
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  let tone: MonitoringBannerTone;
+  let title: string;
+  let body: string;
+
+  if (alreadyHired) {
+    tone = "mint";
+    title = "Already hired";
+    body =
+      "This wallet is recorded as watching this agent. Dolphin does not yet run live alerting for it - see Manage.";
+  } else if (!isWalletConnected) {
+    tone = "amber";
+    title = "Connect a wallet to hire";
+    body =
+      "Hiring a monitoring agent only needs your public wallet address - no signature, spend cap, or session is created.";
+  } else if (priceModel === null) {
+    tone = "amber";
+    title = "Waiting on published price";
+    body = "This agent's price hasn't resolved yet. Try again once it loads.";
+  } else if (priceBlocksHire) {
+    tone = "coral";
+    title = "Payment required - not supported yet";
+    body = `This agent charges ${priceModel.amount} ${priceModel.token}. Paid hiring isn't available in this build - no x402 seller-side integration is wired up.`;
+  } else if (status === "error") {
+    tone = "coral";
+    title = "Hire failed";
+    body = errorMessage ?? "Something went wrong.";
+  } else {
+    tone = "mint";
+    title = "Free to hire";
+    body =
+      "This saves a real record of this wallet watching this agent. It does not create a wallet session, spend cap, or execute any transaction.";
+  }
+
+  const bannerStyle = MONITORING_BANNER_STYLES[tone];
+  const disabled = alreadyHired ? false : !isWalletConnected || priceModel === null || priceBlocksHire;
+
+  return (
+    <View className="gap-4">
+      <View className={`rounded-2xl border p-4 ${bannerStyle.border} ${bannerStyle.background}`}>
+        <Text className={`text-[13px] font-bold ${bannerStyle.title}`}>{title}</Text>
+        <Text className={`mt-1 text-[12px] leading-5 ${bannerStyle.body}`}>{body}</Text>
+      </View>
+
+      <Button
+        disabled={disabled}
+        label={alreadyHired ? "Open in My Agents" : status === "hiring" ? "Hiring…" : "Hire — Free"}
+        loading={status === "hiring"}
+        onPress={alreadyHired ? onHired : handleHire}
+      />
+    </View>
   );
 }

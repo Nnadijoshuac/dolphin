@@ -13,6 +13,7 @@ import type * as categoryStatsValidators from "../categoryStatsValidators.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
 import type * as lib_dataSources from "../lib/dataSources.js";
 import type * as lib_liveMetric from "../lib/liveMetric.js";
+import type * as monitoringHires from "../monitoringHires.js";
 import type * as protocols_aave from "../protocols/aave.js";
 import type * as protocols_pancakeswap from "../protocols/pancakeswap.js";
 import type * as protocols_types from "../protocols/types.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   "lib/bscClient": typeof lib_bscClient;
   "lib/dataSources": typeof lib_dataSources;
   "lib/liveMetric": typeof lib_liveMetric;
+  monitoringHires: typeof monitoringHires;
   "protocols/aave": typeof protocols_aave;
   "protocols/pancakeswap": typeof protocols_pancakeswap;
   "protocols/types": typeof protocols_types;

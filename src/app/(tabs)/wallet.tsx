@@ -179,6 +179,7 @@ export default function WalletScreen() {
           >
             <ConstellationBg opacity={0.35} />
             <Image
+              cachePolicy="memory-disk"
               contentFit="contain"
               priority="high"
               source={walletHeroImage}

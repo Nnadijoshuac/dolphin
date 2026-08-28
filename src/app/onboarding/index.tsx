@@ -147,6 +147,7 @@ export default function OnboardingScreen() {
                       style={{ height: 260, width: "100%" }}
                     >
                       <Image
+                        cachePolicy="memory-disk"
                         contentFit="contain"
                         source={require("../../../assets/images/SplashScreen.jpeg")}
                         style={{ height: "100%", width: "100%" }}
@@ -310,6 +311,7 @@ export default function OnboardingScreen() {
                     <View className="items-center justify-center">
                       <View style={{ height: 160, width: 160 }}>
                         <Image
+                          cachePolicy="memory-disk"
                           contentFit="contain"
                           source={require("../../../assets/images/onboarding-shield.png")}
                           style={{ height: "100%", width: "100%" }}

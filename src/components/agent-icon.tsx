@@ -40,6 +40,7 @@ export function AgentIcon({ category, uri, size = 60 }: AgentIconProps) {
     return (
       <Image
         accessibilityLabel={`${category} agent icon`}
+        cachePolicy="memory-disk"
         contentFit="cover"
         source={{ uri }}
         style={shell}

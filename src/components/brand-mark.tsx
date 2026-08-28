@@ -1,4 +1,5 @@
-import { View, Text, Image } from "react-native";
+import { Text, View } from "react-native";
+import { Image } from "expo-image";
 import { colors } from "@/constants/theme";
 
 const dolphinLogo = require("../../assets/DolphinLogo.png");
@@ -16,12 +17,13 @@ export function BrandMark({ size = 32, color, inverted = false }: BrandMarkProps
   return (
     <Image
       accessibilityLabel="Dolphin"
+      cachePolicy="memory-disk"
+      contentFit="contain"
       source={dolphinLogo}
       style={{
         width: size,
         height: size,
         tintColor: tint,
-        resizeMode: "contain",
       }}
     />
   );
@@ -31,11 +33,12 @@ export function BnbLogo({ size = 18 }: { size?: number }) {
   return (
     <Image
       accessibilityLabel="BNB"
+      cachePolicy="memory-disk"
+      contentFit="contain"
       source={bnbLogo}
       style={{
         width: size,
         height: size,
-        resizeMode: "contain",
       }}
     />
   );

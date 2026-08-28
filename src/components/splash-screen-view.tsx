@@ -93,6 +93,7 @@ export function SplashScreenView({
           {/* Center Graphic */}
           <View className="my-auto flex-1 items-center justify-center py-2">
             <Image
+              cachePolicy="memory-disk"
               contentFit="contain"
               priority="high"
               source={splashImage}

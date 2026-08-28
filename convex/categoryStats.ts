@@ -4,9 +4,10 @@ import { v } from "convex/values";
 import { action, internalMutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { agentCategoryValidator, agentLiveStatsValidator } from "./categoryStatsValidators";
+import { readYieldStats } from "./protocols/aave";
 import { readGridTradingStats } from "./protocols/pancakeswap";
+import { unavailableMonitoringStats } from "./protocols/unavailable";
 import { readHealthFactorStats } from "./protocols/venus";
-import { unavailableMonitoringStats, unavailableYieldStats } from "./protocols/unavailable";
 
 /**
  * `./_generated/server` and the `internal.*`/`api.*` reference objects are
@@ -88,7 +89,7 @@ export const refreshAgentCategoryStats = action({
         case "monitoring":
           return unavailableMonitoringStats(checkedAt);
         case "yield":
-          return unavailableYieldStats(checkedAt);
+          return readYieldStats(agentWallet, checkedAt);
       }
     })();
 

@@ -11,7 +11,12 @@
  * separate, looser one.
  */
 
-export type ClassificationCategory = "monitoring" | "grid-trading" | "health-factor" | "yield";
+export type ClassificationCategory =
+  | "monitoring"
+  | "rebalancing"
+  | "grid-trading"
+  | "health-factor"
+  | "yield";
 
 export interface ClassificationResult {
   category: ClassificationCategory;
@@ -68,6 +73,20 @@ interface TermSet {
 // "concentrated liquidity"). Kept deliberately narrow - a term added here
 // should be traceable to real observed agent copy, not a guess at what
 // might exist.
+//
+// "grid-trading" and "rebalancing" were split from one bucket (formerly
+// both called "grid-trading") after an audit found the original bucket's
+// real population was LP-range management (Rebalancing's actual
+// definition), not price-ladder trading. "market making" was dropped from
+// grid-trading's terms - it wasn't traceable to any specific real agent
+// sampled and doesn't cleanly belong to either bucket. "grid trader",
+// "grid planning", and "buy and sell ladders" were added after a live
+// 8004scan search pass (2026-08-28) surfaced a real unclassified agent
+// ("Grid Trader", token 269224 BSC: "Deterministic grid planning:
+// symmetric buy and sell ladders with price wall annotations per level")
+// that the previous term list missed entirely - grid-trading was not
+// genuinely scarce, the term list just hadn't been checked against real
+// grid-trading copy yet.
 const CATEGORY_TERMS: Record<ClassificationCategory, TermSet> = {
   monitoring: {
     strong: [
@@ -80,17 +99,13 @@ const CATEGORY_TERMS: Record<ClassificationCategory, TermSet> = {
     ],
     weak: ["surveillance", "notify", "watchlist"],
   },
-  "grid-trading": {
-    strong: [
-      "grid trading",
-      "grid strategy",
-      "concentrated liquidity",
-      "liquidity range",
-      "market making",
-      "tick range",
-      "lp position",
-    ],
+  rebalancing: {
+    strong: ["concentrated liquidity", "liquidity range", "tick range", "lp position"],
     weak: ["liquidity pool", "v3 pool", "price range"],
+  },
+  "grid-trading": {
+    strong: ["grid trading", "grid strategy", "grid trader", "grid planning", "buy and sell ladders"],
+    weak: [],
   },
   "health-factor": {
     strong: [

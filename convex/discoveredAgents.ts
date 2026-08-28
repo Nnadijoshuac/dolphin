@@ -19,9 +19,17 @@ const RESULTS_PER_QUERY = 30;
 // One natural-language query per category, built from the same terms
 // classifyAgent() looks for - mirrors what was verified by hand to return
 // relevant results before 8004scan's API degraded mid-session.
+//
+// "grid-trading" and "rebalancing" queries were split (2026-08-28) to match
+// classification.ts's split of what used to be one combined term list.
+// "grid trader price ladder buy sell levels" was verified by hand against
+// 8004scan's live search endpoint that day and surfaces real price-ladder
+// agents (e.g. token 269224 "Grid Trader") that the old combined query,
+// tuned only for LP-range language, never returned.
 const CATEGORY_SEARCH_QUERIES: Record<string, string> = {
   monitoring: "monitor wallet alert track",
-  "grid-trading": "grid trading liquidity concentrated range",
+  rebalancing: "concentrated liquidity range rebalance lp position",
+  "grid-trading": "grid trader price ladder buy sell levels",
   "health-factor": "health factor liquidation lending collateral",
   yield: "yield vault farm apy compound",
 };

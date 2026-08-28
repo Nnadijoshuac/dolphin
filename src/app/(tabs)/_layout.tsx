@@ -55,11 +55,11 @@ export default function TabsLayout() {
         },
         tabBarStyle: {
           position: "absolute",
-          left: 20,
-          right: 20,
+          left: 40,
+          right: 40,
           bottom: bottomOffset,
-          height: 64,
-          borderRadius: 36,
+          height: 60,
+          borderRadius: 30,
           borderWidth: 1.2,
           borderColor: "rgba(17,18,20,0.08)",
           backgroundColor: "rgba(255,255,255,0.85)",
@@ -69,7 +69,7 @@ export default function TabsLayout() {
           shadowOpacity: 0.12,
           shadowRadius: 24,
           elevation: 8,
-          paddingHorizontal: 8,
+          paddingHorizontal: 4,
         },
         tabBarBackground: () => (
           <BlurView

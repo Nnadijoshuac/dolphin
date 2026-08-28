@@ -11,10 +11,19 @@ Hackathon: BNB Chain "Build the Era" — deadline Sep 9, 2026. Judged on **Funct
 A mobile marketplace for discovering, comparing, and hiring AI agents registered on BNB Smart Chain (BSC) under ERC-8004. UX model: **Apple's App Store app** — Today-style Discover tab, Categories/Apps-style browse grid, a rich per-agent "product page," live search, bottom tab bar. Not a generic crypto dashboard.
 
 Four required categories, equal visual and functional depth:
-1. **Monitoring** — watches markets, wallets, positions
-2. **Grid trading** — automated strategies within set ranges
+1. **Rebalancing** — resets/manages LP ranges automatically
+2. **Grid trading** — price-ladder buy/sell orders across a fixed range
 3. **Health factor** — tracks loan positions, acts before liquidation
 4. **Yield** — moves capital to highest-earning opportunities
+
+(A category taxonomy audit on 2026-08-28 found the app's original "Monitoring"
+and "Grid trading" categories didn't match this list: "Monitoring" isn't one
+of the four graded categories and has no real data source or population beyond
+one agent, and what the app called "grid trading" was in substance Rebalancing
+- LP-range management, not price-ladder trading. Monitoring stays a real,
+working category in the type system and data (its one agent, Wallet Watch,
+keeps its real hire record), but is no longer presented as one of the four
+graded categories in Discover/Search/onboarding's category browsing.)
 
 ---
 
@@ -90,7 +99,7 @@ This split protects all three judging criteria simultaneously: Functionality and
 **Normalized `Agent` type:**
 
 ```ts
-type AgentCategory = "monitoring" | "grid_trading" | "health_factor" | "yield";
+type AgentCategory = "monitoring" | "rebalancing" | "grid-trading" | "health-factor" | "yield";
 
 interface Agent {
   id: string;                    // ERC-8004 onchain identity / registry ID
@@ -113,9 +122,10 @@ interface Agent {
 
 **Category-specific `liveStats`:**
 - **monitoring**: alert frequency, assets watched, last alert timestamp, false-positive rate
-- **grid_trading**: win rate, active range, current P&L, number of grids, track-record timeframe
-- **health_factor**: positions monitored, average health factor maintained, liquidations prevented, response latency
-- **yield**: current APY, TVL managed, protocols used (Aave/Venus/PancakeSwap/Lista), rebalance frequency
+- **rebalancing**: rebalance efficiency, active LP range, current P&L, number of LP positions, track-record timeframe
+- **grid-trading**: win rate, active price range, current P&L, number of grid levels, track-record timeframe
+- **health-factor**: positions monitored, average health factor maintained, liquidations prevented, response latency
+- **yield**: current APY, TVL managed, protocols used (Aave/Venus/PancakeSwap/Lista), vault rebalance cadence (the vault's own internal rebalance frequency - not the same concept as the Rebalancing category above)
 
 **Trust Score composition** (label each component by source so the UI can show "on-chain verified" vs. "marketplace-derived" — this is a direct, explicit Data Quality signal for judges):
 - ERC-8004 reputation (on-chain)

@@ -48,6 +48,23 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string> = {
 // before this timeout was added). Bounded so one slow page can never hang
 // the whole sync - it just counts as a failed page, same as any other
 // fetch error.
+// Agents that pass every automated filter (not spam, real, live, keyword-
+// matched) but were manually reviewed and rejected as too broad a fit -
+// the matched category is one incidental clause among many unrelated
+// capabilities, not what the agent actually is. Keeping these terms in
+// CATEGORY_TERMS is still correct (they're real signal for genuine
+// category-focused agents), so the fix is a specific exclusion, not a
+// weaker term list. Re-review by hand if 8004scan meaningfully updates an
+// excluded agent's own description.
+const MANUALLY_EXCLUDED_TOKEN_IDS = new Set([
+  "113284", // Topaz Agent - broad ve(3,3) DEX agent (swaps, gauge votes, bribes,
+  // veTOPAZ locks); "optimize LP positions" is one clause among many, not its
+  // identity. Matches rebalancing's "lp position" term.
+  "6428", // Tator Trader - 24+ chain "does everything" agent (trades, bridges,
+  // perps, prediction markets, token launches, name registration); "manage
+  // yield positions" is one clause among ten. Matches yield's weak "yield" term.
+]);
+
 const PER_REQUEST_TIMEOUT_MS = 15_000;
 // Raised from 8 (2026-08-29) now that SCAN8004_API_KEY lifts the request
 // budget to 600/min - each page is still independently timeout-boxed, so a
@@ -184,6 +201,7 @@ export const syncDiscoveredAgents = internalAction({
     let rejectedSpam = 0;
     let rejectedUnclassified = 0;
     let rejectedNotActive = 0;
+    let rejectedManually = 0;
 
     for (const item of seen.values()) {
       const name = item.name ?? "";
@@ -191,6 +209,11 @@ export const syncDiscoveredAgents = internalAction({
 
       if (isLikelySpamOrUnsuitable(name, description)) {
         rejectedSpam++;
+        continue;
+      }
+
+      if (MANUALLY_EXCLUDED_TOKEN_IDS.has(item.token_id)) {
+        rejectedManually++;
         continue;
       }
 
@@ -222,7 +245,15 @@ export const syncDiscoveredAgents = internalAction({
       upserted++;
     }
 
-    return { upserted, rejectedSpam, rejectedUnclassified, rejectedNotActive, candidatesSeen: seen.size, errors };
+    return {
+      upserted,
+      rejectedSpam,
+      rejectedUnclassified,
+      rejectedNotActive,
+      rejectedManually,
+      candidatesSeen: seen.size,
+      errors,
+    };
   },
 });
 

@@ -7,7 +7,8 @@ authorization, and payment as separate concepts.
 
 ## What is implemented
 
-- Discover, Categories, Search, My Agents, and Wallet tabs.
+- Discover, Search, My Agents, and Wallet tabs (4 tabs - category browsing
+  lives inside Discover as a chip row, not its own tab).
 - Agent, category, setup review, preview management, and onboarding routes.
 - Four equal discovery categories: Monitoring, Grid Trading, Health Factor, and
   Yield.
@@ -133,14 +134,17 @@ wallet state.
 
 ## Routes
 
+4 tabs, not 5 - category browsing lives inside Discover as a chip row rather
+than its own tab (project-scope.md §4/§9); `category/[slug].tsx` is still a
+full route, just reached from those chips instead of a tab bar item.
+
 ```text
-src/app/(tabs)/index.tsx          Discover
-src/app/(tabs)/categories.tsx     Category browse
+src/app/(tabs)/index.tsx          Discover (includes category chip row)
 src/app/(tabs)/search.tsx         Local live filtering
 src/app/(tabs)/my-agents.tsx      Device previews
-src/app/(tabs)/profile.tsx        Wallet and capability status
+src/app/(tabs)/wallet.tsx         Wallet and capability status
 src/app/agent/[id].tsx            Agent detail
-src/app/category/[slug].tsx       Full category listing
+src/app/category/[slug].tsx       Full category listing (from Discover's chips)
 src/app/hire/[id].tsx             Truthful setup review
 src/app/manage/[id].tsx           Device-preview management
 src/app/onboarding/index.tsx      First-launch explainer

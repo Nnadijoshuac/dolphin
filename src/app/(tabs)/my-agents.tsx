@@ -152,7 +152,7 @@ export default function MyAgentsScreen() {
                   <View className="mt-6 w-full">
                     <Button
                       label="Browse agent catalog"
-                      onPress={() => router.push("/(tabs)/categories")}
+                      onPress={() => router.push("/(tabs)")}
                     />
                   </View>
                 </View>

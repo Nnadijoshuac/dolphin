@@ -80,7 +80,7 @@ export default function DiscoverScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
+        stickyHeaderIndices={[1, 3]}
       >
         {/* Child 0: Top Dolphin Writeup Header */}
         <View>
@@ -122,7 +122,7 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Compact Featured Hero Card - Wider Layout */}
+        {/* Child 2: Compact Featured Hero Card - Wider Layout */}
         <View className="px-2 pb-1 pt-1">
           <PressableScale
             accessibilityLabel="Explore Monitoring Agents collection"
@@ -204,8 +204,14 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Category Filter Tabs Bar */}
-        <View className="px-4 pt-5 pb-3">
+        {/* Child 3: Category Filter Tabs Bar */}
+        <View
+          className="px-4 pt-4 pb-2"
+          style={{
+            backgroundColor: colors.canvas,
+            zIndex: 10,
+          }}
+        >
           <View className="border-b" style={{ borderColor: "rgba(17,18,20,0.06)" }}>
             <ScrollView
               contentContainerStyle={{ gap: 24, paddingRight: 16 }}

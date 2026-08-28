@@ -1,10 +1,14 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useQuery as useConvexQuery } from "convex/react";
 
+import { api } from "../../convex/_generated/api";
 import {
   AGENT_DATA_SOURCES,
   AGENT_QUERY_TIMINGS,
 } from "@/constants/agents";
+import { discoveredAgentToAgent } from "@/data/discovered-agents";
+import { convexClient } from "@/providers/convex-provider";
 import {
   fetchAgentById,
   fetchAgents,
@@ -58,13 +62,40 @@ function withRegistryVerification(
   };
 }
 
+/**
+ * Editorial (hand-vetted) agents plus, when Convex is configured, agents
+ * discovered by the scheduled 8004scan sync (convex/discoveredAgents.ts) -
+ * see discoveredAgentToAgent's doc comment for how those are classified
+ * and labeled. A discovered agent that duplicates an editorial tokenId is
+ * dropped in favor of the hand-vetted entry.
+ */
 export function useAgents() {
-  return useQuery({
+  const editorialQuery = useQuery({
     queryKey: agentQueryKeys.list(),
     queryFn: ({ signal }) => fetchAgents({ signal }),
     staleTime: AGENT_QUERY_TIMINGS.listStaleTimeMs,
     gcTime: AGENT_QUERY_TIMINGS.garbageCollectionTimeMs,
   });
+
+  const discoveredRows = useConvexQuery(
+    api.discoveredAgents.listDiscoveredAgents,
+    convexClient ? {} : "skip",
+  );
+
+  const data = useMemo(() => {
+    if (!editorialQuery.data || !discoveredRows || discoveredRows.length === 0) {
+      return editorialQuery.data;
+    }
+
+    const knownTokenIds = new Set(editorialQuery.data.map((agent) => agent.tokenId));
+    const discovered = discoveredRows
+      .filter((row) => !knownTokenIds.has(row.tokenId))
+      .map(discoveredAgentToAgent);
+
+    return [...editorialQuery.data, ...discovered];
+  }, [editorialQuery.data, discoveredRows]);
+
+  return { ...editorialQuery, data };
 }
 
 export function useAgent(

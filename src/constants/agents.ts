@@ -72,6 +72,10 @@ export const AGENT_DATA_SOURCES = {
     id: "dolphin-editorial",
     label: "Dolphin editorial classification",
   },
+  heuristicDiscovery: {
+    id: "dolphin-heuristic-discovery",
+    label: "Dolphin automated discovery (keyword-matched, not human-vetted)",
+  },
 } as const satisfies Record<string, DataSourceLabel>;
 
 export const AGENT_QUERY_TIMINGS = {

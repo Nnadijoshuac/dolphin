@@ -17,7 +17,7 @@ import type {
 const METRICS_NOT_PUBLISHED =
   "No auditable live metric feed or execution history is published for this value.";
 
-function unavailableMetric<T>(
+export function unavailableMetric<T>(
   reason: string,
   source: DataSourceLabel = AGENT_DATA_SOURCES.publisher,
 ): LiveMetric<T> {
@@ -30,7 +30,7 @@ function unavailableMetric<T>(
   };
 }
 
-function unverifiedRegistry(): RegistryVerification {
+export function unverifiedRegistry(): RegistryVerification {
   const reason = "On-chain identity has not been checked in this request yet.";
 
   return {
@@ -41,7 +41,7 @@ function unverifiedRegistry(): RegistryVerification {
   };
 }
 
-function unavailableLiveStats(category: AgentCategory): AgentLiveStats {
+export function unavailableLiveStats(category: AgentCategory): AgentLiveStats {
   switch (category) {
     case "monitoring":
       return {

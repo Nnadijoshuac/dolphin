@@ -72,7 +72,7 @@ const CATEGORY_TERMS: Record<ClassificationCategory, TermSet> = {
       "position monitor",
       "monitoring agent",
     ],
-    weak: ["alert", "surveillance", "notify", "watchlist"],
+    weak: ["surveillance", "notify", "watchlist"],
   },
   "grid-trading": {
     strong: [

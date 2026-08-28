@@ -10,7 +10,10 @@
 
 import type * as categoryStats from "../categoryStats.js";
 import type * as categoryStatsValidators from "../categoryStatsValidators.js";
+import type * as crons from "../crons.js";
+import type * as discoveredAgents from "../discoveredAgents.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
+import type * as lib_classification from "../lib/classification.js";
 import type * as lib_dataSources from "../lib/dataSources.js";
 import type * as lib_liveMetric from "../lib/liveMetric.js";
 import type * as monitoringHires from "../monitoringHires.js";
@@ -29,7 +32,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   categoryStats: typeof categoryStats;
   categoryStatsValidators: typeof categoryStatsValidators;
+  crons: typeof crons;
+  discoveredAgents: typeof discoveredAgents;
   "lib/bscClient": typeof lib_bscClient;
+  "lib/classification": typeof lib_classification;
   "lib/dataSources": typeof lib_dataSources;
   "lib/liveMetric": typeof lib_liveMetric;
   monitoringHires: typeof monitoringHires;

@@ -1,14 +1,12 @@
 "use client";
 
+import Link from "next/link";
+
 import { AgentIcon } from "@/components/agent-icon";
-import { Button } from "@/components/buttons";
 import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
-import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
-import { Surface } from "@/components/surface";
-import { colors } from "@/constants/theme";
 import { useAgentCategoryStats } from "@/hooks/use-category-stats";
 import { convexClient } from "@/providers/convex-provider";
 import type {
@@ -28,24 +26,48 @@ const categoryLabels: Record<AgentCategory, string> = {
 
 function shortAddress(value: string | null) {
   if (!value) return "Not reported";
-  return `${value.slice(0, 8)}…${value.slice(-6)}`;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
 }
 
-function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+function formatList(values: string[]) {
+  return values.length > 0 ? values.join(", ") : "None";
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Not reported";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function DetailSection({
+  title,
+  summary,
+  children,
+}: {
+  title: string;
+  summary: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mt-9">
-      <SectionHeading title={title} />
-      {children}
-    </div>
+    <section className="grid gap-7 border-t border-[var(--line)] py-12 lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-12">
+      <header>
+        <h2 className="text-base font-bold tracking-[-0.025em] text-[var(--ink)]">
+          {title}
+        </h2>
+        <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{summary}</p>
+      </header>
+      <div className="min-w-0">{children}</div>
+    </section>
   );
 }
 
 /**
- * Every metric of a category marked "syncing" rather than "unavailable" - the
- * honest state while the Convex read is still in flight. "unavailable" asserts
- * a feed was checked and does not exist, which is a stronger claim than we can
- * make before the answer arrives (project-scope.md SS5). Mirrors
- * syncingLiveStats in the mobile app's src/data/editorial-agents.ts.
+ * Every metric of a category starts as syncing while the Convex read is in
+ * flight. Unavailable is reserved for a completed read that found no source.
  */
 function syncingLiveStats(stats: AgentLiveStats): AgentLiveStats {
   return Object.fromEntries(
@@ -66,23 +88,12 @@ function syncingLiveStats(stats: AgentLiveStats): AgentLiveStats {
 }
 
 /**
- * Live signals come from convex/categoryStats.ts - the real Venus /
- * PancakeSwap V3 / Aave reads in convex/protocols/ - not from the static stub
- * carried on the agent record. Until 2026-08-29 this site rendered
- * `agent.liveStats` directly, which is always the "unavailable" placeholder, so
- * every agent's Live signals read "Unavailable" here while the mobile app
- * showed real on-chain values for the same agent.
- *
- * Split in two on purpose: useAgentCategoryStats calls convex/react hooks,
- * which throw when no ConvexProvider is mounted, and ConvexClientProvider
- * mounts none when NEXT_PUBLIC_CONVEX_URL is unset. `convexClient` is a
- * module-level constant, so this branch is fixed for the life of the process
- * and can never reorder hooks between renders.
+ * Live signals use the same Convex categoryStats rows and refresh action as
+ * mobile. The catalog's unavailable stub is used only when Convex itself is
+ * not configured.
  */
 function LiveStats({ agent }: { agent: Agent }) {
   if (!convexClient) {
-    // No backend configured, so there is genuinely nothing to read - the
-    // static unavailable stub is the honest answer, not a placeholder.
     return <LiveStatsView stats={agent.liveStats} />;
   }
 
@@ -95,12 +106,6 @@ function BackendLiveStats({ agent }: { agent: Agent }) {
     agent.category,
     agent.agentWallet,
   );
-
-  // `undefined` = the Convex client has not answered yet; `null` = no row is
-  // cached and the refresh action is still running. Both mean "not known yet",
-  // which is syncing, not unavailable. Once a row exists we render exactly what
-  // the backend stored, including its own honest per-field "unavailable"
-  // entries - those are correct and must not be papered over.
   const stats = cached?.stats ?? syncingLiveStats(agent.liveStats);
 
   return <LiveStatsView stats={stats} />;
@@ -108,152 +113,351 @@ function BackendLiveStats({ agent }: { agent: Agent }) {
 
 function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   return (
-    <Surface>
-      <div className="grid grid-cols-2 gap-y-6 gap-x-6">
-        {stats.category === "monitoring" && (
-          <>
-            <MetricCell format={(v) => v} label="Alert frequency" metric={stats.alertFrequency} />
-            <MetricCell format={(v) => v.join(", ")} label="Assets watched" metric={stats.assetsWatched} />
-            <MetricCell format={(v) => v} label="Last alert" metric={stats.lastAlertAt} />
-            <MetricCell format={(v) => `${v.toFixed(1)}%`} label="False positives" metric={stats.falsePositiveRate} />
-          </>
-        )}
-        {/*
-          Rebalancing and grid-trading carry the same metric field set but are
-          different categories (LP-range management vs a true price ladder) -
-          see the taxonomy split in src/types/agent.ts. They are listed
-          separately rather than merged so the labels can diverge later without
-          re-untangling them.
-        */}
-        {stats.category === "rebalancing" && (
-          <>
-            <MetricCell format={(v) => `${v.toFixed(1)}%`} label="Rebalance efficiency" metric={stats.winRate} />
-            <MetricCell format={(v) => v} label="Active range" metric={stats.activeRange} />
-            <MetricCell format={(v) => v} label="Current P&L" metric={stats.currentPnl} />
-            <MetricCell format={(v) => v.toLocaleString()} label="LP positions" metric={stats.positionCount} />
-          </>
-        )}
-        {stats.category === "grid-trading" && (
-          <>
-            <MetricCell format={(v) => `${v.toFixed(1)}%`} label="Win rate" metric={stats.winRate} />
-            <MetricCell format={(v) => v} label="Active range" metric={stats.activeRange} />
-            <MetricCell format={(v) => v} label="Current P&L" metric={stats.currentPnl} />
-            <MetricCell format={(v) => v.toLocaleString()} label="Grid levels" metric={stats.positionCount} />
-          </>
-        )}
-        {stats.category === "health-factor" && (
-          <>
-            <MetricCell format={(v) => v.toLocaleString()} label="Positions watched" metric={stats.positionsMonitored} />
-            <MetricCell format={(v) => v.toFixed(2)} label="Average health" metric={stats.averageHealthFactor} />
-            <MetricCell format={(v) => v.toLocaleString()} label="Liquidations prevented" metric={stats.liquidationsPrevented} />
-            <MetricCell format={(v) => `${v} ms`} label="Response latency" metric={stats.responseLatencyMs} />
-          </>
-        )}
-        {stats.category === "yield" && (
-          <>
-            <MetricCell format={(v) => `${v.toFixed(2)}%`} label="Current APY" metric={stats.currentApy} />
-            <MetricCell format={(v) => `$${v.toLocaleString()}`} label="TVL managed" metric={stats.tvlManagedUsd} />
-            <MetricCell format={(v) => v.join(", ")} label="Protocols" metric={stats.protocolsUsed} />
-            <MetricCell format={(v) => v} label="Rebalances" metric={stats.rebalanceFrequency} />
-          </>
-        )}
-      </div>
-    </Surface>
+    <div className="grid border-b border-[var(--line)] sm:grid-cols-2 sm:[&>*:nth-child(odd)]:border-r">
+      {stats.category === "monitoring" && (
+        <>
+          <MetricCell
+            format={(value) => value}
+            label="Alert frequency"
+            metric={stats.alertFrequency}
+          />
+          <MetricCell
+            format={formatList}
+            label="Assets watched"
+            metric={stats.assetsWatched}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Last alert"
+            metric={stats.lastAlertAt}
+          />
+          <MetricCell
+            format={(value) => `${value.toFixed(1)}%`}
+            label="False positives"
+            metric={stats.falsePositiveRate}
+          />
+        </>
+      )}
+
+      {stats.category === "rebalancing" && (
+        <>
+          <MetricCell
+            format={(value) => `${value.toFixed(1)}%`}
+            label="Win rate"
+            metric={stats.winRate}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Active LP range"
+            metric={stats.activeRange}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Current P&L"
+            metric={stats.currentPnl}
+          />
+          <MetricCell
+            format={(value) => value.toLocaleString()}
+            label="LP positions"
+            metric={stats.positionCount}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Track-record period"
+            metric={stats.trackRecordPeriod}
+          />
+        </>
+      )}
+
+      {stats.category === "grid-trading" && (
+        <>
+          <MetricCell
+            format={(value) => `${value.toFixed(1)}%`}
+            label="Win rate"
+            metric={stats.winRate}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Price range"
+            metric={stats.activeRange}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Current P&L"
+            metric={stats.currentPnl}
+          />
+          <MetricCell
+            format={(value) => value.toLocaleString()}
+            label="Grid levels"
+            metric={stats.positionCount}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Track-record period"
+            metric={stats.trackRecordPeriod}
+          />
+        </>
+      )}
+
+      {stats.category === "health-factor" && (
+        <>
+          <MetricCell
+            format={(value) => value.toLocaleString()}
+            label="Positions watched"
+            metric={stats.positionsMonitored}
+          />
+          <MetricCell
+            format={(value) => value.toFixed(2)}
+            label="Average health factor"
+            metric={stats.averageHealthFactor}
+          />
+          <MetricCell
+            format={(value) => value.toLocaleString()}
+            label="Liquidations prevented"
+            metric={stats.liquidationsPrevented}
+          />
+          <MetricCell
+            format={(value) => `${value} ms`}
+            label="Response latency"
+            metric={stats.responseLatencyMs}
+          />
+        </>
+      )}
+
+      {stats.category === "yield" && (
+        <>
+          <MetricCell
+            format={(value) => `${value.toFixed(2)}%`}
+            label="Current APY"
+            metric={stats.currentApy}
+          />
+          <MetricCell
+            format={(value) => `$${value.toLocaleString()}`}
+            label="TVL managed"
+            metric={stats.tvlManagedUsd}
+          />
+          <MetricCell
+            format={formatList}
+            label="Protocols"
+            metric={stats.protocolsUsed}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Vault rebalance cadence"
+            metric={stats.rebalanceFrequency}
+          />
+        </>
+      )}
+    </div>
   );
 }
 
-type AgentDetailProps = {
-  agent: Agent;
-  /**
-   * Omit when there is no hire flow to send the user into. The action button
-   * is then not rendered at all, rather than shown as a control that does
-   * nothing - a dead button reads as a broken feature, not an absent one.
-   */
-  onHire?: () => void;
-  actionLabel?: string;
-};
-
-export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDetailProps) {
+export function AgentDetail({ agent }: { agent: Agent }) {
   const registeredMetric = agent.registryVerification.registered;
+  const isRegistryVerified =
+    registeredMetric.status === "live" && registeredMetric.value;
 
   return (
-    <>
-      <div className="mt-7 flex items-start gap-4">
-        <AgentIcon category={agent.category} size={92} uri={agent.iconUrl} />
-        <div className="min-w-0 flex-1 pt-1">
-          <h1
-            className="text-[27px] font-bold tracking-tight"
-            style={{ color: colors.ink }}
-          >
-            {agent.name}
-          </h1>
-          <p className="mt-1 text-[13px]" style={{ color: colors.muted }}>
-            {agent.publisher}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+    <article className="min-w-0">
+      <header className="pb-12 sm:pb-16">
+        <div className="flex flex-wrap items-start justify-between gap-7">
+          <AgentIcon category={agent.category} size={84} uri={agent.iconUrl} />
+          <div className="flex flex-wrap gap-2">
             <StatusBadge label={categoryLabels[agent.category]} tone="neutral" />
             <StatusBadge
-              label={registeredMetric.status === "live" && registeredMetric.value ? "Registry verified" : registeredMetric.status}
-              tone={registeredMetric.status === "live" && registeredMetric.value ? "live" : registeredMetric.status}
+              label={
+                isRegistryVerified
+                  ? "Registry verified"
+                  : registeredMetric.status === "live"
+                    ? "Not registered"
+                    : `Registry ${registeredMetric.status}`
+              }
+              tone={isRegistryVerified ? "live" : registeredMetric.status}
             />
           </div>
         </div>
-      </div>
 
-      <p className="mt-6 text-[16px] leading-6" style={{ color: colors.muted }}>
-        {agent.tagline}
-      </p>
-      {onHire !== undefined && (
-        <Button label={actionLabel} onPress={onHire} style={{ marginTop: 22 }} />
-      )}
+        <h1 className="text-balance mt-9 max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.065em] text-[var(--ink)] sm:text-7xl">
+          {agent.name}
+        </h1>
+        <p className="mt-5 text-sm font-semibold text-[var(--muted)]">
+          Published by {agent.publisher}
+        </p>
+        <p className="text-pretty mt-7 max-w-3xl text-lg leading-8 text-[var(--ink-secondary)] sm:text-xl sm:leading-9">
+          {agent.tagline}
+        </p>
 
-      <DetailSection title="Live signals">
+        <div className="mt-10 grid border-y border-[var(--line)] sm:grid-cols-3">
+          {[
+            ["Registry token", `#${agent.tokenId}`],
+            ["Network", "BNB Smart Chain / 56"],
+            ["Catalog status", agent.recordStatus.replaceAll("-", " ")],
+          ].map(([label, value]) => (
+            <div
+              className="border-b border-[var(--line)] py-5 last:border-b-0 sm:border-b-0 sm:border-r sm:px-5 sm:first:pl-0 sm:last:border-r-0 sm:last:pr-0"
+              key={label}
+            >
+              <p className="text-[10px] font-bold tracking-[0.1em] text-[var(--faint)]">
+                {label.toUpperCase()}
+              </p>
+              <p className="mt-2 truncate text-sm font-bold capitalize text-[var(--ink)]">
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </header>
+
+      <DetailSection
+        summary="Status, source, freshness, methodology, and missing-data reasons stay attached."
+        title="Live signals"
+      >
         <LiveStats agent={agent} />
       </DetailSection>
 
-      <DetailSection title="Track record">
+      <DetailSection
+        summary="Only auditable points supplied by the current data sources can draw this chart."
+        title="Track record"
+      >
         <PerformancePanel points={agent.performanceSeries} />
       </DetailSection>
 
-      <DetailSection title="How it works">
-        <Surface>
-          <p className="text-[15px] leading-6" style={{ color: colors.ink }}>
-            {agent.description}
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {agent.skills.length > 0 ? (
-              agent.skills.map((skill) => (
-                <StatusBadge
-                  key={`${skill.name}-${skill.evidence}`}
-                  label={`${skill.name} · ${skill.evidence.replace("-", " ")}`}
-                  tone={skill.evidence === "verified" ? "live" : "neutral"}
-                />
-              ))
+      <DetailSection
+        summary="Publisher description, declared skills, and service endpoints."
+        title="Agent method"
+      >
+        <p className="text-pretty text-base leading-8 text-[var(--ink-secondary)]">
+          {agent.description}
+        </p>
+
+        <div className="mt-8 border-b border-[var(--line)]">
+          <div className="grid gap-3 border-t border-[var(--line)] py-5 sm:grid-cols-[150px_1fr]">
+            <h3 className="text-xs font-bold text-[var(--muted)]">Skills</h3>
+            <div className="flex flex-wrap gap-2">
+              {agent.skills.length > 0 ? (
+                agent.skills.map((skill) => (
+                  <StatusBadge
+                    key={`${skill.name}-${skill.evidence}`}
+                    label={`${skill.name} / ${skill.evidence.replaceAll("-", " ")}`}
+                    tone={skill.evidence === "verified" ? "live" : "neutral"}
+                  />
+                ))
+              ) : (
+                <span className="text-sm text-[var(--faint)]">
+                  No skills published
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-3 border-t border-[var(--line)] py-5 sm:grid-cols-[150px_1fr]">
+            <h3 className="text-xs font-bold text-[var(--muted)]">
+              Service endpoints
+            </h3>
+            {agent.services.length > 0 ? (
+              <div className="space-y-4">
+                {agent.services.map((service) => (
+                  <div className="min-w-0" key={`${service.name}-${service.endpoint}`}>
+                    <p className="text-sm font-bold text-[var(--ink)]">
+                      {service.name}
+                      {service.version ? ` / ${service.version}` : ""}
+                    </p>
+                    <p className="mt-1 break-all font-mono text-[11px] leading-5 text-[var(--muted)]">
+                      {service.endpoint}
+                    </p>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <StatusBadge label="No skills published" tone="unavailable" />
+              <span className="text-sm text-[var(--faint)]">
+                No service endpoints published
+              </span>
             )}
           </div>
-        </Surface>
+        </div>
       </DetailSection>
 
-      <DetailSection title="Recent onchain activity">
+      <DetailSection
+        summary="A direct BSC registry read is shown separately from indexed catalog metadata."
+        title="Registry verification"
+      >
+        <div className="grid border-b border-[var(--line)] sm:grid-cols-2 sm:[&>*:nth-child(odd)]:border-r">
+          <MetricCell
+            format={(value) => (value ? "Registered" : "Not registered")}
+            label="Registration"
+            metric={agent.registryVerification.registered}
+          />
+          <MetricCell
+            format={shortAddress}
+            label="Registry owner"
+            metric={agent.registryVerification.owner}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Token URI"
+            metric={agent.registryVerification.tokenUri}
+          />
+          <MetricCell
+            format={shortAddress}
+            label="Agent wallet"
+            metric={agent.registryVerification.agentWallet}
+          />
+        </div>
+
+        <dl className="mt-8 border-b border-[var(--line)]">
+          {[
+            ["Identity registry", shortAddress(agent.registryAddress)],
+            ["Indexed publisher", shortAddress(agent.publisherAddress)],
+            ["Indexed agent wallet", shortAddress(agent.agentWallet)],
+            ["Indexed registration", formatDate(agent.registeredAt)],
+            ["Classification", agent.classificationSource.replaceAll("-", " ")],
+            ["Classification confidence", agent.classificationConfidence ?? "Not applicable"],
+          ].map(([label, value]) => (
+            <div
+              className="grid gap-2 border-t border-[var(--line)] py-4 sm:grid-cols-[180px_1fr]"
+              key={label}
+            >
+              <dt className="text-xs text-[var(--muted)]">{label}</dt>
+              <dd className="min-w-0 break-words text-sm font-semibold capitalize text-[var(--ink)] sm:text-right">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </DetailSection>
+
+      <DetailSection
+        summary="Execution claims require a returned event and keep their originating source."
+        title="Recent activity"
+      >
         {agent.recentActivity.length > 0 ? (
-          <Surface>
-            {agent.recentActivity.map((activity, index) => (
-              <div
-                className={index === 0 ? "pb-4" : "border-t py-4"}
+          <div className="border-b border-[var(--line)]">
+            {agent.recentActivity.map((activity) => (
+              <article
+                className="grid gap-3 border-t border-[var(--line)] py-5 sm:grid-cols-[1fr_auto]"
                 key={`${activity.timestamp}-${activity.action}`}
-                style={{ borderColor: colors.line }}
               >
-                <p className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                  {activity.action}
-                </p>
-                <p className="mt-1 text-[11px]" style={{ color: colors.muted }}>
-                  {activity.timestamp} · {activity.source.label}
-                </p>
-              </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--ink)]">
+                    {activity.action}
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                    {formatDate(activity.timestamp)} / {activity.source.label}
+                  </p>
+                </div>
+                {activity.txHash && (
+                  <Link
+                    className="text-xs font-bold text-[var(--accent-ink)]"
+                    href={`https://bscscan.com/tx/${activity.txHash}`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    View transaction
+                  </Link>
+                )}
+              </article>
             ))}
-          </Surface>
+          </div>
         ) : (
           <StatePanel
             body="No auditable execution events were returned by the current data sources."
@@ -264,35 +468,40 @@ export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDeta
         )}
       </DetailSection>
 
-      <DetailSection title="Onchain information">
-        <Surface>
-          {[
-            ["ERC-8004 token", `#${agent.tokenId}`],
-            ["Identity registry", shortAddress(agent.registryAddress)],
-            ["Publisher", shortAddress(agent.publisherAddress)],
-            ["Agent wallet", shortAddress(agent.agentWallet)],
-            ["Chain", "BNB Smart Chain · 56"],
-            ["Registered", agent.registeredAt ?? "Not reported"],
-            ["Classification", agent.classificationSource.replaceAll("-", " ")],
-          ].map(([label, value], index) => (
+      <DetailSection
+        summary="The profile names every upstream registry, index, publisher, and Dolphin policy source it uses."
+        title="Source ledger"
+      >
+        <div className="border-b border-[var(--line)]">
+          {agent.sourceLabels.map((source) => (
             <div
-              className={index === 0 ? "flex justify-between pb-4" : "flex justify-between border-t py-4"}
-              key={label}
-              style={{ borderColor: colors.line }}
+              className="grid gap-2 border-t border-[var(--line)] py-4 sm:grid-cols-[1fr_auto] sm:items-center"
+              key={source.id}
             >
-              <span className="text-[12px]" style={{ color: colors.muted }}>
-                {label}
-              </span>
-              <span
-                className="ml-5 flex-1 text-right text-[12px] font-semibold truncate"
-                style={{ color: colors.ink }}
-              >
-                {value}
-              </span>
+              <div>
+                <p className="text-sm font-bold text-[var(--ink)]">
+                  {source.label}
+                </p>
+                <p className="mt-1 font-mono text-[10px] text-[var(--faint)]">
+                  {source.id}
+                </p>
+              </div>
+              {source.url ? (
+                <Link
+                  className="text-xs font-bold text-[var(--accent-ink)]"
+                  href={source.url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open source
+                </Link>
+              ) : (
+                <span className="text-xs text-[var(--faint)]">No public URL</span>
+              )}
             </div>
           ))}
-        </Surface>
+        </div>
       </DetailSection>
-    </>
+    </article>
   );
 }

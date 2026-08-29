@@ -1,23 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { use } from "react";
 
 import { AgentDetail } from "@/components/agent-detail";
-import { StatePanel } from "@/components/state-panel";
-import { SectionHeading } from "@/components/section-heading";
 import { HireAction } from "@/components/hire-action";
-import { convexClient } from "@/providers/convex-provider";
+import { StatePanel } from "@/components/state-panel";
 import { useAgentDetail } from "@/hooks/use-agents";
+import { convexClient } from "@/providers/convex-provider";
 
-/**
- * The agent detail route. AgentCard has always linked to /agent/<tokenId> and
- * this page did not exist, so every card on the site led to a 404 - the
- * AgentDetail component was written and never routed to.
- *
- * It reads useAgentDetail, which is convex/agents.ts's getAgent plus a live
- * on-chain ERC-8004 registry check: the same pipeline the list came from, so a
- * detail page can never disagree with the card that linked to it.
- */
 export default function AgentPage({
   params,
 }: {
@@ -28,11 +19,11 @@ export default function AgentPage({
 
   if (isLoading) {
     return (
-      <div className="py-16">
+      <div className="site-frame py-20">
         <StatePanel
-          title="Loading agent"
-          body="Reading the ERC-8004 registry and Dolphin's indexed catalog."
+          body="Reading Dolphin's catalog and re-checking ERC-8004 identity on BNB Smart Chain."
           state="syncing"
+          title="Loading the agent dossier"
         />
       </div>
     );
@@ -40,35 +31,58 @@ export default function AgentPage({
 
   if (isError || !agent) {
     return (
-      <div className="py-16">
+      <div className="site-frame py-20">
         <StatePanel
-          title="Agent not found"
           body={
             error instanceof Error
               ? error.message
               : "This agent is not in Dolphin's explicitly classified BSC discovery set."
           }
           state="unavailable"
+          title="Agent not found"
         />
+        <Link
+          className="mt-7 inline-flex text-sm font-bold text-[var(--accent-ink)]"
+          href="/search"
+        >
+          Search the catalog
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="pb-24">
-      <AgentDetail agent={agent} />
-      <div className="mt-9">
-        <SectionHeading title="Activate" />
-        {convexClient ? (
-          <HireAction agent={agent} />
-        ) : (
-          <StatePanel
-            title="Backend not configured"
-            body="NEXT_PUBLIC_CONVEX_URL is unset, so a hire cannot be recorded."
-            state="unavailable"
-            compact
-          />
-        )}
+    <div className="site-frame py-8 sm:py-12 lg:py-16">
+      <nav aria-label="Breadcrumb" className="mb-10">
+        <Link
+          className="text-xs font-bold text-[var(--muted)] no-underline hover:text-[var(--ink)]"
+          href="/"
+        >
+          Discover
+        </Link>
+        <span className="mx-2 text-[var(--faint)]">/</span>
+        <span className="text-xs font-bold capitalize text-[var(--ink)]">
+          {agent.category.replaceAll("-", " ")}
+        </span>
+      </nav>
+
+      <div className="grid min-w-0 gap-14 xl:grid-cols-[minmax(0,1fr)_390px] xl:items-start">
+        <AgentDetail agent={agent} />
+
+        <aside aria-label="Hire this agent" className="xl:sticky xl:top-28">
+          {convexClient ? (
+            <HireAction agent={agent} />
+          ) : (
+            <div className="rounded-[18px] border border-[var(--line)] bg-[var(--surface)] p-6">
+              <StatePanel
+                body="NEXT_PUBLIC_CONVEX_URL is unset, so a hire cannot be recorded."
+                compact
+                state="unavailable"
+                title="Backend not configured"
+              />
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   );

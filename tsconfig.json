@@ -17,6 +17,7 @@
     "nativewind-env.d.ts"
   ],
   "exclude": [
-    "example"
+    "example",
+    "web"
   ]
 }

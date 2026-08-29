@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState, useSyncExternalStore } from "react";
 import type { PropsWithChildren } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import {
   WagmiProvider,
   createConfig,
@@ -11,13 +11,29 @@ import {
   useDisconnect,
 } from "wagmi";
 import { bsc } from "wagmi/chains";
-import { injected } from "wagmi/connectors";
+import { injected, walletConnect } from "wagmi/connectors";
 
 import { BSC_RPC_URL } from "@/constants/agents";
 
-const wagmiConfig = createConfig({
+// Reown / WalletConnect Project ID
+export const projectId =
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || "f7d3e8b6dfc7cd94443105a09b378eef";
+
+export const wagmiConfig = createConfig({
   chains: [bsc],
-  connectors: [injected()],
+  connectors: [
+    injected(),
+    walletConnect({
+      projectId,
+      metadata: {
+        name: "Dolphin Marketplace",
+        description: "AI Agent Marketplace on BNB Chain",
+        url: typeof window !== "undefined" ? window.location.origin : "https://dolphin.agency",
+        icons: ["https://api.8004scan.io/favicon.ico"],
+      },
+      showQrModal: true,
+    }),
+  ],
   transports: {
     [bsc.id]: http(BSC_RPC_URL),
   },
@@ -39,12 +55,9 @@ export interface WalletState {
   disconnect: () => Promise<void>;
 }
 
-function subscribeToEthereum(): () => void {
+function subscribe() {
   return () => {};
 }
-
-const NO_PROVIDER =
-  "No browser wallet detected. Install MetaMask, Trust Wallet, or another EIP-1193 extension and reload.";
 
 export function useWallet(): WalletState {
   const { address, isConnected } = useAccount();
@@ -52,18 +65,26 @@ export function useWallet(): WalletState {
   const { disconnectAsync } = useDisconnect();
   const [error, setError] = useState<string | null>(null);
 
-  const isAvailable = useSyncExternalStore(
-    subscribeToEthereum,
-    () => Boolean(window.ethereum),
+  const isMounted = useSyncExternalStore(
+    subscribe,
+    () => true,
     () => false,
   );
 
   const connect = useCallback(async () => {
     setError(null);
 
-    const connector = connectors.find((c) => c.id === "injected") ?? connectors[0];
+    // Prefer injected extension if available, otherwise launch Reown WalletConnect modal
+    const wcConnector = connectors.find((c) => c.id === "walletConnect");
+    const injectedConnector = connectors.find((c) => c.id === "injected");
+
+    const connector =
+      typeof window !== "undefined" && window.ethereum && injectedConnector
+        ? injectedConnector
+        : wcConnector ?? connectors[0];
+
     if (!connector) {
-      setError(NO_PROVIDER);
+      setError("No wallet connector available.");
       return;
     }
 
@@ -76,14 +97,18 @@ export function useWallet(): WalletState {
 
   const disconnect = useCallback(async () => {
     setError(null);
-    await disconnectAsync();
+    try {
+      await disconnectAsync();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
   }, [disconnectAsync]);
 
   return {
-    isConnected,
-    address: address ?? null,
-    isAvailable,
-    unavailableReason: isAvailable ? null : NO_PROVIDER,
+    isConnected: isMounted && Boolean(isConnected),
+    address: isMounted && address ? address : null,
+    isAvailable: true,
+    unavailableReason: null,
     isConnecting: isPending,
     error,
     connect,
@@ -92,7 +117,7 @@ export function useWallet(): WalletState {
 }
 
 export function WalletConnectButton({
-  connectLabel = "Connect Browser Wallet",
+  connectLabel = "Connect Wallet",
 }: {
   connectLabel?: string;
 }) {
@@ -102,7 +127,7 @@ export function WalletConnectButton({
     wallet.isConnected && wallet.address
       ? `Disconnect ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
       : wallet.isConnecting
-        ? "Check your wallet..."
+        ? "Connecting..."
         : connectLabel;
 
   return (
@@ -126,8 +151,8 @@ export function WalletConnectButton({
       >
         {label}
       </button>
-      {wallet.error !== null && (
-        <p className="mt-2 text-xs font-semibold leading-5 text-[#B9473A]">
+      {wallet.error && (
+        <p className="mt-2 text-xs font-semibold text-[#B9473A]">
           {wallet.error}
         </p>
       )}

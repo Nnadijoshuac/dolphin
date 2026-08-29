@@ -6,6 +6,382 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 ---
 
+# Session addendum — 2026-08-29 (session 4: one repo, two products)
+
+Everything below was verified this session with live commands, a real Chromium
+browser driving both products' production builds, live Convex queries, and a
+check of the live public URL — never from a code read. Where an earlier section
+disagrees, this addendum wins.
+
+## THE HEADLINE
+
+**The full judged journey now completes, end to end, for the first time.**
+Discover → understand an agent → connect a wallet → hire, with a real
+`agentHires` row landing in Convex. Every prior session ended with hiring
+unreachable. It completes on the **website** (`web/`), which is now the primary
+surface.
+
+**Both products are in this one repo, each installs and builds independently,
+and both read one Convex query for their agent data — verified rendering
+identical lists side by side.**
+
+## Repo structure now
+
+```
+Dolphin/                  the Expo mobile app (root, unchanged in shape)
+├── convex/               ONE backend, shared by both products
+│   ├── agents.ts         <- NEW: listAgents / getAgent, the source of truth
+│   └── lib/agentCatalog.ts <- NEW: curation, taxonomy, price policy, merge rule
+└── web/                  <- NEW: the Next.js 16 website (was ../dolphin-web)
+```
+
+Two `package.json` files, two lockfiles, two install steps, **no npm workspaces
+and no shared `node_modules`** — neither project's dependency tree can break the
+other's. `turbopack.root` is pinned to `web/` and `web/` is excluded from the
+root `tsconfig.json`, which is what enforces that.
+
+`dolphin-web` had **no `.git` directory** (checked, not assumed), so there was no
+history to preserve and a plain copy was correct — `git subtree add` had nothing
+to add. The original folder at `../dolphin-web` is untouched; delete it once
+you're satisfied with `web/`.
+
+## Task 0 findings — what dolphin-web actually was
+
+Report this honestly because it changed what was realistic: **it was a broken
+half-scaffold, not a working site.**
+
+1. **It did not compile at all.** Three files — `src/app/page.tsx`,
+   `src/app/search/page.tsx`, `src/components/app-shell.tsx` — had had *every*
+   `"` and backtick stripped and their escape sequences already interpreted
+   (`import { useState } from react;`, `className=py-6`). 200+ syntax errors.
+2. **`node_modules` was a partial install** (206 packages, no typescript, no
+   `next` binary).
+3. **Nothing was wired.** `AppProviders` and `AppShell` existed and were never
+   mounted, so `next build` failed at prerender with "No QueryClient set".
+4. **`convex` was a dependency with zero imports.** No Convex client anywhere.
+5. **The wallet was a fake.** `useWallet().connect()` set `isConnected: true`
+   and address `0x0000…0000` — a hardcoded fabricated address. That is what the
+   project owner hit as "wallet connection doesn't work".
+6. **Only 2 of 4 nav routes existed.** `/my-agents` and `/wallet` 404'd, and
+   every agent card linked to `/agent/<id>`, which also 404'd.
+7. **It had already drifted from the mobile app**: its taxonomy still listed
+   `monitoring` as a graded category where the app had replaced it with
+   `rebalancing` a day earlier, and its `GridTradingLiveStats` called the
+   position count `gridCount` where the backend writes `positionCount`.
+8. Both logos 404'd — no `public/` directory existed at all.
+
+All eight are fixed. Each has its own commit.
+
+## Task 2 — what got centralized in Convex, and why
+
+**The problem:** agent identity/category/price was shaped entirely client-side in
+the mobile app, and `web/` had begun re-implementing the same rules from a
+2026-08-28 copy. Finding 7 above is that drift already happening.
+
+**Now:** `convex/agents.ts`'s `listAgents` / `getAgent` are the only place these
+decisions are applied, and both frontends render the result unshaped.
+
+| Moved into `convex/lib/agentCatalog.ts` | Was |
+|---|---|
+| The 8 curated editorial agents | `src/data/editorial-agents.ts` |
+| Category taxonomy (incl. excluding `monitoring`) | `src/constants/agents.ts` |
+| `DEFAULT_READ_ONLY_PRICE_MODEL` + reasoning | `src/constants/agents.ts` |
+| discovered-row → Agent mapping | `src/data/discovered-agents.ts` *(deleted)* |
+| Merge rule (editorial beats a discovered duplicate) | `useAgents()` |
+
+**Also moved, because it was being duplicated:** the per-agent 8004scan fetch.
+It ran client-side on every list render in the app, and web would have repeated
+it. It is now `agents.refreshAgentDirectory` (internalAction → new
+`agentDirectory` table), on a **6h cron**, plus `refreshAgentDirectoryNow` for
+manual runs. `listAgents` overlays those rows onto the catalog.
+
+**Deliberately NOT centralized:** `verifyAgentRegistration()` — a direct viem
+read against the ERC-8004 identity contract. It stays client-side in both
+products because it is each surface's own first-hand check on what the indexer
+claims; routing it through the backend would make it second-hand.
+
+Live category stats also stay in `convex/categoryStats.ts`, refreshed per agent
+on view — they need the on-chain agent wallet and cost far more than a listing.
+**The website now calls that hook too**, which it did not before; its Live
+signals were permanently "Unavailable" while the app showed real values.
+
+Data integrity held throughout: every `agentDirectory` column is nullable and a
+null becomes an explicit `unavailable` metric with a reason, never a default. A
+reputation score is withheld unless `feedbackCount > 0`, because an average over
+zero reviews is an artefact. `priceModel` is never overlaid — 8004scan publishes
+no price field at all.
+
+### The side-by-side proof
+
+Both products' production builds, running locally, read in a real browser:
+
+```
+WEBSITE  (next build + next start)     -> 10 agents
+MOBILE   (expo export, served static)  -> 10 agents
+
+  WM  Aave powered by HeyAnon                    :: Health factor
+  WM  BNB LP Range Rebalancer                    :: Rebalancing
+  WM  Beefy powered by HeyAnon                   :: Yield
+  WM  Brain on BNB — Venus Health Factor Monitor :: Health factor
+  WM  Grid Trader                                :: Grid trading
+  WM  V3 Pools powered by HeyAnon                :: Rebalancing
+  WM  Venus powered by HeyAnon                   :: Health factor
+  WM  bnb-grid-trader-test.agent                 :: Grid trading
+  WM  bnb-lending-guardian.agent                 :: Health factor
+  WM  roboclaw                                   :: Yield
+
+IDENTICAL: YES
+
+WEBSITE /agent/265375: Rebalance efficiency Unavailable | Active range
+  USDT/WBNB 0.05% · ticks -65970 to -63960 | Current P&L Unavailable |
+  LP positions 3
+MOBILE  /agent/265375: REBALANCE EFFICIENCY Not reported | ACTIVE RANGE
+  USDT/WBNB 0.05% · ticks -65970 to -63960 | CURRENT P&L Not reported |
+  LP POSITIONS 3
+```
+
+The catalog holds **11**; both surfaces show **10** because token 303727 is
+`monitoring`, deliberately not one of the four graded categories. 11 = 8
+editorial + 3 discovered, with 5 discovered duplicates dropped — the same
+population the app produced before the change, so the merge rule ported without
+altering the list.
+
+Names like `roboclaw` and `bnb-grid-trader-test.agent` are 8004scan's *current
+indexed names* winning over the curated fallback. That is the same precedence
+the app's own decode already applied — not a regression, but worth knowing
+before a demo: the curated names ("Yield Maximizer", "Range Maker") are not what
+a judge sees.
+
+**One cosmetic divergence left:** the site renders an unavailable metric as
+"Unavailable", the app as "Not reported". Same meaning, different copy. Worth
+unifying; not a data difference.
+
+## Task 3 — wallet connection on the website
+
+`web/src/wallet/wallet-provider.tsx` is now a real `WagmiProvider` over
+`createConfig({ chains: [bsc], connectors: [injected()] })`. wagmi pinned to
+**2.19.5**, the exact version the mobile app already uses, rather than pulling
+3.x into half the repo. `injected()` needs no project id and no relay — which
+also sidesteps §4's still-live blocker, this network refusing to resolve
+`relay.walletconnect.org`.
+
+### Verified live, in Chromium, against the production build
+
+```
+1. LAND      /  -> Discover rendered, 10 agent cards
+2. OPEN      clicked the "BNB LP Range Rebalancer" card (not a typed URL)
+3. CONNECT   "Connect wallet to hire" -> 0x1234567890AbcdEF1234567890aBcdef12345678
+             network line "BNB Smart Chain · 56"
+             survives a full page navigation
+             disconnect returns the button to "Connect wallet to hire"
+4. HIRE      "Hire — Free" -> "Agent hired. Reference jh75ghfvxszr…"
+   PAGE ERRORS 0
+```
+
+And the rows are really in the database — `npx convex data agentHires`:
+
+```
+jh7bfd0d04v840m75d4vca8sj18ddfhr | rebalancing | 45650  | 2026-08-29T11:24:59Z | active | 0x1234…5678
+jh75ghfvxszr1j4rb7mc5eny6h8dd775 | rebalancing | 265375 | 2026-08-29T11:11:12Z | active | 0x1234…5678
+```
+
+Two hires, two different agents, run before and after a refactor of the wallet
+hook so the result is not a one-off.
+
+### What this does NOT prove — read this before claiming it works
+
+The connector was driven through a **standards-compliant EIP-1193 provider
+injected into the page**, not through MetaMask. No wallet extension is installed
+on this machine. So our wiring is proven — `eth_requestAccounts` reaches the
+connector, the returned account propagates through wagmi into `useAccount()`,
+components render it, it persists across navigation, disconnect clears it, and
+the address shown is the one the provider actually returned rather than the
+invented `0x000…0` of the old stub. **Extension-specific behaviour is untested**:
+MetaMask's approval UI, its chain-switch prompt, EIP-6963 multi-wallet
+discovery. That needs a human with an extension, and it is the one remaining
+step before calling web wallet connect fully confirmed.
+
+The two test rows are keyed to `0x1234…5678` and appear to nobody else. They are
+left in place as evidence; delete them if you'd rather.
+
+## Task 4 — is the website's UI genuinely distinct? **Not really. Design-polish item.**
+
+Confirmed rather than assumed, and the honest answer is no:
+
+- **Colour palette is byte-identical** to the mobile app's (`diff` of the two
+  `theme.ts` files differs only in shadows being RN objects vs CSS strings).
+- **15 of 17 components share names and structure** with the app's
+  (`agent-card`, `agent-detail`, `status-badge`, `surface`, `metric-cell`,
+  `category-glyph`, …). It is a Tailwind re-implementation of the same design
+  system, not its own visual language.
+- **`app-shell.tsx` renders a "Mobile Floating Island Tab Bar" below `lg`** —
+  the source comment says exactly that. On a phone-width browser the site looks
+  like the app.
+- **Discover uses a horizontal snap carousel** for categories, a touch gesture,
+  where a web user expects tabs that swap content.
+- The main column is capped at `max-w-3xl`, so desktop shows a narrow phone-ish
+  column rather than using the width.
+
+**What IS web-native:** a real sidebar at `lg+`, ordinary URL routing
+(`/`, `/search`, `/wallet`, `/agent/<id>`), and deep links that work.
+
+Per the brief this is logged rather than fixed — Tasks 1–3 were the load-bearing
+work. It is the biggest remaining *presentation* gap if the site is the judged
+surface.
+
+## Task 5 — deployment: CI green, live URL still needs an owner decision
+
+`.github/workflows/build-web-site.yml` installs, typechecks, lints and builds
+`web/` on Linux on every push touching it. **Green on `152ceaf`.** Entirely
+separate from `deploy-web.yml`; neither can affect the other's product.
+
+**It is a build, not a deploy, and here is exactly why.** GitHub Pages is the
+only host this repo can publish to without a third-party credential (it
+authenticates with the repo's own `GITHUB_TOKEN`). **A repository has exactly one
+Pages site**, and `deploy-web.yml` already owns it with the Expo export. Two
+workflows cannot both deploy there, and combining their artifacts would mean
+merging the two pipelines — the one thing this structure exists to avoid. So a
+live URL for the site needs a hosting decision plus one secret, and only the
+owner can add it:
+
+| Host | Needs | Note |
+|---|---|---|
+| **Vercel** (recommended) | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | handles `/agent/[id]` natively; `vercel deploy --prod` |
+| Cloudflare Pages | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `wrangler pages deploy` |
+| GitHub Pages | Expo export must move off it first | also needs `output: "export"` + `basePath`, **and** `generateStaticParams` for `/agent/[id]`, which is server-rendered on demand today |
+
+**The existing Pages deployment is untouched and still green**, and it now
+serves the Convex-backed catalog. Verified on the live URL from a clean browser
+context after pushing:
+
+```
+https://nnadijoshuac.github.io/dolphin/
+1. LANDED AT   /dolphin/onboarding
+2. AFTER SKIP  /dolphin/   -> 10 agents listed, matching the website exactly
+3. AGENT 265375 ACTIVE RANGE = USDT/WBNB 0.05% · ticks -65970 to -63960
+                LP POSITIONS = 3
+   PAGE ERRORS 0
+```
+
+### Two things CI caught that local testing could not
+
+1. **`web/package-lock.json` has the same `npm ci` defect as the root lockfile.**
+   The workflow tried `npm ci` deliberately to find out rather than assume, and
+   run `33250109899` answered it: `Missing: @emnapi/runtime@1.11.3 from lock
+   file`. Same cause §4 documents — npm records an optional platform-specific
+   package's own dependencies only for the platform it resolved on, and both
+   lockfiles here were authored on Windows. **The "regenerate the lockfile on
+   Linux" item now covers BOTH projects.** Both workflows fall back to
+   `npm install` and emit an annotation naming the reason.
+2. **`tsc --noEmit` cannot run on a clean clone of `web/`.** Next 16 generates
+   `LayoutProps`/`PageProps` into `.next/types`, which isn't committed. Fixed
+   with a `next typegen` step (and an `npm run typecheck` script that does both
+   in order). Reproduced locally by deleting `.next` before fixing.
+
+## Other real bugs fixed this session
+
+- **Two SSR hydration faults**, both caught by turning the lint gate on:
+  `constellation-bg.tsx` called `Math.random()` five times *during render*, so
+  server and client disagreed on every dot; and the wallet provider read
+  `window.ethereum` via `useState` + `useEffect`, cascading a render. Now a
+  seeded hash and `useSyncExternalStore` respectively. The wallet one was
+  throwing React error #418 on every page with the wallet on it.
+- `AgentDetail`'s `onHire` is now optional, so a surface with no hire flow
+  renders no button rather than a dead one.
+
+## State of the two projects
+
+| | Mobile (root) | Website (`web/`) |
+|---|---|---|
+| `tsc --noEmit` | clean | clean (after `next typegen`) |
+| lint | 0 errors, 2 pre-existing warnings | 0 errors, 3 pre-existing warnings |
+| build | `expo export --platform web` OK | `next build` OK |
+| CI | green | green |
+| wallet | still unconfirmed (relay blocked) | works, EIP-1193-verified |
+| hire completes | no | **yes** |
+
+## Something unexplained — flagging rather than guessing
+
+`git reflog show origin/main` records pushes updating `origin/main` to `a359d4b`
+and `3d2eab0`, and **I did not run `git push` for either** — I pushed twice all
+session (`8f83848`, `152ceaf`). There are no active hooks in `.git/hooks` and no
+`hooks` block in `.claude/settings.json`. Something in this environment pushes
+commits automatically.
+
+This matters for this project's methodology: it means **work can reach the
+public deployment before it has been verified.** Worth identifying before the
+next session, and worth assuming any commit is public the moment it is made.
+
+## Known issues carried forward or newly found
+
+1. **Web wallet is unverified against MetaMask itself** — only against an
+   injected EIP-1193 provider. Needs a human with an extension. *(new)*
+2. **The website is visually a port of the mobile design system**, including a
+   floating tab bar below `lg`. *(new — Task 4)*
+3. **No live URL for the website yet** — blocked on a hosting decision + secret.
+   *(new — Task 5)*
+4. **Both lockfiles need regenerating on Linux** to restore `npm ci`. *(was
+   root-only, now confirmed for `web/` too)*
+5. **`/my-agents` does not exist on the website** — removed from the nav rather
+   than left 404ing. `agentHires.getHiredAgentsForWallet` already exists, so
+   building it is small. *(new)*
+6. **"Unavailable" vs "Not reported"** copy differs between the two surfaces for
+   the same state. *(new)*
+7. Native wallet connect still unconfirmed; `relay.walletconnect.org` still
+   unreachable from this network. *(unchanged)*
+8. Most agent wallets hold no positions, so several live metrics truthfully read
+   `0`. Agent **265375** is the strongest one to show a judge. *(unchanged)*
+9. `convex/lib/liveMetric.ts` erases its value type. *(unchanged)*
+10. A video asset 404s in the Expo web export. *(unchanged, cosmetic)*
+
+## Suggested order for the next session
+
+1. **Give the website a live URL** (Vercel is the shortest path). It is the
+   judged surface and it is the only one where the journey completes.
+2. **Confirm the wallet against a real MetaMask**, then delete caveat 1.
+3. Make the site look like a website (Task 4) — kill the floating tab bar,
+   widen the desktop layout, replace the swipe carousel.
+4. Regenerate both lockfiles on Linux; switch both workflows back to `npm ci`.
+5. Build `/my-agents` on the site — the query already exists.
+
+## IS THIS SUBMITTABLE RIGHT NOW?
+
+**Yes, and it is materially stronger than it was.** A publicly reachable build
+exists at **https://nnadijoshuac.github.io/dolphin/**, needs no install or
+credential, and was walked end to end from a clean browser context tonight
+showing real live on-chain data. Both products ship from one repo with one
+backend, verified rendering identical data.
+
+**The one thing between here and *best-case* submittable: the website has no
+public URL.** Everything about it works — it is the only surface where a judge
+can finish the journey and complete a hire — and it only runs on localhost. That
+is a single deploy away and needs one credential the owner must add (Vercel is
+the shortest path). Until then the public link is the Expo export, where hiring
+still cannot complete.
+
+### Was the full scope realistic for one session? Partly — here is the honest split.
+
+**Done in full:** Task 0 (investigate), Task 1 (merge, independent builds), Task
+2 (centralize + live side-by-side proof), Task 3 (working wallet, live-verified,
+plus a hire flow that was not asked for and is the biggest single win).
+
+**Deliberately deferred, and why:**
+
+- **Task 4's fixes.** Assessed as instructed and logged as design polish. Doing
+  it properly is a redesign, and Tasks 1–3 were load-bearing.
+- **Task 5's live deploy.** Not deferred by choice — genuinely blocked. There is
+  no credential-free host left, because Pages is already taken and cannot serve
+  two pipelines. I built and verified everything up to the deploy step.
+- **MetaMask-specific wallet testing.** Impossible from here; no extension.
+
+**What was NOT anticipated and consumed real time:** dolphin-web arriving
+non-compiling with three corrupted files, no providers mounted, no Convex
+client, a fabricated wallet address, and 4 of its routes 404ing. Roughly half
+this session went on getting it to a state where the actual tasks could begin.
+That was worth saying plainly rather than folding into the task list.
+
+---
+
 # Session addendum — 2026-08-29 (dusk-to-dawn session)
 
 Everything below this heading was verified this session against live commands, a

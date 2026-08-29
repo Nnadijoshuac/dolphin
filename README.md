@@ -1,22 +1,49 @@
 # Dolphin
 
-Dolphin is an Expo SDK 54 mobile marketplace for discovering ERC-8004 agents on
-BNB Smart Chain. Its interface follows an App-Store-style browse → detail → setup
-journey while keeping registry identity, publisher claims, live evidence, wallet
-authorization, and payment as separate concepts.
+Dolphin is a marketplace for discovering ERC-8004 agents on BNB Smart Chain. It
+ships as **two independent products sharing one backend**, so neither surface can
+drift from the other:
+
+| | | |
+|---|---|---|
+| **Mobile app** | repo root | Expo SDK 54 + Expo Router + NativeWind |
+| **Website** | `web/` | Next.js 16 + Tailwind v4 |
+| **Backend** | `convex/` | shared by both; `agents.listAgents` is the single source of truth for agent data |
+
+Each project has its own `package.json` and lockfile and installs separately —
+there are no npm workspaces and no shared `node_modules`, deliberately, so one
+project's dependency tree cannot break the other's.
+
+```bash
+npm install && npx expo start          # mobile app, from the repo root
+cd web && npm install && npm run dev    # website, at http://localhost:3000
+```
+
+The website needs `NEXT_PUBLIC_CONVEX_URL` in `web/.env.local` pointing at the
+same Convex deployment as the app's `EXPO_PUBLIC_CONVEX_URL` — that shared URL is
+what keeps the two in sync. See `web/.env.example`.
+
+Both interfaces follow a browse → detail → activate journey while keeping registry
+identity, publisher claims, live evidence, wallet authorization, and payment as
+separate concepts.
 
 ## What is implemented
 
 - Discover, Search, My Agents, and Wallet tabs (4 tabs - category browsing
   lives inside Discover as a chip row, not its own tab).
 - Agent, category, setup review, preview management, and onboarding routes.
-- Four equal discovery categories: Monitoring, Grid Trading, Health Factor, and
-  Yield.
+- Four equal discovery categories: Rebalancing, Grid Trading, Health Factor, and
+  Yield. ("Monitoring" is still a valid category with one real agent, but is
+  deliberately excluded from the four graded ones — see project-scope.md's
+  taxonomy notes.)
 - Anonymous 8004scan discovery with a small explicitly classified fallback set.
 - Direct BSC ERC-8004 `ownerOf`, `tokenURI`, and agent-wallet reads through viem.
 - TanStack Query caching, network/focus integration, and truthful unavailable or
   syncing metric states.
 - Reown AppKit/Wagmi integration on native builds, gated by a project ID.
+- A working browser-wallet connection on the website (wagmi `injected()`), and a
+  hire flow that completes there — the website is currently the only surface
+  where the full journey reaches a finished state.
 - Device-only setup previews that are always labeled as not onchain.
 - A Convex backend (`convex/`) that reads real per-agent-wallet on-chain state
   for category live stats - see "Backend (Convex)" below.

@@ -1,0 +1,111 @@
+# Builds the Next.js website (web/) on Linux, on every push.
+#
+# WHY THIS IS A BUILD AND NOT A DEPLOY, stated plainly rather than left as an
+# unexplained gap:
+#
+# GitHub Pages is the only host this repo can publish to without a third-party
+# credential, because it authenticates with the repo's own GITHUB_TOKEN. A
+# repository has exactly ONE Pages site, and deploy-web.yml already publishes
+# the Expo web export to it. Two workflows cannot both deploy to Pages - the
+# second overwrites the first - and combining them into one artifact would mean
+# merging the two pipelines, which is exactly what this repo does not want:
+# each product builds and ships on its own.
+#
+# So a live URL for this site needs a hosting decision only the repo owner can
+# make, plus one secret:
+#
+#   Vercel            add VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID, then
+#                     `vercel deploy --prod`. Handles /agent/[id] natively.
+#   Cloudflare Pages  add CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID, then
+#                     `wrangler pages deploy`.
+#   GitHub Pages      only if the Expo export moves off it, AND next.config.ts
+#                     gains `output: "export"` with a `basePath`. Note that
+#                     /agent/[id] is currently server-rendered on demand, so it
+#                     would also need generateStaticParams - it cannot be
+#                     statically exported as written.
+#
+# Until then this job still earns its place: it proves the site builds on Linux
+# from a clean install, which is not a given here. deploy-web.yml documents at
+# length how the Windows-authored root lockfile makes `npm ci` impossible on a
+# Linux runner; web/package-lock.json was authored on Windows too, so this is
+# the job that finds out whether it has the same defect.
+name: Build website (web/)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/build-web-site.yml"
+  pull_request:
+    paths:
+      - "web/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      # A public client identifier, not a secret - Next inlines every
+      # NEXT_PUBLIC_* value into the browser bundle by design, and this URL is
+      # already readable in any shipped build. It must point at the SAME Convex
+      # deployment the mobile app uses; that is what makes the two surfaces
+      # show identical data. The one real secret in this project
+      # (SCAN8004_API_KEY) is Convex-side only and is never referenced here.
+      NEXT_PUBLIC_CONVEX_URL: ${{ vars.NEXT_PUBLIC_CONVEX_URL || 'https://enduring-mastiff-708.eu-west-1.convex.cloud' }}
+      NEXT_PUBLIC_BSC_RPC_URL: ${{ vars.NEXT_PUBLIC_BSC_RPC_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24 to match the toolchain both projects were verified against
+      # locally, and the one deploy-web.yml already pins.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # `npm ci` first, on purpose. The root project cannot use it (see
+      # deploy-web.yml for the full diagnosis), and the point of trying it here
+      # is to learn whether web/'s lockfile shares that defect rather than
+      # assuming either way. If it does, the fallback keeps the build green and
+      # says so in an annotation instead of failing silently or hiding the
+      # cause - that annotation is how the root project's failure was finally
+      # diagnosed, since raw job logs need an authenticated download.
+      - name: Install dependencies
+        run: |
+          set -o pipefail
+          if npm ci --no-audit --no-fund 2>&1 | tee /tmp/npm-ci.log; then
+            echo "installed with npm ci"
+          else
+            reason=$(grep -iE "npm (error|ERR!)" /tmp/npm-ci.log | head -n 10 | tr '\n' '~')
+            echo "::warning title=npm ci failed, fell back to npm install::${reason:-see job log}"
+            npm install --no-audit --no-fund
+          fi
+
+      # Typecheck separately from the build so a type error is reported as a
+      # type error, rather than as a generic build failure 60 seconds later.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Build
+        run: npx next build
+
+      # Kept so a future deploy step has something to publish, and so a failed
+      # deploy can be told apart from a failed build.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-next-build
+          path: |
+            web/.next
+            !web/.next/cache
+          retention-days: 7

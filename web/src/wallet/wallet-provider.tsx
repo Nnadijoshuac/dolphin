@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 import type { PropsWithChildren } from "react";
 import {
   WagmiProvider,
@@ -63,6 +63,16 @@ export interface WalletState {
   disconnect: () => Promise<void>;
 }
 
+/**
+ * An injected provider is set once, before our JS runs, and is never removed
+ * while the page lives - so there is nothing to subscribe to. The unsubscribe
+ * is a no-op; useSyncExternalStore still re-reads the snapshot on hydration,
+ * which is all this needs.
+ */
+function subscribeToEthereum(): () => void {
+  return () => {};
+}
+
 const NO_PROVIDER =
   "No browser wallet detected. Install MetaMask (or another EIP-1193 wallet extension) and reload.";
 
@@ -76,12 +86,19 @@ export function useWallet(): WalletState {
   // same thing on the server and on the first client pass or hydration fails
   // (this threw "Minified React error #418" when it was a useMemo reading
   // window.ethereum directly: the server rendered "No wallet detected", the
-  // client rendered "Not connected"). So the first paint always says
-  // unavailable, and an effect corrects it after mount.
-  const [isAvailable, setIsAvailable] = useState(false);
-  useEffect(() => {
-    setIsAvailable(Boolean(window.ethereum));
-  }, []);
+  // client rendered "Not connected").
+  //
+  // useSyncExternalStore is the purpose-built answer: its third argument is the
+  // server/hydration snapshot, so the first pass on both sides returns false
+  // and the client re-reads immediately afterwards. Doing it with
+  // useState + useEffect instead works but calls setState synchronously in an
+  // effect, which cascades an extra render (and react-hooks/set-state-in-effect
+  // flags it).
+  const isAvailable = useSyncExternalStore(
+    subscribeToEthereum,
+    () => Boolean(window.ethereum),
+    () => false,
+  );
 
   const connect = useCallback(async () => {
     setError(null);

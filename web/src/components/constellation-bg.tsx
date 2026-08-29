@@ -1,5 +1,25 @@
 "use client";
 
+/**
+ * Deterministic hash -> [0, 1). Replaces Math.random(), which was being called
+ * during render: the server and the client each rolled their own numbers, so
+ * every dot's size and position differed between the two passes and React
+ * reported a hydration mismatch. Seeding from the dot's index gives a fixed,
+ * arbitrary-looking layout that both passes agree on.
+ */
+function seeded(index: number, salt: number): number {
+  const x = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+const DOTS = Array.from({ length: 24 }, (_, i) => ({
+  size: 2 + seeded(i, 1) * 3,
+  top: seeded(i, 2) * 100,
+  left: seeded(i, 3) * 100,
+  delay: seeded(i, 4) * 6,
+  duration: 4 + seeded(i, 5) * 4,
+}));
+
 export function ConstellationBg({ opacity = 0.35 }: { opacity?: number }) {
   return (
     <div
@@ -9,27 +29,19 @@ export function ConstellationBg({ opacity = 0.35 }: { opacity?: number }) {
     >
       {/* Animated constellation dots */}
       <div className="absolute inset-0">
-        {Array.from({ length: 24 }).map((_, i) => {
-          const size = 2 + Math.random() * 3;
-          const top = Math.random() * 100;
-          const left = Math.random() * 100;
-          const delay = Math.random() * 6;
-          const duration = 4 + Math.random() * 4;
-
-          return (
-            <span
-              key={i}
-              className="absolute rounded-full bg-amber-300"
-              style={{
-                width: size,
-                height: size,
-                top: `${top}%`,
-                left: `${left}%`,
-                animation: `twinkle ${duration}s ease-in-out ${delay}s infinite`,
-              }}
-            />
-          );
-        })}
+        {DOTS.map((dot, i) => (
+          <span
+            key={i}
+            className="absolute rounded-full bg-amber-300"
+            style={{
+              width: dot.size,
+              height: dot.size,
+              top: `${dot.top}%`,
+              left: `${dot.left}%`,
+              animation: `twinkle ${dot.duration}s ease-in-out ${dot.delay}s infinite`,
+            }}
+          />
+        ))}
       </div>
     </div>
   );

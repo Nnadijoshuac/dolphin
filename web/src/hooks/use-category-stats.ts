@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { useAction, useQuery } from "convex/react";
 
 import { categoryStatsApi, type AgentCategoryStatsRow } from "@/convex/api";
-import { convexClient } from "@/providers/convex-provider";
 import type { AgentCategory } from "@/types/agent";
 
 const REFRESH_INTERVAL_MS = 60_000;

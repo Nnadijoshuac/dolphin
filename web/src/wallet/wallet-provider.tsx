@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 import {
   WagmiProvider,
@@ -72,12 +72,16 @@ export function useWallet(): WalletState {
   const { disconnectAsync } = useDisconnect();
   const [error, setError] = useState<string | null>(null);
 
-  // `typeof window` guards SSR; wagmi's own connector list is the same on both
-  // sides of hydration, so the availability check must be the thing that varies.
-  const isAvailable = useMemo(
-    () => typeof window !== "undefined" && Boolean(window.ethereum),
-    [],
-  );
+  // Availability can only be known in the browser, and React must render the
+  // same thing on the server and on the first client pass or hydration fails
+  // (this threw "Minified React error #418" when it was a useMemo reading
+  // window.ethereum directly: the server rendered "No wallet detected", the
+  // client rendered "Not connected"). So the first paint always says
+  // unavailable, and an effect corrects it after mount.
+  const [isAvailable, setIsAvailable] = useState(false);
+  useEffect(() => {
+    setIsAvailable(Boolean(window.ethereum));
+  }, []);
 
   const connect = useCallback(async () => {
     setError(null);

@@ -1,0 +1,103 @@
+# Publishes the Expo web export to GitHub Pages.
+#
+# Why GitHub Pages: it is the only host reachable from this repo without a
+# third-party account, because it authenticates with the repo's own
+# GITHUB_TOKEN. Vercel/Netlify/Cloudflare all need an interactive login.
+#
+# ONE-TIME OWNER STEP, required before the first run publishes anything:
+#   Settings -> Pages -> Build and deployment -> Source: "GitHub Actions"
+# Until that is set, this workflow builds successfully but the deploy step
+# fails, and no URL exists.
+#
+# Scope note: the web build is the read-only marketplace. Wallet connection
+# is deliberately stubbed out on web (src/wallet/wallet-provider.web.tsx),
+# so browsing, agent detail, and live category stats all work, but hiring
+# cannot complete there - it needs a connected wallet. See HANDOVER.md.
+name: Deploy web export to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Both of these are EXPO_PUBLIC_* values, which Expo inlines into the
+      # client bundle by design - they are public identifiers, not secrets,
+      # and are already readable in any shipped build. The real secret in
+      # this project (SCAN8004_API_KEY) is Convex-side only and is never
+      # referenced here or in any client bundle.
+      EXPO_PUBLIC_CONVEX_URL: ${{ vars.EXPO_PUBLIC_CONVEX_URL || 'https://enduring-mastiff-708.eu-west-1.convex.cloud' }}
+      EXPO_PUBLIC_REOWN_PROJECT_ID: ${{ vars.EXPO_PUBLIC_REOWN_PROJECT_ID }}
+      EXPO_PUBLIC_BSC_RPC_URL: ${{ vars.EXPO_PUBLIC_BSC_RPC_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # A GitHub project site is served from /<repo>, not from /. Expo needs
+      # to know that at build time so it can prefix every bundled asset URL
+      # (verified against the SDK 54 app config reference: experiments.baseUrl,
+      # "Export a website relative to a subpath of a domain").
+      #
+      # Patched here rather than committed into app.json so the repo stays
+      # correct for a root-serving host (Vercel/Netlify/Cloudflare) and for
+      # local `npx expo export` verification, both of which need an empty
+      # baseUrl. Change nothing in app.json to move hosts.
+      - name: Set web base URL for the Pages subpath
+        run: |
+          node -e '
+            const fs = require("fs");
+            const config = JSON.parse(fs.readFileSync("app.json", "utf8"));
+            const base = "/" + process.env.GITHUB_REPOSITORY.split("/")[1];
+            config.expo.experiments = { ...config.expo.experiments, baseUrl: base };
+            fs.writeFileSync("app.json", JSON.stringify(config, null, 2));
+            console.log("experiments.baseUrl =", base);
+          '
+
+      - run: npx expo export --platform web
+
+      # Expo emits an _expo/ directory, and Jekyll strips leading-underscore
+      # paths, which would 404 every JS/CSS bundle. Documented in Expo's own
+      # publishing-websites guide.
+      - name: Disable Jekyll
+        run: touch dist/.nojekyll
+
+      # app.json sets web.output "single", so the export is a client-side SPA
+      # with exactly one index.html. GitHub Pages has no rewrite rule, so a
+      # deep link like /agent/45381 (or a refresh on one) would 404. Pages
+      # serves 404.html for any unmatched path, so making it a copy of
+      # index.html gives the SPA router a chance to handle the route.
+      - name: Add SPA fallback
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

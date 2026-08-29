@@ -2,38 +2,48 @@
 
 :root {
   color-scheme: light;
-  --canvas: #f2f3ef;
-  --surface: #fafbf7;
-  --surface-elevated: #ffffff;
-  --surface-subtle: #e8eae4;
-  --surface-muted: #dfe2db;
-  --ink: #151712;
-  --ink-secondary: #2d302a;
-  --muted: #62675d;
-  --faint: #8b9086;
-  --line: rgb(21 23 18 / 14%);
-  --line-light: rgb(21 23 18 / 8%);
-  --accent: #e9b949;
-  --accent-hover: #d9a52d;
-  --accent-soft: #f7e8ba;
-  --accent-muted: #fbf1d5;
-  --accent-border: #dfc26f;
-  --accent-ink: #5d4300;
-  --dark-card: #11130f;
-  --dark-card-surface: #1a1d17;
-  --success-soft: #dcecdf;
-  --success: #22643e;
-  --info-soft: #dfe9ee;
-  --info: #305e73;
-  --neutral-soft: #e6e8e2;
-  --danger-soft: #f2deda;
-  --danger: #963f35;
-  --overlay: rgb(12 14 10 / 52%);
-  --header: rgb(242 243 239 / 86%);
-  --shadow-subtle: 0 2px 10px rgb(31 35 27 / 5%);
-  --shadow-card: 0 18px 45px rgb(31 35 27 / 8%);
-  --shadow-accent: 0 8px 24px rgb(179 129 21 / 20%);
-  --shadow-floating: 0 28px 80px rgb(20 23 17 / 15%);
+  --canvas: #FBF9F4;
+  --surface: #FFFFFF;
+  --surface-elevated: #FFFFFF;
+  --surface-subtle: #F5F3EB;
+  --surface-muted: #EFECE4;
+  --ink: #111214;
+  --ink-secondary: #303236;
+  --muted: #6E706B;
+  --faint: #A5A79F;
+  --line: #ECE8DE;
+  --line-light: #F3F0E8;
+  --accent: #F5B300;
+  --accent-hover: #E2A500;
+  --accent-soft: #FEF5D6;
+  --accent-muted: #FFF9E6;
+  --accent-border: #F3E3A6;
+  --accent-ink: #946B00;
+  --dark-card: #111214;
+  --dark-card-surface: #1C1D24;
+  --mint: #DCEFE4;
+  --mint-ink: #1C6A44;
+  --mint-border: #BFE0CC;
+  --blue: #DDE9F8;
+  --blue-ink: #295C92;
+  --blue-border: #C6D8EE;
+  --lilac: #E9E1F4;
+  --lilac-ink: #65478A;
+  --lilac-border: #D8CAE8;
+  --coral: #F7DFD8;
+  --coral-ink: #964C3C;
+  --coral-border: #E8C1B7;
+  --success: #1C6A44;
+  --success-soft: #DCEFE4;
+  --danger: #B9473A;
+  --danger-soft: #F7DFD8;
+  --overlay: rgba(17, 18, 20, 0.44);
+  --header: rgba(251, 249, 244, 0.92);
+  --shadow-subtle: 0 2px 8px rgba(17, 18, 20, 0.04);
+  --shadow-card: 0 6px 20px rgba(17, 18, 20, 0.05);
+  --shadow-accent: 0 4px 16px rgba(245, 179, 0, 0.25);
+  --shadow-floating: 0 12px 32px rgba(17, 18, 20, 0.08);
+  --shadow-modal: 0 24px 64px rgba(17, 18, 20, 0.16);
 }
 
 @theme inline {
@@ -43,51 +53,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --canvas: #0d0f0c;
-    --surface: #141611;
-    --surface-elevated: #191b16;
-    --surface-subtle: #1e211b;
-    --surface-muted: #262a22;
-    --ink: #f1f2eb;
-    --ink-secondary: #d2d5cc;
-    --muted: #a5aa9e;
-    --faint: #777d71;
-    --line: rgb(241 242 235 / 15%);
-    --line-light: rgb(241 242 235 / 8%);
-    --accent: #e9b949;
-    --accent-hover: #f0c665;
-    --accent-soft: #30270f;
-    --accent-muted: #211d11;
-    --accent-border: #765d1e;
-    --accent-ink: #f2ca6a;
-    --dark-card: #10120e;
-    --dark-card-surface: #191c16;
-    --success-soft: #193326;
-    --success: #8fc9a4;
-    --info-soft: #1c303a;
-    --info: #99bfce;
-    --neutral-soft: #252821;
-    --danger-soft: #3c211d;
-    --danger: #efa399;
-    --overlay: rgb(4 5 4 / 66%);
-    --header: rgb(13 15 12 / 88%);
-    --shadow-subtle: 0 2px 10px rgb(0 0 0 / 18%);
-    --shadow-card: 0 18px 45px rgb(0 0 0 / 26%);
-    --shadow-accent: 0 8px 24px rgb(103 72 8 / 24%);
-    --shadow-floating: 0 28px 80px rgb(0 0 0 / 38%);
-  }
-}
-
 * {
   box-sizing: border-box;
 }
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 108px;
+  scroll-padding-top: 96px;
   background: var(--canvas);
 }
 
@@ -95,12 +67,11 @@ body {
   min-width: 320px;
   margin: 0;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at 84% -18%, rgb(233 185 73 / 9%), transparent 34rem),
-    var(--canvas);
+  background-color: var(--canvas);
   color: var(--ink);
-  font-family: var(--font-geist-sans), Arial, sans-serif;
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
@@ -118,18 +89,18 @@ button {
 
 ::selection {
   background: var(--accent);
-  color: #16140d;
+  color: #111214;
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 4px;
+  outline-offset: 3px;
 }
 
 .site-frame {
-  width: min(100%, 1440px);
+  width: min(100%, 1400px);
   margin-inline: auto;
-  padding-inline: clamp(1.25rem, 4vw, 4.5rem);
+  padding-inline: clamp(1.25rem, 3.5vw, 3.5rem);
 }
 
 .text-balance {
@@ -142,11 +113,15 @@ button {
 
 .pressable-scale {
   transition:
-    transform 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    color 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pressable-scale:hover {
+  transform: translateY(-2px);
 }
 
 .pressable-scale:active {
@@ -175,22 +150,22 @@ button {
   background: linear-gradient(
     90deg,
     transparent,
-    rgb(255 255 255 / 34%),
+    rgba(255, 255, 255, 0.6),
     transparent
   );
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .reveal-one {
-    animation: reveal-up 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: reveal-up 650ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .reveal-two {
-    animation: reveal-up 820ms 90ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: reveal-up 750ms 80ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .reveal-three {
-    animation: reveal-up 900ms 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: reveal-up 850ms 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   .skeleton-sheen::after {
@@ -201,7 +176,7 @@ button {
 @keyframes reveal-up {
   from {
     opacity: 0;
-    transform: translateY(22px);
+    transform: translateY(18px);
   }
   to {
     opacity: 1;
@@ -213,6 +188,21 @@ button {
   to {
     transform: translateX(100%);
   }
+}
+
+@keyframes orbit-pulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.03);
+  }
+}
+
+.orbit-glow {
+  animation: orbit-pulse 6s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

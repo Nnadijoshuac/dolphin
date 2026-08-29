@@ -3,10 +3,12 @@
 import Link from "next/link";
 
 import { StatePanel } from "@/components/state-panel";
-import type { AgentPerformancePoint } from "@/types/agent";
+import type { AgentCategory, AgentPerformancePoint } from "@/types/agent";
 
 type PerformancePanelProps = {
-  points: AgentPerformancePoint[];
+  points?: AgentPerformancePoint[];
+  series?: AgentPerformancePoint[];
+  category?: AgentCategory;
 };
 
 function buildSvgPath(
@@ -18,7 +20,7 @@ function buildSvgPath(
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  const padding = 6;
+  const padding = 16;
 
   return points
     .map((point, index) => {
@@ -43,63 +45,73 @@ function formatDate(value: string) {
   }).format(date);
 }
 
-export function PerformancePanel({ points }: PerformancePanelProps) {
-  if (points.length < 2) {
+export function PerformancePanel({ points, series }: PerformancePanelProps) {
+  const dataPoints = points ?? series ?? [];
+
+  if (dataPoints.length < 2) {
     return (
       <StatePanel
-        body="The current sources did not return enough auditable points to draw a performance series."
+        body="This agent does not have enough on-chain data points yet to plot a historical performance series."
         compact
         state="unavailable"
-        title="No chartable track record"
+        title="No Track Record Points Yet"
       />
     );
   }
 
   const width = 800;
-  const height = 220;
-  const path = buildSvgPath(points, width, height);
+  const height = 200;
+  const path = buildSvgPath(dataPoints, width, height);
   const sources = Array.from(
-    new Map(points.map((point) => [point.source.id, point.source])).values(),
+    new Map(dataPoints.map((point) => [point.source.id, point.source])).values(),
   );
 
   return (
-    <figure className="border-y border-[var(--line)] py-6">
-      <svg
-        aria-label={`Performance series with ${points.length} auditable data points`}
-        className="h-56 w-full overflow-visible"
-        preserveAspectRatio="none"
-        role="img"
-        viewBox={`0 0 ${width} ${height}`}
-      >
-        <line
-          stroke="var(--line)"
-          strokeWidth="1"
-          x1="0"
-          x2={width}
-          y1={height - 1}
-          y2={height - 1}
-        />
-        <path
-          d={path}
-          fill="none"
-          stroke="var(--accent)"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="4"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <figcaption className="mt-5 grid gap-3 text-xs leading-5 text-[var(--muted)] sm:grid-cols-[1fr_auto]">
+    <figure className="rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-6 shadow-sm">
+      <div className="flex items-center justify-between border-b border-[#ECE8DE] pb-3 text-xs font-bold">
+        <span className="text-[#111214]">Historical Trajectory</span>
+        <span className="text-[#946B00]">{dataPoints.length} Auditable Samples</span>
+      </div>
+
+      <div className="relative mt-4">
+        <svg
+          aria-label={`Performance series with ${dataPoints.length} auditable data points`}
+          className="h-48 w-full overflow-visible"
+          preserveAspectRatio="none"
+          role="img"
+          viewBox={`0 0 ${width} ${height}`}
+        >
+          <line
+            stroke="#ECE8DE"
+            strokeWidth="1"
+            x1="0"
+            x2={width}
+            y1={height - 1}
+            y2={height - 1}
+          />
+          <path
+            d={path}
+            fill="none"
+            stroke="#F5B300"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="4"
+          />
+        </svg>
+      </div>
+
+      <figcaption className="mt-4 flex flex-col justify-between gap-2 border-t border-[#ECE8DE] pt-3 text-[11px] text-[#6E706B] sm:flex-row">
         <span>
-          {formatDate(points[0].timestamp)} to {formatDate(points.at(-1)!.timestamp)} / {points.length} points
+          Range: {formatDate(dataPoints[0].timestamp)} – {formatDate(dataPoints[dataPoints.length - 1].timestamp)}
         </span>
-        <span className="sm:text-right">
-          Source: {sources.map((source, index) => (
+        <span>
+          Data Source:{" "}
+          {sources.map((source, index) => (
             <span key={source.id}>
               {index > 0 && ", "}
               {source.url ? (
                 <Link
-                  className="font-semibold text-[var(--ink-secondary)] underline decoration-[var(--line)] underline-offset-4"
+                  className="font-bold text-[#946B00] hover:underline"
                   href={source.url}
                   rel="noreferrer"
                   target="_blank"
@@ -107,7 +119,7 @@ export function PerformancePanel({ points }: PerformancePanelProps) {
                   {source.label}
                 </Link>
               ) : (
-                source.label
+                <span className="font-semibold text-[#111214]">{source.label}</span>
               )}
             </span>
           ))}

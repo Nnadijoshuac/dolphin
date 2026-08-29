@@ -27,47 +27,48 @@ export function MetricCell<T>({ label, metric, format }: MetricCellProps<T>) {
   return (
     <article
       aria-live={metric.status === "syncing" ? "polite" : undefined}
-      className="min-w-0 border-t border-[var(--line)] p-5 sm:p-6"
+      className="min-w-0 rounded-2xl border border-[#ECE8DE] bg-white p-5 shadow-sm"
     >
       <div className="flex items-start justify-between gap-4">
-        <h3 className="text-xs font-bold text-[var(--muted)]">{label}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-[#6E706B]">{label}</h3>
         <StatusBadge label={metric.status} tone={metric.status} />
       </div>
 
       {hasValue ? (
-        <p className="mt-5 break-words text-2xl font-black tracking-[-0.045em] text-[var(--ink)]">
+        <p className="mt-4 break-words text-2xl font-black tracking-tight text-[#111214]">
           {format(metric.value) || "None"}
         </p>
       ) : metric.status === "syncing" ? (
-        <div className="mt-5" aria-label="Metric syncing">
-          <div className="skeleton-sheen h-7 w-28 rounded-lg" />
+        <div aria-label="Metric syncing" className="mt-4">
+          <div className="skeleton-sheen h-8 w-32 rounded-xl" />
         </div>
       ) : (
-        <p className="mt-5 text-lg font-bold text-[var(--faint)]">
+        <p className="mt-4 text-base font-bold text-[#A5A79F]">
           Unavailable
         </p>
       )}
 
-      <div className="mt-5 space-y-1.5 border-t border-[var(--line-light)] pt-4 text-[11px] leading-5 text-[var(--muted)]">
+      <div className="mt-4 space-y-1 border-t border-[#F3F0E8] pt-3 text-[11px] leading-5 text-[#6E706B]">
         <p>
-          Source: {metric.source.url ? (
+          <span className="font-semibold text-[#111214]">Source:</span>{" "}
+          {metric.source.url ? (
             <Link
-              className="font-semibold text-[var(--ink-secondary)] underline decoration-[var(--line)] underline-offset-4 hover:text-[var(--accent-ink)]"
+              className="font-bold text-[#946B00] hover:underline"
               href={metric.source.url}
               rel="noreferrer"
               target="_blank"
             >
-              {metric.source.label}
+              {metric.source.label} ↗
             </Link>
           ) : (
-            <span className="font-semibold text-[var(--ink-secondary)]">
+            <span className="font-semibold text-[#303236]">
               {metric.source.label}
             </span>
           )}
         </p>
-        {checkedAt && <p>Checked: {checkedAt}</p>}
-        {metric.methodology && <p>Method: {metric.methodology}</p>}
-        {!hasValue && metric.reason && <p>Reason: {metric.reason}</p>}
+        {checkedAt && <p><span className="font-semibold text-[#111214]">Checked:</span> {checkedAt}</p>}
+        {metric.methodology && <p><span className="font-semibold text-[#111214]">Method:</span> {metric.methodology}</p>}
+        {!hasValue && metric.reason && <p><span className="font-semibold text-[#111214]">Note:</span> {metric.reason}</p>}
       </div>
     </article>
   );

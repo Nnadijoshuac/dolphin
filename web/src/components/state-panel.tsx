@@ -7,34 +7,79 @@ type StatePanelProps = {
   compact?: boolean;
 };
 
-const stateLabels: Record<LiveMetricStatus | "empty", string> = {
-  syncing: "Syncing",
-  live: "Live",
-  stale: "Stale",
-  unavailable: "Unavailable",
-  empty: "Empty",
+const stateConfigs: Record<
+  LiveMetricStatus | "empty",
+  { label: string; bg: string; border: string; text: string; icon: "sparkle" | "shield" | "info" | "close" }
+> = {
+  syncing: {
+    label: "Syncing",
+    bg: "#FEF5D6",
+    border: "#F3E3A6",
+    text: "#946B00",
+    icon: "sparkle",
+  },
+  live: {
+    label: "Live",
+    bg: "#DCEFE4",
+    border: "#BFE0CC",
+    text: "#1C6A44",
+    icon: "shield",
+  },
+  stale: {
+    label: "Stale",
+    bg: "#FEF5D6",
+    border: "#F3E3A6",
+    text: "#946B00",
+    icon: "info",
+  },
+  unavailable: {
+    label: "Unavailable",
+    bg: "#F5F3EB",
+    border: "#ECE8DE",
+    text: "#6E706B",
+    icon: "info",
+  },
+  empty: {
+    label: "Empty",
+    bg: "#F5F3EB",
+    border: "#ECE8DE",
+    text: "#6E706B",
+    icon: "info",
+  },
 };
 
 export function StatePanel({ title, body, state, compact }: StatePanelProps) {
+  const config = stateConfigs[state] ?? stateConfigs.unavailable;
+
   return (
     <div
       aria-live={state === "syncing" ? "polite" : undefined}
-      className={`border-y border-[var(--line)] ${compact ? "py-5" : "py-10 sm:py-12"}`}
+      className={`rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm ${
+        compact ? "py-4 sm:py-5" : "py-8 sm:py-10"
+      }`}
     >
-      <div className="grid gap-4 sm:grid-cols-[8rem_1fr] sm:items-start">
-        <div>
-          <span className="inline-flex rounded-full border border-[var(--line)] bg-[var(--surface-subtle)] px-3 py-1 text-[10px] font-bold tracking-[0.1em] text-[var(--muted)]">
-            {stateLabels[state].toUpperCase()}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+        <div className="shrink-0">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider"
+            style={{
+              backgroundColor: config.bg,
+              borderColor: config.border,
+              color: config.text,
+              borderWidth: 1,
+            }}
+          >
+            {state === "syncing" && (
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[#F5B300]" />
+            )}
+            {config.label}
           </span>
-          {state === "syncing" && (
-            <div className="skeleton-sheen mt-3 h-1.5 w-20 rounded-full" />
-          )}
         </div>
         <div>
-          <h3 className="text-lg font-bold tracking-[-0.025em] text-[var(--ink)]">
+          <h3 className="text-lg font-black tracking-tight text-[#111214]">
             {title}
           </h3>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-[#6E706B]">
             {body}
           </p>
         </div>

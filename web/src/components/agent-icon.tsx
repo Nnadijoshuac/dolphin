@@ -1,10 +1,14 @@
-/* Dynamic registry artwork can come from publisher-controlled hosts that are
- * intentionally not allowlisted in Next config, so a native image preserves
- * compatibility with the shared catalog here. */
 /* eslint-disable @next/next/no-img-element */
-
 import { CategoryGlyph } from "@/components/category-glyph";
 import type { AgentCategory } from "@/types/agent";
+
+const categoryBgColors: Record<AgentCategory, { bg: string; border: string; glyphColor: string }> = {
+  rebalancing: { bg: "#FEF5D6", border: "#F3E3A6", glyphColor: "#946B00" },
+  "grid-trading": { bg: "#DDE9F8", border: "#C6D8EE", glyphColor: "#295C92" },
+  "health-factor": { bg: "#DCEFE4", border: "#BFE0CC", glyphColor: "#1C6A44" },
+  yield: { bg: "#E9E1F4", border: "#D8CAE8", glyphColor: "#65478A" },
+  monitoring: { bg: "#F5F3EB", border: "#ECE8DE", glyphColor: "#303236" },
+};
 
 type AgentIconProps = {
   category: AgentCategory;
@@ -13,13 +17,18 @@ type AgentIconProps = {
 };
 
 export function AgentIcon({ category, size = 48, uri }: AgentIconProps) {
+  const config = categoryBgColors[category] ?? categoryBgColors.monitoring;
   const dimensions = { width: size, height: size, flexShrink: 0 };
 
   if (uri) {
     return (
       <div
-        className="overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--surface-subtle)]"
-        style={dimensions}
+        className="overflow-hidden rounded-2xl border shadow-sm"
+        style={{
+          ...dimensions,
+          backgroundColor: config.bg,
+          borderColor: config.border,
+        }}
       >
         <img
           alt=""
@@ -35,14 +44,18 @@ export function AgentIcon({ category, size = 48, uri }: AgentIconProps) {
 
   return (
     <div
-      className="flex items-center justify-center rounded-[14px] border border-[var(--line)] bg-[var(--surface-subtle)]"
-      style={dimensions}
+      className="flex items-center justify-center rounded-2xl border shadow-sm"
+      style={{
+        ...dimensions,
+        backgroundColor: config.bg,
+        borderColor: config.border,
+      }}
     >
       <CategoryGlyph
-        color="var(--ink)"
+        color={config.glyphColor}
         name={category}
-        size={size * 0.43}
-        strokeWidth={1.8}
+        size={size * 0.48}
+        strokeWidth={2.2}
       />
     </div>
   );

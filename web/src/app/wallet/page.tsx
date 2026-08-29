@@ -3,21 +3,26 @@
 import Link from "next/link";
 
 import { BnbLogo } from "@/components/brand-mark";
+import { CategoryGlyph } from "@/components/category-glyph";
+import { ConstellationBg } from "@/components/constellation-bg";
 import { StatePanel } from "@/components/state-panel";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
 const connectionFacts = [
   {
-    title: "Reads one public address",
-    body: "Dolphin uses it to associate real backend hire records with this wallet.",
+    title: "100% Non-Custodial Reads",
+    body: "Dolphin reads only your public address to link your on-chain agent subscriptions. Your private keys never leave your device.",
+    icon: "shield" as const,
   },
   {
-    title: "Requests no wallet authority",
-    body: "A read-only hire creates no signature, spending approval, or session key.",
+    title: "Altana Scoped Sessions",
+    body: "When session execution is granted, limits are enforced strictly by on-chain smart contracts (EIP-7702) with daily spend caps.",
+    icon: "bot" as const,
   },
   {
-    title: "Sends no transaction",
-    body: "The current hire flow writes a Dolphin subscription record, not an onchain execution.",
+    title: "Zero Secret Exfiltration",
+    body: "Dolphin will never ask for a seed phrase, private key, or unscoped custody. Every interaction is transparent and verifiable.",
+    icon: "sparkle" as const,
   },
 ] as const;
 
@@ -25,131 +30,154 @@ export default function WalletPage() {
   const wallet = useWallet();
 
   return (
-    <div className="site-frame py-12 sm:py-16 lg:py-20">
-      <header className="grid gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-end">
-        <div className="reveal-one">
-          <p className="text-xs font-bold tracking-[0.16em] text-[var(--accent-ink)]">
-            WALLET CONNECTION
-          </p>
-          <h1 className="text-balance mt-4 max-w-2xl text-5xl font-black leading-[0.92] tracking-[-0.065em] text-[var(--ink)] sm:text-7xl">
-            Connect with clarity.
+    <div className="relative min-h-screen py-10 sm:py-16">
+      <ConstellationBg opacity={0.4} />
+
+      <div className="site-frame">
+        {/* Header */}
+        <header className="max-w-3xl">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3.5 py-1 text-xs font-bold text-[#946B00]">
+            <CategoryGlyph color="#946B00" name="shield" size={13} strokeWidth={2.4} />
+            <span>WALLET & PERMISSIONS</span>
+          </div>
+          <h1 className="mt-4 text-4xl font-black tracking-tight text-[#111214] sm:text-5xl lg:text-6xl">
+            Wallet & Security Boundary
           </h1>
-        </div>
-        <p className="reveal-two max-w-xl text-base leading-7 text-[var(--muted)] lg:justify-self-end">
-          Dolphin connects to an injected browser wallet on BNB Smart Chain.
-          The current hire flow reads its public address and nothing more.
-        </p>
-      </header>
-
-      <div className="mt-14 grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
-        <section
-          aria-labelledby="connection-heading"
-          className="rounded-[18px] bg-[var(--dark-card)] p-7 text-white shadow-[var(--shadow-floating)] sm:p-9"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-bold tracking-[0.14em] text-white/45">
-                CURRENT CONNECTION
-              </p>
-              <h2
-                className="mt-3 text-2xl font-black tracking-[-0.045em]"
-                id="connection-heading"
-              >
-                {wallet.isConnected ? "Wallet connected" : "No wallet connected"}
-              </h2>
-            </div>
-            <div className="flex items-center gap-2 text-xs font-bold text-white/60">
-              <BnbLogo size={18} />
-              BNB Chain
-            </div>
-          </div>
-
-          {wallet.isConnected && wallet.address ? (
-            <dl className="mt-8 border-b border-white/12">
-              <div className="border-t border-white/12 py-4">
-                <dt className="text-xs text-white/45">Public address</dt>
-                <dd className="mt-2 break-all font-mono text-xs font-bold leading-5 text-white">
-                  {wallet.address}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-5 border-t border-white/12 py-4">
-                <dt className="text-xs text-white/45">Network</dt>
-                <dd className="text-right text-sm font-bold">
-                  BNB Smart Chain / 56
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <div className="mt-7 border-y border-white/12 py-5">
-              <p className="text-sm font-bold text-white">
-                {wallet.isAvailable
-                  ? "Ready for your browser wallet"
-                  : "No injected wallet detected"}
-              </p>
-              <p className="mt-2 text-xs leading-5 text-white/54">
-                {wallet.unavailableReason ??
-                  "Connecting will ask the wallet to expose its public address."}
-              </p>
-            </div>
-          )}
-
-          <div className="mt-7">
-            <WalletConnectButton />
-          </div>
-
-          {wallet.isConnected && (
-            <Link
-              className="mt-5 inline-flex text-xs font-bold text-[#e9b949]"
-              href="/my-agents"
-            >
-              View this wallet&apos;s agents
-            </Link>
-          )}
-        </section>
-
-        <section aria-labelledby="connection-facts-heading" className="py-3">
-          <p className="text-sm font-semibold text-[var(--accent-ink)]">
-            Know the boundary
+          <p className="mt-3 text-base leading-relaxed text-[#6E706B]">
+            Connect your browser wallet to manage agent subscriptions on BNB Smart Chain. Full transparency with zero custodial risk.
           </p>
-          <h2
-            className="text-balance mt-3 max-w-xl text-3xl font-black leading-[1] tracking-[-0.05em] text-[var(--ink)] sm:text-4xl"
-            id="connection-facts-heading"
+        </header>
+
+        {/* 2 Column Main Grid */}
+        <div className="mt-12 grid gap-10 lg:grid-cols-[1fr_1.2fr]">
+          {/* Left Column: Wallet Connection Card */}
+          <section
+            aria-labelledby="connection-heading"
+            className="rounded-3xl border border-[#ECE8DE] bg-white p-8 shadow-md sm:p-10"
           >
-            What connecting does, exactly.
-          </h2>
-
-          <div className="mt-8 border-b border-[var(--line)]">
-            {connectionFacts.map((fact, index) => (
-              <article
-                className="grid gap-3 border-t border-[var(--line)] py-6 sm:grid-cols-[3rem_1fr]"
-                key={fact.title}
-              >
-                <span className="font-mono text-xs text-[var(--faint)]">
-                  0{index + 1}
+            <div className="flex items-start justify-between gap-4 border-b border-[#F3F0E8] pb-6">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#A5A79F]">
+                  CONNECTION STATUS
                 </span>
-                <div>
-                  <h3 className="text-base font-bold text-[var(--ink)]">
-                    {fact.title}
-                  </h3>
-                  <p className="mt-2 max-w-lg text-sm leading-6 text-[var(--muted)]">
-                    {fact.body}
-                  </p>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          {!wallet.isAvailable && !wallet.isConnected && (
-            <div className="mt-8">
-              <StatePanel
-                body="Install an EIP-1193 browser wallet such as MetaMask, then reload this page. Dolphin will never ask for a private key."
-                compact
-                state="unavailable"
-                title="Browser wallet required"
-              />
+                <h2
+                  className="mt-1 text-2xl font-black tracking-tight text-[#111214]"
+                  id="connection-heading"
+                >
+                  {wallet.isConnected ? "Wallet Connected" : "No Wallet Connected"}
+                </h2>
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-[#ECE8DE] bg-[#FBF9F4] px-3 py-1.5 text-xs font-bold text-[#303236]">
+                <BnbLogo size={16} />
+                <span>BNB Chain</span>
+              </div>
             </div>
-          )}
-        </section>
+
+            {wallet.isConnected && wallet.address ? (
+              <dl className="mt-6 divide-y divide-[#F3F0E8] border-b border-[#ECE8DE] text-xs">
+                <div className="py-3.5">
+                  <dt className="font-semibold text-[#6E706B]">Public Address</dt>
+                  <dd className="mt-1 break-all font-mono text-sm font-bold text-[#111214]">
+                    {wallet.address}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between py-3.5">
+                  <dt className="font-semibold text-[#6E706B]">Active Network</dt>
+                  <dd className="flex items-center gap-1.5 font-bold text-[#1C6A44]">
+                    <span className="h-2 w-2 rounded-full bg-[#1C6A44]" />
+                    BNB Smart Chain (56)
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between py-3.5">
+                  <dt className="font-semibold text-[#6E706B]">Security Standard</dt>
+                  <dd className="font-bold text-[#946B00]">
+                    Non-Custodial / EIP-1193
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <div className="mt-6 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-5">
+                <p className="text-sm font-bold text-[#111214]">
+                  {wallet.isAvailable
+                    ? "Injected Web3 Wallet Detected"
+                    : "No Injected Wallet Found"}
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-[#6E706B]">
+                  {wallet.unavailableReason ??
+                    "Connect your wallet to review your active agents and manage on-chain subscriptions."}
+                </p>
+              </div>
+            )}
+
+            <div className="mt-8">
+              <WalletConnectButton />
+            </div>
+
+            {wallet.isConnected && (
+              <div className="mt-6 text-center">
+                <Link
+                  className="inline-flex items-center gap-1 text-xs font-bold text-[#946B00] hover:underline"
+                  href="/my-agents"
+                >
+                  <span>View this wallet&apos;s active agents</span>
+                  <CategoryGlyph color="#946B00" name="arrow-right" size={12} strokeWidth={2.4} />
+                </Link>
+              </div>
+            )}
+          </section>
+
+          {/* Right Column: Security Architecture & Boundary Notes */}
+          <section aria-labelledby="connection-facts-heading">
+            <div className="rounded-3xl border border-[#ECE8DE] bg-white p-8 shadow-sm sm:p-10">
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#946B00]">
+                TRANSPARENCY GUARANTEE
+              </span>
+              <h2
+                className="mt-1 text-2xl font-black tracking-tight text-[#111214]"
+                id="connection-facts-heading"
+              >
+                Security & Custody Guardrails
+              </h2>
+
+              <div className="mt-8 space-y-6">
+                {connectionFacts.map((fact) => (
+                  <div
+                    className="flex items-start gap-4 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-5"
+                    key={fact.title}
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#F3E3A6] bg-[#FEF5D6]">
+                      <CategoryGlyph
+                        color="#946B00"
+                        name={fact.icon}
+                        size={18}
+                        strokeWidth={2.4}
+                      />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-[#111214]">
+                        {fact.title}
+                      </h3>
+                      <p className="mt-1 text-xs leading-relaxed text-[#6E706B]">
+                        {fact.body}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {!wallet.isAvailable && !wallet.isConnected && (
+                <div className="mt-8">
+                  <StatePanel
+                    body="Install MetaMask, Trust Wallet, or another BSC-compatible browser extension to interact with on-chain agent features."
+                    compact
+                    state="unavailable"
+                    title="Browser Extension Recommended"
+                  />
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );

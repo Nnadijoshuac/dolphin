@@ -7,6 +7,7 @@ export type GlyphName =
   | "categories"
   | "search"
   | "agents"
+  | "bot"
   | "wallet"
   | "shield"
   | "clock"
@@ -17,7 +18,9 @@ export type GlyphName =
   | "layers"
   | "info"
   | "chevron-right"
-  | "arrow-right";
+  | "arrow-right"
+  | "menu"
+  | "close";
 
 type CategoryGlyphProps = {
   name: GlyphName;
@@ -52,12 +55,6 @@ export function CategoryGlyph({
         </>
       )}
 
-      {/*
-        Rebalancing: a concentrated-liquidity band being reset around price.
-        Distinct from grid-trading below, which is a fixed price ladder - the
-        two were one category until the 2026-08-28 taxonomy split, and drawing
-        them the same would undo the distinction the split exists to make.
-      */}
       {name === "rebalancing" && (
         <>
           <rect height="9" rx="1.5" width="8" x="5" y="7.5" {...common} strokeWidth={1.8} />
@@ -121,7 +118,7 @@ export function CategoryGlyph({
         </>
       )}
 
-      {name === "agents" && (
+      {(name === "agents" || name === "bot") && (
         <>
           <rect height="12" rx="3.5" width="16" x="4" y="8" {...common} />
           <line x1="12" x2="12" y1="4" y2="8" {...common} />
@@ -141,9 +138,7 @@ export function CategoryGlyph({
       )}
 
       {name === "shield" && (
-        <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11Z" {...common}>
-          <path d="m9 12 2 2 4-4" {...common} />
-        </path>
+        <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11Z" {...common} />
       )}
 
       {name === "clock" && (
@@ -198,6 +193,21 @@ export function CategoryGlyph({
         <>
           <line x1="5" x2="19" y1="12" y2="12" {...common} />
           <path d="m12 5 7 7-7 7" {...common} />
+        </>
+      )}
+
+      {name === "menu" && (
+        <>
+          <line x1="4" x2="20" y1="6" y2="6" {...common} strokeWidth={2} />
+          <line x1="4" x2="20" y1="12" y2="12" {...common} strokeWidth={2} />
+          <line x1="4" x2="20" y1="18" y2="18" {...common} strokeWidth={2} />
+        </>
+      )}
+
+      {name === "close" && (
+        <>
+          <line x1="6" x2="18" y1="6" y2="18" {...common} strokeWidth={2} />
+          <line x1="6" x2="18" y1="18" y2="6" {...common} strokeWidth={2} />
         </>
       )}
     </svg>

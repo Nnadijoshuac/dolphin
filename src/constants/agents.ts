@@ -100,6 +100,19 @@ export const AGENT_DATA_SOURCES = {
 /* ---------------------------------------------------------------------------
  * DECISION (2026-08-29): what an agent costs when nobody publishes a price.
  * ---------------------------------------------------------------------------
+ * NO LONGER THE AUTHORITY. As of the 2026-08-29 centralization, the live
+ * price every surface renders comes from convex/lib/agentCatalog.ts's
+ * DEFAULT_READ_ONLY_PRICE_MODEL, which both this app and the website under
+ * web/ read through agents.listAgents. Change it THERE.
+ *
+ * What survives here is the fallback path only: the editorial agents built in
+ * src/data/editorial-agents.ts, used when EXPO_PUBLIC_CONVEX_URL is unset (see
+ * fetchAgentCatalog in src/hooks/use-agents.ts). Kept identical to the Convex
+ * copy on purpose - if you change one, change both, the same manual-mirror
+ * rule AGENTS.md SS9 already applies to the Convex validators.
+ *
+ * The original reasoning, unchanged:
+ *
  * ERC-8004 carries no price field, and 8004scan's agent API publishes none
  * either (verified by inspecting every key of a full raw response). No
  * third-party price feed for these agents exists to fall back on.

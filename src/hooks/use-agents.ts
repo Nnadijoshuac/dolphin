@@ -1,14 +1,11 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useQuery as useConvexQuery } from "convex/react";
 
 import { api } from "../../convex/_generated/api";
 import {
   AGENT_DATA_SOURCES,
   AGENT_QUERY_TIMINGS,
 } from "@/constants/agents";
-import { discoveredAgentToAgent } from "@/data/discovered-agents";
-import { findEditorialAgent } from "@/data/editorial-agents";
 import { convexClient } from "@/providers/convex-provider";
 import {
   AgentsApiError,
@@ -65,71 +62,78 @@ function withRegistryVerification(
 }
 
 /**
- * Editorial (hand-vetted) agents plus, when Convex is configured, agents
- * discovered by the scheduled 8004scan sync (convex/discoveredAgents.ts) -
- * see discoveredAgentToAgent's doc comment for how those are classified
- * and labeled. A discovered agent that duplicates an editorial tokenId is
- * dropped in favor of the hand-vetted entry.
+ * Convex hands back addresses as plain `string`, because a Convex validator
+ * cannot express viem's `0x${string}` template-literal type. The values really
+ * are checksummed addresses (convex/lib/agentCatalog.ts and the 8004scan
+ * decode both only ever store what the registry/indexer published), so this is
+ * a type-level widening, not an unchecked claim about the data. Kept to this
+ * one boundary function rather than scattered casts at each call site.
  */
+function asAgents(rows: unknown): Agent[] {
+  return rows as Agent[];
+}
+
+/**
+ * The agent catalog, from convex/agents.ts's `listAgents` - the single
+ * authoritative source both this app and the website under web/ read.
+ * Curation, category taxonomy, hire price, the 8004scan overlay and the
+ * editorial/discovered merge all happen there, so neither frontend can shape
+ * the list differently from the other.
+ *
+ * FALLBACK when EXPO_PUBLIC_CONVEX_URL is unset: the original client-side path
+ * (src/services/agents-api.ts, editorial agents refreshed per agent straight
+ * from 8004scan). It returns the eight curated agents without the discovered
+ * ones, which is the honest degraded answer for a build with no backend
+ * configured - the same reasoning convex-provider.tsx already applies. It is
+ * NOT a second implementation of the rules: it predates them, and Convex wins
+ * whenever it is available, which is every deployed build (the CI workflow
+ * sets EXPO_PUBLIC_CONVEX_URL).
+ */
+async function fetchAgentCatalog(options: {
+  signal?: AbortSignal;
+}): Promise<Agent[]> {
+  if (!convexClient) {
+    return fetchAgents(options);
+  }
+
+  return asAgents(await convexClient.query(api.agents.listAgents, {}));
+}
+
+async function fetchCatalogAgent(
+  reference: string,
+  options: { signal?: AbortSignal },
+): Promise<Agent> {
+  if (!convexClient) {
+    return fetchAgentById(reference, options);
+  }
+
+  const row = await convexClient.query(api.agents.getAgent, { reference });
+
+  if (!row) {
+    throw new AgentsApiError(
+      "This agent is not in Dolphin's explicitly classified BSC discovery set.",
+    );
+  }
+
+  return asAgents([row])[0];
+}
+
 export function useAgents() {
-  const editorialQuery = useQuery({
+  return useQuery({
     queryKey: agentQueryKeys.list(),
-    queryFn: ({ signal }) => fetchAgents({ signal }),
+    queryFn: ({ signal }) => fetchAgentCatalog({ signal }),
     staleTime: AGENT_QUERY_TIMINGS.listStaleTimeMs,
     gcTime: AGENT_QUERY_TIMINGS.garbageCollectionTimeMs,
   });
-
-  const discoveredRows = useConvexQuery(
-    api.discoveredAgents.listDiscoveredAgents,
-    convexClient ? {} : "skip",
-  );
-
-  const data = useMemo(() => {
-    if (!editorialQuery.data || !discoveredRows || discoveredRows.length === 0) {
-      return editorialQuery.data;
-    }
-
-    const knownTokenIds = new Set(editorialQuery.data.map((agent) => agent.tokenId));
-    const discovered = discoveredRows
-      .filter((row) => !knownTokenIds.has(row.tokenId))
-      .map(discoveredAgentToAgent);
-
-    return [...editorialQuery.data, ...discovered];
-  }, [editorialQuery.data, discoveredRows]);
-
-  return { ...editorialQuery, data };
 }
-
-const NOT_IN_DISCOVERY_SET_ERROR =
-  "This agent is not in Dolphin's explicitly classified BSC discovery set.";
 
 /**
- * Looks up a discovered (non-editorial) agent by tokenId. fetchAgentById
- * (agents-api.ts) only ever checked EDITORIAL_AGENTS - opening any
- * discovered agent's detail page threw and rendered "Agent Not Found"
- * (confirmed by hand for "BNB LP Range Rebalancer", tokenId 265375, on
- * 2026-08-29). This is the fallback useAgent() takes when the reference
- * isn't an editorial agent.
+ * One agent, from the same Convex catalog as the list, plus a live on-chain
+ * registry check. The registry read stays client-side deliberately: it is a
+ * cheap direct viem call against the ERC-8004 identity contract and it is the
+ * app's own independent verification of what the indexer claims - routing it
+ * through the backend would make it a second-hand assertion.
  */
-async function fetchDiscoveredAgentById(reference: string): Promise<Agent> {
-  const parts = reference.split(":");
-  const tokenId = parts[parts.length - 1];
-
-  if (!convexClient) {
-    throw new AgentsApiError(NOT_IN_DISCOVERY_SET_ERROR);
-  }
-
-  const row = await convexClient.query(api.discoveredAgents.getDiscoveredAgentByTokenId, {
-    tokenId,
-  });
-
-  if (!row) {
-    throw new AgentsApiError(NOT_IN_DISCOVERY_SET_ERROR);
-  }
-
-  return discoveredAgentToAgent(row);
-}
-
 export function useAgent(
   reference: string | null | undefined,
   options: UseAgentOptions = {},
@@ -142,10 +146,7 @@ export function useAgent(
     enabled:
       normalizedReference.length > 0 && (options.enabled === undefined || options.enabled),
     queryFn: async ({ signal }) => {
-      const isEditorial = findEditorialAgent(normalizedReference) !== undefined;
-      const agent = isEditorial
-        ? await fetchAgentById(normalizedReference, { signal })
-        : await fetchDiscoveredAgentById(normalizedReference);
+      const agent = await fetchCatalogAgent(normalizedReference, { signal });
 
       if (!verifyOnChain) {
         return agent;

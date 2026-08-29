@@ -10,7 +10,10 @@ import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors } from "@/constants/theme";
-import type { Agent, AgentCategory } from "@/types/agent";
+import { syncingLiveStats } from "@/data/editorial-agents";
+import { useAgentCategoryStats } from "@/hooks/use-category-stats";
+import { convexClient } from "@/providers/convex-provider";
+import type { Agent, AgentCategory, AgentLiveStats } from "@/types/agent";
 
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
@@ -34,9 +37,47 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
   );
 }
 
+/**
+ * Chooses where "Live signals" reads from.
+ *
+ * agent.liveStats is a static unavailable stub on every agent from every
+ * source (see unavailableLiveStats in src/data/editorial-agents.ts) - it is
+ * never populated with real values. The real per-category numbers come from
+ * the Convex backend's on-chain reads (convex/protocols/{venus,pancakeswap,
+ * aave}.ts), reached through useAgentCategoryStats. Until 2026-08-29 nothing
+ * called that hook, so all of that backend work was invisible in the UI.
+ *
+ * Split across two components on purpose: useAgentCategoryStats calls
+ * convex/react hooks, which throw when no ConvexProvider is mounted, and
+ * ConvexClientProvider mounts none when EXPO_PUBLIC_CONVEX_URL is unset.
+ * convexClient is a module-level constant, so this branch is fixed for the
+ * life of the process and can never reorder hooks between renders.
+ */
 function LiveStats({ agent }: { agent: Agent }) {
-  const stats = agent.liveStats;
+  if (!convexClient) {
+    // No backend configured, so there is genuinely nothing to read - the
+    // static unavailable stub is the honest answer, not a placeholder.
+    return <LiveStatsView stats={agent.liveStats} />;
+  }
 
+  return <BackendLiveStats agent={agent} />;
+}
+
+function BackendLiveStats({ agent }: { agent: Agent }) {
+  const cached = useAgentCategoryStats(agent.tokenId, agent.category, agent.agentWallet);
+
+  // `undefined` = the Convex client has not answered yet; `null` = no row is
+  // cached and the refresh action is still running. Both mean "not known
+  // yet", which is syncing - not unavailable. Once a row exists we render
+  // exactly what the backend stored, including its own honest per-field
+  // "unavailable" entries (e.g. rebalancing winRate, for which no cost-basis
+  // feed exists) - those are correct and must not be papered over.
+  const stats = cached?.stats ?? syncingLiveStats(agent.category);
+
+  return <LiveStatsView stats={stats} />;
+}
+
+function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   return (
     <Surface>
       <View className="flex-row flex-wrap gap-y-6">

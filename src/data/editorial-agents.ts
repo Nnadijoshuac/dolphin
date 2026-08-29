@@ -88,6 +88,43 @@ export function unavailableLiveStats(category: AgentCategory): AgentLiveStats {
   }
 }
 
+/**
+ * The same field set as unavailableLiveStats, but every metric marked
+ * "syncing" instead of "unavailable" - the honest state while the Convex
+ * backend read (convex/categoryStats.ts) is still in flight.
+ *
+ * The distinction matters and is required by project-scope.md SS5:
+ * "unavailable" asserts we checked and no feed exists, "syncing" says we
+ * have not finished checking yet. Showing "Not reported" during the initial
+ * load would state the stronger claim before it is known to be true.
+ *
+ * Derived from unavailableLiveStats rather than repeating its switch, so
+ * adding a category or a metric only has to be done in one place. The cast
+ * is safe because only each metric's `status`/`asOf` change - the key set
+ * and the `category` discriminant are carried through untouched.
+ */
+export function syncingLiveStats(category: AgentCategory): AgentLiveStats {
+  const settled = unavailableLiveStats(category);
+
+  const syncing = Object.fromEntries(
+    Object.entries(settled).map(([key, field]) =>
+      key === "category"
+        ? [key, field]
+        : [
+            key,
+            {
+              status: "syncing",
+              value: null,
+              asOf: null,
+              source: (field as LiveMetric<unknown>).source,
+            },
+          ],
+    ),
+  );
+
+  return syncing as AgentLiveStats;
+}
+
 interface EditorialAgentInput {
   tokenId: string;
   name: string;

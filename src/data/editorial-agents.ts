@@ -4,6 +4,7 @@ import {
   AGENT_DATA_SOURCES,
   BSC_CHAIN_ID,
   ERC8004_REGISTRY_ADDRESSES,
+  defaultReadOnlyPriceMetric,
 } from "@/constants/agents";
 import type {
   Agent,
@@ -185,9 +186,9 @@ function createEditorialAgent(input: EditorialAgentInput): Agent {
     liveStats: unavailableLiveStats(input.category),
     performanceSeries: [],
     recentActivity: [],
-    priceModel: unavailableMetric(
-      "No machine-readable, currently verified price model is available.",
-    ),
+    // Dolphin's own hire price, not a publisher-published one - see
+    // DEFAULT_READ_ONLY_PRICE_MODEL for the full decision and how to reverse it.
+    priceModel: defaultReadOnlyPriceMetric(),
     registryVerification: unverifiedRegistry(),
     sourceLabels: [
       AGENT_DATA_SOURCES.editorial,

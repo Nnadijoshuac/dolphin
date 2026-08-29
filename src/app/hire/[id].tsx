@@ -225,10 +225,20 @@ function AccessReview({
 
 function PaymentReview({ agent }: { agent: AgentDetail }) {
   const payment = assessAuthorizationCapability(agent.category, "erc8183_hire");
-  const publishedPrice =
+  // Deliberately labeled as Dolphin's price, not the publisher's. The value
+  // comes from DEFAULT_READ_ONLY_PRICE_MODEL (src/constants/agents.ts) and
+  // describes what a hire here costs - it is not a price the publisher
+  // published, because neither ERC-8004 nor 8004scan exposes one.
+  const priceModel =
     agent.priceModel.status === "live" || agent.priceModel.status === "stale"
-      ? `${agent.priceModel.value.amount} ${agent.priceModel.value.token}`
-      : "Not published";
+      ? agent.priceModel.value
+      : null;
+  const dolphinHirePrice =
+    priceModel === null
+      ? "Not resolved"
+      : Number(priceModel.amount) === 0
+        ? "Free"
+        : `${priceModel.amount} ${priceModel.token}`;
 
   return (
     <Surface>
@@ -244,10 +254,18 @@ function PaymentReview({ agent }: { agent: AgentDetail }) {
       <View className="mt-4 gap-3 border-t pt-4" style={{ borderColor: colors.line }}>
         <View className="flex-row justify-between">
           <Text className="text-[12px]" style={{ color: colors.muted }}>
-            Published price
+            Dolphin hire price
           </Text>
           <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
-            {publishedPrice}
+            {dolphinHirePrice}
+          </Text>
+        </View>
+        <View className="flex-row justify-between">
+          <Text className="text-[12px]" style={{ color: colors.muted }}>
+            Publisher price
+          </Text>
+          <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+            Not published
           </Text>
         </View>
         <View className="flex-row justify-between">
@@ -258,6 +276,11 @@ function PaymentReview({ agent }: { agent: AgentDetail }) {
             Not verified
           </Text>
         </View>
+        <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
+          Hiring here records a read-only subscription and costs nothing. The
+          publisher may charge separately at its own endpoint - ERC-8004 and
+          8004scan expose no price field for Dolphin to read.
+        </Text>
       </View>
     </Surface>
   );

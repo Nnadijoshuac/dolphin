@@ -1,6 +1,11 @@
 import type { Address } from "viem";
 
-import type { AgentCategory, DataSourceLabel } from "@/types/agent";
+import type {
+  AgentCategory,
+  AgentPriceModel,
+  DataSourceLabel,
+  LiveMetric,
+} from "@/types/agent";
 
 export const BSC_CHAIN_ID = 56 as const;
 
@@ -83,7 +88,72 @@ export const AGENT_DATA_SOURCES = {
     id: "dolphin-heuristic-discovery",
     label: "Dolphin automated discovery (keyword-matched, not human-vetted)",
   },
+  // Not a data feed: a value set by Dolphin's own marketplace policy. Used
+  // for DEFAULT_READ_ONLY_PRICE_MODEL below, so a reader can always tell a
+  // Dolphin-set value apart from an indexed or on-chain one.
+  marketplacePolicy: {
+    id: "dolphin-marketplace-policy",
+    label: "Dolphin marketplace policy (not a publisher-published value)",
+  },
 } as const satisfies Record<string, DataSourceLabel>;
+
+/* ---------------------------------------------------------------------------
+ * DECISION (2026-08-29): what an agent costs when nobody publishes a price.
+ * ---------------------------------------------------------------------------
+ * ERC-8004 carries no price field, and 8004scan's agent API publishes none
+ * either (verified by inspecting every key of a full raw response). No
+ * third-party price feed for these agents exists to fall back on.
+ *
+ * Until now `priceModel` was hardcoded `unavailable` on every agent from
+ * every source, and hire/[id].tsx gates its Hire button on the price
+ * resolving to "live"/"stale" - so hiring was unreachable for every agent in
+ * every category. That was the single dead end in the judged
+ * land -> find -> understand -> activate flow.
+ *
+ * The resolution is to price what Dolphin actually does, which is precisely
+ * knowable rather than guessed. A Dolphin hire is a read-only subscription
+ * record (convex/agentHires.ts): no signature, no spend cap, no session, no
+ * on-chain transaction, no custody. It costs the user exactly zero. That is
+ * a verifiable fact about this marketplace, not an assumption about a
+ * publisher, which is why it does not violate the data-integrity rule in
+ * AGENTS.md SS5 the way inventing an APY or a win rate would.
+ *
+ * What this deliberately does NOT claim: that the publisher offers their
+ * service free. They may charge at their own service endpoint; Dolphin
+ * cannot see that and must not assert otherwise. So `source` names Dolphin's
+ * own policy instead of a data feed, and `methodology` states the limit -
+ * the provenance travels with the value rather than living only in this
+ * comment. hire/[id].tsx renders it as "Dolphin hire price", never as a
+ * publisher-published price.
+ *
+ * TO REVERSE THIS (e.g. once x402 or a real publisher price feed lands):
+ * change or delete this constant and the two call sites that use it -
+ * src/data/editorial-agents.ts and src/data/discovered-agents.ts.
+ * src/services/agents-api.ts inherits it via its `...fallback` spread.
+ * Paid agents already fail closed: convex/agentHires.ts rejects any non-zero
+ * price because no x402 seller-side integration is wired up.
+ */
+export const DEFAULT_READ_ONLY_PRICE_MODEL = {
+  type: "flat",
+  amount: "0",
+  token: "BNB",
+} as const satisfies AgentPriceModel;
+
+const READ_ONLY_PRICE_METHODOLOGY =
+  "Dolphin's own hire price, not a publisher-published one. A hire here records a " +
+  "read-only subscription and requests no signature, payment, session, or spend cap, " +
+  "so it costs nothing. The publisher may charge separately at its own service " +
+  "endpoint; ERC-8004 and 8004scan expose no price field for Dolphin to read.";
+
+export function defaultReadOnlyPriceMetric(): LiveMetric<AgentPriceModel> {
+  return {
+    status: "live",
+    value: { ...DEFAULT_READ_ONLY_PRICE_MODEL },
+    asOf: new Date().toISOString(),
+    source: AGENT_DATA_SOURCES.marketplacePolicy,
+    methodology: READ_ONLY_PRICE_METHODOLOGY,
+  };
+}
 
 export const AGENT_QUERY_TIMINGS = {
   listStaleTimeMs: 5 * 60 * 1_000,

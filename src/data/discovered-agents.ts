@@ -2,7 +2,11 @@ import { getAddress, isAddress } from "viem";
 import type { Address } from "viem";
 
 import { unavailableLiveStats, unavailableMetric, unverifiedRegistry } from "@/data/editorial-agents";
-import { AGENT_DATA_SOURCES, ERC8004_REGISTRY_ADDRESSES } from "@/constants/agents";
+import {
+  AGENT_DATA_SOURCES,
+  ERC8004_REGISTRY_ADDRESSES,
+  defaultReadOnlyPriceMetric,
+} from "@/constants/agents";
 import type { Agent } from "@/types/agent";
 
 // Mirrors the discoveredAgents table in convex/discoveredAgents.ts -
@@ -85,9 +89,9 @@ export function discoveredAgentToAgent(row: DiscoveredAgentRecord): Agent {
     liveStats: unavailableLiveStats(row.category),
     performanceSeries: [],
     recentActivity: [],
-    priceModel: unavailableMetric(
-      "No machine-readable, currently verified price model is available.",
-    ),
+    // Dolphin's own hire price, not a publisher-published one - see
+    // DEFAULT_READ_ONLY_PRICE_MODEL for the full decision and how to reverse it.
+    priceModel: defaultReadOnlyPriceMetric(),
     registryVerification: unverifiedRegistry(),
     sourceLabels: [AGENT_DATA_SOURCES.scan, AGENT_DATA_SOURCES.publisher, AGENT_DATA_SOURCES.heuristicDiscovery],
     recordStatus: "indexed",

@@ -304,6 +304,12 @@ function decodeIndexedAgent(payload: unknown, fallback: Agent): Agent {
           indexedAt,
         );
 
+  // priceModel is deliberately absent from this decode and inherited from
+  // `fallback` via the spread below: 8004scan's agent payload has no price
+  // field of any kind (verified against a full raw response), so there is
+  // nothing here to decode. Leaving it out is what keeps a live refresh from
+  // regressing an agent back to an unresolved price and re-breaking the hire
+  // button - see DEFAULT_READ_ONLY_PRICE_MODEL in src/constants/agents.ts.
   return {
     ...fallback,
     id: fallback.id,

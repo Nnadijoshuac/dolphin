@@ -1,33 +1,32 @@
-import { colors } from "@/constants/theme";
-
 type StatusBadgeProps = {
   label: string;
   tone: string;
 };
 
-const toneStyles: Record<string, { bg: string; color: string; border: string }> = {
-  live: { bg: "#DCEFE4", color: "#1C6A44", border: "#B4DFC6" },
-  indexed: { bg: "#DDE9F8", color: "#295C92", border: "#B8D4F0" },
-  neutral: { bg: "#F5F3EB", color: "#6E706B", border: "#ECE8DE" },
-  unavailable: { bg: "#F5F3EB", color: "#6E706B", border: "#ECE8DE" },
-  syncing: { bg: "#FFF9E6", color: "#946B00", border: "#F3E3A6" },
-  stale: { bg: "#FFF3CD", color: "#856404", border: "#FFE69C" },
-  preview: { bg: "#FEF5D6", color: "#946B00", border: "#F3E3A6" },
+const toneClasses: Record<string, string> = {
+  live:
+    "border-[color-mix(in_srgb,var(--success)_32%,transparent)] bg-[var(--success-soft)] text-[var(--success)]",
+  indexed:
+    "border-[color-mix(in_srgb,var(--info)_30%,transparent)] bg-[var(--info-soft)] text-[var(--info)]",
+  neutral: "border-[var(--line)] bg-[var(--neutral-soft)] text-[var(--muted)]",
+  unavailable:
+    "border-[var(--line)] bg-[var(--neutral-soft)] text-[var(--muted)]",
+  syncing:
+    "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-ink)]",
+  stale:
+    "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-ink)]",
+  preview:
+    "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-ink)]",
 };
 
 export function StatusBadge({ label, tone }: StatusBadgeProps) {
-  const style = toneStyles[tone] ?? toneStyles.neutral;
-
   return (
     <span
-      className="inline-flex items-center rounded-full px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wider border"
-      style={{
-        backgroundColor: style.bg,
-        color: style.color,
-        borderColor: style.border,
-      }}
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-[0.08em] ${
+        toneClasses[tone] ?? toneClasses.neutral
+      }`}
     >
-      {label}
+      {label.toUpperCase()}
     </span>
   );
 }

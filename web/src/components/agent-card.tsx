@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { CategoryGlyph } from "@/components/category-glyph";
-import { colors, shadows } from "@/constants/theme";
+
+import { AgentIcon } from "@/components/agent-icon";
 import type { Agent, AgentCategory } from "@/types/agent";
 
 const categoryLabels: Record<AgentCategory, string> = {
@@ -15,80 +15,43 @@ const categoryLabels: Record<AgentCategory, string> = {
 
 type AgentCardProps = {
   agent: Agent;
+  className?: string;
 };
 
-export function AgentCard({ agent }: AgentCardProps) {
+export function AgentCard({ agent, className = "" }: AgentCardProps) {
   return (
     <Link
+      className={`pressable-scale group flex min-h-72 flex-col border-t border-[var(--line)] p-6 no-underline hover:bg-[var(--surface-elevated)] sm:p-8 ${className}`}
       href={`/agent/${agent.tokenId}`}
-      className="pressable-scale block rounded-3xl border bg-white p-4 no-underline transition-shadow duration-200 hover:shadow-lg"
-      style={{
-        borderColor: "rgba(17,18,20,0.06)",
-        boxShadow: shadows.subtle,
-      }}
     >
-      <div className="flex items-start gap-4">
-        {/* Icon */}
-        <div
-          className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border"
-          style={{
-            backgroundColor: "#F5F3EC",
-            borderColor: "rgba(17,18,20,0.04)",
-          }}
-        >
-          <CategoryGlyph
-            color={colors.ink}
-            name={agent.category}
-            size={38}
-            strokeWidth={2.2}
-          />
-        </div>
+      <div className="flex items-start justify-between gap-5">
+        <AgentIcon category={agent.category} size={64} uri={agent.iconUrl} />
+        <span className="rounded-full border border-[var(--line)] px-3 py-1.5 text-[11px] font-bold text-[var(--muted)]">
+          {categoryLabels[agent.category]}
+        </span>
+      </div>
 
-        {/* Info */}
-        <div className="min-w-0 flex-1">
-          <h3
-            className="text-[17px] font-bold tracking-tight truncate"
-            style={{ color: colors.ink }}
-          >
-            {agent.name}
-          </h3>
+      <div className="mt-8 flex-1">
+        <h3 className="text-2xl font-bold tracking-[-0.045em] text-[var(--ink)]">
+          {agent.name}
+        </h3>
+        <p className="text-pretty mt-3 max-w-lg text-sm leading-6 text-[var(--muted)]">
+          {agent.tagline}
+        </p>
+      </div>
 
-          <p
-            className="mt-1 line-clamp-2 text-[13px] leading-[18px]"
-            style={{ color: "#4A4B4F" }}
-          >
-            {agent.tagline}
+      <div className="mt-8 flex items-end justify-between gap-5 border-t border-[var(--line-light)] pt-5">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold tracking-[0.12em] text-[var(--faint)]">
+            PUBLISHER
           </p>
-
-          {/* Category tag */}
-          <div className="mt-2.5 flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
-            <span className="text-[12px] font-medium text-zinc-500">
-              {categoryLabels[agent.category]}
-            </span>
-          </div>
-
-          {/* Status & CTA */}
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <CategoryGlyph color="#8C8E88" name="sparkle" size={13} />
-              <span className="text-[11.5px] font-medium text-zinc-500">
-                Syncing BSC data
-              </span>
-            </div>
-
-            <span
-              className="flex items-center justify-center rounded-xl px-4 py-1.5 text-[13px] font-bold text-black"
-              style={{
-                backgroundColor: colors.gold,
-                minWidth: 64,
-                boxShadow: shadows.subtle,
-              }}
-            >
-              View
-            </span>
-          </div>
+          <p className="mt-1 truncate text-xs font-semibold text-[var(--ink-secondary)]">
+            {agent.publisher}
+          </p>
         </div>
+        <span className="shrink-0 text-sm font-bold text-[var(--accent-ink)] transition-transform duration-200 group-hover:translate-x-1">
+          Open evidence
+        </span>
       </div>
     </Link>
   );

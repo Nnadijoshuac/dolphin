@@ -28,6 +28,17 @@ function shortAddress(value: string | null) {
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
+/**
+ * A live read that returned an empty list is a real answer - "we checked the
+ * chain and this wallet uses none" - but value.join(", ") renders it as a
+ * blank cell that reads as a broken UI. "None" keeps it honest while staying
+ * visibly distinct from MetricCell's "Not reported", which means no feed was
+ * available to check in the first place.
+ */
+function formatList(value: string[]) {
+  return value.length > 0 ? value.join(", ") : "None";
+}
+
 function DetailSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <View className="mt-9">
@@ -87,7 +98,7 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
               <MetricCell format={(value) => value} label="Alert frequency" metric={stats.alertFrequency} />
             </View>
             <View className="w-1/2 pl-3">
-              <MetricCell format={(value) => value.join(", ")} label="Assets watched" metric={stats.assetsWatched} />
+              <MetricCell format={formatList} label="Assets watched" metric={stats.assetsWatched} />
             </View>
             <View className="w-1/2 pr-3">
               <MetricCell format={(value) => value} label="Last alert" metric={stats.lastAlertAt} />
@@ -154,7 +165,7 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
               <MetricCell format={(value) => `$${value.toLocaleString()}`} label="TVL managed" metric={stats.tvlManagedUsd} />
             </View>
             <View className="w-1/2 pr-3">
-              <MetricCell format={(value) => value.join(", ")} label="Protocols" metric={stats.protocolsUsed} />
+              <MetricCell format={formatList} label="Protocols" metric={stats.protocolsUsed} />
             </View>
             <View className="w-1/2 pl-3">
               <MetricCell format={(value) => value} label="Vault rebalance cadence" metric={stats.rebalanceFrequency} />

@@ -141,8 +141,8 @@ export const AGENT_DATA_SOURCES = {
  *
  * TO REVERSE THIS (e.g. once x402 or a real publisher price feed lands):
  * change or delete this constant and the two call sites that use it -
- * src/data/editorial-agents.ts and src/data/discovered-agents.ts.
- * src/services/agents-api.ts inherits it via its `...fallback` spread.
+ * src/data/editorial-agents.ts. src/services/agents-api.ts inherits it via
+ * its `...fallback` spread.
  * Paid agents already fail closed: convex/agentHires.ts rejects any non-zero
  * price because no x402 seller-side integration is wired up.
  */

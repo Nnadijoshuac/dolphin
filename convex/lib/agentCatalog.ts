@@ -5,7 +5,7 @@
  * WHY THIS EXISTS (2026-08-29). These decisions used to live only in the
  * mobile app's client code - src/data/editorial-agents.ts (curation),
  * src/constants/agents.ts (taxonomy + DEFAULT_READ_ONLY_PRICE_MODEL),
- * src/data/discovered-agents.ts (the discovered->Agent mapping) and
+ * src/data/discovered-agents.ts (the discovered->Agent mapping, now deleted) and
  * src/hooks/use-agents.ts (merge-and-dedupe). The Next.js site under web/ had
  * begun re-implementing all four from a copy taken on 2026-08-28, and had
  * already drifted: its taxonomy still listed "monitoring" as a graded category
@@ -467,7 +467,8 @@ function deriveTagline(description: string): string {
  * convex/lib/classification.ts's keyword heuristic - not a human) into the same
  * shape as an editorial agent. classificationSource/classificationConfidence
  * carry that provenance through so a UI can visibly distinguish these from the
- * hand-vetted entries. Ported from src/data/discovered-agents.ts.
+ * hand-vetted entries. Ported from the former src/data/discovered-agents.ts,
+ * which is deleted - this is now the only copy.
  */
 export function buildDiscoveredAgent(
   row: {

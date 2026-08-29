@@ -25,10 +25,10 @@
 #                     statically exported as written.
 #
 # Until then this job still earns its place: it proves the site builds on Linux
-# from a clean install, which is not a given here. deploy-web.yml documents at
-# length how the Windows-authored root lockfile makes `npm ci` impossible on a
-# Linux runner; web/package-lock.json was authored on Windows too, so this is
-# the job that finds out whether it has the same defect.
+# from a clean install, which is not a given here. Its first run immediately
+# caught two things that only show up on a clean Linux checkout - the lockfile
+# defect and the missing generated route types - both documented at their steps
+# below.
 name: Build website (web/)
 
 on:
@@ -71,13 +71,23 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      # `npm ci` first, on purpose. The root project cannot use it (see
-      # deploy-web.yml for the full diagnosis), and the point of trying it here
-      # is to learn whether web/'s lockfile shares that defect rather than
-      # assuming either way. If it does, the fallback keeps the build green and
-      # says so in an annotation instead of failing silently or hiding the
-      # cause - that annotation is how the root project's failure was finally
-      # diagnosed, since raw job logs need an authenticated download.
+      # `npm ci` first, and the first CI run answered the open question: web/'s
+      # lockfile HAS the same defect as the root one. Run 33250109899 emitted
+      #
+      #   npm error code EUSAGE
+      #   npm error Missing: @emnapi/runtime@1.11.3 from lock file
+      #   npm error Missing: @emnapi/core@1.11.3 from lock file
+      #
+      # which is character-for-character the failure deploy-web.yml diagnoses at
+      # length: npm records an optional platform-specific package's own
+      # dependencies only for the platform it resolved on, and both lockfiles
+      # here were authored on Windows. So both projects need the fallback, and
+      # the durable fix for both is to regenerate the lockfiles once on Linux.
+      #
+      # `npm ci` is still attempted first so this stops falling back the moment
+      # that happens, and the annotation keeps the reason visible - annotations
+      # being how the root project's failure was diagnosed, since raw job logs
+      # need an authenticated download.
       - name: Install dependencies
         run: |
           set -o pipefail
@@ -88,6 +98,14 @@ jobs:
             echo "::warning title=npm ci failed, fell back to npm install::${reason:-see job log}"
             npm install --no-audit --no-fund
           fi
+
+      # Next 16 generates the global route types (LayoutProps, PageProps) into
+      # .next/types, and .next is not committed - so on a clean clone
+      # `tsc --noEmit` fails with "Cannot find name 'LayoutProps'" before
+      # anything has built. The first CI run failed exactly there. `next typegen`
+      # emits those types without a full build, which is what it is for.
+      - name: Generate route types
+        run: npx next typegen
 
       # Typecheck separately from the build so a type error is reported as a
       # type error, rather than as a generic build failure 60 seconds later.

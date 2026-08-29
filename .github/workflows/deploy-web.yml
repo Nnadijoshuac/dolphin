@@ -45,9 +45,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Match the toolchain the lockfile was generated and verified with
+      # (Node 24.13 / npm 11) rather than pinning an older major. Node 20 is
+      # also deprecated on GitHub runners now - they force actions onto Node
+      # 24 regardless - and `npm ci` failed under it on the first two runs.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - run: npm ci

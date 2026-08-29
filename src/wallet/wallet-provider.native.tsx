@@ -38,6 +38,24 @@ import type {
   WalletProviderProps,
 } from "./wallet-types";
 
+// TEMPORARY DIAGNOSTIC (remove once the relay publish issue is confirmed
+// fixed): proves whether react-native-get-random-values above actually
+// installed a working getRandomValues, rather than continuing to guess
+// from relay symptoms alone.
+try {
+  const probe = new Uint8Array(8);
+  crypto.getRandomValues(probe);
+  console.log(
+    "[wallet-diagnostic] crypto.getRandomValues OK, sample:",
+    Array.from(probe).join(","),
+  );
+} catch (error) {
+  console.log(
+    "[wallet-diagnostic] crypto.getRandomValues FAILED:",
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
 const MISSING_PROJECT_ID_MESSAGE =
   "Wallet connection is not configured. Add EXPO_PUBLIC_REOWN_PROJECT_ID to a local .env file.";
 

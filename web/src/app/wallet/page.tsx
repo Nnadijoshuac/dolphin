@@ -1,99 +1,155 @@
 "use client";
 
+import Link from "next/link";
+
+import { BnbLogo } from "@/components/brand-mark";
 import { StatePanel } from "@/components/state-panel";
-import { Surface } from "@/components/surface";
-import { SectionHeading } from "@/components/section-heading";
-import { colors } from "@/constants/theme";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
-/**
- * The wallet surface. AppShell has always had a Wallet tab and there was no
- * route behind it, so the link 404'd - visible in the browser as a failed
- * prefetch on every page load.
- */
+const connectionFacts = [
+  {
+    title: "Reads one public address",
+    body: "Dolphin uses it to associate real backend hire records with this wallet.",
+  },
+  {
+    title: "Requests no wallet authority",
+    body: "A read-only hire creates no signature, spending approval, or session key.",
+  },
+  {
+    title: "Sends no transaction",
+    body: "The current hire flow writes a Dolphin subscription record, not an onchain execution.",
+  },
+] as const;
+
 export default function WalletPage() {
   const wallet = useWallet();
 
   return (
-    <div className="py-6 pb-24">
-      <h1
-        className="text-2xl md:text-3xl font-black tracking-tight"
-        style={{ color: colors.ink }}
-      >
-        Wallet
-      </h1>
-      <p className="mt-1 text-[13px]" style={{ color: colors.muted }}>
-        Connect a browser wallet to hire agents on BNB Smart Chain.
-      </p>
+    <div className="site-frame py-12 sm:py-16 lg:py-20">
+      <header className="grid gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-end">
+        <div className="reveal-one">
+          <p className="text-xs font-bold tracking-[0.16em] text-[var(--accent-ink)]">
+            WALLET CONNECTION
+          </p>
+          <h1 className="text-balance mt-4 max-w-2xl text-5xl font-black leading-[0.92] tracking-[-0.065em] text-[var(--ink)] sm:text-7xl">
+            Connect with clarity.
+          </h1>
+        </div>
+        <p className="reveal-two max-w-xl text-base leading-7 text-[var(--muted)] lg:justify-self-end">
+          Dolphin connects to an injected browser wallet on BNB Smart Chain.
+          The current hire flow reads its public address and nothing more.
+        </p>
+      </header>
 
-      <div className="mt-6 max-w-md">
-        <WalletConnectButton />
-      </div>
+      <div className="mt-14 grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
+        <section
+          aria-labelledby="connection-heading"
+          className="rounded-[18px] bg-[var(--dark-card)] p-7 text-white shadow-[var(--shadow-floating)] sm:p-9"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-bold tracking-[0.14em] text-white/45">
+                CURRENT CONNECTION
+              </p>
+              <h2
+                className="mt-3 text-2xl font-black tracking-[-0.045em]"
+                id="connection-heading"
+              >
+                {wallet.isConnected ? "Wallet connected" : "No wallet connected"}
+              </h2>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-bold text-white/60">
+              <BnbLogo size={18} />
+              BNB Chain
+            </div>
+          </div>
 
-      <div className="mt-8">
-        <SectionHeading title="Connection" />
-        <Surface>
           {wallet.isConnected && wallet.address ? (
-            <dl className="space-y-4">
-              <div>
-                <dt
-                  className="text-[11px] font-bold uppercase tracking-wider"
-                  style={{ color: colors.muted }}
-                >
-                  Address
-                </dt>
-                <dd
-                  className="mt-1 break-all font-mono text-[13px]"
-                  style={{ color: colors.ink }}
-                >
+            <dl className="mt-8 border-b border-white/12">
+              <div className="border-t border-white/12 py-4">
+                <dt className="text-xs text-white/45">Public address</dt>
+                <dd className="mt-2 break-all font-mono text-xs font-bold leading-5 text-white">
                   {wallet.address}
                 </dd>
               </div>
-              <div>
-                <dt
-                  className="text-[11px] font-bold uppercase tracking-wider"
-                  style={{ color: colors.muted }}
-                >
-                  Network
-                </dt>
-                <dd className="mt-1 text-[13px]" style={{ color: colors.ink }}>
-                  BNB Smart Chain · 56
+              <div className="flex items-center justify-between gap-5 border-t border-white/12 py-4">
+                <dt className="text-xs text-white/45">Network</dt>
+                <dd className="text-right text-sm font-bold">
+                  BNB Smart Chain / 56
                 </dd>
               </div>
             </dl>
           ) : (
-            <StatePanel
-              title={wallet.isAvailable ? "Not connected" : "No wallet detected"}
-              body={
-                wallet.unavailableReason ??
-                "Dolphin never asks for a private key and never requests a signature for a read-only hire."
-              }
-              state="unavailable"
-              compact
-            />
+            <div className="mt-7 border-y border-white/12 py-5">
+              <p className="text-sm font-bold text-white">
+                {wallet.isAvailable
+                  ? "Ready for your browser wallet"
+                  : "No injected wallet detected"}
+              </p>
+              <p className="mt-2 text-xs leading-5 text-white/54">
+                {wallet.unavailableReason ??
+                  "Connecting will ask the wallet to expose its public address."}
+              </p>
+            </div>
           )}
-        </Surface>
-      </div>
 
-      {/*
-        Stated plainly rather than implied. A hire on Dolphin is a read-only
-        subscription record in Convex - no signature, no spend cap, no
-        transaction - and saying so here is the same claim the price policy
-        makes in convex/lib/agentCatalog.ts. Overstating it would be the exact
-        kind of unearned assertion AGENTS.md SS5 rules out.
-      */}
-      <div className="mt-8">
-        <SectionHeading title="What connecting does" />
-        <Surface>
-          <ul
-            className="list-disc space-y-2 pl-5 text-[14px] leading-6"
-            style={{ color: colors.ink }}
+          <div className="mt-7">
+            <WalletConnectButton />
+          </div>
+
+          {wallet.isConnected && (
+            <Link
+              className="mt-5 inline-flex text-xs font-bold text-[#e9b949]"
+              href="/my-agents"
+            >
+              View this wallet&apos;s agents
+            </Link>
+          )}
+        </section>
+
+        <section aria-labelledby="connection-facts-heading" className="py-3">
+          <p className="text-sm font-semibold text-[var(--accent-ink)]">
+            Know the boundary
+          </p>
+          <h2
+            className="text-balance mt-3 max-w-xl text-3xl font-black leading-[1] tracking-[-0.05em] text-[var(--ink)] sm:text-4xl"
+            id="connection-facts-heading"
           >
-            <li>Reads your public address so a hire can be recorded against it.</li>
-            <li>Requests no signature, no spending approval and no session key.</li>
-            <li>Sends no transaction — a Dolphin hire is a read-only subscription record.</li>
-          </ul>
-        </Surface>
+            What connecting does, exactly.
+          </h2>
+
+          <div className="mt-8 border-b border-[var(--line)]">
+            {connectionFacts.map((fact, index) => (
+              <article
+                className="grid gap-3 border-t border-[var(--line)] py-6 sm:grid-cols-[3rem_1fr]"
+                key={fact.title}
+              >
+                <span className="font-mono text-xs text-[var(--faint)]">
+                  0{index + 1}
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-[var(--ink)]">
+                    {fact.title}
+                  </h3>
+                  <p className="mt-2 max-w-lg text-sm leading-6 text-[var(--muted)]">
+                    {fact.body}
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          {!wallet.isAvailable && !wallet.isConnected && (
+            <div className="mt-8">
+              <StatePanel
+                body="Install an EIP-1193 browser wallet such as MetaMask, then reload this page. Dolphin will never ask for a private key."
+                compact
+                state="unavailable"
+                title="Browser wallet required"
+              />
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

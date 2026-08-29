@@ -142,15 +142,23 @@ export function WalletConnectButton({
 }) {
   const wallet = useWallet();
 
-  const label = wallet.isConnected && wallet.address
-    ? `Disconnect ${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`
-    : wallet.isConnecting
-      ? "Check your wallet…"
-      : connectLabel;
+  const label =
+    wallet.isConnected && wallet.address
+      ? `Disconnect ${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
+      : wallet.isConnecting
+        ? "Check your wallet..."
+        : connectLabel;
 
   return (
     <div className="w-full">
       <button
+        aria-busy={wallet.isConnecting}
+        className={`pressable-scale min-h-12 w-full rounded-xl border px-5 text-sm font-black disabled:cursor-wait disabled:opacity-60 ${
+          wallet.isConnected
+            ? "border-white/18 bg-white/8 text-white hover:border-white/35 hover:bg-white/12"
+            : "border-[#e9b949] bg-[#e9b949] text-[#17140c] hover:border-[#f0c665] hover:bg-[#f0c665]"
+        }`}
+        disabled={wallet.isConnecting}
         onClick={() => {
           if (wallet.isConnected) {
             void wallet.disconnect();
@@ -158,17 +166,14 @@ export function WalletConnectButton({
             void wallet.connect();
           }
         }}
-        disabled={wallet.isConnecting}
-        className="w-full rounded-xl py-3 px-5 font-bold text-sm transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100"
-        style={{
-          backgroundColor: wallet.isConnected ? "#FEE2E2" : "#F5B300",
-          color: wallet.isConnected ? "#B91C1C" : "#111214",
-        }}
+        type="button"
       >
         {label}
       </button>
       {wallet.error !== null && (
-        <p className="mt-2 text-xs font-medium text-red-600">{wallet.error}</p>
+        <p className="mt-2 text-xs font-semibold leading-5 text-[var(--danger)]">
+          {wallet.error}
+        </p>
       )}
     </div>
   );

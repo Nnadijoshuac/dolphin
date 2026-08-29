@@ -12,6 +12,7 @@ export function BrandMark({ size = 32 }: { size?: number }) {
       height={size}
       className="object-contain"
       priority
+      style={{ height: size, width: size }}
     />
   );
 }
@@ -24,6 +25,7 @@ export function BnbLogo({ size = 18 }: { size?: number }) {
       width={size}
       height={size}
       className="object-contain"
+      style={{ height: size, width: size }}
     />
   );
 }

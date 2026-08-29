@@ -1,0 +1,48 @@
+export const colors = {
+  canvas: "#FBF9F4",
+  surface: "#FFFFFF",
+  surfaceElevated: "#FDFDFD",
+  surfaceSubtle: "#F5F3EB",
+  surfaceMuted: "#EFECE4",
+  ink: "#111214",
+  inkSecondary: "#303236",
+  muted: "#6E706B",
+  faint: "#A5A79F",
+  line: "#ECE8DE",
+  lineLight: "#F3F0E8",
+  gold: "#F5B300",
+  goldHover: "#E2A500",
+  goldSoft: "#FEF5D6",
+  goldMuted: "#FFF9E6",
+  goldBorder: "#F3E3A6",
+  goldDark: "#946B00",
+  darkCard: "#121318",
+  darkCardSurface: "#1C1D24",
+  mint: "#DCEFE4",
+  mintInk: "#1C6A44",
+  blue: "#DDE9F8",
+  blueInk: "#295C92",
+  lilac: "#E9E1F4",
+  lilacInk: "#65478A",
+  coral: "#F7DFD8",
+  coralInk: "#964C3C",
+  danger: "#B9473A",
+  success: "#287A4E",
+  overlay: "rgba(17, 18, 20, 0.44)",
+} as const;
+
+export const radii = {
+  xs: 8,
+  small: 12,
+  medium: 18,
+  large: 24,
+  xl: 32,
+  pill: 999,
+} as const;
+
+export const shadows = {
+  subtle: "0 2px 8px rgba(17,18,20,0.04)",
+  card: "0 6px 18px rgba(17,18,20,0.05)",
+  goldGlow: "0 4px 14px rgba(245,179,0,0.25)",
+  floating: "0 12px 24px rgba(17,18,20,0.12)",
+} as const;

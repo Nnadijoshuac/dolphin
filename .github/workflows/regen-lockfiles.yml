@@ -1,0 +1,91 @@
+# Regenerates package-lock.json on Linux for both projects.
+#
+# WHY: npm records optional platform-specific packages' dependencies only for
+# the platform the lockfile was resolved on. Both lockfiles here were authored
+# on Windows, so they are missing @emnapi/core and @emnapi/runtime which Linux
+# needs for @napi-rs/wasm-runtime. `npm ci` on a Linux runner fails with:
+#
+#   npm error Missing: @emnapi/core@1.11.3 from lock file
+#   npm error Missing: @emnapi/runtime@1.11.3 from lock file
+#
+# This workflow runs `npm install` on ubuntu-latest (the same OS as the real CI
+# runners), verifies `npm ci` against the result, and uploads both regenerated
+# lockfiles as a downloadable artifact.
+#
+# USAGE: manually dispatch from Actions tab, download the artifact, commit the
+# lockfiles, then delete this workflow file.
+name: Regenerate lockfiles on Linux
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    env:
+      # Needed so npm install can resolve everything, even though we don't
+      # actually build. Use the same public values as the real workflows.
+      EXPO_PUBLIC_CONVEX_URL: 'https://enduring-mastiff-708.eu-west-1.convex.cloud'
+      NEXT_PUBLIC_CONVEX_URL: 'https://enduring-mastiff-708.eu-west-1.convex.cloud'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Show versions
+        run: |
+          echo "Node: $(node --version)"
+          echo "npm:  $(npm --version)"
+          echo "OS:   $(uname -a)"
+
+      # --- Root project ---
+      - name: Install root dependencies (generates lockfile)
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+          echo "--- Root lockfile regenerated ---"
+
+      - name: Verify root npm ci
+        run: |
+          rm -rf node_modules
+          npm ci --no-audit --no-fund
+          echo "--- Root npm ci succeeded ---"
+
+      - name: Snapshot root lockfile
+        run: cp package-lock.json /tmp/root-package-lock.json
+
+      # --- Web project ---
+      - name: Install web dependencies (generates lockfile)
+        working-directory: web
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
+          echo "--- Web lockfile regenerated ---"
+
+      - name: Verify web npm ci
+        working-directory: web
+        run: |
+          rm -rf node_modules
+          npm ci --no-audit --no-fund
+          echo "--- Web npm ci succeeded ---"
+
+      - name: Snapshot web lockfile
+        run: cp web/package-lock.json /tmp/web-package-lock.json
+
+      # --- Upload both ---
+      - name: Prepare artifact
+        run: |
+          mkdir -p /tmp/lockfiles/web
+          cp /tmp/root-package-lock.json /tmp/lockfiles/package-lock.json
+          cp /tmp/web-package-lock.json /tmp/lockfiles/web/package-lock.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-lockfiles
+          path: /tmp/lockfiles/
+          retention-days: 7

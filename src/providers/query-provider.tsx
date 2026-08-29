@@ -8,14 +8,36 @@ import {
 import { AppState, Platform, type AppStateStatus } from "react-native";
 import { useEffect, type PropsWithChildren } from "react";
 
-onlineManager.setEventListener((setOnline) =>
-  NetInfo.addEventListener((state) => {
-    const hasNetwork = state.isConnected === true;
-    const canReachInternet = state.isInternetReachable !== false;
+// Native only, deliberately. Browsers already have TanStack Query's own
+// onlineManager, driven by window's online/offline events - the same reason
+// the focus listener below is skipped on web.
+//
+// Wiring NetInfo here on web actively breaks the app when it is not served
+// from the domain root. NetInfo's web build defaults to
+// `reachabilityUrl: "/"` with `reachabilityMethod: "HEAD"` and a
+// `reachabilityTest` of `status === 200` (see its
+// internal/defaultConfiguration.web.js). Under any sub-path deploy - a
+// GitHub Pages project site at /<repo>, or anything behind a path prefix -
+// that probe hits a root the app does not own and gets a 404, so
+// isInternetReachable becomes false, onlineManager goes offline, and
+// TanStack Query *pauses* every query instead of failing it: no HTTP
+// request, no error, no retry, and a permanently empty marketplace.
+//
+// Confirmed on 2026-08-29 by exporting with experiments.baseUrl set and
+// serving under a sub-path: zero requests to 8004scan and a "No Agents
+// Found" Discover tab, while the identical bundle served at / fetched all
+// eight agents. Convex was unaffected, which is what made it look like a
+// routing bug rather than a network-state one.
+if (Platform.OS !== "web") {
+  onlineManager.setEventListener((setOnline) =>
+    NetInfo.addEventListener((state) => {
+      const hasNetwork = state.isConnected === true;
+      const canReachInternet = state.isInternetReachable !== false;
 
-    setOnline(hasNetwork && canReachInternet);
-  }),
-);
+      setOnline(hasNetwork && canReachInternet);
+    }),
+  );
+}
 
 export const queryClient = new QueryClient({
   defaultOptions: {

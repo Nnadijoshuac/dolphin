@@ -4,7 +4,9 @@ import { use } from "react";
 
 import { AgentDetail } from "@/components/agent-detail";
 import { StatePanel } from "@/components/state-panel";
-import { WalletConnectButton } from "@/wallet/wallet-provider";
+import { SectionHeading } from "@/components/section-heading";
+import { HireAction } from "@/components/hire-action";
+import { convexClient } from "@/providers/convex-provider";
 import { useAgentDetail } from "@/hooks/use-agents";
 
 /**
@@ -55,8 +57,18 @@ export default function AgentPage({
   return (
     <div className="pb-24">
       <AgentDetail agent={agent} />
-      <div className="mt-8">
-        <WalletConnectButton connectLabel="Connect wallet to hire" />
+      <div className="mt-9">
+        <SectionHeading title="Activate" />
+        {convexClient ? (
+          <HireAction agent={agent} />
+        ) : (
+          <StatePanel
+            title="Backend not configured"
+            body="NEXT_PUBLIC_CONVEX_URL is unset, so a hire cannot be recorded."
+            state="unavailable"
+            compact
+          />
+        )}
       </div>
     </div>
   );

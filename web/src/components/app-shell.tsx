@@ -60,28 +60,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </Link>
 
-          {/* Desktop Nav Links */}
+          {/* Desktop Nav Links (Warm Gold/Amber Active State - No Black Pill) */}
           <nav
             aria-label="Primary navigation"
-            className="hidden items-center gap-1 rounded-full border border-[#ECE8DE] bg-white/80 p-1.5 shadow-sm md:flex"
+            className="hidden items-center gap-1.5 rounded-full border border-[#ECE8DE] bg-white/90 p-1.5 shadow-sm md:flex"
           >
             {navigation.map((item) => {
               const isActive = isActiveRoute(pathname, item.path);
               return (
                 <Link
                   aria-current={isActive ? "page" : undefined}
-                  className={`pressable-scale flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-bold no-underline transition-all ${
+                  className={`pressable-scale flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-extrabold no-underline transition-all ${
                     isActive
-                      ? "bg-[#111214] text-white shadow-sm"
-                      : "text-[#6E706B] hover:bg-[#F5F3EB] hover:text-[#111214]"
+                      ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00] shadow-sm"
+                      : "border border-transparent text-[#6E706B] hover:bg-[#F5F3EB] hover:text-[#111214]"
                   }`}
                   href={item.path}
                   key={item.path}
                 >
                   <CategoryGlyph
-                    color={isActive ? "#F5B300" : "currentColor"}
+                    color={isActive ? "#946B00" : "currentColor"}
                     name={item.icon}
                     size={14}
+                    strokeWidth={isActive ? 2.5 : 2}
                   />
                   {item.label}
                 </Link>
@@ -92,7 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Right Network & Wallet Connect Button */}
           <div className="flex items-center gap-3">
             {/* Live Network Indicator */}
-            <div className="hidden items-center gap-2 rounded-full border border-[#ECE8DE] bg-white px-3 py-1.5 text-xs font-semibold text-[#303236] shadow-sm lg:flex">
+            <div className="hidden items-center gap-2 rounded-full border border-[#ECE8DE] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#303236] shadow-sm lg:flex">
               <BnbLogo size={16} />
               <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#111214]">
                 <span className="h-2 w-2 rounded-full bg-[#1C6A44]" />
@@ -145,9 +146,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 const isActive = isActiveRoute(pathname, item.path);
                 return (
                   <Link
-                    className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold no-underline ${
+                    className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold no-underline ${
                       isActive
-                        ? "bg-[#111214] text-white"
+                        ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00]"
                         : "bg-white text-[#6E706B] border border-[#ECE8DE]"
                     }`}
                     href={item.path}
@@ -155,7 +156,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
                     <CategoryGlyph
-                      color={isActive ? "#F5B300" : "currentColor"}
+                      color={isActive ? "#946B00" : "currentColor"}
                       name={item.icon}
                       size={16}
                     />

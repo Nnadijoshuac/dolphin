@@ -54,7 +54,18 @@ jobs:
           node-version: 24
           cache: npm
 
-      - run: npm ci
+      # Wrapped so a failure reports itself as a GitHub annotation. Raw job
+      # logs need an authenticated download, but annotations are readable
+      # from the public API, so this keeps `npm ci` failures diagnosable
+      # without pushing another commit just to add logging.
+      - name: Install dependencies
+        run: |
+          set -o pipefail
+          if ! npm ci --no-audit --no-fund 2>&1 | tee /tmp/npm-ci.log; then
+            reason=$(grep -iE "npm (error|ERR!)" /tmp/npm-ci.log | grep -viE "^npm (error|ERR!)\s*$" | head -n 10 | tr '\n' '~')
+            echo "::error title=npm ci failed::${reason:-no npm error lines captured; see job log}"
+            exit 1
+          fi
 
       # A GitHub project site is served from /<repo>, not from /. Expo needs
       # to know that at build time so it can prefix every bundled asset URL

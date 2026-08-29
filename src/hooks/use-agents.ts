@@ -8,8 +8,10 @@ import {
   AGENT_QUERY_TIMINGS,
 } from "@/constants/agents";
 import { discoveredAgentToAgent } from "@/data/discovered-agents";
+import { findEditorialAgent } from "@/data/editorial-agents";
 import { convexClient } from "@/providers/convex-provider";
 import {
+  AgentsApiError,
   fetchAgentById,
   fetchAgents,
   searchAgentsLocally,
@@ -98,6 +100,36 @@ export function useAgents() {
   return { ...editorialQuery, data };
 }
 
+const NOT_IN_DISCOVERY_SET_ERROR =
+  "This agent is not in Dolphin's explicitly classified BSC discovery set.";
+
+/**
+ * Looks up a discovered (non-editorial) agent by tokenId. fetchAgentById
+ * (agents-api.ts) only ever checked EDITORIAL_AGENTS - opening any
+ * discovered agent's detail page threw and rendered "Agent Not Found"
+ * (confirmed by hand for "BNB LP Range Rebalancer", tokenId 265375, on
+ * 2026-08-29). This is the fallback useAgent() takes when the reference
+ * isn't an editorial agent.
+ */
+async function fetchDiscoveredAgentById(reference: string): Promise<Agent> {
+  const parts = reference.split(":");
+  const tokenId = parts[parts.length - 1];
+
+  if (!convexClient) {
+    throw new AgentsApiError(NOT_IN_DISCOVERY_SET_ERROR);
+  }
+
+  const row = await convexClient.query(api.discoveredAgents.getDiscoveredAgentByTokenId, {
+    tokenId,
+  });
+
+  if (!row) {
+    throw new AgentsApiError(NOT_IN_DISCOVERY_SET_ERROR);
+  }
+
+  return discoveredAgentToAgent(row);
+}
+
 export function useAgent(
   reference: string | null | undefined,
   options: UseAgentOptions = {},
@@ -110,7 +142,10 @@ export function useAgent(
     enabled:
       normalizedReference.length > 0 && (options.enabled === undefined || options.enabled),
     queryFn: async ({ signal }) => {
-      const agent = await fetchAgentById(normalizedReference, { signal });
+      const isEditorial = findEditorialAgent(normalizedReference) !== undefined;
+      const agent = isEditorial
+        ? await fetchAgentById(normalizedReference, { signal })
+        : await fetchDiscoveredAgentById(normalizedReference);
 
       if (!verifyOnChain) {
         return agent;

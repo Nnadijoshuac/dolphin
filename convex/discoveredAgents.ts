@@ -296,3 +296,22 @@ export const listDiscoveredAgents = query({
       .collect();
   },
 });
+
+/**
+ * Single-agent lookup for the agent detail route. Added 2026-08-29:
+ * fetchAgentById (src/services/agents-api.ts) only ever checked
+ * EDITORIAL_AGENTS, so opening any discovered (non-editorial) agent's
+ * detail page threw "not in Dolphin's explicitly classified BSC discovery
+ * set" and rendered "Agent Not Found" - confirmed by hand for "BNB LP
+ * Range Rebalancer" (265375). useAgent() (src/hooks/use-agents.ts) now
+ * falls back to this query when the editorial lookup fails.
+ */
+export const getDiscoveredAgentByTokenId = query({
+  args: { tokenId: v.string() },
+  handler: async (ctx, { tokenId }) => {
+    return ctx.db
+      .query("discoveredAgents")
+      .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId))
+      .unique();
+  },
+});

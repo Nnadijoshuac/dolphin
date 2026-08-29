@@ -204,9 +204,38 @@ step before calling web wallet connect fully confirmed.
 The two test rows are keyed to `0x1234…5678` and appear to nobody else. They are
 left in place as evidence; delete them if you'd rather.
 
-## Task 4 — is the website's UI genuinely distinct? **Not really. Design-polish item.**
+## Task 4 — is the website's UI genuinely distinct? **Now yes. Resolved by the owner.**
 
-Confirmed rather than assumed, and the honest answer is no:
+> **UPDATE, later on 2026-08-29.** The owner rebuilt the web design system in
+> five commits (`cb5114a`..`b42a70b`) after this session ended. Every specific
+> gap listed below is fixed. Re-checked against the source and a real browser,
+> not taken on trust:
+>
+> | Gap logged below | Now |
+> |---|---|
+> | Floating tab bar below `lg` | gone — real header nav, no `fixed bottom` anywhere in `app-shell.tsx` |
+> | Horizontal snap carousel on Discover | gone — no `snap-x`/`carouselRef` in `page.tsx`; one category renders at a time |
+> | Column capped at `max-w-3xl` | `.site-frame` is now `width: min(100%, 1440px)` with `clamp(1.25rem, 4vw, 4.5rem)` fluid padding |
+> | Palette byte-identical to the app's | fully diverged — all 30 tokens in `theme.ts` now differ |
+>
+> What still overlaps is 15 shared component *names* (`agent-card`,
+> `status-badge`, `surface`, …), but several were rewritten in the same pass,
+> so this is shared vocabulary rather than a shared look. The site also gained a
+> skip-to-content link and `aria-current`/`aria-label` on its nav, which the
+> mobile port never had.
+>
+> **Verified working against live data** on the redesign's production build:
+> Discover 2/2/4/2 agents across the four tabs (union = the same 10, unchanged
+> split), search returns 3 hits for "venus", wallet connects, `/agent/265375`
+> still shows `USDT/WBNB 0.05% · ticks -65970 to -63960` and `LP positions 3`,
+> and **0 console errors, page errors or 4xx**. `tsc`, `eslint` and
+> `next build` all clean.
+>
+> **These five commits are LOCAL ONLY at time of writing** — CI's newest run is
+> still `3573a75`, and the live Pages site does not have them. They need
+> pushing.
+
+The original assessment, kept for the record of what was fixed:
 
 - **Colour palette is byte-identical** to the mobile app's (`diff` of the two
   `theme.ts` files differs only in shadows being RN objects vs CSS strings).
@@ -316,15 +345,16 @@ next session, and worth assuming any commit is public the moment it is made.
 
 1. **Web wallet is unverified against MetaMask itself** — only against an
    injected EIP-1193 provider. Needs a human with an extension. *(new)*
-2. **The website is visually a port of the mobile design system**, including a
-   floating tab bar below `lg`. *(new — Task 4)*
+2. ~~**The website is visually a port of the mobile design system**, including a
+   floating tab bar below `lg`.~~ **RESOLVED** by the owner in `cb5114a`..`b42a70b`
+   — see the update in the Task 4 section above.
 3. **No live URL for the website yet** — blocked on a hosting decision + secret.
    *(new — Task 5)*
 4. **Both lockfiles need regenerating on Linux** to restore `npm ci`. *(was
    root-only, now confirmed for `web/` too)*
-5. **`/my-agents` does not exist on the website** — removed from the nav rather
-   than left 404ing. `agentHires.getHiredAgentsForWallet` already exists, so
-   building it is small. *(new)*
+5. ~~**`/my-agents` does not exist on the website**~~ **RESOLVED** — built by the
+   owner in `47499e1`, with `use-hired-agents.ts`. Verified live: with a wallet
+   connected it lists exactly the two hire rows recorded for it.
 6. **"Unavailable" vs "Not reported"** copy differs between the two surfaces for
    the same state. *(new)*
 7. Native wallet connect still unconfirmed; `relay.walletconnect.org` still
@@ -333,16 +363,21 @@ next session, and worth assuming any commit is public the moment it is made.
    `0`. Agent **265375** is the strongest one to show a judge. *(unchanged)*
 9. `convex/lib/liveMetric.ts` erases its value type. *(unchanged)*
 10. A video asset 404s in the Expo web export. *(unchanged, cosmetic)*
+11. **The web redesign (`cb5114a`..`b42a70b`) is committed locally but not
+    pushed.** Neither CI nor the live deployment has seen it. *(new)*
 
 ## Suggested order for the next session
 
 1. **Give the website a live URL** (Vercel is the shortest path). It is the
    judged surface and it is the only one where the journey completes.
 2. **Confirm the wallet against a real MetaMask**, then delete caveat 1.
-3. Make the site look like a website (Task 4) — kill the floating tab bar,
-   widen the desktop layout, replace the swipe carousel.
+3. ~~Make the site look like a website (Task 4)~~ — **done by the owner**; push it.
 4. Regenerate both lockfiles on Linux; switch both workflows back to `npm ci`.
-5. Build `/my-agents` on the site — the query already exists.
+   Still blocked locally: no Docker, no podman, and WSL has no distro installed
+   (re-checked, not assumed). A manually-dispatched CI job that runs
+   `npm install` on the runner and uploads the regenerated lockfiles as an
+   artifact would unblock this without needing a local Linux box.
+5. ~~Build `/my-agents` on the site~~ — **done by the owner** in `47499e1`.
 
 ## IS THIS SUBMITTABLE RIGHT NOW?
 

@@ -1,7 +1,7 @@
 import type { AgentCategory } from "@/types/agent";
 
 export const AUTHORIZATION_CAPABILITIES = [
-  "read_only_monitoring",
+  "read_only_hire",
   "altana_action_session",
   "erc8183_hire",
 ] as const;
@@ -53,13 +53,15 @@ export function assessAuthorizationCapability(
     revocationCancelsEscrow: AUTHORIZATION_FACTS.revocationCancelsEscrow,
   };
 
-  if (category === "monitoring" && capability === "read_only_monitoring") {
+  if (capability === "read_only_hire") {
+    // Convex's hireReadOnlyAgent mutation is category-agnostic. Availability
+    // is gated by the resolved price at the call site, not by category.
     return {
       ...common,
       status: "available",
       available: true,
       reason:
-        "Read-only monitoring only needs a public wallet address and grants no signing or spending authority.",
+        "A read-only hire only needs a public wallet address and grants no signing or spending authority.",
       nextStep: "Choose the public wallet address this agent should watch.",
       minimumTransactions: 0,
     };
@@ -75,9 +77,7 @@ export function assessAuthorizationCapability(
       nextStep:
         "Keep Hire unavailable until escrow funding and settlement pass an end-to-end WalletConnect test.",
       minimumTransactions:
-        category === "monitoring"
-          ? 1
-          : AUTHORIZATION_FACTS.minimumGrantAndHireTransactions,
+        AUTHORIZATION_FACTS.minimumGrantAndHireTransactions,
     };
   }
 
@@ -88,7 +88,7 @@ export function assessAuthorizationCapability(
     reason:
       capability === "altana_action_session"
         ? unavailableActionReason
-        : "This category requires action authority and cannot run as a read-only monitoring agent.",
+        : "This category requires action authority and cannot run as a read-only hire.",
     nextStep:
       "Keep activation unavailable until Altana supports a WalletConnect-compatible signer. Dolphin will never ask for a private key.",
     minimumTransactions:

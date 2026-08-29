@@ -215,7 +215,9 @@ export const getAgent = query({
  * 8004scan refresh
  * ------------------------------------------------------------------------ */
 
-const AGENT_DETAIL_URL = "https://api.8004scan.io/api/v1/agents";
+const AGENT_DETAIL_URL =
+  process.env["8004SCAN_API_URL"]?.trim() ||
+  "https://api.8004scan.io/api/v1/agents";
 const PER_REQUEST_TIMEOUT_MS = 15_000;
 
 // Same key and same fallback as convex/discoveredAgents.ts - authenticated

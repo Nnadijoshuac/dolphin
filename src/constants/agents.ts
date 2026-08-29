@@ -60,8 +60,10 @@ export const AGENT_CATEGORIES: readonly {
   },
 ];
 
+const configured8004ScanBaseUrl = process.env.EXPO_PUBLIC_8004SCAN_API_BASE_URL?.trim();
+
 export const AGENTS_API = {
-  baseUrl: "https://8004scan.io/api/v1/public",
+  baseUrl: configured8004ScanBaseUrl || "https://8004scan.io/api/v1/public",
   chainId: BSC_CHAIN_ID,
 } as const;
 

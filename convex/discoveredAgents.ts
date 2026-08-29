@@ -13,7 +13,9 @@ import { agentCategoryValidator } from "./categoryStatsValidators";
 // `/agents?sort_by=...`), never a from-scratch scan of the ~287k agents
 // registered on BSC mainnet, most of which are spam (see
 // convex/lib/classification.ts's header comment).
-const AGENTS_URL = "https://api.8004scan.io/api/v1/agents";
+const AGENTS_URL =
+  process.env["8004SCAN_API_URL"]?.trim() ||
+  "https://api.8004scan.io/api/v1/agents";
 const RESULTS_PER_QUERY = 30;
 
 // One natural-language query per category, built from the same terms

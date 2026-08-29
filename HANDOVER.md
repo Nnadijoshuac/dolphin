@@ -12,29 +12,42 @@ Everything below this heading was verified this session against live commands, a
 real browser driving the actual web export, and live Convex queries — never from
 a code read alone. Where a claim in §1–§6 is now out of date, this addendum wins.
 
+## THE PUBLIC URL
+
+# https://nnadijoshuac.github.io/dolphin/
+
+**Live, verified, and publishing automatically on every push to `main`** via
+`.github/workflows/deploy-web.yml`. This is the line to paste into the hackathon
+submission form.
+
 ## IS THIS SUBMITTABLE RIGHT NOW?
 
-**No — and exactly one thing stands between here and submittable: the repo is
-private, so no public URL exists.**
+**Yes — the eligibility blocker is gone.** A publicly reachable build exists, needs
+no credential or VPN, and was walked end to end from a clean browser context with
+no prior state: landing → onboarding → Discover → tapping into an agent →
+real, live on-chain numbers. Deep links and refreshes work too.
 
-Everything needed to produce that URL is built, committed, pushed, and verified
-working locally. It is blocked on two owner-only clicks that cannot be done from
-a non-interactive session:
+**The one thing between this and a *complete* judged journey: hiring cannot be
+finished on the web build.** The Hire button is gated on a connected wallet, and
+`wallet-provider.web.tsx` is an intentional stub that always reports
+`isConnected: false`. The price gate that used to block it is fixed and the hire
+mutation is proven to work, so this is now purely the wallet step. That is a
+Functionality gap, not an eligibility one — a judge can browse, search, inspect,
+and verify everything, but cannot press through to a completed hire.
 
-1. **Make `github.com/Nnadijoshuac/dolphin` public.** GitHub Pages does not serve
-   from a private repo on the free plan. (Evidence: `git push` succeeds with the
-   cached credentials, while `https://api.github.com/repos/Nnadijoshuac/dolphin`
-   returns `Not Found` — that combination means private.)
-2. **Settings → Pages → Build and deployment → Source: "GitHub Actions."**
+Fix that next: a web wallet path using wagmi's `injected()` connector against
+`window.ethereum` — wagmi is already a dependency, so it needs no new package and
+does not touch the native path.
 
-After those, the pushed workflow (`.github/workflows/deploy-web.yml`) publishes on
-every push to `main` and the URL will be **https://nnadijoshuac.github.io/dolphin/**.
-That URL 404s today and will keep 404ing until step 1 and 2 are done.
+Verified on the live URL on 2026-08-29, from a fresh browser context:
 
-If the owner would rather not make the repo public, any root-serving host works
-with no code change (`npx expo export --platform web`, upload `dist/`) — Vercel,
-Netlify and Cloudflare Pages all need an interactive login this session could not
-perform.
+```
+1. LANDED at /dolphin/onboarding
+2. AFTER ONBOARDING at /dolphin/   -> Discover, categories, agents listed
+3. OPENED AGENT via "BNB LP Range Rebalancer" at /dolphin/agent/265375
+   LIVE SIGNALS: ACTIVE RANGE = USDT/WBNB 0.05% · ticks -65970 to -63960
+                 LP POSITIONS = 3
+```
 
 ## What changed this session
 
@@ -202,21 +215,75 @@ copies `index.html` to `404.html` so deep links survive, since `web.output` is
 `experiments.baseUrl` was verified against the SDK 54 app-config reference rather
 than assumed.
 
-Verified against a local server reproducing Pages' exact behaviour (assets under
-`/dolphin`, unmatched paths served `404.html`): landing, onboarding, Discover,
-tapping through to an agent, and direct deep links all work, with real Live
-signals rendering. **Not yet verified from a genuinely fresh external context,
-because no public URL exists yet** — that check still has to happen once Pages is
-enabled.
+**Deployed and green.** Verified first against a local server reproducing Pages'
+exact behaviour, then on the live URL itself from a clean browser context:
+landing, onboarding, Discover, tapping through to an agent, and direct deep links
+all work, with real Live signals rendering for all three wired categories and
+grid-trading correctly still fully unavailable.
+
+**`npm ci` cannot be used in this repo's CI, and that is not a stale lockfile.**
+Four runs failed before this was pinned down. npm records an optional
+platform-specific package's *dependencies* only for the platform it resolved on,
+and `package-lock.json` is authored on Windows — so
+`node_modules/@napi-rs/wasm-runtime` (optional) is committed carrying only
+`@tybys/wasm-util`, omitting the `@emnapi/core` and `@emnapi/runtime` it actually
+declares. A Linux runner needs those and `npm ci` aborts:
+
+```
+npm error code EUSAGE
+npm error Missing: @emnapi/core@1.11.3 from lock file
+npm error Missing: @emnapi/runtime@1.11.3 from lock file
+```
+
+Ruled out as staleness: `npm ci --dry-run` passes on Windows against this exact
+lockfile, and regenerating it from scratch on Windows *removes* those entries
+instead of adding them, so no Windows-side change can fix it. A Linux lockfile
+could not be generated locally (WSL has no distro installed, Docker absent). The
+workflow therefore uses `npm install`, which honours every pinned version and
+only fills the missing optional subtree. **The durable fix is to regenerate
+`package-lock.json` once on Linux and switch the workflow back to `npm ci`.**
+
+Worth knowing for future CI work: raw job logs need an authenticated download,
+but annotations are readable from the public API — the workflow now emits npm's
+error lines as an annotation, which is how the above was finally diagnosed
+instead of guessed at.
 
 Scope note for the submission text: the web build demonstrates the read-only
 marketplace — browse, search, agent detail, live on-chain stats, registry
 verification. Wallet connection and therefore hiring do not work there.
 
-### 5. Wallet connect (Task 4 — not advanced)
+### 5. Wallet connect (Task 4 — not advanced, and the network block is confirmed still live)
 
-Not testable this session: no device, and the blocker recorded in §4 was the test
-network's DNS refusing `relay.walletconnect.org`. Status is unchanged.
+Not testable this session: no device to hand. The §4 blocker was re-checked
+directly rather than assumed, and **it is still in place on this network**:
+
+```
+api.expo.dev             https=200
+exp.host                 https=200
+registry.npmjs.org       https=200
+8004scan.io              https=200
+relay.walletconnect.org  https=000   <- unreachable
+```
+
+Everything else answers; only the WalletConnect relay does not. So wallet connect
+still cannot be tested from this machine/network, exactly as recorded before —
+this is not a new failure mode, and no code change is warranted on this evidence.
+
+### 5a. `npx expo start` failing with `TypeError: fetch failed`
+
+Seen this session. The trace runs through
+`validateDependenciesVersionsAsync → getNativeModuleVersionsAsync`, which calls
+Expo's API at startup to check dependency versions. It is a CLI startup check,
+not anything wrong with the project.
+
+It was transient — `api.expo.dev` answered 200 on retest a moment later, so
+plain `npx expo start -c` should work. If it recurs, either of these skips the
+check (both confirmed to exist in the installed SDK 54 CLI, not guessed):
+
+- `npx expo start --offline` — verified working this session; prints "Skipping
+  dependency validation in offline mode" and serves normally.
+- `EXPO_NO_DEPENDENCY_VALIDATION=1 npx expo start -c` — narrower, leaves the
+  CLI's other network features enabled.
 
 One new observation: the `[wallet-diagnostic]` log **does** fire and reports
 `crypto.getRandomValues OK` — but it fired in the *web* bundle, where that was
@@ -234,9 +301,10 @@ harmless next to the risk of breaking the one wallet path that might work.
 
 ## New known issues found this session
 
-1. **The repo is private, so no public URL can exist.** Top blocker. See above.
-2. **Hiring cannot complete on web** — wallet gate, not price gate. Needs the
-   wagmi `injected()` web connector.
+1. **Hiring cannot complete on web** — wallet gate, not price gate. Needs the
+   wagmi `injected()` web connector. Top remaining Functionality item.
+2. **`npm ci` is unusable in CI until the lockfile is regenerated on Linux.**
+   See the deployment section above for the exact cause and the durable fix.
 3. **Most agent wallets hold no positions**, so several live metrics read a
    truthful `0`. Real, but thin for a demo; agent 265375 is the strongest one to
    show a judge.
@@ -254,11 +322,11 @@ harmless next to the risk of breaking the one wallet path that might work.
 
 ## Suggested order for the next session
 
-1. Owner: make the repo public, enable Pages, then open the URL from a phone or a
-   clean browser profile and walk the whole journey. Record the URL here.
-2. Web wallet via wagmi `injected()`, so the hire journey completes for a judge.
-3. Confirm native wallet connect on a network that resolves the relay domain;
-   remove the diagnostic log once it does.
+1. **Web wallet via wagmi `injected()`**, so the hire journey actually completes
+   for a judge on the public URL. Highest-value remaining work by a distance.
+2. Regenerate `package-lock.json` on Linux and switch CI back to `npm ci`.
+3. Confirm native wallet connect on a network that resolves
+   `relay.walletconnect.org`; remove the `[wallet-diagnostic]` log once it does.
 4. Then the §5 stretch list (surface `classificationConfidence`, cancel/un-hire).
 
 ---

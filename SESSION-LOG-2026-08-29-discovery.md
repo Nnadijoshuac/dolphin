@@ -215,6 +215,75 @@ editorial "Yield Maximizer") and `315943` have `mcp_server`, `a2a_endpoint`,
 `agent_url` and `services` all null. "No endpoint advertised" is a third
 outcome, distinct from "unreachable", and the pipeline records it that way.
 
+### Task 0.5 — registry fragmentation. The brief's suspicion is correct.
+
+Two separate identity registries exist on BNB Chain. Both were read directly
+on-chain via `eth_call` against a BSC RPC — not taken from a search result, per
+AGENTS.md §9's rule about contract addresses:
+
+| contract | `name()` | `symbol()` | size |
+|---|---|---|---|
+| `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `"AgentIdentity"` | `AGENT` | 289,971 indexed by 8004scan |
+| `0xfA09B3397fAC75424422C4D28b1729E3D4f659D7` | `"BRC8004 Identity Registry"` | `BRC8004` | `totalSupply() = 26` |
+
+**8004scan covers the first and not the second.** Verified three ways rather than
+assumed: all **3,446** records across both Task 0 samples carry
+`contract_address: 0x8004a169…a432` and nothing else; `search=BRC8004` returns
+`total=0`; and passing `contract_address=0xfA09…59D7` as a filter is silently
+**ignored** — it returns the full 289,971-record set, all from the other
+contract. (Worth knowing on its own: 8004scan's list endpoint accepts unknown
+query parameters without erroring, so a filter that looks like it works may not.)
+
+The first registry is the one `src/services/chain.ts`'s
+`verifyAgentRegistration()` already reads, so **Dolphin's own independent
+on-chain check and 8004scan's coverage do line up** — that part needed
+confirming and is fine.
+
+**But BRC8004's 26 agents are invisible to Dolphin today, and at least one of
+them is real and in a graded category.** The registry has no ERC721Enumerable
+`tokenByIndex`, so it was walked by `ownerOf`/`tokenURI` over ids 0–40; 26 tokens
+answered. Reading their registration URIs directly:
+
+```
+token 25  data:application/json,{"name":"lista-earn-autocompounder",
+          "description":"Autonomous stablecoin-vault rotation agent on ListaDAO Earn",
+          "strategy":"stablecoin-vault-auto-rotate-highest-net-apy",
+          "protocol":"ListaDAO Moolah ERC-4626", ...}          <- a real YIELD agent
+token 21  https://api.fengshuibnb.com/master-xuan/.well-known/agent-card.json
+token 26  https://weavr-eight.vercel.app/.well-known/agent-registration.json
+token 23  https://raw.githubusercontent.com/nickthelegend/xorr-agent-backend/.../agent_card.json
+token 11  data:application/json,{"name":"0xUniko","services":[{"name":"MCP",
+          "endpoint":"npx @bnb-chain/mcp@latest"}]}
+tokens 15-20  six registrations all pointing at one shared registration file
+token 12  https://example.com/agent.json                        <- placeholder
+token  1  {"name":"Test","description":"A test agent for BRC8004 protocol demonstration"}
+```
+
+Registration URIs come in four transports — `ipfs://`, `https://`,
+`data:application/json;base64,` and raw `data:application/json,` (both
+percent-encoded and not). The tokenURI cross-check in Task 2 has to handle all
+four, and that is true of the main registry as well.
+
+**DECISION: BRC8004 is swept and evaluated, but its agents are never
+auto-published this session.** The reason is a concrete key collision, not
+caution for its own sake: Dolphin's catalog is keyed on a **bare tokenId**
+throughout — `agentDirectory` and `discoveredAgents` both index
+`["chainId", "tokenId"]`, and `agents.getAgent` resolves a reference by splitting
+on `:` and taking the last segment. BRC8004 token 25 and AgentIdentity token 25
+are different agents with the same id. Publishing both would silently merge them.
+Fixing that properly means a registry-qualified key that reaches into how both
+frontends build and parse agent ids — which is UI code AGENTS.md §11 puts
+off-limits by default. So `agentCandidates` carries `registryAddress` from the
+start and records BRC8004 agents honestly as pending with that exact reason,
+which leaves the next session a ready-made list and a one-line change rather than
+a rediscovery job.
+
+### Registry growth rate — measured, for the cadence calculation
+
+`total` moved from **289,938 to 289,971 in roughly 70 minutes** across this
+session's own calls: **~28 new registrations per hour**. That is the number the
+new-registration tail sweep is sized against, not a guess.
+
 ### Answers to the four questions Task 0 asks
 
 1. **Real/spam ratio in a random sample**: 0 of 100 were a real four-category

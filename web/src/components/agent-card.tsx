@@ -7,6 +7,7 @@ import type { Agent, AgentCategory } from "@/types/agent";
 
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
+  rebalancing: "Rebalancing",
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",

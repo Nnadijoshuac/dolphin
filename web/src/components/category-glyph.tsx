@@ -52,6 +52,21 @@ export function CategoryGlyph({
         </>
       )}
 
+      {/*
+        Rebalancing: a concentrated-liquidity band being reset around price.
+        Distinct from grid-trading below, which is a fixed price ladder - the
+        two were one category until the 2026-08-28 taxonomy split, and drawing
+        them the same would undo the distinction the split exists to make.
+      */}
+      {name === "rebalancing" && (
+        <>
+          <rect height="9" rx="1.5" width="8" x="5" y="7.5" {...common} strokeWidth={1.8} />
+          <line x1="9" x2="9" y1="4.5" y2="19.5" {...common} strokeWidth={1.4} />
+          <path d="M14.5 8.5h4.5m0 0-2-2m2 2-2 2" {...common} strokeWidth={1.8} />
+          <path d="M19.5 15.5H15m0 0 2-2m-2 2 2 2" {...common} strokeWidth={1.8} />
+        </>
+      )}
+
       {name === "grid-trading" && (
         <>
           <line x1="4.5" x2="4.5" y1="5.5" y2="18.5" {...common} strokeWidth={2.2} />

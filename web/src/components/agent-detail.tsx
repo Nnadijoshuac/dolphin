@@ -11,6 +11,7 @@ import type { Agent, AgentCategory } from "@/types/agent";
 
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
+  rebalancing: "Rebalancing",
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
@@ -44,12 +45,27 @@ function LiveStats({ agent }: { agent: Agent }) {
             <MetricCell format={(v) => `${v.toFixed(1)}%`} label="False positives" metric={stats.falsePositiveRate} />
           </>
         )}
+        {/*
+          Rebalancing and grid-trading carry the same metric field set but are
+          different categories (LP-range management vs a true price ladder) -
+          see the taxonomy split in src/types/agent.ts. They are listed
+          separately rather than merged so the labels can diverge later without
+          re-untangling them.
+        */}
+        {stats.category === "rebalancing" && (
+          <>
+            <MetricCell format={(v) => `${v.toFixed(1)}%`} label="Rebalance efficiency" metric={stats.winRate} />
+            <MetricCell format={(v) => v} label="Active range" metric={stats.activeRange} />
+            <MetricCell format={(v) => v} label="Current P&L" metric={stats.currentPnl} />
+            <MetricCell format={(v) => v.toLocaleString()} label="LP positions" metric={stats.positionCount} />
+          </>
+        )}
         {stats.category === "grid-trading" && (
           <>
             <MetricCell format={(v) => `${v.toFixed(1)}%`} label="Win rate" metric={stats.winRate} />
             <MetricCell format={(v) => v} label="Active range" metric={stats.activeRange} />
             <MetricCell format={(v) => v} label="Current P&L" metric={stats.currentPnl} />
-            <MetricCell format={(v) => v.toLocaleString()} label="Grid count" metric={stats.gridCount} />
+            <MetricCell format={(v) => v.toLocaleString()} label="Grid levels" metric={stats.positionCount} />
           </>
         )}
         {stats.category === "health-factor" && (

@@ -1,8 +1,16 @@
-/** Alias for Ethereum addresses — keeps compat with the mobile app's viem-based types */
+/**
+ * Hand-mirrored from the mobile app's src/types/agent.ts (AGENTS.md SS9's manual
+ * mirror rule). Both frontends render agents.listAgents from the same Convex
+ * backend, so this shape MUST match - if src/types/agent.ts changes, change
+ * this in the same commit.
+ *
+ * The only intentional difference: viem is not used for typing here, so
+ * `Address` is declared locally rather than imported from viem.
+ */
 export type Address = `0x${string}`;
-
 export type AgentCategory =
   | "monitoring"
+  | "rebalancing"
   | "grid-trading"
   | "health-factor"
   | "yield";
@@ -41,7 +49,18 @@ export type LiveMetric<T> =
 export type AgentClassificationSource =
   | "editorial-explicit-metadata"
   | "registry-metadata"
-  | "oasf-metadata";
+  | "oasf-metadata"
+  | "heuristic-keyword-match";
+
+/**
+ * How sure the category assignment is, for agents classified by
+ * convex/lib/classification.ts's keyword heuristic rather than a human.
+ * "confirmed" = an unambiguous, category-specific phrase matched and no
+ * other category also matched. "likely" = a weaker/generic term matched
+ * for exactly one category. Absent (undefined) means classification was
+ * not heuristic - editorial/registry/oasf sources are implicitly certain.
+ */
+export type ClassificationConfidence = "confirmed" | "likely";
 
 export interface AgentSkill {
   name: string;
@@ -62,12 +81,32 @@ export interface MonitoringLiveStats {
   falsePositiveRate: LiveMetric<number>;
 }
 
+/**
+ * LP-range management: resets/rebalances a concentrated-liquidity position
+ * automatically (e.g. PancakeSwap V3). Renamed from what this codebase used
+ * to call "grid-trading" - that name was substance-wrong (see
+ * GridTradingLiveStats below for the actual price-ladder definition).
+ */
+export interface RebalancingLiveStats {
+  category: "rebalancing";
+  winRate: LiveMetric<number>;
+  activeRange: LiveMetric<string>;
+  currentPnl: LiveMetric<string>;
+  positionCount: LiveMetric<number>;
+  trackRecordPeriod: LiveMetric<string>;
+}
+
+/**
+ * True price-ladder grid trading: buy/sell orders placed across a fixed
+ * range. Distinct from RebalancingLiveStats above (LP-range management) -
+ * see project-scope.md's category taxonomy notes for the split's history.
+ */
 export interface GridTradingLiveStats {
   category: "grid-trading";
   winRate: LiveMetric<number>;
   activeRange: LiveMetric<string>;
   currentPnl: LiveMetric<string>;
-  gridCount: LiveMetric<number>;
+  positionCount: LiveMetric<number>;
   trackRecordPeriod: LiveMetric<string>;
 }
 
@@ -89,6 +128,7 @@ export interface YieldLiveStats {
 
 export type AgentLiveStats =
   | MonitoringLiveStats
+  | RebalancingLiveStats
   | GridTradingLiveStats
   | HealthFactorLiveStats
   | YieldLiveStats;
@@ -136,6 +176,7 @@ export interface Agent {
   publisherAddress: Address | null;
   category: AgentCategory;
   classificationSource: AgentClassificationSource;
+  classificationConfidence?: ClassificationConfidence;
   tagline: string;
   description: string;
   iconUrl: string | null;

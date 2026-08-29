@@ -11,7 +11,7 @@ import { BrandMark } from "@/components/brand-mark";
 import type { AgentCategory } from "@/types/agent";
 
 export default function DiscoverPage() {
-  const [activeCategory, setActiveCategory] = useState<AgentCategory>("monitoring");
+  const [activeCategory, setActiveCategory] = useState<AgentCategory>("rebalancing");
   const { data: agents, isLoading, isError } = useAgents();
   const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -87,7 +87,7 @@ export default function DiscoverPage() {
       <div className="pt-4 space-y-6">
         {/* Featured Hero Card */}
         <div
-          onClick={() => handleSelectCategory("monitoring")}
+          onClick={() => handleSelectCategory("rebalancing")}
           className="cursor-pointer overflow-hidden rounded-3xl p-6 md:p-8 text-white relative transition-all duration-300 hover:scale-[1.01]"
           style={{
             backgroundColor: "#000000",
@@ -104,15 +104,15 @@ export default function DiscoverPage() {
                 color: colors.gold,
               }}
             >
-              MONITORING
+              REBALANCING
             </div>
 
             <h2 className="text-2xl md:text-3xl font-black leading-tight">
-              Agents that watch{"\n"}while you sleep
+              Agents that hold your{" "}liquidity in range
             </h2>
 
             <p className="mt-2 text-xs md:text-sm text-zinc-400 leading-relaxed">
-              Autonomous agents that track markets and safeguard your positions 24/7 on BNB Smart Chain.
+              Autonomous agents that reset concentrated-liquidity positions on BNB Smart Chain, with every figure read live from the protocol.
             </p>
 
             <div className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#F5B300]">

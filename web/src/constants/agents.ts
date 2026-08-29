@@ -13,8 +13,23 @@ export const ERC8004_REGISTRY_ADDRESSES = {
   reputation: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63" as Address,
 } as const;
 
+/**
+ * The four categories graded by the hackathon's Agent Diversity rubric.
+ *
+ * MIRRORS convex/lib/agentCatalog.ts's AGENT_CATEGORY_SLUGS / AGENT_CATEGORIES,
+ * which is the authority - the agent rows this list filters come from
+ * agents.listAgents, so a category named here that Convex does not assign shows
+ * an empty tab, and one Convex assigns that is missing here is invisible.
+ *
+ * This list said "monitoring" until 2026-08-29 while the mobile app had already
+ * replaced it with "rebalancing" a day earlier, which is exactly the drift the
+ * Convex centralization exists to stop. "monitoring" is still a valid
+ * AgentCategory - Wallet Watch's data and hire record are real - but it is
+ * deliberately not one of the four graded categories, so it never appears in
+ * category browsing on either surface.
+ */
 export const AGENT_CATEGORY_SLUGS = [
-  "monitoring",
+  "rebalancing",
   "grid-trading",
   "health-factor",
   "yield",
@@ -26,31 +41,29 @@ export const AGENT_CATEGORIES: readonly {
   description: string;
 }[] = [
   {
-    slug: "monitoring",
-    label: "Monitoring",
-    description: "Agents that publish market, wallet, or position monitoring.",
+    slug: "rebalancing",
+    label: "Rebalancing",
+    description:
+      "LP-range agents that reset concentrated-liquidity positions automatically.",
   },
   {
     slug: "grid-trading",
     label: "Grid Trading",
-    description: "Range-strategy agents and their available track-record evidence.",
+    description: "Price-ladder agents and their available track-record evidence.",
   },
   {
     slug: "health-factor",
     label: "Health Factor",
-    description: "Lending-risk agents and their published liquidation-buffer data.",
+    description:
+      "Lending-risk agents and their published liquidation-buffer data.",
   },
   {
     slug: "yield",
     label: "Yield",
-    description: "Yield agents and their available protocol and performance sources.",
+    description:
+      "Yield agents and their available protocol and performance sources.",
   },
 ];
-
-export const AGENTS_API = {
-  baseUrl: "https://8004scan.io/api/v1/public",
-  chainId: BSC_CHAIN_ID,
-} as const;
 
 export const AGENT_DATA_SOURCES = {
   registry: {
@@ -70,6 +83,14 @@ export const AGENT_DATA_SOURCES = {
   editorial: {
     id: "dolphin-editorial",
     label: "Dolphin editorial classification",
+  },
+  heuristicDiscovery: {
+    id: "dolphin-heuristic-discovery",
+    label: "Dolphin automated discovery (keyword-matched, not human-vetted)",
+  },
+  marketplacePolicy: {
+    id: "dolphin-marketplace-policy",
+    label: "Dolphin marketplace policy (not a publisher-published value)",
   },
 } as const satisfies Record<string, DataSourceLabel>;
 

@@ -17,7 +17,7 @@ import {
   useMemo,
   type PropsWithChildren,
 } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { bsc, bscTestnet } from "viem/chains";
 import { WagmiProvider } from "wagmi";
 
@@ -77,7 +77,19 @@ const appKitStorage: Storage = {
 const projectId = process.env.EXPO_PUBLIC_REOWN_PROJECT_ID?.trim();
 const bscNetworks = [bsc, bscTestnet] as const;
 
-const reownSetup = projectId
+// wallet-provider.ts imports both this file and wallet-provider.web.tsx
+// unconditionally (Metro doesn't apply its .native/.web extension
+// resolution to an explicitly-suffixed import specifier), so this
+// module's top-level code still runs even when the app is bundled for
+// web. Without this guard, createAppKit()/WagmiAdapter() would construct
+// a real WalletConnect Core instance on web too - which is what was
+// actually crashing the static web export's SSR pass (Core.init calling
+// AsyncStorage.getItem, which needs `window`, unavailable during
+// server-side rendering) and firing a stray "metadata.url differs from
+// page url" warning in the browser console. Web deliberately has no
+// wallet support (see wallet-provider.web.tsx) - this just makes sure
+// nothing tries to set one up regardless.
+const reownSetup = projectId && Platform.OS !== "web"
   ? (() => {
       const wagmiAdapter = new WagmiAdapter({
         networks: bscNetworks,

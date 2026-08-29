@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import { AppProviders } from "@/providers/app-providers";
+
 import { AppShell } from "@/components/app-shell";
+import { AppProviders } from "@/providers/app-providers";
+
+import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,24 +17,28 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dolphin — ERC-8004 AI agent marketplace on BNB Chain",
+  title: {
+    default: "Dolphin | Evidence-first AI agent marketplace",
+    template: "%s | Dolphin",
+  },
   description:
-    "Browse ERC-8004 AI agents registered on BNB Smart Chain, with live on-chain data and explicit provenance for every number shown.",
+    "Discover ERC-8004 AI agents on BNB Smart Chain with live data, visible provenance, and honest permission boundaries.",
+  keywords: [
+    "ERC-8004",
+    "BNB Chain",
+    "AI agents",
+    "agent marketplace",
+    "onchain agents",
+  ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="en"
     >
-      {/*
-        AppProviders and AppShell were both written but never mounted, so every
-        page that calls useAgents() threw "No QueryClient set" and the
-        production build failed at prerender. They belong here rather than in
-        each page: one QueryClient for the whole app, one nav shell around it.
-      */}
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-[100dvh] flex-col">
         <AppProviders>
           <AppShell>{children}</AppShell>
         </AppProviders>

@@ -1,6 +1,6 @@
 import { anyApi } from "convex/server";
 
-import type { Agent } from "@/types/agent";
+import type { Agent, AgentCategory, AgentLiveStats } from "@/types/agent";
 
 /**
  * Typed handle on the Convex queries this site calls.
@@ -30,11 +30,49 @@ type Query<Args, Result> = {
   _componentPath: undefined;
 };
 
+type Action<Args, Result> = {
+  _type: "action";
+  _visibility: "public";
+  _args: Args;
+  _returnType: Result;
+  _componentPath: undefined;
+};
+
 export const api = anyApi as unknown as {
   agents: {
     /** convex/agents.ts -> listAgents */
     listAgents: Query<Record<string, never>, Agent[]>;
     /** convex/agents.ts -> getAgent */
     getAgent: Query<{ reference: string }, Agent | null>;
+  };
+};
+
+/** One agentLiveStats row - convex/categoryStats.ts's cache table. */
+export interface AgentCategoryStatsRow {
+  chainId: number;
+  tokenId: string;
+  category: AgentCategory;
+  agentWallet: string | null;
+  stats: AgentLiveStats;
+  checkedAt: string;
+}
+
+/**
+ * Kept separate from `api` above only because convex/react's `useQuery` and
+ * `useAction` want the reference itself; splitting the namespaces makes the two
+ * modules' call sites read the same as the mobile app's `api.categoryStats.*`.
+ */
+export const categoryStatsApi = anyApi as unknown as {
+  categoryStats: {
+    /** convex/categoryStats.ts -> getAgentCategoryStats */
+    getAgentCategoryStats: Query<
+      { tokenId: string; category: AgentCategory },
+      AgentCategoryStatsRow | null
+    >;
+    /** convex/categoryStats.ts -> refreshAgentCategoryStats */
+    refreshAgentCategoryStats: Action<
+      { tokenId: string; category: AgentCategory; agentWallet: string | null },
+      unknown
+    >;
   };
 };

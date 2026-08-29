@@ -7,10 +7,12 @@ import { BrandMark } from "@/components/brand-mark";
 import { colors } from "@/constants/theme";
 import type { GlyphName } from "@/components/category-glyph";
 
+// Only routes that exist. "My Agents" was listed here with no page behind it,
+// so Next prefetched /my-agents on every render and got a 404, and clicking it
+// took the user to the not-found page. It comes back when the route does.
 const tabs: { path: string; label: string; icon: GlyphName }[] = [
   { path: "/", label: "Discover", icon: "discover" },
   { path: "/search", label: "Search", icon: "search" },
-  { path: "/my-agents", label: "My Agents", icon: "agents" },
   { path: "/wallet", label: "Wallet", icon: "wallet" },
 ];
 

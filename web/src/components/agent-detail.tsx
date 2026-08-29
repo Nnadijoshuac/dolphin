@@ -1,3 +1,5 @@
+"use client";
+
 import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
 import { MetricCell } from "@/components/metric-cell";
@@ -7,7 +9,14 @@ import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors } from "@/constants/theme";
-import type { Agent, AgentCategory } from "@/types/agent";
+import { useAgentCategoryStats } from "@/hooks/use-category-stats";
+import { convexClient } from "@/providers/convex-provider";
+import type {
+  Agent,
+  AgentCategory,
+  AgentLiveStats,
+  LiveMetric,
+} from "@/types/agent";
 
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
@@ -31,9 +40,73 @@ function DetailSection({ title, children }: { title: string; children: React.Rea
   );
 }
 
-function LiveStats({ agent }: { agent: Agent }) {
-  const stats = agent.liveStats;
+/**
+ * Every metric of a category marked "syncing" rather than "unavailable" - the
+ * honest state while the Convex read is still in flight. "unavailable" asserts
+ * a feed was checked and does not exist, which is a stronger claim than we can
+ * make before the answer arrives (project-scope.md SS5). Mirrors
+ * syncingLiveStats in the mobile app's src/data/editorial-agents.ts.
+ */
+function syncingLiveStats(stats: AgentLiveStats): AgentLiveStats {
+  return Object.fromEntries(
+    Object.entries(stats).map(([key, field]) =>
+      key === "category"
+        ? [key, field]
+        : [
+            key,
+            {
+              status: "syncing",
+              value: null,
+              asOf: null,
+              source: (field as LiveMetric<unknown>).source,
+            },
+          ],
+    ),
+  ) as AgentLiveStats;
+}
 
+/**
+ * Live signals come from convex/categoryStats.ts - the real Venus /
+ * PancakeSwap V3 / Aave reads in convex/protocols/ - not from the static stub
+ * carried on the agent record. Until 2026-08-29 this site rendered
+ * `agent.liveStats` directly, which is always the "unavailable" placeholder, so
+ * every agent's Live signals read "Unavailable" here while the mobile app
+ * showed real on-chain values for the same agent.
+ *
+ * Split in two on purpose: useAgentCategoryStats calls convex/react hooks,
+ * which throw when no ConvexProvider is mounted, and ConvexClientProvider
+ * mounts none when NEXT_PUBLIC_CONVEX_URL is unset. `convexClient` is a
+ * module-level constant, so this branch is fixed for the life of the process
+ * and can never reorder hooks between renders.
+ */
+function LiveStats({ agent }: { agent: Agent }) {
+  if (!convexClient) {
+    // No backend configured, so there is genuinely nothing to read - the
+    // static unavailable stub is the honest answer, not a placeholder.
+    return <LiveStatsView stats={agent.liveStats} />;
+  }
+
+  return <BackendLiveStats agent={agent} />;
+}
+
+function BackendLiveStats({ agent }: { agent: Agent }) {
+  const cached = useAgentCategoryStats(
+    agent.tokenId,
+    agent.category,
+    agent.agentWallet,
+  );
+
+  // `undefined` = the Convex client has not answered yet; `null` = no row is
+  // cached and the refresh action is still running. Both mean "not known yet",
+  // which is syncing, not unavailable. Once a row exists we render exactly what
+  // the backend stored, including its own honest per-field "unavailable"
+  // entries - those are correct and must not be papered over.
+  const stats = cached?.stats ?? syncingLiveStats(agent.liveStats);
+
+  return <LiveStatsView stats={stats} />;
+}
+
+function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   return (
     <Surface>
       <div className="grid grid-cols-2 gap-y-6 gap-x-6">
@@ -91,7 +164,12 @@ function LiveStats({ agent }: { agent: Agent }) {
 
 type AgentDetailProps = {
   agent: Agent;
-  onHire: () => void;
+  /**
+   * Omit when there is no hire flow to send the user into. The action button
+   * is then not rendered at all, rather than shown as a control that does
+   * nothing - a dead button reads as a broken feature, not an absent one.
+   */
+  onHire?: () => void;
   actionLabel?: string;
 };
 
@@ -125,7 +203,9 @@ export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDeta
       <p className="mt-6 text-[16px] leading-6" style={{ color: colors.muted }}>
         {agent.tagline}
       </p>
-      <Button label={actionLabel} onPress={onHire} style={{ marginTop: 22 }} />
+      {onHire !== undefined && (
+        <Button label={actionLabel} onPress={onHire} style={{ marginTop: 22 }} />
+      )}
 
       <DetailSection title="Live signals">
         <LiveStats agent={agent} />

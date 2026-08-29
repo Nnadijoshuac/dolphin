@@ -22,7 +22,9 @@ export const projectId =
 export const wagmiConfig = createConfig({
   chains: [bsc],
   connectors: [
-    injected(),
+    injected({
+      shimDisconnect: true,
+    }),
     walletConnect({
       projectId,
       metadata: {
@@ -51,7 +53,7 @@ export interface WalletState {
   unavailableReason: string | null;
   isConnecting: boolean;
   error: string | null;
-  connect: () => Promise<void>;
+  connect: (preferredType?: "injected" | "walletConnect") => Promise<void>;
   disconnect: () => Promise<void>;
 }
 
@@ -60,7 +62,7 @@ function subscribe() {
 }
 
 export function useWallet(): WalletState {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, isConnecting: accountConnecting, isReconnecting } = useAccount();
   const { connectAsync, connectors, isPending } = useConnect();
   const { disconnectAsync } = useDisconnect();
   const [error, setError] = useState<string | null>(null);
@@ -71,29 +73,49 @@ export function useWallet(): WalletState {
     () => false,
   );
 
-  const connect = useCallback(async () => {
-    setError(null);
+  const connect = useCallback(
+    async (preferredType?: "injected" | "walletConnect") => {
+      setError(null);
 
-    // Prefer injected extension if available, otherwise launch Reown WalletConnect modal
-    const wcConnector = connectors.find((c) => c.id === "walletConnect");
-    const injectedConnector = connectors.find((c) => c.id === "injected");
+      const injectedConn = connectors.find((c) => c.id === "injected");
+      const wcConn = connectors.find((c) => c.id === "walletConnect");
 
-    const connector =
-      typeof window !== "undefined" && window.ethereum && injectedConnector
-        ? injectedConnector
-        : wcConnector ?? connectors[0];
+      // Choose target connector
+      let target =
+        preferredType === "walletConnect"
+          ? wcConn
+          : preferredType === "injected"
+            ? injectedConn
+            : typeof window !== "undefined" && window.ethereum && injectedConn
+              ? injectedConn
+              : wcConn ?? connectors[0];
 
-    if (!connector) {
-      setError("No wallet connector available.");
-      return;
-    }
+      if (!target) {
+        setError("No wallet connector found. Please install MetaMask, Trust Wallet, or use WalletConnect.");
+        return;
+      }
 
-    try {
-      await connectAsync({ connector, chainId: bsc.id });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }, [connectAsync, connectors]);
+      try {
+        await connectAsync({ connector: target });
+      } catch (cause) {
+        const errorMsg = cause instanceof Error ? cause.message : String(cause);
+        
+        // If injected fails and WalletConnect is available, attempt fallback to WalletConnect modal
+        if (target.id === "injected" && wcConn && !preferredType) {
+          try {
+            await connectAsync({ connector: wcConn });
+            return;
+          } catch (wcCause) {
+            setError(wcCause instanceof Error ? wcCause.message : String(wcCause));
+            return;
+          }
+        }
+
+        setError(errorMsg);
+      }
+    },
+    [connectAsync, connectors],
+  );
 
   const disconnect = useCallback(async () => {
     setError(null);
@@ -104,12 +126,14 @@ export function useWallet(): WalletState {
     }
   }, [disconnectAsync]);
 
+  const isBusy = isPending || accountConnecting || isReconnecting;
+
   return {
     isConnected: isMounted && Boolean(isConnected),
     address: isMounted && address ? address : null,
     isAvailable: true,
     unavailableReason: null,
-    isConnecting: isPending,
+    isConnecting: isBusy,
     error,
     connect,
     disconnect,

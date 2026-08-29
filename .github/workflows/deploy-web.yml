@@ -54,16 +54,36 @@ jobs:
           node-version: 24
           cache: npm
 
-      # Wrapped so a failure reports itself as a GitHub annotation. Raw job
-      # logs need an authenticated download, but annotations are readable
-      # from the public API, so this keeps `npm ci` failures diagnosable
-      # without pushing another commit just to add logging.
+      # `npm install`, not `npm ci`, and that is deliberate.
+      #
+      # package-lock.json is authored on Windows, and npm records an optional
+      # platform-specific package's *dependencies* only for the platform it
+      # resolved on. `node_modules/@napi-rs/wasm-runtime` (optional) is
+      # therefore committed with `dependencies: { "@tybys/wasm-util": ... }`
+      # alone, omitting the @emnapi/core and @emnapi/runtime it really
+      # declares. On a Linux runner npm needs those, finds them absent, and
+      # `npm ci` aborts:
+      #
+      #   npm error code EUSAGE
+      #   npm error Missing: @emnapi/core@1.11.3 from lock file
+      #   npm error Missing: @emnapi/runtime@1.11.3 from lock file
+      #
+      # So a Windows-authored lockfile cannot satisfy `npm ci` on Linux at
+      # all. Confirmed it is not simply stale: `npm ci --dry-run` passes on
+      # Windows, and regenerating the lockfile from scratch there removes
+      # those entries rather than adding them.
+      #
+      # `npm install` still honours every version the lockfile does pin and
+      # only resolves the gaps, so the trade-off is a little less strictness
+      # for a build that can actually run. The durable fix is to regenerate
+      # package-lock.json on Linux once and commit it, after which this can
+      # go back to `npm ci`.
       - name: Install dependencies
         run: |
           set -o pipefail
-          if ! npm ci --no-audit --no-fund 2>&1 | tee /tmp/npm-ci.log; then
-            reason=$(grep -iE "npm (error|ERR!)" /tmp/npm-ci.log | grep -viE "^npm (error|ERR!)\s*$" | head -n 10 | tr '\n' '~')
-            echo "::error title=npm ci failed::${reason:-no npm error lines captured; see job log}"
+          if ! npm install --no-audit --no-fund 2>&1 | tee /tmp/npm-install.log; then
+            reason=$(grep -iE "npm (error|ERR!)" /tmp/npm-install.log | head -n 10 | tr '\n' '~')
+            echo "::error title=npm install failed::${reason:-see job log}"
             exit 1
           fi
 

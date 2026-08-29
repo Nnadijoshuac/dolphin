@@ -63,13 +63,13 @@ export default function SearchPage() {
         <header className="max-w-3xl">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3.5 py-1 text-xs font-bold text-[#946B00]">
             <CategoryGlyph color="#946B00" name="search" size={13} strokeWidth={2.4} />
-            <span>CATALOG SEARCH</span>
+            <span>STORE SEARCH</span>
           </div>
           <h1 className="mt-4 text-4xl font-black tracking-tight text-[#111214] sm:text-5xl lg:text-6xl">
-            Search Agents & Skills
+            Search Agents & Handlers
           </h1>
           <p className="mt-3 text-base leading-relaxed text-[#6E706B]">
-            Query agents by strategy, publisher address, protocol, or verified skill. Sourced directly from Dolphin&apos;s shared ERC-8004 catalog on BNB Chain.
+            Query agents by strategy, protocol, or verified skill. Discover verified ERC-8004 agents across BNB Smart Chain.
           </p>
         </header>
 
@@ -114,7 +114,7 @@ export default function SearchPage() {
             <button
               className={`rounded-full px-3.5 py-1 text-xs font-bold transition-all ${
                 selectedCategoryFilter === "all"
-                  ? "bg-[#111214] text-white"
+                  ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00] shadow-sm"
                   : "border border-[#ECE8DE] bg-[#FBF9F4] text-[#6E706B] hover:border-[#F5B300]"
               }`}
               onClick={() => setSelectedCategoryFilter("all")}
@@ -126,7 +126,7 @@ export default function SearchPage() {
               <button
                 className={`rounded-full px-3.5 py-1 text-xs font-bold transition-all ${
                   selectedCategoryFilter === cat.slug
-                    ? "bg-[#111214] text-white"
+                    ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00] shadow-sm"
                     : "border border-[#ECE8DE] bg-[#FBF9F4] text-[#6E706B] hover:border-[#F5B300]"
                 }`}
                 key={cat.slug}
@@ -249,7 +249,7 @@ export default function SearchPage() {
                 title="No Agents Found"
               />
             ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {searchResults.map((agent) => (
                   <AgentCard agent={agent} key={agent.id} />
                 ))}

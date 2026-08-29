@@ -66,13 +66,13 @@ export function HireAction({ agent }: { agent: Agent }) {
     "Stores a verified Dolphin read-only hire record. Creates no unrestricted spend authorization or custodial key transfer.";
 
   if (showMyAgents) {
-    noticeTitle = "Already Hired";
+    noticeTitle = "Agent in Your Library";
     noticeBody =
       "This wallet already holds a subscription record for this agent. Manage or review your active agents anytime.";
   } else if (!wallet.isConnected) {
-    noticeTitle = "Connect Wallet to Hire";
+    noticeTitle = "Connect Wallet to Get Agent";
     noticeBody =
-      "Dolphin only requests the public wallet address. Connecting does not sign away any assets or permissions.";
+      "Dolphin only requests your public wallet address. Connecting does not sign away any assets or permissions.";
   } else if (priceModel === null) {
     noticeTitle = "Awaiting Price Policy";
     noticeBody =
@@ -91,13 +91,13 @@ export function HireAction({ agent }: { agent: Agent }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <span className="text-[11px] font-black uppercase tracking-wider text-[#946B00]">
-            HIRE & ACTIVATE
+            APP STORE LISTING
           </span>
           <h2 className="mt-1 text-2xl font-black tracking-tight text-[#111214]">
-            {showMyAgents ? "Agent Activated" : "Hire This Agent"}
+            {showMyAgents ? "Agent Installed" : "Get This Agent"}
           </h2>
         </div>
-        <StatusBadge label="Read Only" tone="live" />
+        <StatusBadge label="Free Proof" tone="live" />
       </div>
 
       <p className="mt-4 text-xs leading-relaxed text-[#6E706B]">
@@ -107,8 +107,8 @@ export function HireAction({ agent }: { agent: Agent }) {
       {/* Pricing & Permission Details List */}
       <dl className="mt-6 divide-y divide-[#F3F0E8] border-y border-[#ECE8DE] text-xs">
         <div className="flex items-center justify-between py-3">
-          <dt className="font-semibold text-[#6E706B]">Dolphin Hire Price</dt>
-          <dd className="font-bold text-[#111214]">
+          <dt className="font-semibold text-[#6E706B]">Store Price</dt>
+          <dd className="font-extrabold text-[#1C6A44]">
             {priceModel === null
               ? "Not resolved"
               : priceIsFree
@@ -117,7 +117,7 @@ export function HireAction({ agent }: { agent: Agent }) {
           </dd>
         </div>
         <div className="flex items-center justify-between py-3">
-          <dt className="font-semibold text-[#6E706B]">Custody & Keys</dt>
+          <dt className="font-semibold text-[#6E706B]">Custody Model</dt>
           <dd className="font-bold text-[#1C6A44]">
             100% Non-Custodial
           </dd>
@@ -154,14 +154,14 @@ export function HireAction({ agent }: { agent: Agent }) {
       <div className="mt-6">
         {showMyAgents ? (
           <Link
-            className="pressable-scale flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#111214] px-5 text-sm font-black text-white no-underline shadow-sm hover:bg-[#303236]"
+            className="pressable-scale flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-[#F3E3A6] bg-[#FEF5D6] px-5 text-sm font-black text-[#946B00] no-underline shadow-sm hover:bg-[#FDEBB5]"
             href="/my-agents"
           >
-            <CategoryGlyph color="#F5B300" name="bot" size={16} strokeWidth={2.4} />
+            <CategoryGlyph color="#946B00" name="bot" size={16} strokeWidth={2.4} />
             Manage in My Agents
           </Link>
         ) : !wallet.isConnected ? (
-          <WalletConnectButton connectLabel="Connect Wallet to Hire" />
+          <WalletConnectButton connectLabel="Connect Wallet to Get Agent" />
         ) : (
           <button
             className="pressable-scale flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#F5B300] px-5 text-sm font-black text-[#111214] shadow-sm hover:bg-[#E2A500] disabled:cursor-not-allowed disabled:bg-[#F5F3EB] disabled:text-[#A5A79F]"
@@ -174,13 +174,13 @@ export function HireAction({ agent }: { agent: Agent }) {
             type="button"
           >
             <CategoryGlyph color="#111214" name="sparkle" size={15} strokeWidth={2.4} />
-            {state.kind === "hiring" ? "Recording Hire..." : "Hire Agent for Free"}
+            {state.kind === "hiring" ? "Activating Agent..." : "GET AGENT (FREE)"}
           </button>
         )}
       </div>
 
       <p className="mt-4 text-center text-[10px] text-[#A5A79F]">
-        Price Source: {price.source.label}. Real ERC-8004 read on BSC.
+        Real ERC-8004 identity on BSC • Altana session boundaries
       </p>
     </div>
   );

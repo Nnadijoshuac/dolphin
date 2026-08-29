@@ -52,7 +52,7 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
-function DetailSection({
+function StoreSection({
   title,
   summary,
   children,
@@ -63,7 +63,7 @@ function DetailSection({
 }) {
   return (
     <section className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm sm:p-8">
-      <header className="border-b border-[#F3F0E8] pb-5">
+      <header className="border-b border-[#F3F0E8] pb-4">
         <h2 className="text-xl font-black tracking-tight text-[#111214]">
           {title}
         </h2>
@@ -245,26 +245,31 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
 export function AgentDetail({ agent }: { agent: Agent }) {
   const pillStyle = categoryPillStyles[agent.category] ?? categoryPillStyles.monitoring;
 
+  const ratingScore =
+    agent.reputationScore !== undefined && typeof agent.reputationScore === "number"
+      ? (agent.reputationScore / 20).toFixed(1)
+      : "4.9";
+
   return (
-    <div className="site-frame py-10 sm:py-14">
-      {/* Breadcrumb Navigation */}
+    <div className="site-frame py-8 sm:py-12">
+      {/* App Store Breadcrumb */}
       <nav aria-label="Breadcrumbs" className="mb-6 flex items-center gap-2 text-xs font-bold text-[#6E706B]">
         <Link className="hover:text-[#111214]" href="/">
-          Discover
+          Store
         </Link>
         <span>/</span>
         <Link className="hover:text-[#111214]" href={`/search?category=${agent.category}`}>
           {categoryLabels[agent.category]}
         </Link>
         <span>/</span>
-        <span className="text-[#111214]">#{agent.tokenId}</span>
+        <span className="text-[#111214]">{agent.name}</span>
       </nav>
 
-      {/* Hero Header Card */}
-      <div className="rounded-[32px] border border-[#ECE8DE] bg-white p-8 shadow-md sm:p-10">
+      {/* App Store Hero Card */}
+      <div className="rounded-[32px] border border-[#ECE8DE] bg-white p-8 shadow-sm sm:p-10">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-            <AgentIcon category={agent.category} size={88} uri={agent.iconUrl} />
+            <AgentIcon category={agent.category} size={96} uri={agent.iconUrl} />
 
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -290,7 +295,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               </p>
 
               {/* Publisher & Registry Links */}
-              <div className="mt-4 flex flex-wrap items-center gap-4 text-xs">
+              <div className="mt-3.5 flex flex-wrap items-center gap-4 text-xs">
                 <div className="flex items-center gap-1.5 font-mono text-[#6E706B]">
                   <span className="font-sans font-bold text-[#111214]">Publisher:</span>
                   <span>{agent.publisher}</span>
@@ -309,15 +314,17 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </div>
           </div>
 
-          {/* Quick Reputation & Chain Indicator */}
-          <div className="flex items-center gap-4 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-4 lg:flex-col lg:items-end">
+          {/* App Store Highlights Row */}
+          <div className="flex items-center gap-6 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-5 lg:flex-col lg:items-end">
             <div className="text-left lg:text-right">
               <span className="text-[10px] font-black uppercase tracking-wider text-[#A5A79F]">
-                REPUTATION SCORE
+                STORE RATING
               </span>
-              <p className="text-2xl font-black text-[#111214]">
-                {agent.reputationScore !== undefined ? `${agent.reputationScore} / 100` : "98 / 100"}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg text-[#946B00]">★</span>
+                <span className="text-2xl font-black text-[#111214]">{ratingScore}</span>
+                <span className="text-xs font-semibold text-[#A5A79F]">/ 5.0</span>
+              </div>
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold text-[#1C6A44]">
               <span className="h-2 w-2 rounded-full bg-[#1C6A44]" />
@@ -327,32 +334,32 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         </div>
       </div>
 
-      {/* Main Grid: Content Details (Left) + Hire Action Sticky (Right) */}
-      <div className="mt-10 grid gap-10 lg:grid-cols-[1.3fr_0.7fr]">
+      {/* Main Product Layout: Details + Sticky Hire Sidebar */}
+      <div className="mt-8 grid gap-8 lg:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-8">
-          {/* Section 1: Live Protocol Proof Metrics */}
-          <DetailSection
-            summary="Live metrics queried directly from verified smart contracts on BNB Chain."
-            title="Real-Time Protocol Evidence"
+          {/* Section 1: Live Protocol Evidence (App Store Preview) */}
+          <StoreSection
+            summary="Real-time verified smart contract reads on BNB Smart Chain."
+            title="Live Protocol Evidence"
           >
             <LiveStats agent={agent} />
-          </DetailSection>
+          </StoreSection>
 
-          {/* Section 2: Historical Performance & Visual Curve */}
-          <DetailSection
-            summary="Verifiable track record points recorded over operational history."
+          {/* Section 2: Historical Trajectory */}
+          <StoreSection
+            summary="On-chain operational history and historical performance trajectory."
             title="Performance Trajectory"
           >
             <PerformancePanel
               category={agent.category}
               series={agent.performanceSeries}
             />
-          </DetailSection>
+          </StoreSection>
 
-          {/* Section 3: Strategy & Guardrails */}
-          <DetailSection
-            summary="Plain-language breakdown of this agent's operational scope and limits."
-            title="Strategy & Operational Guardrails"
+          {/* Section 3: Strategy Breakdown & Verified Skills */}
+          <StoreSection
+            summary="Autonomous strategy scope and registered execution abilities."
+            title="About This Agent"
           >
             <p className="text-sm leading-relaxed text-[#303236]">
               {agent.description}
@@ -374,12 +381,62 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                 ))}
               </div>
             </div>
-          </DetailSection>
+          </StoreSection>
 
-          {/* Section 4: On-Chain Registry Specifications */}
-          <DetailSection
-            summary="Raw ERC-8004 identity data indexed on BNB Smart Chain."
-            title="Technical Identity & Provenance"
+          {/* Section 4: Google Play Style "Data Safety & Security Boundary" */}
+          <StoreSection
+            summary="Non-custodial guardrails and cryptographic permissions."
+            title="Security & Data Safety"
+          >
+            <div className="space-y-4">
+              <div className="flex items-start gap-4 rounded-2xl border border-[#BFE0CC] bg-[#DCEFE4]/40 p-4">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#DCEFE4] text-[#1C6A44]">
+                  <CategoryGlyph color="#1C6A44" name="shield" size={18} strokeWidth={2.4} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-[#111214]">
+                    100% Non-Custodial
+                  </h4>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[#1C6A44]">
+                    The agent never holds or receives your private key. In read-only mode, zero wallet authorization or fund transfers occur.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-4">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#946B00]">
+                  <CategoryGlyph color="#946B00" name="clock" size={18} strokeWidth={2.4} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-[#111214]">
+                    Altana Scoped Session Bounds
+                  </h4>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[#6E706B]">
+                    Any automated execution relies on smart contract session limits, daily spend caps, and explicit call allowlists.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-4">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#B9473A]">
+                  <CategoryGlyph color="#B9473A" name="revoke" size={18} strokeWidth={2.4} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-[#111214]">
+                    Instant User Revocation
+                  </h4>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[#6E706B]">
+                    You can pause or terminate active agent subscriptions from your wallet dashboard at any time with a single transaction.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </StoreSection>
+
+          {/* Section 5: Technical Provenance Specs */}
+          <StoreSection
+            summary="Raw ERC-8004 identity data registered on BNB Smart Chain."
+            title="Technical Information"
           >
             <dl className="divide-y divide-[#F3F0E8] text-xs">
               <div className="flex items-center justify-between py-3">
@@ -400,13 +457,13 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               </div>
               <div className="flex items-center justify-between py-3">
                 <dt className="font-semibold text-[#6E706B]">Registry Standard</dt>
-                <dd className="font-bold text-[#946B00]">ERC-8004 / BSC Mainnet</dd>
+                <dd className="font-bold text-[#946B00]">ERC-8004 / BSC Mainnet (Chain 56)</dd>
               </div>
             </dl>
-          </DetailSection>
+          </StoreSection>
         </div>
 
-        {/* Right Sticky Sidebar: Hire Action */}
+        {/* Right Sticky App Store Sidebar: GET / Hire Action */}
         <div className="lg:sticky lg:top-28 lg:self-start">
           <HireAction agent={agent} />
         </div>

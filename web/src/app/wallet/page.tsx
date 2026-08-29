@@ -13,27 +13,23 @@ export default function WalletPage() {
 
   return (
     <div className="relative flex min-h-[calc(100vh-160px)] items-center justify-center py-12 sm:py-20">
-      <ConstellationBg opacity={0.45} />
+      <ConstellationBg opacity={0.35} />
 
-      <div className="site-frame relative z-10 mx-auto flex w-full max-w-[540px] flex-col items-center text-center">
-        {/* Floating 3D Wallet Graphic */}
-        <div className="relative mb-6 flex h-60 w-60 items-center justify-center">
-          {/* Subtle Ambient Gold Glow */}
-          <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(245,179,0,0.22)_0%,transparent_70%)] blur-2xl" />
-
-          <div className="float-gentle relative h-52 w-52">
-            <Image
-              alt="Dolphin Wallet"
-              className="object-contain drop-shadow-[0_20px_40px_rgba(245,179,0,0.2)]"
-              fill
-              priority
-              src="/wallet.png"
-            />
-          </div>
+      <div className="site-frame relative z-10 mx-auto flex w-full max-w-[500px] flex-col items-center text-center">
+        {/* 3D Wallet Graphic */}
+        <div className="relative mb-6 flex h-48 w-48 items-center justify-center">
+          <Image
+            alt="Dolphin Wallet"
+            className="object-contain"
+            height={180}
+            priority
+            src="/wallet.png"
+            width={180}
+          />
         </div>
 
         {/* Headline & Psychology Prompt */}
-        <div className="reveal-one px-4">
+        <div className="px-4">
           <h1 className="text-balance text-3xl font-black tracking-tight text-[#111214] sm:text-4xl">
             {wallet.isConnected
               ? "Wallet Connected"
@@ -47,7 +43,7 @@ export default function WalletPage() {
         </div>
 
         {/* Connected Card or Connect Button */}
-        <div className="reveal-two mt-8 w-full max-w-[420px] px-4">
+        <div className="mt-8 w-full max-w-[400px] px-4">
           {wallet.isConnected && wallet.address ? (
             <div className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between border-b border-[#F3F0E8] pb-4">

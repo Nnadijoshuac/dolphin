@@ -1,4 +1,4 @@
-import type { AgentCategory, DataSourceLabel } from "@/types/agent";
+import type { AgentCategory, DataSourceLabel, AgentPriceModel, LiveMetric } from "@/types/agent";
 import type { Address } from "@/types/agent";
 
 export const BSC_CHAIN_ID = 56 as const;
@@ -13,21 +13,6 @@ export const ERC8004_REGISTRY_ADDRESSES = {
   reputation: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63" as Address,
 } as const;
 
-/**
- * The four categories graded by the hackathon's Agent Diversity rubric.
- *
- * MIRRORS convex/lib/agentCatalog.ts's AGENT_CATEGORY_SLUGS / AGENT_CATEGORIES,
- * which is the authority - the agent rows this list filters come from
- * agents.listAgents, so a category named here that Convex does not assign shows
- * an empty tab, and one Convex assigns that is missing here is invisible.
- *
- * This list said "monitoring" until 2026-08-29 while the mobile app had already
- * replaced it with "rebalancing" a day earlier, which is exactly the drift the
- * Convex centralization exists to stop. "monitoring" is still a valid
- * AgentCategory - Wallet Watch's data and hire record are real - but it is
- * deliberately not one of the four graded categories, so it never appears in
- * category browsing on either surface.
- */
 export const AGENT_CATEGORY_SLUGS = [
   "rebalancing",
   "grid-trading",
@@ -93,6 +78,28 @@ export const AGENT_DATA_SOURCES = {
     label: "Dolphin marketplace policy (not a publisher-published value)",
   },
 } as const satisfies Record<string, DataSourceLabel>;
+
+export const DEFAULT_READ_ONLY_PRICE_MODEL = {
+  type: "flat",
+  amount: "0",
+  token: "BNB",
+} as const satisfies AgentPriceModel;
+
+const READ_ONLY_PRICE_METHODOLOGY =
+  "Dolphin's own hire price, not a publisher-published one. A hire here records a " +
+  "read-only subscription and requests no signature, payment, session, or spend cap, " +
+  "so it costs nothing. The publisher may charge separately at its own service " +
+  "endpoint; ERC-8004 and 8004scan expose no price field for Dolphin to read.";
+
+export function defaultReadOnlyPriceMetric(): LiveMetric<AgentPriceModel> {
+  return {
+    status: "live",
+    value: { ...DEFAULT_READ_ONLY_PRICE_MODEL },
+    asOf: new Date().toISOString(),
+    source: AGENT_DATA_SOURCES.marketplacePolicy,
+    methodology: READ_ONLY_PRICE_METHODOLOGY,
+  };
+}
 
 export const AGENT_QUERY_TIMINGS = {
   listStaleTimeMs: 5 * 60 * 1_000,

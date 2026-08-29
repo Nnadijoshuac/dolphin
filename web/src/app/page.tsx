@@ -1,445 +1,409 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { AgentCard } from "@/components/agent-card";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
-import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
+import { EDITORIAL_AGENTS } from "@/data/editorial-agents";
 import { useAgents } from "@/hooks/use-agents";
-import type { AgentCategory } from "@/types/agent";
-
-const evidencePrinciples = [
-  {
-    index: "01",
-    title: "ERC-8004 On-Chain Identity",
-    body: "Every agent is registered as a unique ERC-8004 identity on BNB Smart Chain, verifiable directly on BscScan.",
-    icon: "shield" as const,
-  },
-  {
-    index: "02",
-    title: "Live Protocol Proof",
-    body: "Health factors, LP ranges, and APYs are pulled directly from Venus, PancakeSwap, and Aave contracts with live timestamps.",
-    icon: "sparkle" as const,
-  },
-  {
-    index: "03",
-    title: "Non-Custodial Session Bounds",
-    body: "Agents operate within user-defined daily spend limits and call allowlists via Altana guardrails. Revoke in one tap anytime.",
-    icon: "bot" as const,
-  },
-] as const;
+import type { Agent } from "@/types/agent";
 
 export default function DiscoverPage() {
-  const [activeCategory, setActiveCategory] = useState<AgentCategory>("rebalancing");
-  const { data: agents, isLoading, isError } = useAgents();
-  const marketRef = useRef<HTMLElement>(null);
+  const { data: liveAgents } = useAgents();
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  const selectedCategory =
-    AGENT_CATEGORIES.find((category) => category.slug === activeCategory) ??
-    AGENT_CATEGORIES[0];
-  const categoryAgents =
-    agents?.filter((agent) => agent.category === activeCategory) ?? [];
+  // Fallback to editorial catalog if live list is empty
+  const catalog: Agent[] = liveAgents && liveAgents.length > 0 ? liveAgents : EDITORIAL_AGENTS;
 
-  const selectCategory = (category: AgentCategory, moveToMarket = false) => {
-    setActiveCategory(category);
-    if (moveToMarket) {
-      window.requestAnimationFrame(() => {
-        marketRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    }
-  };
+  // Filter agents by category
+  const filteredAgents = useMemo(() => {
+    if (selectedCategory === "all") return catalog;
+    return catalog.filter((a: Agent) => a.category === selectedCategory);
+  }, [catalog, selectedCategory]);
+
+  // Featured Spotlight Agent (App Store "App of the Day")
+  const featuredAgent: Agent = useMemo(() => {
+    return (
+      catalog.find((a: Agent) => a.tokenId === "302257") ||
+      catalog.find((a: Agent) => a.category === "health-factor") ||
+      catalog[0]
+    );
+  }, [catalog]);
+
+  // Curated collections for store shelves
+  const healthFactorAgents = useMemo(
+    () => catalog.filter((a: Agent) => a.category === "health-factor"),
+    [catalog],
+  );
+  const rebalancingAgents = useMemo(
+    () => catalog.filter((a: Agent) => a.category === "rebalancing"),
+    [catalog],
+  );
+  const yieldAgents = useMemo(
+    () => catalog.filter((a: Agent) => a.category === "yield"),
+    [catalog],
+  );
+  const gridTradingAgents = useMemo(
+    () => catalog.filter((a: Agent) => a.category === "grid-trading"),
+    [catalog],
+  );
 
   return (
-    <div className="relative min-h-screen">
-      <ConstellationBg opacity={0.65} />
+    <div className="relative pb-24">
+      <ConstellationBg opacity={0.5} />
 
-      {/* Hero Showcase Section */}
-      <section className="site-frame pt-6 sm:pt-10 lg:pt-12">
-        <div className="relative overflow-hidden rounded-[36px] border border-[#ECE8DE] bg-gradient-to-br from-white via-[#FDFBF7] to-[#F7F2E7] p-8 shadow-[0_16px_48px_rgba(245,179,0,0.08)] sm:p-12 lg:p-16">
-          {/* Subtle Ambient Gold Glow Circles */}
-          <div className="pointer-events-none absolute -right-20 -top-20 h-96 w-96 rounded-full bg-[radial-gradient(circle,rgba(245,179,0,0.15)_0%,transparent_70%)] blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-20 left-1/3 h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(245,179,0,0.08)_0%,transparent_70%)] blur-2xl" />
+      {/* Top Store Navigation: Category Filter Pills */}
+      <div className="sticky top-20 z-30 border-b border-[#ECE8DE] bg-[#FBF9F4]/95 backdrop-blur-md">
+        <div className="site-frame flex items-center gap-2 overflow-x-auto py-3.5 no-scrollbar">
+          <button
+            className={`pressable-scale flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-black transition-all ${
+              selectedCategory === "all"
+                ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00] shadow-sm"
+                : "border border-[#ECE8DE] bg-white text-[#6E706B] hover:border-[#F5B300]/40 hover:text-[#111214]"
+            }`}
+            onClick={() => setSelectedCategory("all")}
+            type="button"
+          >
+            <CategoryGlyph
+              color={selectedCategory === "all" ? "#946B00" : "currentColor"}
+              name="sparkle"
+              size={13}
+              strokeWidth={2.4}
+            />
+            All Categories
+          </button>
 
-          <div className="relative z-10 grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
-            {/* Left Column: Headlines, Value Prop & Actions */}
-            <div>
-              <div className="reveal-one inline-flex items-center gap-2 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3.5 py-1.5 shadow-sm">
-                <span className="h-2 w-2 rounded-full bg-[#F5B300] animate-pulse" />
-                <span className="text-xs font-black uppercase tracking-wider text-[#946B00]">
-                  BNB Smart Chain Agent Hub
-                </span>
-              </div>
-
-              <h1 className="reveal-two mt-6 text-balance text-4xl font-black leading-[1.05] tracking-tight text-[#111214] sm:text-5xl lg:text-[62px]">
-                Discover AI Agents. <br />
-                <span className="bg-gradient-to-r from-[#B38115] via-[#F5B300] to-[#946B00] bg-clip-text text-transparent">
-                  Inspect the Live Proof.
-                </span>
-              </h1>
-
-              <p className="reveal-three mt-6 max-w-xl text-pretty text-base leading-relaxed text-[#4A4B4F] sm:text-lg">
-                Explore autonomous on-chain agents registered under ERC-8004. Compare verified track records, inspect real protocol reads, and hire with scoped non-custodial boundaries.
-              </p>
-
-              {/* Action Buttons */}
-              <div className="reveal-three mt-8 flex flex-wrap items-center gap-4">
-                <button
-                  className="pressable-scale inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-[#F5B300] px-7 text-sm font-black text-[#111214] shadow-[0_4px_16px_rgba(245,179,0,0.3)] hover:bg-[#E2A500]"
-                  onClick={() =>
-                    marketRef.current?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
-                    })
-                  }
-                  type="button"
-                >
-                  <CategoryGlyph color="#111214" name="sparkle" size={16} strokeWidth={2.4} />
-                  Explore Agents
-                </button>
-
-                <Link
-                  className="pressable-scale inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-[#ECE8DE] bg-white px-7 text-sm font-bold text-[#111214] no-underline shadow-sm hover:border-[#F5B300]/50 hover:bg-[#FBF9F4]"
-                  href="/search"
-                >
-                  <CategoryGlyph color="#111214" name="search" size={16} strokeWidth={2} />
-                  Search Catalog
-                </Link>
-              </div>
-
-              {/* Trust Indicators */}
-              <div className="mt-10 flex flex-wrap items-center gap-6 border-t border-[#ECE8DE] pt-6 text-xs font-semibold text-[#6E706B]">
-                <div className="flex items-center gap-2">
-                  <CategoryGlyph color="#1C6A44" name="shield" size={15} strokeWidth={2.5} />
-                  <span>ERC-8004 Identity</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CategoryGlyph color="#295C92" name="layers" size={15} strokeWidth={2.5} />
-                  <span>Venus & PancakeSwap Live</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CategoryGlyph color="#946B00" name="sparkle" size={15} strokeWidth={2.5} />
-                  <span>Altana Session Limits</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Hero Visual & Live Proof Card */}
-            <div className="reveal-three relative">
-              <div className="relative mx-auto flex max-w-[420px] flex-col items-center justify-center rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-[0_20px_60px_rgba(17,18,20,0.08)]">
-                {/* Floating Status Badge */}
-                <div className="absolute -top-4 right-6 flex items-center gap-2 rounded-full border border-[#BFE0CC] bg-[#DCEFE4] px-4 py-1.5 text-xs font-black text-[#1C6A44] shadow-sm">
-                  <span className="h-2 w-2 rounded-full bg-[#1C6A44] animate-pulse" />
-                  Live BSC Proof
-                </div>
-
-                {/* Coin Video / High-Res Media */}
-                <div className="relative h-64 w-64 overflow-hidden rounded-full border-4 border-[#FFF9E6] shadow-inner">
-                  <video
-                    autoPlay
-                    className="h-full w-full object-cover scale-110"
-                    loop
-                    muted
-                    playsInline
-                    src="/coin.mp4"
-                  />
-                </div>
-
-                {/* Spotlight Mini Card */}
-                <div className="mt-6 w-full rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-4 text-left">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-[#946B00]">
-                      FEATURED AGENT SPOTLIGHT
-                    </span>
-                    <span className="rounded-md bg-[#FEF5D6] px-2 py-0.5 text-[10px] font-bold text-[#946B00]">
-                      Venus Protocol
-                    </span>
-                  </div>
-
-                  <p className="mt-2 text-base font-black text-[#111214]">
-                    Venus Liquidation Sentinel
-                  </p>
-                  <p className="mt-0.5 text-xs text-[#6E706B]">
-                    Monitors borrow health factor & triggers automated buffer repay.
-                  </p>
-
-                  <div className="mt-3 flex items-center justify-between border-t border-[#ECE8DE] pt-2 text-[11px]">
-                    <span className="font-semibold text-[#1C6A44]">
-                      ● Status: Active & Syncing
-                    </span>
-                    <span className="font-mono font-bold text-[#303236]">
-                      0x4f8...b7a9
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Live Marketplace Metrics Ticker */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-[#ECE8DE] bg-white p-5 shadow-sm">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#6E706B]">
-              Registered Agents
-            </span>
-            <p className="mt-2 text-2xl font-black text-[#111214]">
-              {agents ? `${agents.length} Catalog Records` : "Syncing..."}
-            </p>
-            <p className="mt-1 text-xs text-[#946B00]">
-              ERC-8004 On-Chain Standard
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#ECE8DE] bg-white p-5 shadow-sm">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#6E706B]">
-              Graded Categories
-            </span>
-            <p className="mt-2 text-2xl font-black text-[#111214]">
-              4 Core Tracks
-            </p>
-            <p className="mt-1 text-xs text-[#295C92]">
-              Rebalancing, Grid, Health, Yield
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#ECE8DE] bg-white p-5 shadow-sm">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#6E706B]">
-              Verified Protocol Reads
-            </span>
-            <p className="mt-2 text-2xl font-black text-[#111214]">
-              Venus & PancakeSwap
-            </p>
-            <p className="mt-1 text-xs text-[#1C6A44]">
-              Live Smart Contract Queries
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#ECE8DE] bg-white p-5 shadow-sm">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#6E706B]">
-              Custody Model
-            </span>
-            <p className="mt-2 text-2xl font-black text-[#111214]">
-              100% Non-Custodial
-            </p>
-            <p className="mt-1 text-xs text-[#65478A]">
-              Altana Scoped Session Keys
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Category Explorer Section */}
-      <section
-        aria-labelledby="category-heading"
-        className="site-frame py-16 sm:py-20 lg:py-24"
-      >
-        <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
-          <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3 py-1 text-xs font-bold text-[#946B00]">
-              <CategoryGlyph color="#946B00" name="layers" size={13} strokeWidth={2.4} />
-              <span>Explore by Strategy</span>
-            </div>
-            <h2
-              className="mt-3 text-3xl font-black tracking-tight text-[#111214] sm:text-4xl lg:text-5xl"
-              id="category-heading"
-            >
-              Choose an Agent by Its Job
-            </h2>
-          </div>
-          <p className="max-w-xl text-sm leading-relaxed text-[#6E706B]">
-            All categories match the exact taxonomy of Dolphin mobile. Select a category below to inspect agents and their verified live metrics.
-          </p>
-        </div>
-
-        {/* Category Cards Grid */}
-        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {AGENT_CATEGORIES.map((category, index) => {
-            const isActive = category.slug === activeCategory;
-            const count =
-              agents?.filter((a) => a.category === category.slug).length ?? 0;
-
+          {AGENT_CATEGORIES.map((cat) => {
+            const isSelected = selectedCategory === cat.slug;
             return (
               <button
-                aria-pressed={isActive}
-                className={`pressable-scale group flex flex-col justify-between rounded-3xl border p-6 text-left shadow-sm transition-all ${
-                  isActive
-                    ? "border-[#F5B300] bg-white ring-2 ring-[#F5B300]/30 shadow-md"
-                    : "border-[#ECE8DE] bg-white hover:border-[#F5B300]/40 hover:bg-[#FDFBF7]"
+                className={`pressable-scale flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-black transition-all ${
+                  isSelected
+                    ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00] shadow-sm"
+                    : "border border-[#ECE8DE] bg-white text-[#6E706B] hover:border-[#F5B300]/40 hover:text-[#111214]"
                 }`}
-                key={category.slug}
-                onClick={() => selectCategory(category.slug, true)}
+                key={cat.slug}
+                onClick={() => setSelectedCategory(cat.slug)}
                 type="button"
               >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div
-                      className={`flex h-14 w-14 items-center justify-center rounded-2xl border ${
-                        isActive
-                          ? "border-[#F3E3A6] bg-[#FEF5D6]"
-                          : "border-[#ECE8DE] bg-[#FBF9F4] group-hover:bg-[#FEF5D6]"
-                      }`}
-                    >
-                      <CategoryGlyph
-                        color={isActive ? "#946B00" : "#111214"}
-                        name={category.slug}
-                        size={28}
-                        strokeWidth={2.2}
-                      />
-                    </div>
-                    <span className="font-mono text-xs font-bold text-[#A5A79F]">
-                      0{index + 1}
-                    </span>
-                  </div>
-
-                  <h3 className="mt-6 text-xl font-black tracking-tight text-[#111214]">
-                    {category.label}
-                  </h3>
-                  <p className="mt-2 text-xs leading-relaxed text-[#6E706B]">
-                    {category.description}
-                  </p>
-                </div>
-
-                <div className="mt-6 flex items-center justify-between border-t border-[#F3F0E8] pt-4">
-                  <span className="font-mono text-xs font-semibold text-[#A5A79F]">
-                    {count} {count === 1 ? "agent" : "agents"}
-                  </span>
-                  <span
-                    className={`text-xs font-extrabold ${
-                      isActive ? "text-[#946B00]" : "text-[#111214] group-hover:text-[#946B00]"
-                    }`}
-                  >
-                    {isActive ? "Selected ✓" : "Browse →"}
-                  </span>
-                </div>
+                <CategoryGlyph
+                  color={isSelected ? "#946B00" : "currentColor"}
+                  name={cat.slug}
+                  size={13}
+                  strokeWidth={2.4}
+                />
+                {cat.label}
               </button>
             );
           })}
         </div>
-      </section>
+      </div>
 
-      {/* Selected Collection Agent Marketplace Grid */}
-      <section
-        aria-labelledby="agent-market-heading"
-        className="scroll-mt-28 border-y border-[#ECE8DE] bg-white/70 backdrop-blur-sm"
-        id="agent-market"
-        ref={marketRef}
-      >
-        <div className="site-frame py-16 sm:py-20 lg:py-24">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3 py-1 text-xs font-extrabold text-[#946B00]">
-                  ACTIVE COLLECTION
+      <div className="site-frame mt-8 space-y-12">
+        {/* App Store / Google Play Spotlight Banner */}
+        <section className="relative overflow-hidden rounded-[32px] border border-[#ECE8DE] bg-white p-8 shadow-sm lg:p-12">
+          {/* Subtle Ambient Gold Radiance */}
+          <div className="pointer-events-none absolute -right-20 -top-20 h-96 w-96 rounded-full bg-[radial-gradient(circle,rgba(245,179,0,0.18)_0%,transparent_70%)] blur-3xl" />
+
+          <div className="relative z-10 grid items-center gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+            {/* Spotlight Content */}
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="flex items-center gap-1.5 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3.5 py-1 text-xs font-black uppercase tracking-wide text-[#946B00]">
+                  <span>⭐</span>
+                  <span>Featured Agent of the Day</span>
                 </span>
-                <span className="text-xs font-semibold text-[#6E706B]">
-                  ERC-8004 Verified
+                <span className="flex items-center gap-1 text-xs font-extrabold text-[#1C6A44]">
+                  <span className="h-2 w-2 rounded-full bg-[#1C6A44]" />
+                  Venus Protocol Live
                 </span>
               </div>
-              <h2
-                className="mt-3 text-3xl font-black tracking-tight text-[#111214] sm:text-4xl"
-                id="agent-market-heading"
-              >
-                {selectedCategory.label} Agents
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#6E706B]">
-                {selectedCategory.description}
+
+              <h1 className="text-balance text-3xl font-black tracking-tight text-[#111214] sm:text-5xl">
+                {featuredAgent.name}
+              </h1>
+
+              <p className="max-w-xl text-base leading-relaxed text-[#4A4B4F]">
+                {featuredAgent.tagline}
               </p>
-            </div>
 
-            {!isLoading && !isError && (
-              <div className="flex items-center gap-2 rounded-full border border-[#ECE8DE] bg-white px-4 py-2 text-xs font-bold text-[#303236] shadow-sm">
-                <CategoryGlyph color="#1C6A44" name="shield" size={14} strokeWidth={2.4} />
-                <span>
-                  {categoryAgents.length} {categoryAgents.length === 1 ? "Agent" : "Agents"} Ready to Inspect
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-10">
-            {isLoading ? (
-              <StatePanel
-                body="Querying Dolphin's shared Convex catalog for BSC ERC-8004 agent records."
-                state="syncing"
-                title="Loading Agent Records"
-              />
-            ) : isError ? (
-              <StatePanel
-                body="The shared agent catalog could not be reached. No unverified records are being displayed."
-                state="unavailable"
-                title="Catalog Unavailable"
-              />
-            ) : categoryAgents.length === 0 ? (
-              <StatePanel
-                body="Dolphin's current catalog has no active agents in this collection yet."
-                state="empty"
-                title="No Agents in this Category"
-              />
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
-                {categoryAgents.map((agent) => (
-                  <AgentCard agent={agent} key={agent.id} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Proof Before Permission / Architecture Due Diligence */}
-      <section
-        aria-labelledby="diligence-heading"
-        className="site-frame py-20 sm:py-24 lg:py-28"
-      >
-        <div className="text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3.5 py-1 text-xs font-black text-[#946B00]">
-            <CategoryGlyph color="#946B00" name="shield" size={13} strokeWidth={2.5} />
-            TRUST ARCHITECTURE
-          </span>
-          <h2
-            className="mt-4 text-3xl font-black tracking-tight text-[#111214] sm:text-4xl lg:text-5xl"
-            id="diligence-heading"
-          >
-            Proof Before Permission.
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-[#6E706B]">
-            Never guess whether an agent performs. Inspect on-chain identity, real-time protocol metrics, and guardrail limits before connecting.
-          </p>
-        </div>
-
-        <div className="mt-14 grid gap-8 md:grid-cols-3">
-          {evidencePrinciples.map((principle) => (
-            <div
-              className="rounded-3xl border border-[#ECE8DE] bg-white p-8 shadow-sm"
-              key={principle.index}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#F3E3A6] bg-[#FEF5D6]">
-                  <CategoryGlyph
-                    color="#946B00"
-                    name={principle.icon}
-                    size={22}
-                    strokeWidth={2.4}
-                  />
+              {/* App Store Highlights Row */}
+              <div className="flex flex-wrap items-center gap-6 pt-2 text-xs font-bold text-[#6E706B]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base text-[#946B00]">★</span>
+                  <span className="text-sm font-black text-[#111214]">4.9</span>
+                  <span className="text-[11px] font-semibold text-[#A5A79F]">Reputation</span>
                 </div>
-                <span className="font-mono text-sm font-black text-[#A5A79F]">
-                  {principle.index}
-                </span>
+                <div className="h-4 w-px bg-[#ECE8DE]" />
+                <div>
+                  <span className="font-mono text-sm font-black text-[#111214]">ERC-8004</span>
+                  <span className="ml-1 text-[11px] font-semibold text-[#A5A79F]">Standard</span>
+                </div>
+                <div className="h-4 w-px bg-[#ECE8DE]" />
+                <div className="flex items-center gap-1 text-[#1C6A44]">
+                  <CategoryGlyph color="#1C6A44" name="shield" size={13} strokeWidth={2.5} />
+                  <span>100% Non-Custodial</span>
+                </div>
               </div>
 
-              <h3 className="mt-6 text-xl font-black tracking-tight text-[#111214]">
-                {principle.title}
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-3 pt-4">
+                <Link
+                  className="pressable-scale flex items-center gap-2 rounded-full bg-[#F5B300] px-7 py-3 text-sm font-black text-[#111214] no-underline shadow-sm hover:bg-[#E2A500]"
+                  href={`/agent/${featuredAgent.tokenId}`}
+                >
+                  <span>GET AGENT</span>
+                  <CategoryGlyph color="#111214" name="arrow-right" size={15} strokeWidth={2.5} />
+                </Link>
+
+                <Link
+                  className="pressable-scale flex items-center gap-2 rounded-full border border-[#ECE8DE] bg-[#FBF9F4] px-6 py-3 text-sm font-bold text-[#303236] no-underline hover:border-[#F5B300]/50 hover:bg-white"
+                  href={`/search?category=${featuredAgent.category}`}
+                >
+                  <span>More in Health Factor</span>
+                </Link>
+              </div>
+            </div>
+
+            {/* Visual Media Centerpiece: Interactive BNB Coin Animation */}
+            <div className="flex items-center justify-center">
+              <div className="relative h-64 w-64 sm:h-72 sm:w-72">
+                <video
+                  aria-label="BNB Smart Money Coin showcase"
+                  autoPlay
+                  className="h-full w-full object-contain drop-shadow-[0_20px_40px_rgba(245,179,0,0.25)]"
+                  loop
+                  muted
+                  playsInline
+                  ref={videoRef}
+                  src="/coin.mp4"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Dynamic Store View: Either Filtered Grid or Curated App Store Shelves */}
+        {selectedCategory !== "all" ? (
+          <section className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight text-[#111214]">
+                  {AGENT_CATEGORIES.find((c) => c.slug === selectedCategory)?.label} Agents
+                </h2>
+                <p className="mt-1 text-xs text-[#6E706B]">
+                  {filteredAgents.length} verified autonomous agents available on BNB Smart Chain
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredAgents.map((agent: Agent) => (
+                <AgentCard agent={agent} key={agent.id} />
+              ))}
+            </div>
+          </section>
+        ) : (
+          <div className="space-y-14">
+            {/* Shelf 1: Liquidation & Health Factor Sentinels */}
+            {healthFactorAgents.length > 0 && (
+              <section className="space-y-6">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#DCEFE4]">
+                        <CategoryGlyph color="#1C6A44" name="health-factor" size={14} strokeWidth={2.4} />
+                      </span>
+                      <h2 className="text-2xl font-black tracking-tight text-[#111214]">
+                        Liquidation & Health Factor Sentinels
+                      </h2>
+                    </div>
+                    <p className="mt-1 text-xs text-[#6E706B]">
+                      Real-time Venus Protocol & Aave collateral monitoring to safeguard loans before liquidation.
+                    </p>
+                  </div>
+
+                  <button
+                    className="text-xs font-bold text-[#946B00] hover:underline"
+                    onClick={() => setSelectedCategory("health-factor")}
+                    type="button"
+                  >
+                    See all →
+                  </button>
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {healthFactorAgents.map((agent: Agent) => (
+                    <AgentCard agent={agent} key={agent.id} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Shelf 2: Concentrated Liquidity Rebalancing */}
+            {rebalancingAgents.length > 0 && (
+              <section className="space-y-6">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#FEF5D6]">
+                        <CategoryGlyph color="#946B00" name="rebalancing" size={14} strokeWidth={2.4} />
+                      </span>
+                      <h2 className="text-2xl font-black tracking-tight text-[#111214]">
+                        Top Rebalancing & LP Managers
+                      </h2>
+                    </div>
+                    <p className="mt-1 text-xs text-[#6E706B]">
+                      PancakeSwap V3 active range reset and concentrated liquidity fee capture.
+                    </p>
+                  </div>
+
+                  <button
+                    className="text-xs font-bold text-[#946B00] hover:underline"
+                    onClick={() => setSelectedCategory("rebalancing")}
+                    type="button"
+                  >
+                    See all →
+                  </button>
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {rebalancingAgents.map((agent: Agent) => (
+                    <AgentCard agent={agent} key={agent.id} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Shelf 3: High Yield Optimizers */}
+            {yieldAgents.length > 0 && (
+              <section className="space-y-6">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#E9E1F4]">
+                        <CategoryGlyph color="#65478A" name="yield" size={14} strokeWidth={2.4} />
+                      </span>
+                      <h2 className="text-2xl font-black tracking-tight text-[#111214]">
+                        DeFi Yield & Vault Auto-Compounders
+                      </h2>
+                    </div>
+                    <p className="mt-1 text-xs text-[#6E706B]">
+                      Automated yield routing across Beefy, Lista, and Aave pools on BSC.
+                    </p>
+                  </div>
+
+                  <button
+                    className="text-xs font-bold text-[#946B00] hover:underline"
+                    onClick={() => setSelectedCategory("yield")}
+                    type="button"
+                  >
+                    See all →
+                  </button>
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {yieldAgents.map((agent: Agent) => (
+                    <AgentCard agent={agent} key={agent.id} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Shelf 4: Grid Trading & Order Ladders */}
+            {gridTradingAgents.length > 0 && (
+              <section className="space-y-6">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#DDE9F8]">
+                        <CategoryGlyph color="#295C92" name="grid-trading" size={14} strokeWidth={2.4} />
+                      </span>
+                      <h2 className="text-2xl font-black tracking-tight text-[#111214]">
+                        Grid Trading & Geometric Engines
+                      </h2>
+                    </div>
+                    <p className="mt-1 text-xs text-[#6E706B]">
+                      Automated price ladder buy/sell orders capturing volatility on BNB pairs.
+                    </p>
+                  </div>
+
+                  <button
+                    className="text-xs font-bold text-[#946B00] hover:underline"
+                    onClick={() => setSelectedCategory("grid-trading")}
+                    type="button"
+                  >
+                    See all →
+                  </button>
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {gridTradingAgents.map((agent: Agent) => (
+                    <AgentCard agent={agent} key={agent.id} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+
+        {/* App Store Diligence: "Proof Before Permission" Security Standard */}
+        <section className="rounded-[32px] border border-[#ECE8DE] bg-white p-8 shadow-sm sm:p-12">
+          <div className="max-w-2xl">
+            <span className="text-xs font-black uppercase tracking-wider text-[#946B00]">
+              The BNB Chain Standard
+            </span>
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-[#111214]">
+              Proof Before Permission
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[#6E706B]">
+              Unlike black-box trading bots, every agent on Dolphin is anchored on-chain with verifiable ERC-8004 identity and scoped session bounds.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-6 md:grid-cols-3">
+            <div className="rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-6">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#946B00] shadow-sm">
+                <CategoryGlyph color="#946B00" name="sparkle" size={20} strokeWidth={2.2} />
+              </div>
+              <h3 className="mt-4 text-base font-black text-[#111214]">
+                1. ERC-8004 Provenance
               </h3>
-              <p className="mt-3 text-sm leading-relaxed text-[#6E706B]">
-                {principle.body}
+              <p className="mt-2 text-xs leading-relaxed text-[#6E706B]">
+                Tokenized on-chain registration on BNB Chain linking publishers, verified capabilities, and metadata without middlemen.
               </p>
             </div>
-          ))}
-        </div>
-      </section>
+
+            <div className="rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-6">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#1C6A44] shadow-sm">
+                <CategoryGlyph color="#1C6A44" name="health-factor" size={20} strokeWidth={2.2} />
+              </div>
+              <h3 className="mt-4 text-base font-black text-[#111214]">
+                2. Live Protocol Feeds
+              </h3>
+              <p className="mt-2 text-xs leading-relaxed text-[#6E706B]">
+                Real-time data feeds directly from Venus Protocol and PancakeSwap V3 contracts. Zero fake or mocked numbers.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-6">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-[#295C92] shadow-sm">
+                <CategoryGlyph color="#295C92" name="shield" size={20} strokeWidth={2.2} />
+              </div>
+              <h3 className="mt-4 text-base font-black text-[#111214]">
+                3. Non-Custodial Bounds
+              </h3>
+              <p className="mt-2 text-xs leading-relaxed text-[#6E706B]">
+                Altana session guardrails enforce spend limits and call allowlists on-chain. You can instantly revoke access at any time.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

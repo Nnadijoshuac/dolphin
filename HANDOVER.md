@@ -6,7 +6,269 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 ---
 
+# Session addendum — 2026-08-29 (dusk-to-dawn session)
+
+Everything below this heading was verified this session against live commands, a
+real browser driving the actual web export, and live Convex queries — never from
+a code read alone. Where a claim in §1–§6 is now out of date, this addendum wins.
+
+## IS THIS SUBMITTABLE RIGHT NOW?
+
+**No — and exactly one thing stands between here and submittable: the repo is
+private, so no public URL exists.**
+
+Everything needed to produce that URL is built, committed, pushed, and verified
+working locally. It is blocked on two owner-only clicks that cannot be done from
+a non-interactive session:
+
+1. **Make `github.com/Nnadijoshuac/dolphin` public.** GitHub Pages does not serve
+   from a private repo on the free plan. (Evidence: `git push` succeeds with the
+   cached credentials, while `https://api.github.com/repos/Nnadijoshuac/dolphin`
+   returns `Not Found` — that combination means private.)
+2. **Settings → Pages → Build and deployment → Source: "GitHub Actions."**
+
+After those, the pushed workflow (`.github/workflows/deploy-web.yml`) publishes on
+every push to `main` and the URL will be **https://nnadijoshuac.github.io/dolphin/**.
+That URL 404s today and will keep 404ing until step 1 and 2 are done.
+
+If the owner would rather not make the repo public, any root-serving host works
+with no code change (`npx expo export --platform web`, upload `dist/`) — Vercel,
+Netlify and Cloudflare Pages all need an interactive login this session could not
+perform.
+
+## What changed this session
+
+Five commits, `81834e1..5445d76`, all pushed. `npx tsc --noEmit` is clean and
+`npx expo lint` reports 0 errors (2 pre-existing unused-import warnings in
+`(tabs)/index.tsx` and `agent-card.tsx`, untouched, both present before this
+session).
+
+### 1. Live category stats now actually reach the UI (Task 1 — done, verified)
+
+`useAgentCategoryStats` was dead code. `agent-detail.tsx`'s `LiveStats` now calls
+it. Note the real hook signature is `(tokenId, category, agentWallet)` — not
+`(chainId, tokenId, category)`.
+
+It branches on `convexClient` (a module constant, so hook order is stable):
+Convex unconfigured → the old static `agent.liveStats` stub; otherwise the
+backend row. Added `syncingLiveStats()` so the initial load reads "Syncing"
+rather than "Not reported" — "unavailable" asserts a feed was checked and does
+not exist, which is a stronger claim than we can make while still loading.
+
+**Proof it is the UI driving the refresh, not a pre-warmed table.** Before:
+`agentLiveStats` had 7 rows (all written by hand via `npx convex run`), none for
+tokenId 45381 or 292939. After opening four agent pages in a real browser:
+
+```
+total rows: 9
+12046    yield           checkedAt=2026-08-29T02:12:16.680Z  UPDATED by UI
+265375   rebalancing     checkedAt=2026-08-29T02:12:04.258Z  UPDATED by UI
+292058   health-factor   checkedAt=2026-08-29T02:06:10.227Z  unchanged
+292939   grid-trading    checkedAt=2026-08-29T02:12:28.876Z  *** NEW ROW (created by the UI) ***
+302257   health-factor   checkedAt=2026-08-29T02:06:06.520Z  unchanged
+43129    health-factor   checkedAt=2026-08-29T02:06:13.558Z  unchanged
+45381    health-factor   checkedAt=2026-08-29T02:11:56.125Z  *** NEW ROW (created by the UI) ***
+45422    yield           checkedAt=2026-08-29T02:06:28.193Z  unchanged
+45650    rebalancing     checkedAt=2026-08-29T02:05:24.238Z  unchanged
+```
+
+Two brand-new rows for the two agents that were only ever opened in the browser,
+`checkedAt` advancing for the two that were re-opened, and the three never opened
+sitting untouched.
+
+What a judge now sees, read out of the live DOM of the served build:
+
+```
+AGENT 265375 (rebalancing)
+  REBALANCE EFFICIENCY = Not reported
+  ACTIVE RANGE         = USDT/WBNB 0.05% · ticks -65970 to -63960
+  CURRENT P&L          = Not reported
+  LP POSITIONS         = 3
+AGENT 45381 (health-factor)
+  POSITIONS WATCHED    = 0
+AGENT 12046 (yield)
+  TVL MANAGED          = $0
+  PROTOCOLS            = None
+AGENT 292939 (grid-trading)   <- control, correctly still fully unavailable
+  WIN RATE / ACTIVE RANGE / CURRENT P&L / GRID LEVELS = Not reported
+```
+
+**Honest caveat on data richness.** The pipeline is real for all three wired
+categories, but only agent 265375 currently holds substantive positions. The
+other agent wallets genuinely hold no Venus/Aave/PancakeSwap positions right now,
+so they read a live `0`. That is a true on-chain reading, not a stub — but do not
+oversell "rich live data across every agent" in the submission, because a judge
+opening `Aave powered by HeyAnon` will see `Positions watched 0`.
+
+`refreshAgentCategoryStats` has exactly one trigger: this hook (on view, then
+every 60s). It is deliberately **not** in the cron — `convex/crons.ts` only runs
+the 12h discovery sync. Pre-warming it server-side would need server-side
+`getAgentWallet` resolution per agent, which does not exist; on-view refresh
+settles in ~1–3s and the interim state is an honest "Syncing".
+
+### 2. The hire dead end is fixed at the data layer (Task 2 — partly done)
+
+`priceModel` never resolved, so the Hire button was permanently disabled for
+every agent. Root cause is external and confirmed again: 8004scan publishes no
+price field at all.
+
+**Decision, documented at `DEFAULT_READ_ONLY_PRICE_MODEL` in
+`src/constants/agents.ts`** (that constant is also where to reverse it): price
+what Dolphin actually does, rather than guess at the publisher. A hire here
+writes a read-only subscription record — no signature, spend cap, session, or
+transaction — so it costs exactly zero. That is a checkable fact about this
+marketplace, not a fabricated metric, which is why it does not breach the
+data-integrity rule the way inventing an APY would.
+
+It deliberately does **not** claim the publisher is free. The metric's `source`
+is `"Dolphin marketplace policy (not a publisher-published value)"` rather than a
+data feed, and the hire screen splits the old single "Published price" row into
+**"Dolphin hire price: Free"** and **"Publisher price: Not published"** so the two
+can never be read as the same claim.
+
+`agents-api.ts` needed no change — it inherits `priceModel` through its existing
+`...fallback` spread, which is what stops a live refresh from regressing the
+value. That is now commented so it stays deliberate.
+
+Verified live, A/B, against the real mutation — the old `null` price is still
+rejected, and the new default succeeds across three categories:
+
+```
+=== control: old behaviour (null price) must still be REJECTED ===
+Uncaught Error: Cannot hire yet: this agent's priceModel has not resolved to a live value.
+
+=== with DEFAULT_READ_ONLY_PRICE_MODEL {flat, 0, BNB} ===
+265375   rebalancing    -> "jh7c8xq247pdfd4eefe1t1br7x8dcwmj"
+45381    health-factor  -> "jh79v4a2da1tjxr7055fxvwmc18dde62"
+12046    yield          -> "jh70jj6kpfdqc4kdyfyhxrtgq18dda32"
+```
+
+Three real `active` rows in `agentHires`, three categories, confirmed via
+`npx convex data agentHires`.
+
+**What is NOT done, and it matters.** The button is gated on `priceModel` **and**
+`isWalletConnected`. Fixing the price removed the first gate; the second is still
+closed on web, because `wallet-provider.web.tsx` is an intentional stub that
+always reports `isConnected: false`. So **a judge on the web build still cannot
+complete a hire.** The screen is now at least honest about why — the banner reads
+"Connect a wallet to hire" instead of the old, unfixable "Waiting on published
+price" — but the journey does not reach a completed state there.
+
+This was left rather than bodged, deliberately: the fix is a web wallet path
+(wagmi's `injected()` connector against `window.ethereum`, using the wagmi
+already in `package.json` — no new dependency and no change to the native path),
+but a headless browser has no wallet extension, so it could not have been
+verified tonight. Shipping unverified wallet code would have broken this
+session's own rule. **This is the top remaining Functionality item.**
+
+### 3. A deployment-breaking bug found while verifying the export (not on the task list)
+
+The web export was silently showing an **empty marketplace** ("No Agents Found",
+no HTTP request to 8004scan at all, no error) whenever it was served from
+anything other than the domain root.
+
+Cause: `query-provider.tsx` wired `onlineManager` to NetInfo on web as well as
+native. NetInfo's **web** build defaults to `reachabilityUrl: "/"`,
+`reachabilityMethod: "HEAD"`, and a `status === 200` test (its own
+`internal/defaultConfiguration.web.js`). Under any path-prefixed deploy — which
+is exactly what a GitHub Pages project site at `/<repo>` is — that probe hits a
+root the app does not own, gets a 404, sets `isInternetReachable: false`, and
+TanStack Query then **pauses** every query instead of failing it: no request, no
+error, no retry, forever. Convex was unaffected because it has its own socket and
+never consults `onlineManager`, which is precisely what disguised this as a
+routing bug.
+
+Isolated by building the identical bundle twice — at root it fetched all eight
+agents, under `/dolphin` it fetched none. Fixed by making the override
+native-only, matching the reasoning already applied to the focus listener beside
+it. Re-verified after the fix: all eight agents fetch under the sub-path.
+
+**Had this not been caught, the deployed site would have shown judges an empty
+marketplace.**
+
+Also fixed while verifying: a live-but-empty list (agent 12046's Aave
+`protocolsUsed` is live with `[]`) rendered as a blank cell that read as broken
+UI. It now says "None", which stays distinct from "Not reported".
+
+### 4. Deployment (Task 3 — built and locally verified, blocked on the owner)
+
+`.github/workflows/deploy-web.yml` builds and publishes the Expo web export to
+GitHub Pages. It patches `experiments.baseUrl` to `/<repo>` at build time instead
+of committing it, so `app.json` stays correct for a root-serving host and for
+local exports; writes `.nojekyll` (Jekyll strips Expo's `_expo/` output); and
+copies `index.html` to `404.html` so deep links survive, since `web.output` is
+`"single"`.
+
+`experiments.baseUrl` was verified against the SDK 54 app-config reference rather
+than assumed.
+
+Verified against a local server reproducing Pages' exact behaviour (assets under
+`/dolphin`, unmatched paths served `404.html`): landing, onboarding, Discover,
+tapping through to an agent, and direct deep links all work, with real Live
+signals rendering. **Not yet verified from a genuinely fresh external context,
+because no public URL exists yet** — that check still has to happen once Pages is
+enabled.
+
+Scope note for the submission text: the web build demonstrates the read-only
+marketplace — browse, search, agent detail, live on-chain stats, registry
+verification. Wallet connection and therefore hiring do not work there.
+
+### 5. Wallet connect (Task 4 — not advanced)
+
+Not testable this session: no device, and the blocker recorded in §4 was the test
+network's DNS refusing `relay.walletconnect.org`. Status is unchanged.
+
+One new observation: the `[wallet-diagnostic]` log **does** fire and reports
+`crypto.getRandomValues OK` — but it fired in the *web* bundle, where that was
+never in doubt, so **it says nothing about native yet**. Leave it in place until
+someone runs the app on a device on a network that resolves the relay domain.
+
+The reason it runs on web at all is worth knowing: `wallet-provider.ts` imports
+**both** `.native` and `.web` modules unconditionally, so the native module's
+top-level side effects (the polyfill imports and that probe) execute on web. The
+`Platform.OS !== "web"` guard only stops `createAppKit()`. This is the
+known-suboptimal router already flagged in §5; it also means the whole
+Reown/AppKit/wagmi native stack ships inside the 6.4 MB web bundle. Left alone
+deliberately — it is untestable native code from here, and a console.log is
+harmless next to the risk of breaking the one wallet path that might work.
+
+## New known issues found this session
+
+1. **The repo is private, so no public URL can exist.** Top blocker. See above.
+2. **Hiring cannot complete on web** — wallet gate, not price gate. Needs the
+   wagmi `injected()` web connector.
+3. **Most agent wallets hold no positions**, so several live metrics read a
+   truthful `0`. Real, but thin for a demo; agent 265375 is the strongest one to
+   show a judge.
+4. **A video asset 404s in the web export** — the request path doubles up as
+   `/assets/assets/videos/Coin.<hash>.mp4`. Pre-existing (reproduces at root as
+   well as on the sub-path), cosmetic, not investigated.
+5. **`convex/lib/liveMetric.ts` erases its value type.** `liveMetric()` takes
+   `Parameters<typeof v.union>[0]`, so `Doc<"agentLiveStats">["stats"]` is
+   structurally correct and discriminated by `category`, but each metric's
+   `value` is effectively `any` — verified with a type probe: assigning a string
+   to `currentApy.value` compiles. Runtime is fine (the protocol modules do write
+   numbers) but the client/server mirror is not compiler-checked, and the UI now
+   calls `.toFixed()`/`.join()` on those values. Making `liveMetric` generic would
+   close this.
+
+## Suggested order for the next session
+
+1. Owner: make the repo public, enable Pages, then open the URL from a phone or a
+   clean browser profile and walk the whole journey. Record the URL here.
+2. Web wallet via wagmi `injected()`, so the hire journey completes for a judge.
+3. Confirm native wallet connect on a network that resolves the relay domain;
+   remove the diagnostic log once it does.
+4. Then the §5 stretch list (surface `classificationConfidence`, cancel/un-hire).
+
+---
+
 ## 1. Current State
+
+> **Superseded in part by the 2026-08-29 addendum above.** Specifically: the
+> "Live signals always show Not reported" and "hiring is never reachable because
+> `priceModel` never resolves" findings are fixed; `agentLiveStats` is no longer
+> empty; and a deployment path now exists. The rest of this section still holds.
 
 ### What's actually built and working
 

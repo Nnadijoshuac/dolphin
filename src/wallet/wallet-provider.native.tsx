@@ -1,3 +1,14 @@
+// Must be the very first import: WalletConnect's crypto (key generation,
+// relay-payload encryption) calls crypto.getRandomValues(), which RN has
+// no native implementation of. Neither @walletconnect/react-native-compat
+// (installs EventEmitter/TextEncoder/URL polyfills only - checked its
+// package.json, it doesn't depend on this) nor wagmi/viem/@reown's
+// packages polyfill this themselves - confirmed empty grep for
+// "react-native-get-random-values" across their source. Without it,
+// WalletConnect silently fails to publish relay messages ("Failed to
+// publish custom payload, please try again") rather than throwing a
+// clear error about the missing polyfill.
+import "react-native-get-random-values";
 // This compatibility layer installs required React Native globals before Reown loads.
 import "@walletconnect/react-native-compat";
 

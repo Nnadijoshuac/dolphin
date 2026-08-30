@@ -25,6 +25,58 @@ export default defineSchema({
     .index("by_agent_wallet", ["chainId", "tokenId", "walletAddress"])
     .index("by_wallet", ["walletAddress", "status"]),
 
+  /**
+   * Altana session grants, recorded next to the agentHires row they belong to.
+   * See convex/agentSessions.ts for why this lives in the backend rather than
+   * only in the granting browser: a session is the one thing in Dolphin that
+   * hands real authority to someone else, so "what have I authorized" needs
+   * exactly one answer rather than two that can disagree.
+   *
+   * Public reference detail only. No signer and no key material of any kind -
+   * nothing in this table can act on a wallet, only describe what was granted
+   * and identify what to revoke.
+   *
+   * Keyed on the ALTANA wallet address, not the hiring wallet: they are two
+   * different accounts (Altana's SDK ships no injected signer) and it is the
+   * Altana wallet that carries the authority.
+   */
+  agentSessions: defineTable({
+    chainId: v.number(),
+    tokenId: v.string(),
+    /**
+     * The agent's name AS SHOWN when the grant was made. Denormalized on
+     * purpose: this is an authorization record, and "what did I agree to"
+     * should keep reading the way it read at the time, even if the agent is
+     * later renamed in the catalog.
+     */
+    agentName: v.string(),
+    category: agentCategoryValidator,
+    /** The Altana smart account the session can act on. */
+    altanaWalletAddress: v.string(),
+    /** The wagmi address on the matching agentHires row, when there is one. */
+    hirerWalletAddress: v.union(v.string(), v.null()),
+    /** On-chain identifier for the session, and all revokeSession needs. */
+    sessionPublicKey: v.string(),
+    /** Never empty - an empty allowlist is how Altana spells "any contract". */
+    allowlist: v.array(v.object({ address: v.string(), label: v.string() })),
+    /** Decimal string: a bigint is not a Convex value. */
+    spendCapWei: v.string(),
+    spendPeriod: v.string(),
+    /** Unix epoch seconds. */
+    expiry: v.number(),
+    grantedAt: v.string(),
+    revokedAt: v.union(v.string(), v.null()),
+    grantTransactionHash: v.union(v.string(), v.null()),
+    /**
+     * "expired" is derived on read from `expiry` rather than written here -
+     * nothing runs to flip it, so a stored value would go stale and overstate
+     * how much authority is outstanding.
+     */
+    status: v.union(v.literal("active"), v.literal("revoked"), v.literal("expired")),
+  })
+    .index("by_session_key", ["chainId", "sessionPublicKey"])
+    .index("by_altana_wallet", ["chainId", "altanaWalletAddress"]),
+
   // 8004scan's indexed view of one agent, refreshed server-side by
   // agents.refreshAgentDirectory. Before this table the mobile app fetched
   // 8004scan per agent from the client on every list render, and the website

@@ -7,7 +7,8 @@ import {
   type Session,
   type Signer,
 } from "@altananetwork/sdk";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery as useTanstackQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery as useConvexQuery } from "convex/react";
 import {
   createContext,
   useCallback,
@@ -20,7 +21,9 @@ import {
 } from "react";
 import type { Address, Hex } from "viem";
 
+import { agentSessionsApi, type AgentSessionRow } from "@/convex/api";
 import { useNow } from "@/hooks/use-now";
+import { convexClient } from "@/providers/convex-provider";
 import type { AgentCategory } from "@/types/agent";
 import {
   ALTANA_NETWORK,
@@ -33,13 +36,9 @@ import {
   forgetLocalWallet,
   getAltanaServerSnapshot,
   getAltanaSnapshot,
-  saveSessions,
   saveWallet,
   subscribeToAltanaStorage,
-  type StoredSession,
 } from "./altana-storage";
-
-export type { StoredSession } from "./altana-storage";
 
 /**
  * Dolphin's Altana wallet - a passkey-backed smart account, separate from the
@@ -51,8 +50,8 @@ export type { StoredSession } from "./altana-storage";
  * than a throw, so a page that merely renders this provider never breaks.
  *
  * SSR: Next prerenders every page under app/, so nothing here may touch a
- * browser-only API during the server pass. Persisted state arrives through
- * useSyncExternalStore (see altana-storage.ts) and the balance through
+ * browser-only API during the server pass. The stored credential arrives
+ * through useSyncExternalStore (see altana-storage.ts) and the balance through
  * TanStack Query - deliberately no useState+useEffect pair, which is the exact
  * shape that threw React error #418 on this site once already.
  */
@@ -100,6 +99,8 @@ export type GrantSessionInput = {
   category: AgentCategory;
   spendCapWei: bigint;
   durationDays: number;
+  /** The wagmi address on the matching agentHires row, when connected. */
+  hirerWalletAddress: string | null;
 };
 
 export type AltanaWalletValue = Readonly<{
@@ -116,10 +117,17 @@ export type AltanaWalletValue = Readonly<{
   isReadingBalance: boolean;
   refreshBalance: () => void;
 
-  /** Unexpired granted sessions. */
-  sessions: readonly StoredSession[];
-  /** Sessions usable from this tab. A reload empties this by design. */
-  liveSessionKeys: readonly Hex[];
+  /**
+   * Sessions as Convex holds them - the single source of truth, so this list
+   * and any hire record cannot disagree. `undefined` while loading, and while
+   * Convex is unconfigured (in which case grants are refused rather than
+   * recorded nowhere).
+   */
+  sessions: AgentSessionRow[] | undefined;
+  /** Sessions whose signing key is held in THIS tab. A reload empties it. */
+  liveSessionKeys: readonly string[];
+  /** True when session state cannot be recorded, so grants are refused. */
+  sessionsUnavailable: boolean;
 
   isBusy: boolean;
   error: string | null;
@@ -128,8 +136,8 @@ export type AltanaWalletValue = Readonly<{
   recoverWallet: () => Promise<void>;
   forgetWallet: () => void;
 
-  grantSession: (input: GrantSessionInput) => Promise<StoredSession>;
-  revokeSession: (publicKey: Hex) => Promise<void>;
+  grantSession: (input: GrantSessionInput) => Promise<void>;
+  revokeSession: (publicKey: string) => Promise<void>;
 }>;
 
 const AltanaContext = createContext<AltanaWalletValue | null>(null);
@@ -147,7 +155,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     () => false,
   );
 
-  const persisted = useSyncExternalStore(
+  const stored = useSyncExternalStore(
     subscribeToAltanaStorage,
     getAltanaSnapshot,
     getAltanaServerSnapshot,
@@ -161,14 +169,25 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   const signerRef = useRef<Signer | null>(null);
   // Session signers, keyed by public key. Memory-only and deliberately never
   // persisted - see altana-storage.ts.
-  const [liveSessions, setLiveSessions] = useState<Record<Hex, Session>>({});
+  const [liveSessions, setLiveSessions] = useState<Record<string, Session>>({});
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const supported = isClient && passkeysAvailable();
-  const address = persisted.wallet?.address ?? null;
+  const address = stored?.address ?? null;
 
-  const balanceQuery = useQuery({
+  // Convex is the source of truth for grants. When it is unconfigured these
+  // hooks are skipped and grantSession refuses outright, rather than handing
+  // out authority nothing would have a record of.
+  const sessionsUnavailable = convexClient === null;
+  const sessions = useConvexQuery(
+    agentSessionsApi.agentSessions.getSessionsForAltanaWallet,
+    address && !sessionsUnavailable ? { altanaWalletAddress: address } : "skip",
+  );
+  const recordGrant = useMutation(agentSessionsApi.agentSessions.recordSessionGrant);
+  const markRevoked = useMutation(agentSessionsApi.agentSessions.markSessionRevoked);
+
+  const balanceQuery = useTanstackQuery({
     queryKey: ["altana-balance", ALTANA_NETWORK.chainId, address],
     enabled: Boolean(address),
     // A balance is a live on-chain fact, not cacheable identity data. Same
@@ -232,7 +251,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   /** Rebuilds the admin signer from the stored credential when not in memory. */
   const adminSigner = useCallback((): Signer => {
     if (signerRef.current) return signerRef.current;
-    const wallet = getAltanaSnapshot().wallet;
+    const wallet = getAltanaSnapshot();
     if (!wallet) throw new Error("No Dolphin Wallet on this device.");
     const rebuilt = signerFromPasskey(wallet.credential);
     signerRef.current = rebuilt;
@@ -240,11 +259,20 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   }, []);
 
   const grantSession = useCallback(
-    async (input: GrantSessionInput): Promise<StoredSession> => {
-      const snapshot = getAltanaSnapshot();
-      const wallet = snapshot.wallet;
+    async (input: GrantSessionInput): Promise<void> => {
+      const wallet = getAltanaSnapshot();
       if (!wallet) {
         throw new Error("Create a Dolphin Wallet before granting a session.");
+      }
+      if (sessionsUnavailable) {
+        // Refuse rather than grant real spend authority that nothing would
+        // have a durable record of. A permission a user cannot later find is
+        // a permission they cannot knowingly revoke.
+        throw new Error(
+          "Dolphin's backend is not configured, so a session grant could not be " +
+            "recorded anywhere. Refusing to grant spend authority that would not " +
+            "show up on your wallet screen.",
+        );
       }
 
       const policy = sessionPolicyFor(input.category);
@@ -270,25 +298,27 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           register: true,
         });
 
-        const record: StoredSession = {
-          publicKey: granted.publicKey,
+        // Recorded only AFTER the grant actually landed. Convex cannot sign,
+        // so a row written first would be a claim about something that had not
+        // happened - exactly the shape AGENTS.md §5 rules out.
+        await recordGrant({
           tokenId: input.tokenId,
           agentName: input.agentName,
           category: input.category,
-          allowlist: policy.allowlist.map((c) => ({ address: c.address, label: c.label })),
+          altanaWalletAddress: wallet.address,
+          hirerWalletAddress: input.hirerWalletAddress,
+          sessionPublicKey: granted.publicKey,
+          allowlist: policy.allowlist.map((c) => ({
+            address: c.address,
+            label: c.label,
+          })),
           spendCapWei: input.spendCapWei.toString(),
           spendPeriod: permissions.spend[0].period,
           expiry,
-          grantedAt: new Date().toISOString(),
-          transactionHash: granted.transactionHash ?? null,
-        };
+          grantTransactionHash: granted.transactionHash ?? null,
+        });
 
-        saveSessions([
-          ...snapshot.sessions.filter((s) => s.publicKey !== record.publicKey),
-          record,
-        ]);
         setLiveSessions((current) => ({ ...current, [granted.publicKey]: granted }));
-        return record;
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
         throw cause;
@@ -296,13 +326,12 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner],
+    [adminSigner, recordGrant, sessionsUnavailable],
   );
 
   const revokeSession = useCallback(
-    async (publicKey: Hex) => {
-      const snapshot = getAltanaSnapshot();
-      const wallet = snapshot.wallet;
+    async (publicKey: string) => {
+      const wallet = getAltanaSnapshot();
       if (!wallet) throw new Error("No Dolphin Wallet on this device.");
 
       setIsBusy(true);
@@ -313,10 +342,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         await altanaClient().revokeSession({
           wallet: { address: wallet.address },
           signer: adminSigner(),
-          session: publicKey,
+          session: publicKey as Hex,
           chainId: ALTANA_NETWORK.chainId,
         });
-        saveSessions(snapshot.sessions.filter((s) => s.publicKey !== publicKey));
+
+        if (!sessionsUnavailable) {
+          await markRevoked({ sessionPublicKey: publicKey });
+        }
         setLiveSessions((current) => {
           const next = { ...current };
           delete next[publicKey];
@@ -329,7 +361,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner],
+    [adminSigner, markRevoked, sessionsUnavailable],
   );
 
   const value = useMemo<AltanaWalletValue>(() => {
@@ -337,21 +369,19 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       ? "loading"
       : !supported
         ? "unsupported"
-        : persisted.wallet
+        : stored
           ? "connected"
           : "no-wallet";
 
-    // Expired sessions are dropped rather than shown as authority still held.
-    // `now` is 0 during SSR ("time not known"), where nothing is filtered out.
-    const sessions =
-      now === 0
-        ? persisted.sessions
-        : persisted.sessions.filter((s) => s.expiry * 1000 > now);
+    // The backend already derives "expired" from the clock on read; `now` here
+    // just makes the view re-render as an expiry passes rather than sitting on
+    // a stale answer until something else re-renders the tree.
+    void now;
 
     return {
       status,
       unsupportedReason: status === "unsupported" ? UNSUPPORTED_REASON : null,
-      address: persisted.wallet?.address ?? null,
+      address: stored?.address ?? null,
       chainId: ALTANA_NETWORK.chainId,
       networkLabel: ALTANA_NETWORK.chain.name,
       balanceWei: balanceQuery.data ?? null,
@@ -363,8 +393,9 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
             : null,
       isReadingBalance: balanceQuery.isFetching,
       refreshBalance,
-      sessions,
-      liveSessionKeys: Object.keys(liveSessions) as Hex[],
+      sessions: sessionsUnavailable ? [] : sessions,
+      liveSessionKeys: Object.keys(liveSessions),
+      sessionsUnavailable,
       isBusy,
       error,
       createWallet,
@@ -385,10 +416,12 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     isClient,
     liveSessions,
     now,
-    persisted,
     recoverWallet,
     refreshBalance,
     revokeSession,
+    sessions,
+    sessionsUnavailable,
+    stored,
     supported,
   ]);
 

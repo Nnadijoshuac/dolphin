@@ -1,7 +1,5 @@
 import type { PasskeyCredential } from "@altananetwork/sdk";
-import type { Address, Hex } from "viem";
-
-import type { AgentCategory } from "@/types/agent";
+import type { Address } from "viem";
 
 /**
  * localStorage, modelled as the external store it actually is.
@@ -19,18 +17,23 @@ import type { AgentCategory } from "@/types/agent";
  * than re-parsing JSON on each call.
  */
 
-/* --- what is persisted, and what deliberately is not ----------------------
+/* --- what is persisted here, and what deliberately is not -----------------
  *
- *   STORED   the PasskeyCredential handle (credential id, P256 public key,
+ *   HERE     the PasskeyCredential handle (credential id, P256 public key,
  *            rpId) and the wallet address. All public. The SDK's own doc
  *            comment calls this shape JSON-safe and intended for exactly this.
- *   STORED   session METADATA - public key, permissions, expiry, which agent.
- *            Enough to show what was authorized and to revoke it.
- *   NEVER    key material of any kind. The passkey's private half never leaves
+ *            It is device-local because the passkey it points at is.
+ *   CONVEX   session metadata. Deliberately NOT here - see
+ *            convex/agentSessions.ts. Keeping grants only in the granting
+ *            browser would make the wallet screen and the hire record two
+ *            independent stories about the same authority, and the first time
+ *            they disagreed a user would be told an agent cannot spend when
+ *            it can.
+ *   NOWHERE  key material of any kind. The passkey's private half never leaves
  *            the device's secure element, and a session's signing key is held
  *            in memory for the life of the tab only.
  *
- * The last line has a visible consequence, surfaced in the UI rather than
+ * That last line has a visible consequence, surfaced in the UI rather than
  * hidden: after a reload a granted session can still be seen and revoked
  * (revocation needs only its public key plus the admin passkey) but cannot
  * execute, because its signer is gone. Persisting a spend-capable key in
@@ -39,85 +42,43 @@ import type { AgentCategory } from "@/types/agent";
  * ------------------------------------------------------------------------ */
 
 const CREDENTIAL_KEY = "dolphin.altana.credential.v1";
-const SESSIONS_KEY = "dolphin.altana.sessions.v1";
 
 export type StoredWallet = Readonly<{
   address: Address;
   credential: PasskeyCredential;
 }>;
 
-/** A granted session as shown to a user and persisted. No key material. */
-export type StoredSession = Readonly<{
-  /** On-chain identifier, and all revokeSession needs. */
-  publicKey: Hex;
-  tokenId: string;
-  agentName: string;
-  category: AgentCategory;
-  /** Contracts this session may call. Never empty - see altana-policy.ts. */
-  allowlist: readonly { address: Address; label: string }[];
-  /** Decimal string: bigint is not JSON-safe. */
-  spendCapWei: string;
-  spendPeriod: string;
-  /** Unix epoch seconds. */
-  expiry: number;
-  grantedAt: string;
-  transactionHash: Hex | null;
-}>;
+const EMPTY: StoredWallet | null = null;
 
-type Snapshot = Readonly<{
-  wallet: StoredWallet | null;
-  sessions: readonly StoredSession[];
-}>;
-
-const EMPTY: Snapshot = { wallet: null, sessions: [] };
-
-/**
- * The server has no localStorage, so it must return a stable, shared object -
- * a fresh literal each call would make React think the store changed on every
- * server render.
- */
-const SERVER_SNAPSHOT: Snapshot = EMPTY;
-
-let cache: Snapshot | null = null;
+let cache: StoredWallet | null = EMPTY;
+let cacheLoaded = false;
 const listeners = new Set<() => void>();
 
-function parse<T>(raw: string | null): T | null {
-  if (raw === null) return null;
+function readFromStorage(): StoredWallet | null {
+  if (typeof window === "undefined") return null;
   try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
-function readFromStorage(): Snapshot {
-  if (typeof window === "undefined") return EMPTY;
-  try {
-    return {
-      wallet: parse<StoredWallet>(window.localStorage.getItem(CREDENTIAL_KEY)),
-      sessions: parse<StoredSession[]>(window.localStorage.getItem(SESSIONS_KEY)) ?? [],
-    };
+    const raw = window.localStorage.getItem(CREDENTIAL_KEY);
+    return raw ? (JSON.parse(raw) as StoredWallet) : null;
   } catch {
     // A private window with site data blocked throws on access. That is a real
     // state a wallet screen should survive, not crash on: the wallet still
     // works for this tab, it just will not be remembered.
-    return EMPTY;
+    return null;
   }
 }
 
 function emit() {
   cache = readFromStorage();
+  cacheLoaded = true;
   for (const listener of listeners) listener();
 }
 
 export function subscribeToAltanaStorage(listener: () => void): () => void {
   listeners.add(listener);
 
-  // Another tab writing the same wallet should show up here too.
+  // Another tab creating or forgetting the wallet should show up here too.
   const onStorage = (event: StorageEvent) => {
-    if (event.key === CREDENTIAL_KEY || event.key === SESSIONS_KEY || event.key === null) {
-      emit();
-    }
+    if (event.key === CREDENTIAL_KEY || event.key === null) emit();
   };
   window.addEventListener("storage", onStorage);
 
@@ -127,40 +88,40 @@ export function subscribeToAltanaStorage(listener: () => void): () => void {
   };
 }
 
-export function getAltanaSnapshot(): Snapshot {
-  cache ??= readFromStorage();
+export function getAltanaSnapshot(): StoredWallet | null {
+  if (!cacheLoaded) {
+    cache = readFromStorage();
+    cacheLoaded = true;
+  }
   return cache;
 }
 
-export function getAltanaServerSnapshot(): Snapshot {
-  return SERVER_SNAPSHOT;
+/** The server has no localStorage, and must return a stable value. */
+export function getAltanaServerSnapshot(): StoredWallet | null {
+  return EMPTY;
 }
 
-function write(key: string, value: unknown | null) {
+export function saveWallet(wallet: StoredWallet): void {
   if (typeof window === "undefined") return;
   try {
-    if (value === null) window.localStorage.removeItem(key);
-    else window.localStorage.setItem(key, JSON.stringify(value));
+    window.localStorage.setItem(CREDENTIAL_KEY, JSON.stringify(wallet));
   } catch {
     // See readFromStorage: storage being unavailable is survivable.
   }
   emit();
 }
 
-export function saveWallet(wallet: StoredWallet): void {
-  write(CREDENTIAL_KEY, wallet);
-}
-
-export function saveSessions(sessions: readonly StoredSession[]): void {
-  write(SESSIONS_KEY, sessions);
-}
-
 /**
- * Local only. The wallet still exists on-chain and the passkey still exists on
- * the device, so recoverFromPasskey brings it straight back. Nothing here
- * destroys anything and the UI must not imply that it does.
+ * Local only. The wallet still exists on-chain, the passkey still exists on the
+ * device, and every session granted from it stays exactly as active as it was.
+ * Nothing here destroys anything and the UI must not imply that it does.
  */
 export function forgetLocalWallet(): void {
-  write(CREDENTIAL_KEY, null);
-  write(SESSIONS_KEY, null);
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(CREDENTIAL_KEY);
+  } catch {
+    // See readFromStorage.
+  }
+  emit();
 }

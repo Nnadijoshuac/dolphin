@@ -121,3 +121,65 @@ export const agentHiresApi = anyApi as unknown as {
     >;
   };
 };
+
+/**
+ * convex/agentSessions.ts. Altana session grants, recorded next to the hire
+ * row they belong to so "what have I authorized" has exactly one answer rather
+ * than two that can disagree.
+ *
+ * Reference detail only - a session's public key, its bounds, and the agent it
+ * was granted to. No signer and no key material passes through here, so
+ * nothing in this namespace can act on a wallet; it can only describe a grant
+ * and identify what to revoke.
+ *
+ * `recordSessionGrant` records a grant that ALREADY happened on-chain; it
+ * cannot create one (Convex cannot sign). It rejects an empty allowlist,
+ * because that is how Altana spells "any contract" - do not work that refusal
+ * around on the client.
+ */
+export type AgentSessionRow = {
+  tokenId: string;
+  agentName: string;
+  category: AgentCategory;
+  altanaWalletAddress: string;
+  hirerWalletAddress: string | null;
+  sessionPublicKey: string;
+  allowlist: { address: string; label: string }[];
+  spendCapWei: string;
+  spendPeriod: string;
+  expiry: number;
+  grantedAt: string;
+  revokedAt: string | null;
+  grantTransactionHash: string | null;
+  status: "active" | "revoked" | "expired";
+};
+
+export const agentSessionsApi = anyApi as unknown as {
+  agentSessions: {
+    recordSessionGrant: Mutation<
+      {
+        tokenId: string;
+        agentName: string;
+        category: AgentCategory;
+        altanaWalletAddress: string;
+        hirerWalletAddress: string | null;
+        sessionPublicKey: string;
+        allowlist: { address: string; label: string }[];
+        spendCapWei: string;
+        spendPeriod: string;
+        expiry: number;
+        grantTransactionHash: string | null;
+      },
+      string
+    >;
+    markSessionRevoked: Mutation<{ sessionPublicKey: string }, string | null>;
+    getSessionsForAltanaWallet: Query<
+      { altanaWalletAddress: string },
+      AgentSessionRow[]
+    >;
+    getActiveSessionForAgent: Query<
+      { tokenId: string; altanaWalletAddress: string },
+      AgentSessionRow | null
+    >;
+  };
+};

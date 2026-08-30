@@ -9,7 +9,8 @@ import {
   ALTANA_FUNDING_HINT,
   formatBnb,
 } from "@/wallet/altana-policy";
-import { useAltanaWallet, type StoredSession } from "@/wallet/altana-provider";
+import type { AgentSessionRow } from "@/convex/api";
+import { useAltanaWallet } from "@/wallet/altana-provider";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -67,7 +68,7 @@ function SessionCard({
   isBusy,
   isLiveThisTab,
 }: {
-  session: StoredSession;
+  session: AgentSessionRow;
   onRevoke: () => void;
   isBusy: boolean;
   isLiveThisTab: boolean;
@@ -125,11 +126,11 @@ function SessionCard({
             {expiresAt.toISOString().slice(0, 16).replace("T", " ")} UTC
           </dd>
         </div>
-        {session.transactionHash && (
+        {session.grantTransactionHash && (
           <div className="flex items-start justify-between gap-3">
             <dt className="font-semibold text-[#6E706B]">Grant transaction</dt>
             <dd className="break-all text-right font-mono text-[10px] text-[#A5A79F]">
-              {session.transactionHash}
+              {session.grantTransactionHash}
             </dd>
           </div>
         )}
@@ -262,6 +263,8 @@ export function AltanaWalletPanel() {
 
   // status === "connected"
   const address = wallet.address!;
+  const activeSessions = (wallet.sessions ?? []).filter((s) => s.status === "active");
+  const pastSessions = (wallet.sessions ?? []).filter((s) => s.status !== "active");
 
   return (
     <section className="space-y-4">
@@ -401,12 +404,29 @@ export function AltanaWalletPanel() {
             </p>
           </div>
           <StatusBadge
-            label={`${wallet.sessions.length} active`}
-            tone={wallet.sessions.length > 0 ? "live" : "neutral"}
+            label={
+              wallet.sessions === undefined
+                ? "Loading"
+                : `${activeSessions.length} active`
+            }
+            tone={
+              wallet.sessions === undefined
+                ? "syncing"
+                : activeSessions.length > 0
+                  ? "live"
+                  : "neutral"
+            }
           />
         </div>
 
-        {wallet.sessions.length === 0 ? (
+        {wallet.sessions === undefined ? (
+          // "Loading" is not "none". Rendering an empty list while the answer
+          // is still in flight would tell a user no agent can spend from their
+          // wallet, which is a claim this screen has no business making early.
+          <p className="mt-4 text-sm font-semibold text-[#A5A79F]">
+            Checking what you have authorized…
+          </p>
+        ) : activeSessions.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-dashed border-[#ECE8DE] bg-[#FBF9F4] p-5 text-center">
             <CategoryGlyph color="#A5A79F" name="shield" size={20} strokeWidth={2.2} />
             <p className="mt-2 text-sm font-black text-[#111214]">
@@ -420,16 +440,49 @@ export function AltanaWalletPanel() {
           </div>
         ) : (
           <ul className="mt-4 space-y-3">
-            {wallet.sessions.map((session) => (
+            {activeSessions.map((session) => (
               <SessionCard
                 isBusy={wallet.isBusy}
-                isLiveThisTab={wallet.liveSessionKeys.includes(session.publicKey)}
-                key={session.publicKey}
-                onRevoke={() => void wallet.revokeSession(session.publicKey)}
+                isLiveThisTab={wallet.liveSessionKeys.includes(session.sessionPublicKey)}
+                key={session.sessionPublicKey}
+                onRevoke={() => void wallet.revokeSession(session.sessionPublicKey)}
                 session={session}
               />
             ))}
           </ul>
+        )}
+
+        {/* Revoked and expired grants are kept and shown, not deleted: "I did
+            revoke that" should stay checkable after the fact. */}
+        {pastSessions.length > 0 && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs font-bold text-[#6E706B]">
+              {pastSessions.length} permission{pastSessions.length === 1 ? "" : "s"} no
+              longer active
+            </summary>
+            <ul className="mt-3 space-y-2">
+              {pastSessions.map((session) => (
+                <li
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[#ECE8DE] bg-[#FBF9F4] px-3 py-2.5"
+                  key={session.sessionPublicKey}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-[#111214]">
+                      {session.agentName}
+                    </p>
+                    <p className="text-[10px] font-semibold text-[#A5A79F]">
+                      {formatBnb(BigInt(session.spendCapWei))} BNB /{" "}
+                      {session.spendPeriod} · agent #{session.tokenId}
+                    </p>
+                  </div>
+                  <StatusBadge
+                    label={session.status === "revoked" ? "Revoked" : "Expired"}
+                    tone="unavailable"
+                  />
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </div>
 

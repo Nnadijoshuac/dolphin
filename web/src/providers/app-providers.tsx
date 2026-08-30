@@ -20,17 +20,20 @@ import { WalletProvider } from "@/wallet/wallet-provider";
  * injected signer, so one cannot be built on top of the other - see
  * wallet/altana-policy.ts.
  *
- * Altana sits INSIDE QueryProvider because it reads its balance through
- * TanStack Query - a live on-chain value with a refetch cycle, which is what
- * this stack already uses for exactly that (project-scope.md §3).
+ * Altana sits INSIDE both QueryProvider and ConvexClientProvider, because it
+ * needs each for a different thing: TanStack Query for its balance (a live
+ * on-chain value with a refetch cycle, which is what this stack already uses
+ * for exactly that, project-scope.md §3), and Convex for its session grants,
+ * which are backend-owned so the wallet screen and a hire record cannot end up
+ * telling two different stories about the same authority.
  */
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <WalletProvider>
       <QueryProvider>
-        <AltanaWalletProvider>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
-        </AltanaWalletProvider>
+        <ConvexClientProvider>
+          <AltanaWalletProvider>{children}</AltanaWalletProvider>
+        </ConvexClientProvider>
       </QueryProvider>
     </WalletProvider>
   );

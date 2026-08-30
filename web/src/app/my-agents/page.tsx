@@ -7,6 +7,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
+import { HireSessionRow } from "@/components/hire-session-row";
 import { useAgents } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { convexClient } from "@/providers/convex-provider";
@@ -133,14 +134,20 @@ function ConnectedRecords({ address }: { address: string }) {
           </div>
           <div className="mt-6 grid gap-4">
             {hires.map((hire) => (
-              <AgentRecordCard
-                agent={findAgent(hire.tokenId)}
-                date={hire.hiredAt}
-                fallbackId={hire.tokenId}
-                key={`${hire.tokenId}-${hire.hiredAt}`}
-                label="Active"
-                tone="live"
-              />
+              <div key={`${hire.tokenId}-${hire.hiredAt}`}>
+                <AgentRecordCard
+                  agent={findAgent(hire.tokenId)}
+                  date={hire.hiredAt}
+                  fallbackId={hire.tokenId}
+                  label="Active"
+                  tone="live"
+                />
+                {/* Task 5: revocation has to be reachable from the hire record
+                    itself, not only from the wallet screen. Rendered as a
+                    sibling rather than inside AgentRecordCard because that card
+                    is a <Link> and a button cannot be nested in an anchor. */}
+                <HireSessionRow tokenId={hire.tokenId} />
+              </div>
             ))}
           </div>
         </section>

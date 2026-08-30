@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
+import { SessionGrantAction } from "@/components/session-grant-action";
 import { StatusBadge } from "@/components/status-badge";
 import { agentHiresApi } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
@@ -178,6 +179,13 @@ export function HireAction({ agent }: { agent: Agent }) {
           </button>
         )}
       </div>
+
+      {/* The authorization step, kept deliberately separate from the hire
+          above. A hire is a Dolphin record and costs nothing; a session is
+          real, on-chain spend authority. Collapsing the two into one button
+          would hide the only consequential decision on this screen. For agents
+          that need no session, this renders the reason rather than nothing. */}
+      <SessionGrantAction agent={agent} />
 
       <p className="mt-4 text-center text-[10px] text-[#A5A79F]">
         Real ERC-8004 identity on BSC • Altana session boundaries

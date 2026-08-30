@@ -6,6 +6,285 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 ---
 
+# Session addendum — 2026-08-30 (session 5: discovery stops being manual)
+
+Everything below was verified with live commands against the real Convex
+deployment and the real 8004scan API this session. Where an earlier section
+disagrees, this addendum wins. The blow-by-blow with full command output is in
+`SESSION-LOG-2026-08-29-discovery.md`.
+
+## THE HEADLINE
+
+**Dolphin no longer discovers agents by hand.** A continuous, incremental
+pipeline sweeps the registry, filters, classifies, cross-checks each agent
+against its own registration file, probes its endpoint, sources an icon, and
+publishes or holds it — on a cron, with no human in the loop.
+
+**The catalog went from 10 graded agents to 16, and every one of the 16 now has
+a real cached icon (it was mostly blanks).** All four categories grew:
+rebalancing 2→4, grid-trading 2→3, health-factor 4→5, yield 2→4.
+
+## Did it find meaningfully more real agents? Yes — and here they are
+
+Six agents Dolphin had never listed, every one of them classified `confirmed`
+and confirmed alive by Dolphin's own probe, not by 8004scan's flag:
+
+| token | name | category |
+|---|---|---|
+| 302258 | Brain on BNB — BSC Grid Planner | grid-trading |
+| 269228 | Health Factor Monitor | health-factor |
+| 269223 | Portfolio Rebalancer | rebalancing |
+| 304494 | Brain on BNB — Portfolio Rebalance Pricer | rebalancing |
+| 265876 | BNB Yield Optimizer | yield |
+| 6441 | DeFi Trading Agent SperaxOS | yield |
+
+Note 304494: 8004scan reports it `overall_status: "unhealthy"`, `health_score: 0`.
+Dolphin's own probe got its A2A card back in 1217ms. **That agent is listed
+today only because the pipeline stopped trusting the indexer's flag.**
+
+## THE FUNNEL, MEASURED
+
+```
+registry on BSC mainnet    291,543   (was 289,938 when Task 0 measured it)
+ledger — records judged     50,044
+  rejected by pre-filter    45,781
+  rejected by classifier     4,176
+  pending (real, inspectable)   76
+  published                     11
+catalog (agents.listAgents)     17   = 16 graded + 1 monitoring (not graded)
+```
+
+Search sweep: 53 terms → 71 requests → 2,255 unique records in **62 seconds**,
+of which 1,331 pre-filtered out, 839 unclassifiable, **85 classified**.
+Backfill: 8,300 records → **8,084 pre-filtered out (97.4%), 0 classified**.
+That contrast is the single most useful number in the session: the topical
+search slice is where the real agents are, and a blind sweep of 291,543 records
+is almost entirely wasted motion. Coverage still runs, on the leftover budget.
+
+## What runs, and when (`convex/crons.ts` carries the full arithmetic)
+
+| job | every | why that number |
+|---|---|---|
+| discovery sweep | 1h | tail path walks 3 descending pages = ~10x the measured ~28 registrations/hour, so nothing new slips between cycles |
+| deep evaluation | 30m | bounded by *other people's* endpoint latency, not 8004scan — kept separate so one slow agent can't eat the sweep's budget |
+| icon pass | 12h | idempotent; covers the editorial agents the candidate pipeline never sees |
+| 8004scan directory refresh | 6h | unchanged |
+
+Measured backfill throughput **0.41 pages/s** (Task 0 saw 0.180 — the API is
+faster now). Full registry = 2,916 pages ≈ 2 hours of pure wall time, against a
+10-minute action ceiling, so it is incremental by necessity: 8,000 records
+(~80 pages) per cycle, offset persisted, **~36 hourly cycles per complete pass.**
+
+**The legacy 12h keyword sync is removed from the schedule** (the function is
+kept and still callable by hand). It wrote to the same table the pipeline
+publishes to, with the weak classifier and no real liveness gate — leaving it
+scheduled would have meant the pipeline delisting a dead agent and the old sync
+re-adding it an hour later.
+
+## Every decision made, and why
+
+**Classifier: weighted multi-signal scoring, not an LLM.** Cost was *not* the
+reason — a few hundred short prompts per cycle is affordable. There is no LLM
+credential in this deployment and no LLM SDK in either `package.json` (checked
+with `npx convex env list`, not assumed), so wiring one would have meant
+shipping a code path that had never executed, whose accuracy was asserted rather
+than measured, exactly where a wrong answer becomes a confident false claim
+about a real agent. The seam is left ready: `scoreAgent` returns a full evidence
+trail, and an LLM verdict should slot in as a *second opinion*, with
+disagreement demoting to `pending` rather than either side silently winning.
+Revisit the moment a credential exists.
+
+**Confidence threshold: auto-publish needs `confirmed` AND `verified-live`.**
+Asymmetric on purpose — a wrongly-published spam agent is seen by everyone and
+is indistinguishable from a vetted listing; a real agent held one more cycle
+costs that agent one cycle. `confirmed` itself requires four things at once (a
+defining phrase, score ≥12, margin ≥6 over the runner-up, and zero penalties),
+so a pile of weak topical terms can never reach it. `pending` is a real,
+populated, inspectable state — 76 rows with a stated reason each.
+
+**Liveness is part of the publish gate, not a badge.** Listing an agent whose
+service doesn't answer sends a user into a dead end, which is the Functionality
+failure `project-scope.md` §11 rules out. `no-endpoint-advertised` also holds at
+pending — an agent nobody can call cannot be used either, and a publisher can
+add one later.
+
+**Staleness: delist after 3 consecutive failed probes, not 1.** One failure is
+weak evidence (a publisher redeploying fails one probe and passes the next), and
+delisting on it would flicker the catalog on ordinary noise. Delisted means
+demoted to `pending`, never deleted — **one successful probe re-lists it
+automatically, with no human involved.** Live agents are re-probed after 24h;
+rejected records are reconsidered after 14 days.
+
+**Icons: 8004scan → the agent's own registration file → DiceBear `shapes`.**
+Nothing is hotlinked; every tier is fetched or generated once and stored in
+Convex, and `listAgents` serves Dolphin's own URL. `shapes` is abstract/
+geometric on purpose — a character style would risk being mistaken for the
+agent's own mascot, i.e. Dolphin inventing an identity for someone else's agent.
+Seeded on `tokenId` (immutable), generated with the npm library rather than
+DiceBear's hosted API, so that tier has no external dependency at all.
+`@dicebear/collection` has no v10 and peers `core ^9`, so v9 is the current
+pairing, not a downgrade.
+
+**BRC8004 agents are swept and evaluated but never auto-published.** Task 0.5's
+finding stands: their token ids collide with the primary registry's, and
+Dolphin's catalog is keyed on a bare tokenId throughout. Fixing that means a
+registry-qualified key reaching into how both frontends build agent ids — UI
+code `AGENTS.md` §11 reserves. They are recorded `pending` with that exact
+reason, so the next session has a ready-made list and a small change, not a
+rediscovery job.
+
+## The classifier is genuinely better — and here is what it costs
+
+Run **without the denylist telling it the answer**, on live 8004scan text:
+
+- **113284 Topaz Agent → rejected** (−8 for naming gauge votes and bribes,
+  −15 for describing 12 distinct actions). **6428 Tator Trader → rejected**
+  (−32, −18). Both manual-denylist entries, caught on their own evidence.
+- **292939 `bnb-grid-trader-test.agent` → kept** as grid-trading. The old
+  filter's `\btest\b` hard reject would have thrown away this real agent; it
+  survived before only because it was also hand-curated.
+
+**The honest cost:** the same breadth penalty demotes the HeyAnon "safe
+execution layer" agents, which are genuine single-protocol agents that happen to
+enumerate a full action set. 45381 (Aave) scores 11 → 2 and would be rejected;
+43129 (Venus) scores `likely` and was **previously listed**. 45381 is unaffected
+in practice (hand-curated, never routed through this gate). 43129 was restored
+through the manual `include` valve with its reasoning recorded. This was not
+tuned away, because the same penalty is what catches Topaz and Tator.
+
+## The safety valve, preserved and extended
+
+`MANUALLY_EXCLUDED_TOKEN_IDS` still exists, moved to
+`convex/lib/manualExclusions.ts` so the old sync and the new pipeline enforce
+one list. A runtime half was added — `discoveryPipeline.setManualOverride` —
+which works in both directions and was exercised live:
+
+- `exclude` delists immediately and survives every later sweep. Used for real:
+  **6443 (Sperax Intelligence) is a duplicate of 6441** — same owner, identical
+  description opening, *and the same A2A endpoint URL*. Two identity NFTs
+  pointing at one service are one listing.
+- `include` lets a human vouch for a category the classifier only scored
+  `likely` — but relaxes the **classification** half of the gate only. A
+  hand-included agent whose endpoint stops answering is still delisted, because
+  liveness is a claim about right now that no past review can stand in for.
+
+## Four bugs found by running it, not by reading it
+
+1. **The Convex backend has been un-pushable since commit `b47aeba`.**
+   `process.env["8004SCAN_API_URL"]` is an invalid Convex env-var name and
+   `convex dev` rejects the *entire deployment* over it. **No backend change
+   since that commit could have reached the deployment.** Renamed to
+   `SCAN8004_API_URL`. The value was never readable, so every call site had been
+   silently running on its hardcoded default. *(This one is worth re-reading:
+   any backend work done between `b47aeba` and now was never actually live.)*
+2. **An unbounded backfill killed the sweep action with no error message** — it
+   held tens of thousands of records in memory and persisted them in one
+   invocation. Capped at 8,000/sweep with a persisted offset.
+3. **The incremental skip never fired for rejected records.** Gated on
+   `lastDeepEvaluatedAt !== null`, which is never true for a pre-filter
+   rejection — so every rejected record was re-judged and re-patched every
+   cycle, defeating the ledger's whole purpose. Measured re-writing **8,296 of
+   8,300** records. After the fix: **2,247 of 2,255 skipped, 8 new, 0 rewritten.**
+4. **`getPipelineStats` blew Convex's 16MB per-execution read cap** once the
+   ledger passed ~12,000 rows. Now uses counters maintained on insert and status
+   transition, plus a paginated recount for repair.
+
+## Submission path (Task 5)
+
+`agentSubmissions.submitAgent(tokenId)` — a mutation, no UI, per §11. It does
+**not** insert into the catalog; it puts the agent at the front of the same
+queue and the identical pipeline decides. The only privilege is priority
+(seconds, not the next cron). It returns `under-review`, never `listed`, because
+a mutation cannot make the network calls the verdict depends on — and telling a
+submitter their agent is live before anything probed it would be exactly the
+plausible-looking false claim §5 rules out.
+
+Proven live on token 315943: submitted → `under-review` → seconds later
+`health-factor` / `confirmed` / **still held pending**, because its
+`a2a_endpoint` returns HTTP 200 with a capability descriptor that is not an A2A
+agent card. A confirmed classification that still did not get listed is the gate
+working.
+
+**A future UI needs only:** call `submitAgent` with a tokenId, subscribe to
+`agentSubmissions.getSubmissionStatus`, and render `state` and `reason`
+verbatim — both are already written to be shown to a person.
+
+## State of the two products
+
+| | Mobile (root) | Website (`web/`) |
+|---|---|---|
+| `tsc --noEmit` | clean | clean |
+| lint | 0 errors, 2 pre-existing warnings | 0 errors |
+| build | — | `next build` OK |
+| Convex | pushes again (was broken since `b47aeba`) | same backend |
+
+No UI file in either product was touched. `listAgents`' shape is unchanged —
+only `iconUrl`'s *value* now points at Dolphin's storage instead of a third
+party — so both frontends pick up all six new agents and every icon with no
+change at all.
+
+## Known issues, new this session
+
+1. **Token 45381's 8004scan image 307-redirects** to `blob.8004scan.app` and the
+   fetch did not land an allowed image content-type, so it fell through to the
+   generated fallback. One agent; the fallback is honest meanwhile. *(new)*
+2. **The breadth penalty demotes genuine multi-action single-protocol agents**
+   (the HeyAnon family). Documented above; needs a domain-aware verb count
+   rather than a raw one. *(new)*
+3. **Duplicate registrations are only caught by hand.** 6441/6443 share an
+   endpoint and were separated with the manual valve. A generic
+   "same endpoint URL already published" check at the publish gate would catch
+   this class automatically and is a small change. *(new)*
+4. **76 pending agents have never been surfaced anywhere.** They are real,
+   inspectable, and carry a stated reason each; a "pending review" surface would
+   turn them into visible evidence of the pipeline's honesty rather than a
+   database table only an operator sees. *(new — UI, so deliberately not built)*
+5. **The backfill has walked ~49,200 of 291,543** at time of writing. A full
+   first pass needs ~36 hourly cycles. Nothing blocks it; it just needs time.
+
+Everything carried forward from the 2026-08-29 addendum still stands, notably:
+the website still has no public URL, and both lockfiles still need regenerating
+on Linux.
+
+## IS THIS SUBMITTABLE RIGHT NOW?
+
+**Yes, and Data Quality and Agent Diversity are both materially stronger than
+they were this morning.** The public Expo build at
+**https://nnadijoshuac.github.io/dolphin/** now serves 16 graded agents instead
+of 10, spread across all four categories, every one with a real icon, and every
+discovered one confirmed alive by Dolphin's own protocol-appropriate probe
+rather than an indexer's flag. Discovery is automated and self-maintaining: new
+agents are found within an hour, dead ones are delisted after a sustained
+failure pattern, and recovered ones re-list themselves.
+
+**The one thing between here and *best-case* submittable is unchanged from last
+session: the website has no public URL.** It is the only surface where a judge
+can complete a hire, everything on it works, and it runs only on localhost. That
+is one deploy and one credential the owner must add (Vercel is the shortest
+path).
+
+**Second-most valuable, and new:** those five commits from session 4 plus
+everything in this one are **local only**. `origin/main` is still at `e286e51`.
+None of this is public until someone pushes.
+
+### Was the scope realistic? Mostly — the honest split
+
+**Done in full:** Task 1 (pre-filter wired and measured on both sweep paths),
+Task 2 (classifier + tokenURI cross-check, with the tricky cases verified
+blind), Task 3 (liveness probing, three honest states, staleness policy), Task 4
+(all three icon tiers, every listing cached), Task 5 (submission, proven end to
+end), Task 6 (crons, calculated cadence, both directions of the safety valve).
+
+**Deliberately not done:**
+- **No LLM classifier.** Reasoned above; the seam is ready.
+- **BRC8004 agents evaluated but not published.** Blocked on a catalog key
+  change that reaches into UI code §11 reserves.
+- **No pending-review UI.** §11.
+- **The backfill has not completed a full first pass.** It cannot in one
+  session — it is ~36 hourly cycles by measurement — and it is running.
+
+---
+
 # Session addendum — 2026-08-29 (session 4: one repo, two products)
 
 Everything below was verified this session with live commands, a real Chromium

@@ -67,6 +67,8 @@ body {
 
 a {
   color: inherit;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button,
@@ -75,6 +77,7 @@ input {
 }
 
 button {
+  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -84,7 +87,7 @@ button {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 3px solid #8a6500;
   outline-offset: 3px;
 }
 
@@ -126,4 +129,25 @@ button {
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .pressable-scale:hover,
+  .pressable-scale:active {
+    transform: none;
+  }
 }

@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { internalAction, internalMutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { classifyAgent, isLikelySpamOrUnsuitable } from "./lib/classification";
+import { MANUALLY_EXCLUDED_TOKEN_IDS } from "./lib/manualExclusions";
 import { agentCategoryValidator } from "./categoryStatsValidators";
 
 // 8004scan's public discovery API - see project-scope.md SS3, "8004scan
@@ -14,7 +15,7 @@ import { agentCategoryValidator } from "./categoryStatsValidators";
 // registered on BSC mainnet, most of which are spam (see
 // convex/lib/classification.ts's header comment).
 const AGENTS_URL =
-  process.env["8004SCAN_API_URL"]?.trim() ||
+  process.env.SCAN8004_API_URL?.trim() ||
   "https://api.8004scan.io/api/v1/agents";
 const RESULTS_PER_QUERY = 30;
 
@@ -50,22 +51,10 @@ const CATEGORY_SEARCH_QUERIES: Record<string, string> = {
 // before this timeout was added). Bounded so one slow page can never hang
 // the whole sync - it just counts as a failed page, same as any other
 // fetch error.
-// Agents that pass every automated filter (not spam, real, live, keyword-
-// matched) but were manually reviewed and rejected as too broad a fit -
-// the matched category is one incidental clause among many unrelated
-// capabilities, not what the agent actually is. Keeping these terms in
-// CATEGORY_TERMS is still correct (they're real signal for genuine
-// category-focused agents), so the fix is a specific exclusion, not a
-// weaker term list. Re-review by hand if 8004scan meaningfully updates an
-// excluded agent's own description.
-const MANUALLY_EXCLUDED_TOKEN_IDS = new Set([
-  "113284", // Topaz Agent - broad ve(3,3) DEX agent (swaps, gauge votes, bribes,
-  // veTOPAZ locks); "optimize LP positions" is one clause among many, not its
-  // identity. Matches rebalancing's "lp position" term.
-  "6428", // Tator Trader - 24+ chain "does everything" agent (trades, bridges,
-  // perps, prediction markets, token launches, name registration); "manage
-  // yield positions" is one clause among ten. Matches yield's weak "yield" term.
-]);
+// The manual exclusion denylist now lives in convex/lib/manualExclusions.ts,
+// unchanged, so this module and convex/discoveryPipeline.ts enforce one list
+// rather than each keeping its own copy. Not re-exported: Convex function
+// modules should export only Convex functions.
 
 const PER_REQUEST_TIMEOUT_MS = 15_000;
 // Raised from 8 (2026-08-29) now that SCAN8004_API_KEY lifts the request

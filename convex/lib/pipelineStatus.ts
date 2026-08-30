@@ -95,8 +95,16 @@ export interface StatusInput {
   consecutiveProbeFailures: number;
   /** True for anything not on the registry 8004scan indexes - see Task 0.5. */
   offPrimaryRegistry: boolean;
-  /** The manual safety valve. */
+  /** The manual safety valve, keep-out direction. */
   manuallyExcluded: boolean;
+  /**
+   * The manual safety valve, let-in direction: a human has reviewed this agent
+   * and vouched for the category. It relaxes the CLASSIFICATION half of the gate
+   * only - a hand-included agent whose endpoint does not answer still gets
+   * delisted, because the liveness half is a claim about right now that no past
+   * human review can stand in for.
+   */
+  manuallyIncluded: boolean;
   /** Whether this candidate is currently published, for the delist decision. */
   currentlyPublished: boolean;
 }
@@ -160,6 +168,13 @@ export function resolveStatus(input: StatusInput): StatusDecision {
   }
 
   if (input.confidence !== "confirmed") {
+    if (input.manuallyIncluded) {
+      return {
+        status: "published",
+        reason:
+          "Classified `likely` rather than `confirmed`, but a human reviewed the agent and vouched for the category, and its endpoint answered a protocol-appropriate probe. The liveness half of the gate was still enforced.",
+      };
+    }
     return {
       status: "pending",
       reason:

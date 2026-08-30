@@ -60,6 +60,7 @@ import {
 import { agentCategoryValidator } from "./categoryStatsValidators";
 import {
   AGENT_CATEGORY_SLUGS,
+  EDITORIAL_TOKEN_IDS,
   ERC8004_IDENTITY_REGISTRY,
   type AgentCategory,
 } from "./lib/agentCatalog";
@@ -103,6 +104,19 @@ const DEEP_EVAL_BUDGET_MS = 420_000;
 
 /** Pages of the descending tail to walk each cycle. See the cadence note below. */
 const TAIL_PAGES = 3;
+
+/**
+ * Hard ceiling on how many records one sweep holds in memory and writes.
+ *
+ * MEASURED, NOT GUESSED. An unbounded backfill run was tried first and the
+ * Convex action was killed with no error message - the sweep had accumulated
+ * tens of thousands of records in a Map and then tried to judge and persist all
+ * of them at the end of the same invocation. Capping the batch keeps one sweep
+ * inside the runtime's memory and time limits, and costs nothing in coverage:
+ * the backfill offset is persisted, so the next cycle resumes exactly where
+ * this one stopped. Being incremental is the design, not a compromise.
+ */
+const MAX_RECORDS_PER_SWEEP = 8_000;
 /** Most candidates one deep-evaluation pass will process, budget permitting. */
 const DEEP_EVAL_BATCH = 40;
 
@@ -324,6 +338,8 @@ export const sweep = internalAction({
   args: {
     /** Skip the (slow) backfill - used when verifying the other two paths. */
     skipBackfill: v.optional(v.boolean()),
+    /** Skip the search sweep - used when verifying the backfill on its own. */
+    skipSearch: v.optional(v.boolean()),
     /** Override the wall-clock budget, for manual runs. */
     budgetMs: v.optional(v.number()),
   },
@@ -351,7 +367,7 @@ export const sweep = internalAction({
 
     /* PATH A - vocabulary search. */
     const searchDeadline = startedAt + Math.min(SEARCH_SWEEP_BUDGET_MS, totalBudget);
-    await withConcurrency(
+    if (args.skipSearch !== true) await withConcurrency(
       SEARCH_VOCABULARY.map((term) => async () => {
         for (let page = 0; page < MAX_PAGES_PER_TERM; page++) {
           if (Date.now() > searchDeadline) return;
@@ -392,7 +408,10 @@ export const sweep = internalAction({
     let backfillCompletedAt = state?.backfillCompletedAt ?? null;
 
     if (args.skipBackfill !== true) {
-      while (Date.now() < startedAt + totalBudget) {
+      while (
+        Date.now() < startedAt + totalBudget &&
+        seen.size < MAX_RECORDS_PER_SWEEP
+      ) {
         // Four pages at a time, matching the measured optimum concurrency.
         const offsets = Array.from(
           { length: SWEEP_CONCURRENCY },
@@ -623,6 +642,7 @@ export const deepEvaluate = internalAction({
           manuallyExcluded:
             candidate.manualOverride === "exclude" ||
             MANUALLY_EXCLUDED_TOKEN_IDS.has(candidate.tokenId),
+          manuallyIncluded: candidate.manualOverride === "include",
           currentlyPublished: candidate.status === "published",
         });
 
@@ -825,13 +845,22 @@ export const recordSweepBatch = internalMutation({
         continue;
       }
 
-      // A record whose 8004scan text has not changed needs nothing but a
-      // liveness bump on `lastSeenAt`. This is the whole point of the ledger:
-      // ~280,000 already-rejected records must not be re-processed every cycle.
+      // A record whose 8004scan text has not changed needs nothing but a bump
+      // on `lastSeenAt`. This is the whole point of the ledger: ~280,000
+      // already-rejected records must not be re-processed every cycle.
+      //
+      // The condition is text alone, deliberately. The cheap verdict is a pure
+      // function of (name, description) - same text in, same pre-filter rule and
+      // same score out - so re-deriving it changes nothing. An earlier version
+      // also required `lastDeepEvaluatedAt !== null`, which was wrong: a
+      // pre-filter rejection is never deep-evaluated, so that field stays null
+      // forever and every rejected record was re-judged and re-patched on every
+      // single cycle. A live backfill run measured it re-writing 8,296 of 8,300
+      // records it had already judged an hour earlier.
       const textUnchanged =
         existing.name === record.name && existing.description === record.description;
 
-      if (textUnchanged && existing.lastDeepEvaluatedAt !== null) {
+      if (textUnchanged) {
         await ctx.db.patch(existing._id, { lastSeenAt: seenAt });
         unchanged++;
         continue;
@@ -1112,7 +1141,12 @@ export const setManualOverride = mutation({
     await ctx.db.patch(candidate._id, {
       manualOverride: override,
       statusReason: `Manual override (${override ?? "cleared"}): ${reason}`,
-      ...(override === "exclude" ? { status: "rejected-classifier" as const } : {}),
+      ...(override === "exclude"
+        ? { status: "rejected-classifier" as const }
+        : // An "include" or a cleared override does not publish anything by
+          // itself - it re-opens the agent for the normal deep evaluation, which
+          // still has to find a live endpoint before anything is listed.
+          { lastDeepEvaluatedAt: null }),
     });
 
     if (override === "exclude") {
@@ -1203,14 +1237,102 @@ export const listCandidates = query({
       .take(limit ?? 50),
 });
 
+/**
+ * Makes sure EVERY agent the catalog lists has a cached icon - including the
+ * eight hand-vetted editorial agents, which never pass through the candidate
+ * pipeline and so would otherwise be the only listings still hotlinking (or
+ * showing nothing).
+ *
+ * Task 4 is "every agent gets a real icon", and an editorial agent with a blank
+ * tile is just as bad for the store framing as a discovered one. Cheap and
+ * idempotent: it skips anything that already has a cached icon, so it costs
+ * nothing on a steady-state run.
+ */
+export const ensureCatalogIcons = internalAction({
+  args: { includeFallback: v.optional(v.boolean()) },
+  handler: async (ctx, args): Promise<Record<string, number>> => {
+    const targets: { tokenId: string; scanIconUrl: string | null; cached: boolean }[] =
+      await ctx.runQuery(internal.discoveryPipeline.listIconTargets, {});
+
+    const counts: Record<string, number> = {
+      "8004scan-image": 0,
+      "registration-file": 0,
+      "generated-fallback": 0,
+      failed: 0,
+      skipped: 0,
+    };
+
+    for (const target of targets) {
+      if (target.cached) {
+        counts.skipped++;
+        continue;
+      }
+      // Only fetch the registration file when the cheaper source is missing -
+      // this pass exists to fill gaps, not to re-do the deep evaluation.
+      const registrationIconUrl =
+        target.scanIconUrl === null
+          ? (await fetchRegistrationFile(target.tokenId)).iconUrl
+          : null;
+
+      const outcome = await sourceIcon(ctx, {
+        tokenId: target.tokenId,
+        scanIconUrl: target.scanIconUrl,
+        registrationIconUrl,
+        alreadyCached: false,
+      });
+      if (outcome) counts[outcome] = (counts[outcome] ?? 0) + 1;
+    }
+
+    return counts;
+  },
+});
+
+export const listIconTargets = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const published = await ctx.db
+      .query("discoveredAgents")
+      .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
+      .collect();
+
+    const tokenIds = [
+      ...new Set([...EDITORIAL_TOKEN_IDS, ...published.map((row) => row.tokenId)]),
+    ];
+
+    const targets: { tokenId: string; scanIconUrl: string | null; cached: boolean }[] = [];
+    for (const tokenId of tokenIds) {
+      const directory = await ctx.db
+        .query("agentDirectory")
+        .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId))
+        .unique();
+      targets.push({
+        tokenId,
+        scanIconUrl: directory?.iconUrl ?? null,
+        cached: (directory?.iconSource ?? null) !== null,
+      });
+    }
+    return targets;
+  },
+});
+
 /* ---------------------------------------------------------------------------
  * Manual triggers, so every stage can be run and verified by hand.
  * ------------------------------------------------------------------------ */
 
 export const runSweepNow = action({
-  args: { skipBackfill: v.optional(v.boolean()), budgetMs: v.optional(v.number()) },
+  args: {
+    skipBackfill: v.optional(v.boolean()),
+    skipSearch: v.optional(v.boolean()),
+    budgetMs: v.optional(v.number()),
+  },
   handler: async (ctx, args): Promise<SweepReport> =>
     ctx.runAction(internal.discoveryPipeline.sweep, args),
+});
+
+export const runIconPassNow = action({
+  args: {},
+  handler: async (ctx): Promise<Record<string, number>> =>
+    ctx.runAction(internal.discoveryPipeline.ensureCatalogIcons, {}),
 });
 
 export const runDeepEvaluationNow = action({

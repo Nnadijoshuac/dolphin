@@ -25,12 +25,14 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import {
   action,
   internalAction,
   internalMutation,
   internalQuery,
   query,
+  type QueryCtx,
 } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import {
@@ -64,6 +66,11 @@ type DirectoryRow = {
   endpointCheckedAt: string | null;
   indexedAt: string;
   refreshedAt: string;
+  iconStorageId?: Id<"_storage"> | null;
+  iconSource?: string | null;
+  iconCheckedAt?: string | null;
+  /** Resolved from iconStorageId by buildCatalog - not a stored column. */
+  cachedIconUrl?: string | null;
 };
 
 /**
@@ -92,7 +99,12 @@ function applyDirectory(agent: CatalogAgent, row: DirectoryRow): CatalogAgent {
     ...agent,
     name: row.name ?? agent.name,
     description: row.description ?? agent.description,
-    iconUrl: row.iconUrl ?? agent.iconUrl,
+    // Dolphin's own cached copy wins over every external URL. The bytes were
+    // fetched once during onboarding (convex/discoveryPipeline.ts's icon pass)
+    // and are served from Convex storage, so no render depends on a third-party
+    // image host still being up and fast. `cachedIconUrl` falls back to
+    // 8004scan's URL only while an agent is waiting for its first icon pass.
+    iconUrl: row.cachedIconUrl ?? row.iconUrl ?? agent.iconUrl,
     publisher: row.publisher ?? agent.publisher,
     publisherAddress: row.ownerAddress ?? agent.publisherAddress,
     agentWallet: row.agentWallet ?? agent.agentWallet,
@@ -152,29 +164,30 @@ function applyDirectory(agent: CatalogAgent, row: DirectoryRow): CatalogAgent {
   };
 }
 
-async function buildCatalog(ctx: {
-  db: {
-    query: (table: string) => {
-      withIndex: (
-        name: string,
-        fn: (q: { eq: (k: string, val: unknown) => unknown }) => unknown,
-      ) => { collect: () => Promise<unknown[]> };
-    };
-  };
-}): Promise<CatalogAgent[]> {
+async function buildCatalog(ctx: QueryCtx): Promise<CatalogAgent[]> {
   const asOf = new Date().toISOString();
 
   const discoveredRows = (await ctx.db
     .query("discoveredAgents")
     .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
-    .collect()) as Parameters<typeof buildDiscoveredAgent>[0][];
+    .collect()) as unknown as Parameters<typeof buildDiscoveredAgent>[0][];
 
   const directoryRows = (await ctx.db
     .query("agentDirectory")
     .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
-    .collect()) as DirectoryRow[];
+    .collect()) as unknown as DirectoryRow[];
 
-  const directory = new Map(directoryRows.map((row) => [row.tokenId, row]));
+  // Resolve every cached icon to a Convex storage URL in one pass. getUrl is a
+  // cheap lookup, and doing it here rather than in the client keeps both
+  // frontends rendering `iconUrl` exactly as they already do.
+  const directoryWithIcons = await Promise.all(
+    directoryRows.map(async (row) => ({
+      ...row,
+      cachedIconUrl: row.iconStorageId ? await ctx.storage.getUrl(row.iconStorageId) : null,
+    })),
+  );
+
+  const directory = new Map(directoryWithIcons.map((row) => [row.tokenId, row]));
 
   const merged = mergeCatalog(
     EDITORIAL_AGENT_INPUTS.map((input) => buildEditorialAgent(input, asOf)),
@@ -193,7 +206,7 @@ async function buildCatalog(ctx: {
  */
 export const listAgents = query({
   args: {},
-  handler: async (ctx) => buildCatalog(ctx as never),
+  handler: async (ctx) => buildCatalog(ctx),
 });
 
 /**
@@ -206,7 +219,7 @@ export const getAgent = query({
   handler: async (ctx, { reference }) => {
     const parts = reference.split(":");
     const tokenId = parts[parts.length - 1];
-    const catalog = await buildCatalog(ctx as never);
+    const catalog = await buildCatalog(ctx);
     return catalog.find((agent) => agent.tokenId === tokenId) ?? null;
   },
 });
@@ -216,7 +229,7 @@ export const getAgent = query({
  * ------------------------------------------------------------------------ */
 
 const AGENT_DETAIL_URL =
-  process.env["8004SCAN_API_URL"]?.trim() ||
+  process.env.SCAN8004_API_URL?.trim() ||
   "https://api.8004scan.io/api/v1/agents";
 const PER_REQUEST_TIMEOUT_MS = 15_000;
 

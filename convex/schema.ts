@@ -61,7 +61,139 @@ export default defineSchema({
     endpointCheckedAt: v.union(v.string(), v.null()),
     indexedAt: v.string(),
     refreshedAt: v.string(),
+
+    // Icon cache (Task 4). Optional so existing rows stay valid without a
+    // migration, and written by a separate mutation (agents.setAgentIcon) so
+    // the 8004scan refresh above can never clobber a cached icon.
+    //
+    // An icon is fetched ONCE and its bytes stored here; the frontends render a
+    // Convex storage URL. Nothing is hotlinked - a slow or dead third-party
+    // image host would otherwise be a permanent property of every page render.
+    iconStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    // "8004scan-image" | "registration-file" | "generated-fallback" - kept as a
+    // string rather than a literal union so a new tier does not need a schema
+    // migration. The authoritative list is IconSource in convex/lib/agentIcons.ts.
+    iconSource: v.optional(v.union(v.string(), v.null())),
+    iconCheckedAt: v.optional(v.union(v.string(), v.null())),
   }).index("by_agent", ["chainId", "tokenId"]),
+
+  /**
+   * THE EVALUATION LEDGER - one row per tokenId the discovery sweep has ever
+   * seen, whatever became of it.
+   *
+   * This is what makes the pipeline incremental (Task 1.3). 8004scan indexes
+   * 289,938 identities on BSC mainnet and the overwhelming majority are spam;
+   * without a record of what has already been judged, every cycle would re-walk
+   * and re-reject the same ~280,000 records forever. A sweep that re-sees a
+   * known tokenId refreshes `lastSeenAt` and moves on.
+   *
+   * It is also the audit trail. Every rejection carries the rule or reason that
+   * produced it and every classification carries its evidence, so "why is this
+   * agent not listed" and "why is this agent listed" are both answerable after
+   * the fact, without re-running anything. A pipeline that publishes to a public
+   * marketplace with no human watching needs to be able to show its work.
+   *
+   * Keyed on (chainId, registryAddress, tokenId) rather than (chainId, tokenId):
+   * Task 0.5 found a second identity registry on BNB Chain (BRC8004,
+   * 0xfA09B339...) whose token ids collide with the primary AgentIdentity
+   * registry's. The rest of Dolphin's catalog is still keyed on a bare tokenId,
+   * which is exactly why BRC8004 agents are recorded here but held `pending`
+   * rather than published - see convex/lib/pipelineStatus.ts.
+   */
+  agentCandidates: defineTable({
+    chainId: v.number(),
+    registryAddress: v.string(),
+    tokenId: v.string(),
+
+    status: v.union(
+      v.literal("rejected-prefilter"),
+      v.literal("rejected-classifier"),
+      v.literal("pending"),
+      v.literal("published"),
+    ),
+    /** Always set. One checkable sentence saying why the row is in that status. */
+    statusReason: v.string(),
+    /** Which sweep path or intake first produced this row. */
+    source: v.string(),
+
+    // 8004scan's list-item view, as last seen.
+    name: v.string(),
+    description: v.string(),
+    scanIconUrl: v.union(v.string(), v.null()),
+    ownerAddress: v.string(),
+    registeredAt: v.union(v.string(), v.null()),
+    x402Supported: v.union(v.boolean(), v.null()),
+
+    // Stage 1: the cheap pre-filter (convex/lib/prefilter.ts).
+    prefilterRule: v.union(v.string(), v.null()),
+
+    // Stage 2: the classifier (convex/lib/agentScoring.ts).
+    category: v.union(agentCategoryValidator, v.null()),
+    confidence: v.union(v.literal("confirmed"), v.literal("likely"), v.null()),
+    score: v.union(v.number(), v.null()),
+    runnerUpCategory: v.union(agentCategoryValidator, v.null()),
+    runnerUpScore: v.union(v.number(), v.null()),
+    matchedTerms: v.array(v.string()),
+    /** Signal and penalty details, so a classification is auditable. */
+    classificationEvidence: v.array(v.string()),
+    /** Why a `likely` agent fell short of `confirmed`. Real information, not decoration. */
+    shortfall: v.union(v.string(), v.null()),
+
+    // Stage 2b: the agent's own registration file (convex/lib/registrationFile.ts).
+    crossCheckState: v.union(v.string(), v.null()),
+    crossCheckTokenUri: v.union(v.string(), v.null()),
+    /** Set when the agent's own file disagrees with what 8004scan has cached. */
+    crossCheckDrift: v.union(v.string(), v.null()),
+
+    // Stage 3: the liveness probe (convex/lib/liveness.ts).
+    livenessState: v.union(v.string(), v.null()),
+    livenessProtocol: v.union(v.string(), v.null()),
+    livenessUrl: v.union(v.string(), v.null()),
+    livenessDetail: v.union(v.string(), v.null()),
+    livenessCheckedAt: v.union(v.string(), v.null()),
+    /** Drives the delist-after-3 rule in convex/lib/pipelineStatus.ts. */
+    consecutiveProbeFailures: v.number(),
+
+    // The manual safety valve, runtime half. The compile-time half
+    // (MANUALLY_EXCLUDED_TOKEN_IDS) is preserved in convex/discoveredAgents.ts;
+    // this lets an operator hand-correct a specific case without a deploy.
+    manualOverride: v.union(v.literal("exclude"), v.literal("include"), v.null()),
+
+    submittedAt: v.union(v.string(), v.null()),
+
+    firstSeenAt: v.string(),
+    lastSeenAt: v.string(),
+    /** Last time the cheap pre-filter ran over this record. */
+    lastEvaluatedAt: v.string(),
+    /** Last time the expensive stages (cross-check, probe, icon) ran. Null = never. */
+    lastDeepEvaluatedAt: v.union(v.string(), v.null()),
+  })
+    .index("by_agent", ["chainId", "registryAddress", "tokenId"])
+    .index("by_token", ["chainId", "tokenId"])
+    // Picks the deep-evaluation batch: oldest-evaluated first within a status.
+    .index("by_status_evaluated", ["status", "lastDeepEvaluatedAt"]),
+
+  /**
+   * Resumable cursor for the ascending backfill sweep, plus the counters the
+   * session log and HANDOVER report from. One row, keyed by name.
+   *
+   * The backfill is resumable rather than restarting because 8004scan's
+   * `sort_by=token_id&sort_order=asc` is stable under insertion: an ERC-8004
+   * token id only ever increases, so new registrations append at the end and
+   * never shift the offsets of pages already walked. That measured fact (Task 0)
+   * is what makes an offset cursor correct here rather than merely plausible.
+   */
+  discoveryState: defineTable({
+    key: v.string(),
+    /** Next `offset` the ascending backfill should request. */
+    backfillOffset: v.number(),
+    /** Set when the backfill has walked the whole registry at least once. */
+    backfillCompletedAt: v.union(v.string(), v.null()),
+    /** `total` as 8004scan last reported it, for progress reporting. */
+    registryTotal: v.union(v.number(), v.null()),
+    lastSweepAt: v.union(v.string(), v.null()),
+    lastSweepSummary: v.union(v.string(), v.null()),
+  }).index("by_key", ["key"]),
 
   discoveredAgents: defineTable({
     chainId: v.number(),

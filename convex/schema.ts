@@ -193,6 +193,21 @@ export default defineSchema({
     registryTotal: v.union(v.number(), v.null()),
     lastSweepAt: v.union(v.string(), v.null()),
     lastSweepSummary: v.union(v.string(), v.null()),
+
+    // Running ledger totals, maintained transactionally on every insert and
+    // every status transition.
+    //
+    // WHY COUNTERS AND NOT A COUNT QUERY. getPipelineStats originally derived
+    // these by scanning agentCandidates. That worked at a few thousand rows and
+    // then failed outright once the backfill had run - Convex caps a single
+    // function execution at 16MB of reads, and the ledger passes that at around
+    // 12,000 rows. It only grows from here (the registry is 291,543), so a scan
+    // was never going to be the answer. Optional so existing rows stay valid.
+    ledgerTotal: v.optional(v.number()),
+    ledgerRejectedPrefilter: v.optional(v.number()),
+    ledgerRejectedClassifier: v.optional(v.number()),
+    ledgerPending: v.optional(v.number()),
+    ledgerPublished: v.optional(v.number()),
   }).index("by_key", ["key"]),
 
   discoveredAgents: defineTable({

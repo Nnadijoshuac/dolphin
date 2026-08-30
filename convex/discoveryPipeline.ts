@@ -56,6 +56,7 @@ import {
   mutation,
   query,
   type ActionCtx,
+  type MutationCtx,
 } from "./_generated/server";
 import { agentCategoryValidator } from "./categoryStatsValidators";
 import {
@@ -797,6 +798,51 @@ const sweepRecordValidator = v.object({
   shortfall: v.union(v.string(), v.null()),
 });
 
+
+/**
+ * Keeps the running ledger counters in `discoveryState` correct.
+ *
+ * These exist because getPipelineStats used to derive them by scanning
+ * agentCandidates, which worked at a few thousand rows and then failed outright
+ * once the backfill had run: Convex caps one function execution at 16MB of
+ * reads and the ledger crosses that at roughly 12,000 rows. The registry is
+ * 291,543, so the ledger only grows - a scan was never going to be the answer.
+ *
+ * `from` is null for a newly inserted row.
+ */
+const LEDGER_FIELD: Record<CandidateStatus, "ledgerRejectedPrefilter" | "ledgerRejectedClassifier" | "ledgerPending" | "ledgerPublished"> = {
+  "rejected-prefilter": "ledgerRejectedPrefilter",
+  "rejected-classifier": "ledgerRejectedClassifier",
+  pending: "ledgerPending",
+  published: "ledgerPublished",
+};
+
+async function adjustLedger(
+  ctx: MutationCtx,
+  from: CandidateStatus | null,
+  to: CandidateStatus,
+): Promise<void> {
+  if (from === to) return;
+
+  const state = await ctx.db
+    .query("discoveryState")
+    .withIndex("by_key", (q) => q.eq("key", "bsc-sweep"))
+    .unique();
+  if (!state) return; // The first sweep creates it; nothing to adjust before then.
+
+  const patch: Record<string, number> = {};
+  if (from === null) {
+    patch.ledgerTotal = (state.ledgerTotal ?? 0) + 1;
+  } else {
+    const fromField = LEDGER_FIELD[from];
+    patch[fromField] = Math.max(0, (state[fromField] ?? 0) - 1);
+  }
+  const toField = LEDGER_FIELD[to];
+  patch[toField] = (patch[toField] ?? state[toField] ?? 0) + 1;
+
+  await ctx.db.patch(state._id, patch);
+}
+
 export const recordSweepBatch = internalMutation({
   args: {
     records: v.array(sweepRecordValidator),
@@ -841,6 +887,7 @@ export const recordSweepBatch = internalMutation({
           lastEvaluatedAt: seenAt,
           lastDeepEvaluatedAt: null,
         });
+        await adjustLedger(ctx, null, record.status);
         inserted++;
         continue;
       }
@@ -896,6 +943,7 @@ export const recordSweepBatch = internalMutation({
         lastSeenAt: seenAt,
         lastEvaluatedAt: seenAt,
       });
+      if (!keepStatus) await adjustLedger(ctx, existing.status, record.status);
       updated++;
     }
 
@@ -979,6 +1027,7 @@ export const applyDeepEvaluation = internalMutation({
       lastEvaluatedAt: evaluatedAt,
       lastDeepEvaluatedAt: evaluatedAt,
     });
+    await adjustLedger(ctx, candidate.status, fields.status);
 
     // Publication is a write to `discoveredAgents`, which is what
     // agents.listAgents already merges into the catalog. Keeping that as the
@@ -1150,6 +1199,7 @@ export const setManualOverride = mutation({
     });
 
     if (override === "exclude") {
+      await adjustLedger(ctx, candidate.status, "rejected-classifier");
       const published = await ctx.db
         .query("discoveredAgents")
         .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId))
@@ -1174,25 +1224,29 @@ export const getPipelineStats = query({
       .withIndex("by_key", (q) => q.eq("key", "bsc-sweep"))
       .unique();
 
-    const byStatus: Record<string, number> = {
-      "rejected-prefilter": 0,
-      "rejected-classifier": 0,
-      pending: 0,
-      published: 0,
-    };
+    // Only the two SMALL bands are read row by row. The two rejection bands are
+    // tens of thousands of rows and are reported from the maintained counters -
+    // see adjustLedger above for why that is not optional.
+    const pending = await ctx.db
+      .query("agentCandidates")
+      .withIndex("by_status_evaluated", (q) => q.eq("status", "pending"))
+      .collect();
+    const published = await ctx.db
+      .query("agentCandidates")
+      .withIndex("by_status_evaluated", (q) => q.eq("status", "published"))
+      .collect();
+
     const byCategory: Record<string, number> = {};
     const byLiveness: Record<string, number> = {};
     let deepEvaluated = 0;
-
-    for await (const row of ctx.db.query("agentCandidates")) {
-      byStatus[row.status] = (byStatus[row.status] ?? 0) + 1;
+    for (const row of [...pending, ...published]) {
       if (row.lastDeepEvaluatedAt !== null) deepEvaluated++;
-      if (row.status === "published" && row.category) {
-        byCategory[row.category] = (byCategory[row.category] ?? 0) + 1;
-      }
       if (row.livenessState) {
         byLiveness[row.livenessState] = (byLiveness[row.livenessState] ?? 0) + 1;
       }
+    }
+    for (const row of published) {
+      if (row.category) byCategory[row.category] = (byCategory[row.category] ?? 0) + 1;
     }
 
     const directory = await ctx.db.query("agentDirectory").collect();
@@ -1208,13 +1262,102 @@ export const getPipelineStats = query({
       backfillCompletedAt: state?.backfillCompletedAt ?? null,
       lastSweepAt: state?.lastSweepAt ?? null,
       lastSweepSummary: state?.lastSweepSummary ?? null,
-      candidates: byStatus,
-      deepEvaluated,
+      ledgerTotal: state?.ledgerTotal ?? 0,
+      candidates: {
+        "rejected-prefilter": state?.ledgerRejectedPrefilter ?? 0,
+        "rejected-classifier": state?.ledgerRejectedClassifier ?? 0,
+        pending: pending.length,
+        published: published.length,
+      },
+      deepEvaluatedInLiveBands: deepEvaluated,
       publishedByCategory: byCategory,
       livenessByState: byLiveness,
       iconsBySource,
       delistAfterConsecutiveFailures: DELIST_AFTER_CONSECUTIVE_FAILURES,
     };
+  },
+});
+
+/**
+ * One-shot repair for the ledger counters: recounts every band by paginating
+ * the index, then writes the totals back.
+ *
+ * Needed once because the counters were added after the ledger already held
+ * ~12,000 rows, and worth keeping because a counter maintained by deltas can in
+ * principle drift. Paginated so it never trips the same 16MB read cap that made
+ * the counters necessary in the first place.
+ */
+export const recountLedger = internalAction({
+  args: {},
+  handler: async (ctx): Promise<Record<string, number>> => {
+    const totals: Record<string, number> = {};
+    for (const status of [
+      "rejected-prefilter",
+      "rejected-classifier",
+      "pending",
+      "published",
+    ] as const) {
+      let cursor: string | null = null;
+      let count = 0;
+      for (;;) {
+        const page: { count: number; cursor: string | null; isDone: boolean } =
+          await ctx.runQuery(internal.discoveryPipeline.countLedgerPage, { status, cursor });
+        count += page.count;
+        if (page.isDone) break;
+        cursor = page.cursor;
+      }
+      totals[status] = count;
+    }
+    await ctx.runMutation(internal.discoveryPipeline.writeLedgerCounts, {
+      rejectedPrefilter: totals["rejected-prefilter"],
+      rejectedClassifier: totals["rejected-classifier"],
+      pending: totals["pending"],
+      published: totals["published"],
+    });
+    return totals;
+  },
+});
+
+export const countLedgerPage = internalQuery({
+  args: {
+    status: v.union(
+      v.literal("rejected-prefilter"),
+      v.literal("rejected-classifier"),
+      v.literal("pending"),
+      v.literal("published"),
+    ),
+    cursor: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, { status, cursor }) => {
+    const page = await ctx.db
+      .query("agentCandidates")
+      .withIndex("by_status_evaluated", (q) => q.eq("status", status))
+      .paginate({ cursor, numItems: 2000 });
+    return { count: page.page.length, cursor: page.continueCursor, isDone: page.isDone };
+  },
+});
+
+export const writeLedgerCounts = internalMutation({
+  args: {
+    rejectedPrefilter: v.number(),
+    rejectedClassifier: v.number(),
+    pending: v.number(),
+    published: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const state = await ctx.db
+      .query("discoveryState")
+      .withIndex("by_key", (q) => q.eq("key", "bsc-sweep"))
+      .unique();
+    if (!state) return;
+    await ctx.db.patch(state._id, {
+      ledgerRejectedPrefilter: args.rejectedPrefilter,
+      ledgerRejectedClassifier: args.rejectedClassifier,
+      ledgerPending: args.pending,
+      ledgerPublished: args.published,
+      ledgerTotal:
+        args.rejectedPrefilter + args.rejectedClassifier + args.pending + args.published,
+    });
   },
 });
 
@@ -1327,6 +1470,12 @@ export const runSweepNow = action({
   },
   handler: async (ctx, args): Promise<SweepReport> =>
     ctx.runAction(internal.discoveryPipeline.sweep, args),
+});
+
+export const recountLedgerNow = action({
+  args: {},
+  handler: async (ctx): Promise<Record<string, number>> =>
+    ctx.runAction(internal.discoveryPipeline.recountLedger, {}),
 });
 
 export const runIconPassNow = action({

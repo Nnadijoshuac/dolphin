@@ -13,6 +13,7 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 
+import { AltanaWalletCard } from "@/components/altana-wallet-card";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
@@ -127,7 +128,8 @@ export default function WalletScreen() {
               className="mt-1 text-[14px]"
               style={{ color: colors.muted }}
             >
-              BNB Smart Chain account and authorization
+              Two accounts: one identifies you, one can be given bounded
+              spending permission.
             </Text>
           </View>
 
@@ -190,20 +192,27 @@ export default function WalletScreen() {
             />
           </View>
 
+          {/* The Altana wallet: balance, granted permissions, funding. This
+              leads because it is the only account on this screen that can hold
+              a scoped session - the connected wallet below merely identifies
+              the user on a hire record. */}
+          <AltanaWalletCard />
+
           {/* Heading & Subtitle */}
           <View className="items-center px-4 mb-6">
             <Text
               className="text-center text-[22px] font-bold tracking-[-0.5px]"
               style={{ color: colors.ink }}
             >
-              Connect to hire and manage
+              Your own wallet
             </Text>
             <Text
               className="mt-2 text-center text-[14px] leading-5"
               style={{ color: colors.muted }}
             >
-              Your address unlocks registry search,{"\n"}hiring, and session
-              controls.
+              MetaMask or any WalletConnect wallet.{"\n"}Dolphin reads only its
+              public address, to remember{"\n"}which agents you have hired. No
+              agent is ever{"\n"}given permission to spend from it.
             </Text>
           </View>
 

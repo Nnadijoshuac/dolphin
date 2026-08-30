@@ -44,7 +44,7 @@ export function CategoryGlyph({
   };
 
   return (
-    <svg aria-hidden="true" focusable="false" height={size} viewBox="0 0 24 24" width={size}>
+    <svg height={size} viewBox="0 0 24 24" width={size}>
       {name === "monitoring" && (
         <>
           <path d="M3 13s3.2-5.5 9-5.5 9 5.5 9 5.5-3.2 5.5-9 5.5-9-5.5-9-5.5Z" {...common} strokeWidth={1.8} />

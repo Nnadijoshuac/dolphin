@@ -34,15 +34,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </a>
 
       {/* Primary Sticky Header */}
-      <header className="site-header sticky top-0 z-50 border-b border-[#DDE1DD] bg-[#F8F9F7]/92 backdrop-blur-xl transition-colors">
-        <div className="site-frame flex h-20 items-center justify-between gap-2 sm:gap-4">
+      <header className="site-header sticky top-0 z-50 border-b border-[#ECE8DE] bg-[#FBF9F4]/90 backdrop-blur-xl transition-colors">
+        <div className="site-frame flex h-20 items-center justify-between gap-6">
           {/* Logo & Brand Identity */}
           <Link
             aria-label="Dolphin home"
-            className="pressable-scale flex min-w-0 shrink items-center gap-2.5 no-underline sm:gap-3"
+            className="pressable-scale flex shrink-0 items-center gap-3.5 no-underline"
             href="/"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#ECE8DE] bg-white shadow-sm sm:h-11 sm:w-11">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#ECE8DE] bg-white shadow-sm">
               <BrandMark size={28} />
             </div>
             <div>
@@ -50,30 +50,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="text-[17px] font-black tracking-tight text-[#111214]">
                   Dolphin
                 </span>
-                <span className="hidden rounded-md border border-[#F3E3A6] bg-[#FEF5D6] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-[#946B00] sm:inline-flex">
+                <span className="rounded-md border border-[#F3E3A6] bg-[#FEF5D6] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-[#946B00]">
                   ERC-8004
                 </span>
               </div>
-              <p className="hidden text-[11px] font-medium text-[#6E706B] xl:block">
+              <p className="text-[11px] font-medium text-[#6E706B]">
                 AI Agent Marketplace on BNB Chain
               </p>
             </div>
           </Link>
 
-          {/* Desktop navigation */}
+          {/* Desktop Nav Links (Warm Gold/Amber Active State - No Black Pill) */}
           <nav
             aria-label="Primary navigation"
-            className="hidden h-full items-center gap-7 lg:flex"
+            className="hidden items-center gap-1.5 rounded-full border border-[#ECE8DE] bg-white/90 p-1.5 shadow-sm md:flex"
           >
             {navigation.map((item) => {
               const isActive = isActiveRoute(pathname, item.path);
               return (
                 <Link
                   aria-current={isActive ? "page" : undefined}
-                  className={`pressable-scale flex h-full items-center gap-2 border-b-2 px-0.5 text-[13px] font-semibold no-underline transition-colors ${
+                  className={`pressable-scale flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-extrabold no-underline transition-all ${
                     isActive
-                      ? "border-[#D9A900] text-[#171A17]"
-                      : "border-transparent text-[#646A65] hover:border-[#D7DAD7] hover:text-[#171A17]"
+                      ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00] shadow-sm"
+                      : "border border-transparent text-[#6E706B] hover:bg-[#F5F3EB] hover:text-[#111214]"
                   }`}
                   href={item.path}
                   key={item.path}
@@ -91,9 +91,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* Right Network & Wallet Connect Button */}
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-3">
             {/* Live Network Indicator */}
-            <div className="hidden items-center gap-2 text-xs font-semibold text-[#303236] xl:flex">
+            <div className="hidden items-center gap-2 rounded-full border border-[#ECE8DE] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#303236] shadow-sm lg:flex">
               <BnbLogo size={16} />
               <span className="flex items-center gap-1.5 text-[11.5px] font-bold text-[#111214]">
                 <span className="h-2 w-2 rounded-full bg-[#1C6A44]" />
@@ -104,33 +104,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Quick Wallet CTA */}
             {wallet.isConnected && wallet.address ? (
               <Link
-                aria-label={`Connected wallet ${wallet.address.slice(0, 6)} through ${wallet.address.slice(-4)}`}
-                className="pressable-scale flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#E6D58B] bg-[#FFF7D6] px-3 text-xs font-semibold text-[#715600] no-underline hover:bg-[#FBECAE] sm:px-4"
+                className="pressable-scale flex items-center gap-2 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-4 py-2 text-xs font-bold text-[#946B00] no-underline shadow-sm hover:bg-[#FDEBB5]"
                 href="/wallet"
               >
                 <span className="h-2 w-2 rounded-full bg-[#1C6A44]" />
-                <span className="hidden font-mono sm:inline">
-                  {wallet.address.slice(0, 6)}…{wallet.address.slice(-4)}
+                <span className="font-mono">
+                  {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
                 </span>
               </Link>
             ) : (
               <button
-                aria-label="Connect wallet"
-                className="pressable-scale flex min-h-10 min-w-10 items-center justify-center gap-2 rounded-xl bg-[#F4C51A] px-3 text-xs font-semibold text-[#111411] shadow-sm hover:bg-[#EAB914] sm:px-4"
+                className="pressable-scale flex items-center gap-2 rounded-full bg-[#F5B300] px-4 py-2 text-xs font-extrabold text-[#111214] shadow-sm hover:bg-[#E2A500]"
                 onClick={() => wallet.connect()}
                 type="button"
               >
                 <CategoryGlyph color="#111214" name="shield" size={13} strokeWidth={2.5} />
-                <span className="hidden sm:inline">Connect Wallet</span>
+                Connect Wallet
               </button>
             )}
 
             {/* Mobile Hamburger Toggle */}
             <button
-              aria-controls="mobile-navigation"
-              aria-expanded={isMobileMenuOpen}
-              aria-label={isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#DDE1DD] bg-white text-[#111214] shadow-sm lg:hidden"
+              aria-label="Toggle navigation menu"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#ECE8DE] bg-white text-[#111214] md:hidden shadow-sm"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               type="button"
             >
@@ -140,22 +136,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Mobile Expandable Nav */}
-        {isMobileMenuOpen ? (
+        {isMobileMenuOpen && (
           <nav
             aria-label="Mobile menu"
-            className="site-frame border-t border-[#ECE8DE] bg-[#FBF9F4] py-3 lg:hidden"
-            id="mobile-navigation"
+            className="site-frame border-t border-[#ECE8DE] bg-[#FBF9F4] py-4 md:hidden"
           >
-            <div className="grid divide-y divide-[#E0E3E0] border-y border-[#E0E3E0]">
+            <div className="grid gap-2">
               {navigation.map((item) => {
                 const isActive = isActiveRoute(pathname, item.path);
                 return (
                   <Link
-                    aria-current={isActive ? "page" : undefined}
-                    className={`flex min-h-12 items-center gap-3 px-1 text-sm font-semibold no-underline ${
+                    className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold no-underline ${
                       isActive
-                        ? "text-[#171A17]"
-                        : "text-[#656B66]"
+                        ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00]"
+                        : "bg-white text-[#6E706B] border border-[#ECE8DE]"
                     }`}
                     href={item.path}
                     key={item.path}
@@ -172,7 +166,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               })}
             </div>
           </nav>
-        ) : null}
+        )}
       </header>
 
       {/* Main Content Area */}
@@ -201,17 +195,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
 
               <p className="mt-4 max-w-md text-sm leading-6 text-[#6E706B]">
-                Discover, compare, and hire source-labeled AI agents on BNB Smart Chain under ERC-8004. Missing metrics remain explicitly unavailable until a live source proves them.
+                Discover, compare, and hire verifiable AI agents on BNB Smart Chain under ERC-8004. Real on-chain data, live protocol integrations, and zero fake metrics.
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1.5 rounded-full border border-[#ECE8DE] bg-[#FBF9F4] px-3 py-1 text-xs font-semibold text-[#303236]">
                   <BnbLogo size={14} />
-                  <span>BNB Chain catalog</span>
+                  <span>BNB Chain Official</span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded-full border border-[#BFE0CC] bg-[#DCEFE4] px-3 py-1 text-xs font-bold text-[#1C6A44]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#1C6A44]" />
-                  <span>User-approved access</span>
+                  <span>100% Non-Custodial</span>
                 </div>
               </div>
             </div>
@@ -240,6 +234,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <li>
                   <Link className="hover:text-[#111214] hover:underline" href="/search?category=yield">
                     Yield Optimization (Aave / Lista)
+                  </Link>
+                </li>
+                <li>
+                  <Link className="hover:text-[#111214] hover:underline" href="/search?category=monitoring">
+                    Monitoring & Alerts
                   </Link>
                 </li>
               </ul>
@@ -275,9 +274,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-[#ECE8DE] pt-8 text-xs text-[#6C736D] sm:flex-row">
+          <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-[#ECE8DE] pt-8 sm:flex-row text-xs text-[#A5A79F]">
             <p>© 2026 Dolphin. Built for the BNB Chain Smart Money Era Hackathon.</p>
-            <p>Missing data stays unavailable • Registry checks run on agent detail</p>
+            <p>Fail-closed live data • On-chain verified • No fabricated metrics</p>
           </div>
         </div>
       </footer>

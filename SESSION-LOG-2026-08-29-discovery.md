@@ -301,3 +301,208 @@ new-registration tail sweep is sized against, not a guess.
    time to first sight for anything newly registered), and an ascending
    cursor-resumable backfill of the whole registry (completeness, budgeted per
    cycle).
+
+---
+
+# Continuation — 2026-08-30: Tasks 1–6 built, wired and run live
+
+Everything below is output from real commands against the real deployment and
+the real 8004scan API on 2026-08-30. No projections.
+
+## Where this picked up
+
+Tasks 0 and 0.5 were already logged above. `convex/lib/prefilter.ts` (Task 1)
+and `convex/lib/agentScoring.ts` (Task 2's scorer) existed but were **wired into
+nothing** — no caller anywhere, and both referenced two modules that did not
+exist (`pipelineStatus.ts`, `registrationFile.ts`). Nothing had ever run.
+
+## A blocker found before anything could be verified
+
+`npx convex dev` refused the whole deployment:
+
+```
+InvalidModules: The environment variable name 8004SCAN_API_URL is invalid.
+Environment variable names must begin with a letter and may only include
+characters a-z, A-Z, 0-9, and underscores.
+```
+
+**The Convex backend has been un-pushable since commit `b47aeba`** — no backend
+change since then could have reached the deployment. Renamed to
+`SCAN8004_API_URL`. The value was never readable under the old name, so every
+call site had been silently running on its hardcoded default.
+
+## Stage 1 — the pre-filter, over a real batch
+
+Search + tail sweep, one run, 71 requests, **62 seconds**:
+
+```
+unique records seen     2,255
+rejected by pre-filter  1,331   (59.0%)
+  campaign-template       645
+  persona-agent           225
+  empty-description       172
+  collectible-series      160
+  off-topic               112
+  numeric-noise            11
+  repeated-token            6
+survivors to classifier   924
+```
+
+Over the backfill path the ratio is far harsher, which matches Task 0's finding
+that the topical slice is where the real agents are. One backfill run of 8,300
+records: **8,084 pre-filtered out (97.4%), 216 unclassifiable, 0 classified into
+any of the four categories.** The search path found 85 in 2,255. That is the
+whole argument for precision over sweep coverage, now measured on both paths.
+
+## Stage 2 — the classifier, over the 924 survivors
+
+```
+classified into one of the four    85
+  yield          51
+  rebalancing    14
+  health-factor  13
+  grid-trading    7
+rejected as not one of the four   839
+```
+
+### The tricky cases, run WITHOUT the denylist telling it the answer
+
+```
+113284 Topaz Agent        -> REJECTED  score -15
+   -8  names 2 capabilities outside all four categories (gauge vote, bribe)
+  -15  describes 12 distinct actions -> general-purpose capability catalogue
+6428  Tator Trader        -> REJECTED  score -48
+  -32  names 8 outside all four (bridge, perp, prediction market, launch token...)
+  -18  describes 13 distinct actions
+292939 bnb-grid-trader-test.agent -> grid-trading, likely (KEPT)
+   -6  name contains "test"   <- the old filter HARD-REJECTED this real agent
+```
+
+**Both manual-denylist entries are now caught by the classifier on their own
+evidence**, and the real grid-trading agent the old `\btest\b` rule would have
+thrown away is kept. The denylist is retained anyway (see Task 6 below).
+
+### The honest cost of the breadth penalty
+
+The same penalty also demotes the HeyAnon "safe execution layer" family, which
+are genuine single-protocol agents that happen to enumerate a whole action set:
+
+```
+45381 Aave powered by HeyAnon  -> REJECTED (11 -> 2, 10 distinct actions)
+43129 Venus powered by HeyAnon -> health-factor, likely (5)
+```
+
+45381 is unaffected in practice (hand-curated editorially, never routed through
+this gate). 43129 was previously listed by the old keyword sync and would have
+been dropped — it was restored through the manual `include` valve with its
+reasoning recorded. **This is a real limitation, not one tuned away**: the same
+penalty that catches Topaz and Tator unaided also catches these.
+
+## Stage 2b — the registration-file cross-check
+
+Over 87 deep-evaluated candidates: **85 fetched, 2 unreachable, 0 with no
+tokenURI.** 6 showed drift between the agent's own current file and 8004scan's
+cached copy. Both unreachable cases were `ipfs://` (public gateway refusals).
+
+## Stage 3 — liveness, probed directly
+
+Across the 87 deep-evaluated candidates:
+
+```
+verified-live                 16
+unreachable                   44
+  - DNS / connection          26
+  - HTTP 4xx/5xx              14
+  - HTTP 200, not an A2A card  4
+no-endpoint-advertised        27
+```
+
+The 4 "200 but not a card" are agents whose endpoint is alive but does not serve
+what it advertises — e.g. token 315943 returns a real capability descriptor at
+its `a2a_endpoint`, but with no `name` field it is not an A2A agent card.
+Holding those pending is deliberate: "verified live" means the agent answered
+**in the protocol it advertises**, not that some HTTP server responded.
+
+## Stage 4 — icons
+
+```
+8004scan-image        64
+generated-fallback    50
+registration-file     14   <- icons 8004scan's cache never had
+```
+
+**All 16 listed agents now render from Dolphin's own storage. Zero hotlinks,
+zero blanks.** Token 45381 is the one agent that fell through to the generated
+fallback despite having an 8004scan image URL: that URL 307-redirects to
+`blob.8004scan.app` and the fetch did not land an allowed image content-type.
+Worth revisiting; it is one agent, and the fallback is honest in the meantime.
+
+## Task 5 — submission, end to end
+
+```
+submitAgent(315943) -> {"state":"under-review", ...}    (returns immediately)
+...seconds later:
+getSubmissionStatus(315943) -> {
+  "state":"held-pending",
+  "category":"health-factor", "confidence":"confirmed",
+  "liveness":"unreachable",
+  "reason":"The agent's advertised endpoint did not answer a
+            protocol-appropriate probe, so Dolphin cannot confirm it works."
+}
+```
+
+A confirmed classification and still not listed, because the endpoint did not
+answer in its advertised protocol. That is the path working, not failing.
+
+## Task 6 — the safety valve, both directions
+
+```
+setManualOverride(6443, "exclude")  -> graded listings 17 -> 16, 6443 gone
+setManualOverride(43129, "include") -> re-evaluated, published; liveness still
+  enforced (MCP initialize 201, serverInfo=heyanon-erc8004-venus)
+```
+
+6443's exclusion is a real quality decision, not a test artefact: tokens 6441
+and 6443 share an owner (`0x9c2499e3...a8a360`), a byte-identical description
+opening, **and the same A2A endpoint URL**. Two identity NFTs pointing at one
+service are one listing, not two.
+
+## Three bugs the live runs found that a code read would not have
+
+1. **An unbounded backfill killed the Convex action with no error message** — it
+   accumulated tens of thousands of records in memory and judged and persisted
+   them all in one invocation. Capped at 8,000 records/sweep; the offset
+   persists, so the next cycle resumes exactly where the last stopped.
+2. **The incremental skip never fired for rejected records.** It was gated on
+   `lastDeepEvaluatedAt !== null`, which is never true for a pre-filter
+   rejection, so every rejected record was re-judged and re-patched on every
+   cycle — the exact waste the ledger exists to prevent. Measured re-writing
+   **8,296 of 8,300** records it had judged an hour earlier. After the fix, the
+   same search sweep: **2,247 of 2,255 skipped, 8 new, 0 rewritten.**
+3. **`getPipelineStats` exceeded Convex's 16MB per-execution read cap** once the
+   ledger passed ~12,000 rows. Replaced with counters maintained on insert and
+   on status transition, plus a paginated recount action for repair.
+
+## Measured throughput, for the cadence calculation
+
+```
+search sweep      53 terms -> 71 requests -> 2,255 records in 62s
+backfill          80 pages in 196s  =  0.41 pages/s
+                  (Task 0 measured 0.180 pages/s; the API is faster today)
+full registry     2,916 pages -> ~2 hours of pure wall time
+per-cycle bound   8,000 records ~= 80 pages, so ~36 hourly cycles per full pass
+registry total    291,543 (was 289,938 when Task 0 measured it)
+```
+
+## The funnel as it now stands
+
+```
+registry                 291,543
+ledger (evaluated)        50,044
+  rejected pre-filter     45,781
+  rejected classifier      4,176
+  pending                     76
+  published                   11
+catalog (listAgents)          17   (16 graded + 1 monitoring, deliberately
+                                    not one of the four graded categories)
+```

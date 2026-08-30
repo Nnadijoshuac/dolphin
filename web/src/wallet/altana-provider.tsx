@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BNB,
   createClient,
   signerFromPasskey,
   type Client,
@@ -26,7 +27,7 @@ import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
 import type { AgentCategory } from "@/types/agent";
 import {
-  ALTANA_NETWORK,
+  ALTANA_CHAIN_ID,
   ALTANA_WALLET_LABEL,
   buildSessionPermissions,
   expiryFromNow,
@@ -55,6 +56,22 @@ import {
  * TanStack Query - deliberately no useState+useEffect pair, which is the exact
  * shape that threw React error #418 on this site once already.
  */
+
+/**
+ * The SDK's own BNB config, resolved HERE rather than in altana-policy.ts.
+ * The policy module stays free of SDK imports so the native Expo bundle never
+ * has to carry the SDK (measured - see the note beside ALTANA_CHAIN_ID). This
+ * assertion is what stops the two from silently disagreeing about which chain
+ * a wallet is on.
+ */
+const ALTANA_NETWORK = BNB;
+
+if (ALTANA_NETWORK.chainId !== ALTANA_CHAIN_ID) {
+  throw new Error(
+    `Altana network mismatch: policy says chain ${ALTANA_CHAIN_ID}, SDK config is ` +
+      `chain ${ALTANA_NETWORK.chainId}. Reconcile altana-policy.ts with the SDK before shipping.`,
+  );
+}
 
 let cachedClient: Client | null = null;
 

@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@altananetwork/sdk": "0.8.0",
     "@dicebear/collection": "^9",
     "@dicebear/core": "^9",
     "@expo/ui": "0.2.0-beta.9",
@@ -51,7 +52,6 @@
     "zustand": "5.0.15"
   },
   "devDependencies": {
-    "@altananetwork/sdk": "0.8.0",
     "@types/react": "~19.1.10",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~10.0.0",

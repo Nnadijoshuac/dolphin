@@ -6,12 +6,16 @@ import type { AgentCategory } from "@/types/agent";
  * Dolphin's Altana wallet policy: which chain, which signer type, and which
  * agents are honestly entitled to a spend-capable session.
  *
- * MIRRORED BY HAND in src/wallet/altana-policy.ts (the Expo app). The two
+ * THIS FILE IS A HAND-MIRRORED TWIN of web/src/wallet/altana-policy.ts. The two
  * products deliberately share no node_modules and no code (see HANDOVER.md's
- * "one repo, two products"), so this file has a twin that must be edited in
- * the same change — the same manual-sync rule AGENTS.md §9 already applies to
- * LiveMetric and the category stat validators. If you change a decision here,
- * change it there and say so in the commit.
+ * "one repo, two products"), so a decision changed here must be changed there
+ * in the same commit — the same manual-sync rule AGENTS.md §9 already applies
+ * to LiveMetric and the category stat validators.
+ *
+ * The two copies are intended to be byte-identical below this comment. If they
+ * ever diverge, that is a bug, not a platform difference: platform differences
+ * belong in the providers (altana-provider.native.tsx / .web.tsx), not in the
+ * policy that says what Dolphin is willing to authorize.
  */
 
 /* ---------------------------------------------------------------------------

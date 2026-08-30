@@ -81,7 +81,7 @@ export function useWallet(): WalletState {
       const wcConn = connectors.find((c) => c.id === "walletConnect");
 
       // Choose target connector
-      let target =
+      const target =
         preferredType === "walletConnect"
           ? wcConn
           : preferredType === "injected"

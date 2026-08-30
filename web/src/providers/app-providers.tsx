@@ -19,15 +19,19 @@ import { WalletProvider } from "@/wallet/wallet-provider";
  * is the only thing that can hold a scoped session. Altana's SDK has no
  * injected signer, so one cannot be built on top of the other - see
  * wallet/altana-policy.ts.
+ *
+ * Altana sits INSIDE QueryProvider because it reads its balance through
+ * TanStack Query - a live on-chain value with a refetch cycle, which is what
+ * this stack already uses for exactly that (project-scope.md §3).
  */
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <WalletProvider>
-      <AltanaWalletProvider>
-        <QueryProvider>
+      <QueryProvider>
+        <AltanaWalletProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
-        </QueryProvider>
-      </AltanaWalletProvider>
+        </AltanaWalletProvider>
+      </QueryProvider>
     </WalletProvider>
   );
 }

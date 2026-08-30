@@ -1,108 +1,116 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 
+import { AltanaWalletPanel } from "@/components/altana-wallet-panel";
 import { BnbLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
+import { StatusBadge } from "@/components/status-badge";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
+/**
+ * Two wallets, deliberately shown as two things.
+ *
+ * The Dolphin Wallet (Altana passkey smart account) is the one that can hold a
+ * scoped session. The connected browser wallet is the user's existing account
+ * and is only ever used to identify them on a hire record. Altana's SDK ships
+ * no injected signer, so one genuinely cannot be built on the other - see
+ * src/wallet/altana-policy.ts. Presenting them as a single "your wallet" would
+ * be the one misunderstanding on this screen that costs someone money.
+ */
 export default function WalletPage() {
   const wallet = useWallet();
 
   return (
-    <div className="relative flex min-h-[calc(100vh-160px)] items-center justify-center py-12 sm:py-20">
+    <div className="relative py-10 sm:py-14">
       <ConstellationBg opacity={0.35} />
 
-      <div className="site-frame relative z-10 mx-auto flex w-full max-w-[500px] flex-col items-center text-center">
-        {/* 3D Wallet Graphic */}
-        <div className="relative mb-6 flex h-48 w-48 items-center justify-center">
-          <Image
-            alt="Dolphin Wallet"
-            className="object-contain"
-            height={180}
-            priority
-            src="/wallet.png"
-            width={180}
-          />
-        </div>
-
-        {/* Headline & Psychology Prompt */}
-        <div className="px-4">
+      <div className="site-frame relative z-10 mx-auto w-full max-w-[640px]">
+        <header className="mb-8 text-center">
           <h1 className="text-balance text-3xl font-black tracking-tight text-[#111214] sm:text-4xl">
-            {wallet.isConnected
-              ? "Wallet Connected"
-              : "Connect to Hire and Manage"}
+            Wallet
           </h1>
-          <p className="mt-3 text-pretty text-sm leading-relaxed text-[#6E706B] sm:text-base">
-            {wallet.isConnected
-              ? "Your address is active on BNB Smart Chain. Manage your agent subscriptions and review session controls."
-              : "Your address unlocks registry search, hiring, and non-custodial session controls."}
+          <p className="mx-auto mt-3 max-w-[46ch] text-pretty text-sm leading-relaxed text-[#6E706B]">
+            Dolphin uses two separate accounts, and it is worth knowing which is
+            which: one identifies you, the other is the only one an agent can
+            ever be given permission to spend from.
           </p>
-        </div>
+        </header>
 
-        {/* Connected Card or Connect Button */}
-        <div className="mt-8 w-full max-w-[400px] px-4">
+        {/* --- 1. The Altana wallet: balances, sessions, funding ---------- */}
+        <AltanaWalletPanel />
+
+        {/* --- 2. The connected browser wallet ---------------------------- */}
+        <section className="mt-4 rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#6E706B]">
+                Your own wallet
+              </span>
+              <h2 className="mt-1 text-xl font-black tracking-tight text-[#111214]">
+                Connected browser wallet
+              </h2>
+            </div>
+            <StatusBadge
+              label={wallet.isConnected ? "Connected" : "Not connected"}
+              tone={wallet.isConnected ? "live" : "neutral"}
+            />
+          </div>
+
+          <p className="mt-3 text-xs leading-relaxed text-[#6E706B]">
+            MetaMask, Trust Wallet or any WalletConnect wallet. Dolphin reads
+            only its public address, and uses it to remember which agents you
+            have hired. It is never asked to sign anything, and no agent is ever
+            given permission to spend from it.
+          </p>
+
           {wallet.isConnected && wallet.address ? (
-            <div className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#F3F0E8] pb-4">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#1C6A44]" />
-                  <span className="text-xs font-bold text-[#1C6A44]">
-                    BSC Mainnet (56)
+            <>
+              <div className="mt-5 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#A5A79F]">
+                    Public address
                   </span>
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#6E706B]">
+                    <BnbLogo size={14} />
+                    <span>BNB Smart Chain · 56</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-[#6E706B]">
-                  <BnbLogo size={15} />
-                  <span>BNB Chain</span>
-                </div>
-              </div>
-
-              <div className="py-4">
-                <span className="block text-[10px] font-black uppercase tracking-wider text-[#A5A79F]">
-                  PUBLIC ADDRESS
-                </span>
-                <span className="mt-1 block break-all font-mono text-sm font-bold text-[#111214]">
+                <p className="mt-1.5 break-all font-mono text-sm font-bold text-[#111214]">
                   {wallet.address}
-                </span>
+                </p>
               </div>
 
-              <div className="space-y-3 pt-2">
+              <div className="mt-4 space-y-3">
                 <Link
                   className="pressable-scale flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#F5B300] px-5 text-sm font-black text-[#111214] no-underline shadow-sm hover:bg-[#E2A500]"
                   href="/my-agents"
                 >
                   <CategoryGlyph color="#111214" name="bot" size={16} strokeWidth={2.4} />
-                  View My Hired Agents
+                  View my hired agents
                 </Link>
 
                 <button
                   className="pressable-scale flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] px-5 text-xs font-bold text-[#6E706B] hover:border-[#FECACA] hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
-                  onClick={() => wallet.disconnect()}
+                  onClick={() => void wallet.disconnect()}
                   type="button"
                 >
-                  Disconnect Wallet
+                  Disconnect
                 </button>
               </div>
-            </div>
+            </>
           ) : (
-            <div className="space-y-4">
-              <div className="w-full">
-                <WalletConnectButton connectLabel="Connect Wallet" />
-              </div>
-
-              <div className="flex items-center justify-center gap-4 text-xs font-semibold text-[#A5A79F]">
-                <span className="flex items-center gap-1.5">
-                  <CategoryGlyph color="#1C6A44" name="shield" size={13} strokeWidth={2.5} />
-                  100% Non-Custodial
-                </span>
-                <span>•</span>
-                <span>Zero Key Access</span>
-              </div>
+            <div className="mt-5">
+              <WalletConnectButton connectLabel="Connect wallet" />
             </div>
           )}
-        </div>
+        </section>
+
+        <p className="mt-6 text-center text-[11px] leading-relaxed text-[#A5A79F]">
+          Dolphin never asks for a private key or a seed phrase, and never takes
+          custody of either account.
+        </p>
       </div>
     </div>
   );

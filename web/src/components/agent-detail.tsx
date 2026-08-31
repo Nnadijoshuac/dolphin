@@ -497,7 +497,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           </DetailSection>
         </div>
 
-        <aside className="py-9 lg:sticky lg:top-24 lg:self-start lg:py-12">
+        <aside className="order-first py-9 lg:order-none lg:sticky lg:top-24 lg:self-start lg:py-12">
           <HireAction agent={agent} />
         </aside>
       </div>

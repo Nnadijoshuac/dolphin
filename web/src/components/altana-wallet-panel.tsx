@@ -279,6 +279,32 @@ function WalletSetup() {
   );
 }
 
+/* ─────────────── quick action button ─────────────── */
+
+function WalletAction({ icon, label, href, onClick, disabled }: {
+  icon: string;
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  const cls = "wcard__action interactive";
+  const inner = (
+    <>
+      <span className="wcard__action-icon" aria-hidden="true">{icon}</span>
+      <span className="wcard__action-label">{label}</span>
+    </>
+  );
+  if (href) {
+    return <a className={cls} href={href} rel="noreferrer" target="_blank">{inner}</a>;
+  }
+  return (
+    <button className={cls} disabled={disabled} onClick={onClick} type="button">
+      {inner}
+    </button>
+  );
+}
+
 /* ─────────────── identity wallet card (wagmi) ─────────────── */
 
 function IdentityWalletCard() {
@@ -295,11 +321,15 @@ function IdentityWalletCard() {
           <span className="wcard__eyebrow-icon">👤</span>
           Your wallet
         </div>
-        <p className="wcard__title">Not connected</p>
-        <p className="wcard__sub">Identifies you for hire records</p>
-        <div className="wcard__balance wcard__balance--muted">—</div>
-        <div className="wcard__footer">
-          <span className="wcard__addr-placeholder">Connect above ↑</span>
+        <p className="wcard__hero-balance wcard__hero-balance--muted">—</p>
+        <p className="wcard__hero-sub">Not connected</p>
+        <div className="wcard__actions wcard__actions--disabled">
+          <WalletAction disabled icon="↑" label="Send" />
+          <WalletAction disabled icon="↓" label="Receive" />
+          <WalletAction disabled icon="⇄" label="Swap" />
+        </div>
+        <div className="wcard__asset-row wcard__asset-row--empty">
+          <span className="wcard__asset-row-hint">Connect identity wallet above ↑</span>
         </div>
       </div>
     );
@@ -308,33 +338,46 @@ function IdentityWalletCard() {
   const bnbFmt = balData
     ? Number(balData.value / BigInt(10 ** 14)) / 10000
     : null;
+  const bnbStr = balLoading ? "…" : bnbFmt !== null ? bnbFmt.toFixed(4) : "—";
 
   return (
     <div className="wcard wcard--identity surface-raised" aria-label="Identity wallet">
-      <div className="wcard__eyebrow">
-        <span className="wcard__eyebrow-icon">👤</span>
-        Your wallet
-      </div>
-      <p className="wcard__title">Identity</p>
-      <p className="wcard__sub">Identifies you for hire records</p>
-
-      <div className="wcard__balance">
-        {balLoading ? (
-          <span className="wcard__balance--muted">Reading…</span>
-        ) : bnbFmt !== null ? (
-          <>
-            <BnbLogo size={20} />
-            <span className="wcard__balance-figure">{bnbFmt.toFixed(4)}</span>
-            <span className="wcard__balance-unit">BNB</span>
-          </>
-        ) : (
-          <span className="wcard__balance--muted">—</span>
-        )}
+      <div className="wcard__top-row">
+        <div className="wcard__eyebrow">
+          <span className="wcard__eyebrow-icon">👤</span>
+          Your wallet
+        </div>
+        <code className="wcard__addr-pill">{truncateAddress(identity.address)}</code>
       </div>
 
-      <div className="wcard__footer">
-        <code className="wcard__addr">{truncateAddress(identity.address)}</code>
-        <CopyButton label="Copy identity address" value={identity.address} />
+      {/* Hero balance */}
+      <p className="wcard__hero-balance">
+        {bnbStr}
+        <span className="wcard__hero-unit">BNB</span>
+      </p>
+      <p className="wcard__hero-sub">Identity · hire records</p>
+
+      {/* Quick actions */}
+      <div className="wcard__actions">
+        <WalletAction icon="↑" label="Send" onClick={() => { /* future */ }} />
+        <WalletAction icon="↓" label="Receive" onClick={() => {
+          void navigator.clipboard?.writeText(identity.address!);
+        }} />
+        <WalletAction
+          href={`https://bscscan.com/address/${identity.address}`}
+          icon="↗"
+          label="BscScan"
+        />
+      </div>
+
+      {/* Asset row */}
+      <div className="wcard__asset-list">
+        <div className="wcard__asset-row">
+          <span className="wcard__asset-icon"><BnbLogo size={18} /></span>
+          <span className="wcard__asset-name">BNB</span>
+          <span className="wcard__asset-sub">BNB Smart Chain</span>
+          <span className="wcard__asset-amount">{bnbStr} BNB</span>
+        </div>
       </div>
     </div>
   );
@@ -354,42 +397,61 @@ function ConnectedWallet() {
 
       {/* ── Dual wallet cards ── */}
       <section aria-label="Wallets overview" className="wallet-dual-section">
+
         {/* Agent card (Dolphin / Altana passkey) */}
         <div className="wcard wcard--agent surface-raised">
-          <div className="wcard__eyebrow">
-            <span className="wcard__eyebrow-icon">⚡</span>
-            For agents
+          <div className="wcard__top-row">
+            <div className="wcard__eyebrow">
+              <span className="wcard__eyebrow-icon">⚡</span>
+              For agents
+            </div>
+            <code className="wcard__addr-pill">{truncateAddress(address)}</code>
           </div>
-          <p className="wcard__title">Dolphin Wallet</p>
-          <p className="wcard__sub">Passkey-secured · agents spend from here</p>
 
-          <div className="wcard__balance">
-            {wallet.balanceError ? (
-              <span className="wcard__balance--error">Unavailable</span>
-            ) : wallet.balanceWei === null ? (
-              <span className="wcard__balance--muted">
-                {wallet.isReadingBalance ? "Reading…" : "—"}
-              </span>
-            ) : (
-              <>
-                <BnbLogo size={20} />
-                <span className="wcard__balance-figure">{formatBnb(wallet.balanceWei)}</span>
-                <span className="wcard__balance-unit">BNB</span>
-              </>
+          {/* Hero balance */}
+          <p className={`wcard__hero-balance${
+            wallet.balanceError ? " wcard__hero-balance--error" :
+            wallet.balanceWei === null ? " wcard__hero-balance--muted" : ""
+          }`}>
+            {wallet.balanceError ? "Unavailable" :
+             wallet.balanceWei === null ? (wallet.isReadingBalance ? "…" : "—") :
+             formatBnb(wallet.balanceWei)}
+            {!wallet.balanceError && wallet.balanceWei !== null && (
+              <span className="wcard__hero-unit">BNB</span>
             )}
+          </p>
+          <p className="wcard__hero-sub">Dolphin Wallet · passkey-secured</p>
+
+          {/* Quick actions */}
+          <div className="wcard__actions">
+            <WalletAction
+              icon="↓"
+              label="Deposit"
+              onClick={() => void navigator.clipboard?.writeText(address)}
+            />
+            <WalletAction
+              href={`https://bscscan.com/address/${address}`}
+              icon="↗"
+              label="Explorer"
+            />
+            <WalletAction
+              disabled={wallet.isReadingBalance}
+              icon="↻"
+              label="Refresh"
+              onClick={() => void wallet.refreshBalance()}
+            />
           </div>
 
-          <div className="wcard__footer">
-            <code className="wcard__addr">{truncateAddress(address)}</code>
-            <CopyButton label="Copy Dolphin Wallet address" value={address} />
-            <a
-              className="interactive wcard__ext-link"
-              href={`https://bscscan.com/address/${address}`}
-              rel="noreferrer"
-              target="_blank"
-            >
-              BscScan ↗
-            </a>
+          {/* Asset row */}
+          <div className="wcard__asset-list">
+            <div className="wcard__asset-row">
+              <span className="wcard__asset-icon"><BnbLogo size={18} /></span>
+              <span className="wcard__asset-name">BNB</span>
+              <span className="wcard__asset-sub">Agent spending</span>
+              <span className="wcard__asset-amount">
+                {wallet.balanceWei !== null ? `${formatBnb(wallet.balanceWei)} BNB` : "—"}
+              </span>
+            </div>
           </div>
 
           {/* Agent-flavour watermark glyph */}

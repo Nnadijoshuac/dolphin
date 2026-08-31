@@ -87,14 +87,6 @@ function SearchContent() {
 
   return (
     <div className="site-frame page-shell">
-      <header className="page-intro">
-        <p className="eyebrow">Search the catalog</p>
-        <h1 className="display-title mt-5">Search by what you need done.</h1>
-        <p className="body-copy mt-6 max-w-[56ch]">
-          Use a strategy, protocol, skill, publisher, or agent name. Results come
-          from the same shared catalog as the mobile app.
-        </p>
-      </header>
 
       <section aria-label="Agent search" className="mt-12 border-y border-line py-6 sm:py-8">
         <form

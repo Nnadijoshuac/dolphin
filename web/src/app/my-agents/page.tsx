@@ -193,16 +193,7 @@ export default function MyAgentsPage() {
 
   return (
     <div className="site-frame page-shell">
-      <header className="page-intro">
-        <p className="eyebrow">My agents</p>
-        <h1 className="display-title mt-5">Every agent. Every permission. One place.</h1>
-        <p className="body-copy mt-6 max-w-[58ch]">
-          Review agents associated with your connected address and reach any
-          attached spending permission without hunting through settings.
-        </p>
-      </header>
-
-      <div className="mt-12 sm:mt-16">
+      <div>
         {!wallet.isConnected || !wallet.address ? (
           <div className="grid gap-7 border-y border-line py-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
             <div>

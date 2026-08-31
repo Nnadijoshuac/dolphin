@@ -12,42 +12,6 @@ export default function WalletPage() {
 
   return (
     <div className="site-frame page-shell">
-      <header className="grid gap-10 border-b border-line pb-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.7fr)] lg:items-end">
-        <div className="page-intro">
-          <p className="eyebrow">Wallet & permissions</p>
-          <h1 className="display-title mt-5">Your accounts. Your permissions. Nothing hidden.</h1>
-          <p className="body-copy mt-6 max-w-[58ch]">
-            See the account that can hold funds, every active agent permission,
-            and the public address attached to your hire records.
-          </p>
-        </div>
-
-        <div className="border-l border-line pl-6 sm:pl-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
-            Two accounts · two jobs
-          </p>
-          <dl className="mt-4 border-t border-line text-sm">
-            <div className="grid grid-cols-[32px_minmax(0,1fr)] gap-3 border-b border-line py-4">
-              <dt className="text-xs font-medium text-faint">01</dt>
-              <dd>
-                <span className="font-semibold text-ink">Dolphin Wallet</span>
-                <span className="mt-1 block leading-6 text-muted">
-                  A passkey account that can hold BNB and issue scoped agent sessions.
-                </span>
-              </dd>
-            </div>
-            <div className="grid grid-cols-[32px_minmax(0,1fr)] gap-3 border-b border-line py-4">
-              <dt className="text-xs font-medium text-faint">02</dt>
-              <dd>
-                <span className="font-semibold text-ink">Identity wallet</span>
-                <span className="mt-1 block leading-6 text-muted">
-                  Its public address identifies your hire records; agents receive no spend access to it.
-                </span>
-              </dd>
-            </div>
-          </dl>
-        </div>
-      </header>
 
       <div className="py-12 sm:py-16">
         <AltanaWalletPanel />

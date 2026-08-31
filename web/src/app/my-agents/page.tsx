@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { HireSessionRow } from "@/components/hire-session-row";
+import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { StatePanel } from "@/components/state-panel";
 import { useAgents } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
@@ -149,7 +149,16 @@ function ConnectedRecords({ address }: { address: string }) {
                   label="Active hire"
                   tone="live"
                 />
-                <HireSessionRow tokenId={hire.tokenId} />
+                {/*
+                 * Was HireSessionRow, which listed spending sessions for this
+                 * hire. Sessions are gated off in this build
+                 * (FEATURE_SESSION_EXECUTION in altana-policy.ts), and what a
+                 * hire record actually needs to say is what happened to the
+                 * work that was paid for - so this is the delivery state,
+                 * read from the ERC-8183 kernel. Renders nothing for a free
+                 * hire, which bought nothing and has nothing to report.
+                 */}
+                <JobDeliveryStatus tokenId={hire.tokenId} />
               </div>
             ))}
           </div>

@@ -10,6 +10,7 @@ import type { AgentSessionRow } from "@/convex/api";
 import { useNow } from "@/hooks/use-now";
 import {
   ALTANA_FUNDING_HINT,
+  FEATURE_SESSION_EXECUTION,
   formatBnb,
   recoverabilityCopy,
 } from "@/wallet/altana-policy";
@@ -567,7 +568,20 @@ function ConnectedWallet() {
 
       <RecoverabilityPanel />
 
-      {/* ── Active permissions ── */}
+      {/*
+       * ── Active permissions ──
+       *
+       * Gated off by FEATURE_SESSION_EXECUTION (see altana-policy.ts for the
+       * full reasoning). `false &&` removes this from the rendered tree
+       * entirely rather than disabling controls inside it, while keeping the
+       * markup type-checked and one flag away from returning.
+       *
+       * Why it is off: a granted session's signing key never reaches an agent
+       * and nothing in this app can execute with one, so this panel listed
+       * permissions that no party could exercise - and the Grant button that
+       * fed it charged real BNB in gas to create them.
+       */}
+      {FEATURE_SESSION_EXECUTION && (
       <section aria-labelledby="permissions-heading" className="wallet-section">
         <div className="wallet-section__header">
           <div>
@@ -639,6 +653,7 @@ function ConnectedWallet() {
           </details>
         )}
       </section>
+      )}
 
       {/* ── Device access / danger zone ── */}
       <section className="wallet-danger-zone" aria-label="Device access">

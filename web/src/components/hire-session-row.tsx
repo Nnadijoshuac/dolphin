@@ -1,3 +1,18 @@
+// ─────────────────────────────────────────────────────────
+// FUTURE WORK — NOT LIVE IN THIS BUILD
+// This implements the delegated-portfolio-management permission layer:
+// spend caps, protocol allowlist, session duration. The permission
+// plumbing is complete, but no execution path exists yet — a granted
+// session's signing key is never delivered to an agent and never used
+// by this app (see altana-storage.ts for why it's intentionally not
+// persisted). Do not wire this to UI until key-custody and an
+// agent-side execution runtime are designed.
+// ─────────────────────────────────────────────────────────
+//
+// No caller renders this today: my-agents/page.tsx now shows
+// <JobDeliveryStatus> in its place, which reports what a hire actually bought.
+// The guard below keeps it that way even if the tag is re-added somewhere.
+
 "use client";
 
 import { useQuery as useConvexQuery } from "convex/react";
@@ -5,7 +20,7 @@ import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { agentSessionsApi } from "@/convex/api";
-import { formatBnb } from "@/wallet/altana-policy";
+import { FEATURE_SESSION_EXECUTION, formatBnb } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 
 /**
@@ -26,9 +41,16 @@ export function HireSessionRow({ tokenId }: { tokenId: string }) {
 
   const session = useConvexQuery(
     agentSessionsApi.agentSessions.getActiveSessionForAgent,
-    altana.address ? { tokenId, altanaWalletAddress: altana.address } : "skip",
+    // Skipped while the feature is gated off, so a component that renders
+    // nothing does not hold an open Convex subscription.
+    FEATURE_SESSION_EXECUTION && altana.address
+      ? { tokenId, altanaWalletAddress: altana.address }
+      : "skip",
   );
 
+  // See the banner at the top of this file. After every hook, so this is a
+  // legal early return rather than a conditional hook call.
+  if (!FEATURE_SESSION_EXECUTION) return null;
   if (!session) return null;
 
   return (

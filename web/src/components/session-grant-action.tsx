@@ -1,3 +1,20 @@
+// ─────────────────────────────────────────────────────────
+// FUTURE WORK — NOT LIVE IN THIS BUILD
+// This implements the delegated-portfolio-management permission layer:
+// spend caps, protocol allowlist, session duration. The permission
+// plumbing is complete, but no execution path exists yet — a granted
+// session's signing key is never delivered to an agent and never used
+// by this app (see altana-storage.ts for why it's intentionally not
+// persisted). Do not wire this to UI until key-custody and an
+// agent-side execution runtime are designed.
+// ─────────────────────────────────────────────────────────
+//
+// No caller renders this component today: hire-action.tsx dropped its
+// <SessionGrantAction> in the same change that added FEATURE_SESSION_EXECUTION.
+// The guard below is a second line of defence, so re-adding the tag somewhere
+// cannot quietly put a gas-charging Grant button back in front of a user
+// without the flag also being flipped.
+
 "use client";
 
 import { useQuery as useConvexQuery } from "convex/react";
@@ -10,6 +27,7 @@ import type { Agent } from "@/types/agent";
 import {
   DEFAULT_SESSION_DURATION_DAYS,
   DEFAULT_SPEND_CAP_WEI,
+  FEATURE_SESSION_EXECUTION,
   SESSION_DURATION_CHOICES_DAYS,
   SPEND_CAP_CHOICES_WEI,
   formatBnb,
@@ -33,10 +51,17 @@ export function SessionGrantAction({ agent }: { agent: Agent }) {
 
   const existing = useConvexQuery(
     agentSessionsApi.agentSessions.getActiveSessionForAgent,
-    altana.address
+    // Skipped outright while the feature is gated off, so a hidden component
+    // does not keep a live Convex subscription open for a panel nobody sees.
+    FEATURE_SESSION_EXECUTION && altana.address
       ? { tokenId: agent.tokenId, altanaWalletAddress: altana.address }
       : "skip",
   );
+
+  // See the banner at the top of this file. Placed after EVERY hook - including
+  // the query above - so this is a legal early return and not a conditional
+  // hook call.
+  if (!FEATURE_SESSION_EXECUTION) return null;
 
   if (policy.kind === "read-only") {
     return (

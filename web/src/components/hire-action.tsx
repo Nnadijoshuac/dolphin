@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
+import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { PaymentAction } from "@/components/payment-action";
-import { SessionGrantAction } from "@/components/session-grant-action";
 import { agentHiresApi } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { assessAuthorizationCapability } from "@/services/authorization";
@@ -210,16 +210,22 @@ export function HireAction({ agent }: { agent: Agent }) {
         </div>
       ) : null}
 
-      <div className="mt-7 border-t border-line pt-6">
-        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-          Execution permission · separate step
-        </p>
-        <SessionGrantAction agent={agent} />
-      </div>
+      {/*
+       * What happened after the money moved. Placed directly under the payment
+       * step on purpose: this is where someone is standing the moment they pay,
+       * so the waiting state has to appear here without any navigation. It
+       * renders nothing at all when there is no paid job for this agent, so the
+       * free-hire path is untouched.
+       */}
+      <JobDeliveryStatus tokenId={agent.tokenId} />
 
-      <p className="mt-5 text-center text-[0.68rem] leading-5 text-faint">
-        Hiring never grants a spending session automatically.
-      </p>
+      {/*
+       * The session-grant step used to sit here, gated now by
+       * FEATURE_SESSION_EXECUTION (see altana-policy.ts). It is removed from
+       * the rendered tree rather than disabled: a granted session's key is
+       * never delivered to an agent and nothing in this app can execute with
+       * one, so offering it charged real gas for an unusable permission.
+       */}
     </div>
   );
 }

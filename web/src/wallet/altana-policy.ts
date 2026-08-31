@@ -1,3 +1,14 @@
+// ─────────────────────────────────────────────────────────
+// FUTURE WORK — NOT LIVE IN THIS BUILD
+// This implements the delegated-portfolio-management permission layer:
+// spend caps, protocol allowlist, session duration. The permission
+// plumbing is complete, but no execution path exists yet — a granted
+// session's signing key is never delivered to an agent and never used
+// by this app (see altana-storage.ts for why it's intentionally not
+// persisted). Do not wire this to UI until key-custody and an
+// agent-side execution runtime are designed.
+// ─────────────────────────────────────────────────────────
+
 import type { Address } from "viem";
 
 import type { AgentCategory } from "@/types/agent";
@@ -59,6 +70,41 @@ import type { AgentCategory } from "@/types/agent";
  * it for you.
  */
 export const ALTANA_SIGNER_STRATEGY = "passkey" as const;
+
+/* ---------------------------------------------------------------------------
+ * DECISION (2026-08-31): session grants are OFF in shipped builds.
+ * ---------------------------------------------------------------------------
+ * Everything below this flag - CATEGORY_SESSION_POLICY, the allowlists, the
+ * spend caps, buildSessionPermissions - is correct, reviewed, and complete as a
+ * PERMISSION layer. What does not exist is anything that could USE a granted
+ * session:
+ *
+ *   - the session's signing key is held in memory for the life of one tab and
+ *     deliberately never persisted (altana-storage.ts explains why);
+ *   - it is never transmitted to the agent - only the PUBLIC key reaches
+ *     Convex, which is all revocation needs;
+ *   - no code path in either product executes with one. The only `execute`
+ *     calls in this repo are registerWallet's empty admin intent and
+ *     scripts/spike-b-auth.mjs, a standalone testnet probe.
+ *
+ * So granting one spends real BNB in gas to create an on-chain permission that
+ * no party is able to exercise, and the UI around it implied a capability the
+ * product does not have. Until a key-custody model and an agent-side execution
+ * runtime exist, offering it is a promise Dolphin cannot keep.
+ *
+ * THIS FLAG IS THE SINGLE SWITCH. Flip it to `true` and the session UI returns
+ * on both products; nothing else needs changing. The logic is preserved
+ * intentionally - it is real design work for the delegated-management model,
+ * not dead code to be deleted.
+ *
+ * MIRRORED BY HAND in src/wallet/altana-policy.ts. Both must agree, or one
+ * product will offer a session the other hides.
+ */
+// Annotated `boolean` rather than left to infer the literal `false`, so
+// TypeScript does not narrow every guarded branch to unreachable code and
+// start reporting the preserved UI as dead. The value is the switch; the type
+// keeps the gated code type-checked and reviewable.
+export const FEATURE_SESSION_EXECUTION: boolean = false;
 
 /**
  * Label shown in the OS passkey prompt ("Save a passkey for Dolphin?").

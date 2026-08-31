@@ -18,7 +18,6 @@ import type {
   AgentLiveStats,
   LiveMetric,
 } from "@/types/agent";
-import { sessionPolicyFor } from "@/wallet/altana-policy";
 
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
@@ -249,7 +248,6 @@ export function AgentDetail({ agent }: { agent: Agent }) {
     (registryStatus.status === "live" || registryStatus.status === "stale") &&
     registryStatus.value;
   const access = assessAuthorizationCapability(agent.category, "read_only_hire");
-  const sessionPolicy = sessionPolicyFor(agent.category);
 
   return (
     <div className="site-frame pb-16 pt-7 sm:pb-24 sm:pt-10">
@@ -393,7 +391,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           </DetailSection>
 
           <DetailSection
-            summary="Hiring and execution authority are deliberately separate decisions."
+            summary="Hiring and paying for work are deliberately separate decisions."
             title="Permission model"
           >
             <div className="border-t border-line">
@@ -403,21 +401,23 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                   title: "Read-only hire",
                   body: access.reason,
                 },
+                /*
+                 * These two used to describe the spending-session model. That
+                 * feature is gated off in this build
+                 * (FEATURE_SESSION_EXECUTION in altana-policy.ts), so copy
+                 * promising an allowlist, a spend cap and a revocable grant
+                 * would describe something a user cannot reach. Replaced with
+                 * what is actually true of the shipped product.
+                 */
                 {
                   icon: "clock" as const,
-                  title:
-                    sessionPolicy.kind === "read-only"
-                      ? "No spending session required"
-                      : "Execution permission is optional",
-                  body:
-                    sessionPolicy.kind === "read-only"
-                      ? sessionPolicy.reason
-                      : `${sessionPolicy.reason} The allowlist, spend cap, and expiry are shown before a passkey confirmation.`,
+                  title: "Paid work is a separate purchase",
+                  body: "Hiring records this agent against your address and costs nothing. Buying a task funds an ERC-8183 escrow on BNB Smart Chain, and Dolphin reads that job back off the chain before it will call the hire paid.",
                 },
                 {
                   icon: "revoke" as const,
-                  title: "Revocation stays visible",
-                  body: "Any active Dolphin Wallet session can be reviewed and revoked from the Wallet page.",
+                  title: "No agent can spend from your wallets",
+                  body: "Neither a hire nor a purchase gives an agent authority to move your funds. A paid job escrows one fixed amount for one piece of work, and authorises nothing else.",
                 },
               ].map((item) => (
                 <article

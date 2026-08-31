@@ -195,3 +195,358 @@ chosen for consistency with everything else Dolphin reads.
 Both relays being reachable (§0.3) means this is purely a funding question, not
 an environment one — which is worth knowing, because it is a much smaller gap
 than the WalletConnect relay block that has dogged the native wallet path.
+
+---
+
+## Task 1 — wallet-creation strategy: passkey
+
+Documented in code at `ALTANA_SIGNER_STRATEGY`, in
+`web/src/wallet/altana-policy.ts` and its hand-mirrored twin
+`src/wallet/altana-policy.ts`, in the same discoverable/reversible style as
+`DEFAULT_READ_ONLY_PRICE_MODEL`.
+
+The reasoning carried forward from the brief held up under the evidence:
+Altana never persists key material and cannot hand a generated private key
+back, so a private-key wallet makes *this app* solely responsible for custody
+with no recovery path. §0.3's probe adds one reason the brief did not mention —
+a passkey signer's own `address` is the **zero address**, so for that path the
+SDK genuinely never has an EOA identity to leak.
+
+Private-key signers stay right for something operational and are what
+`scripts/spike-b-auth.mjs` uses. They are not offered to a person.
+
+---
+
+## Task 2 — website provider, verified live
+
+Chromium, against `next build` + `next start`, with a **real WebAuthn
+ceremony**. The authenticator is Chrome's virtual authenticator (CDP WebAuthn
+domain) rather than a physical sensor, so no human has to press a fingerprint
+reader — but `navigator.credentials.create()` really runs, the SDK's real
+`createPasskeyWallet` path really executes, and the P256 keys are really
+generated. Nothing about the SDK is stubbed.
+
+```
+virtual authenticator installed                3fa28d3d-69f2-40d4-8d97-cd15284a0471
+
+=== 1. LAND ON /wallet ===
+url                                            http://localhost:3000/wallet
+navigator.credentials present                  true
+
+=== 2. CREATE A REAL PASSKEY WALLET ===
+wallet address (from the page)                 0xfE16aBCc199bB3F9935aa7B6b6466341833130C3
+credential.kind                                webauthn
+credential id length                           43
+P256 public key length (hex)                   130
+rpId                                           (default: origin host)
+stores ANY private key?                        false
+credentials on the authenticator               1
+
+=== 6. SURVIVES A RELOAD ===
+same address after reload                      true
+
+=== ERRORS ===
+console errors                                 0
+page errors                                    0
+```
+
+`stores ANY private key? false` is a real assertion, not a restatement of
+intent: the check enumerates every key of the persisted credential object
+looking for anything matching `/private/i`.
+
+### The balance read, resolved and cross-checked
+
+```
+wallet address: 0xe14033b70c51BC99b115cA0C228e7F4b480e76EA
+
+--- assets card, after the read resolved ---
+   B
+   BNB
+   BNB Smart Chain · native
+   0
+   Read live from chain 56
+
+--- funding path ---
+   visible: true
+   Fund this wallet
+   Send BNB to this address on BNB Smart Chain (chain 56) from an exchange or
+   another wallet. Until it is funded the wallet exists but can do nothing — it
+   holds no balance and cannot pay for a transaction.
+   0xe14033b70c51BC99b115cA0C228e7F4b480e76EA
+
+--- cross-check the same address with an independent RPC ---
+   eth_getBalance(0xe14033b70c51BC99b115cA0C228e7F4b480e76EA) = 0x0
+```
+
+The zero is a **real read**, confirmed twice: once through the SDK (which used
+`bsc-rpc.publicnode.com`, observed in the network log) and once directly
+against `bsc-dataseed.bnbchain.org` from inside the page.
+
+### A real finding: recovery needs one prior transaction
+
+`recoverFromPasskey` timed out on a freshly created wallet. Chasing it produced
+the SDK's own error, worth quoting in full because it is user-quality and it
+names the exact cause:
+
+```
+Picked passkey resolves to wallet 0xd5a593b83b66cc4cfe1adf0c7082e0a1cb272bba,
+but that wallet has no keys registered in KeyStore yet. Either: (a) you picked
+the wrong passkey (the OS keychain has multiple with similar names — use unique
+names per test), or (b) this wallet was created but never executed a
+transaction, so its admin key isn't on-chain yet.
+```
+
+It is (b), and it follows from the SDK's own documented design: `createWallet`'s
+doc comment says the wallet "is NOT yet registered in KeyStore on any chain —
+that happens on the first execute() call per chain."
+
+**What this means in practice, and it matters for a demo:** a wallet created and
+never used cannot be recovered. Note the good half — the passkey lookup itself
+worked perfectly: the discoverable-credential picker returned the right
+credential and the `userHandle` resolved to **the same address that was
+created**. Only the on-chain KeyStore read fails, because nothing is there yet.
+
+Both wallet screens now say this up front rather than letting a user meet it as
+a raw error.
+
+### One incidental observation
+
+Chrome logs a warning during creation:
+
+```
+publicKey.pubKeyCredParams is missing at least one of the default algorithm
+identifiers: ES256 and RS256. This can result in registration failures on
+incompatible authenticators.
+```
+
+The ceremony succeeded regardless. It is the SDK's request shape, not
+Dolphin's, and nothing here can change it — recorded so a future session does
+not spend time rediscovering it.
+
+---
+
+## Task 4 — wallet screens, both products
+
+### Website
+
+Verified in the runs above: create CTA, a distinct recover path, the
+separate-wallet notice, real address, a live BNB asset row, funding path,
+granted-permissions view, and revoke. 0 console errors, 0 page errors.
+
+### Mobile — the Expo **web export**, served statically
+
+This is the surface a judge actually opens: the public build at
+`nnadijoshuac.github.io/dolphin` is this export.
+
+```
+=== 2. Does the Dolphin Wallet card render? ===
+   Dolphin Wallet                 true
+   Create with a passkey          true
+   recover it                     true
+   This is a separate wallet      true
+   Your own wallet                true
+
+=== 3. Create a real passkey wallet on the Expo web build ===
+   wallet address: 0xfb0b95a5C1c4Af1Aa7883AFAB543502028ad22ef
+   credential kind: webauthn | P256 pubkey hex len: 130
+   credentials on authenticator: 1
+   balance label: Read live from chain 56
+   shows 'Fund this wallet': true
+   shows authorized section: true
+   shows 'No agent can spend': true
+
+=== ERRORS: console=0 page=0 ===
+```
+
+---
+
+## Task 5 — which agents get a session, and the live proof of the split
+
+The judgement lives in `CATEGORY_SESSION_POLICY`. A category earns a session
+only when **both** hold: acting (not reporting) is the job, **and** Dolphin can
+name a concrete, already-verified contract to allow.
+
+| Category | Session? | Allowlist | Reasoning |
+|---|---|---|---|
+| health-factor | yes | Venus Core Pool Comptroller | acting before a liquidation is the entire value; without authority to repay it can only warn |
+| rebalancing | yes | PancakeSwap V3 Position Manager | rebalancing a position means moving it |
+| yield | yes | Aave V3 Pool | moving capital to the best-earning venue is the job |
+| grid-trading | **no** | — | would need it in principle, but Dolphin has no wired data source for this category and no verified venue address; authority into a blind spot is worse than none |
+| monitoring | **no** | — | information delivery by definition |
+
+**No new contract address was written this session.** Every allowlisted address
+is one this repo had already verified independently against the protocol's own
+deployments file and cross-checked on BscScan, for its live-stats reads. That
+was deliberate: an allowlist is the one place a wrong address turns into real
+authority over real money.
+
+### The backend refusals, verified live against the deployment
+
+```
+=== CONTROL: empty allowlist must be REJECTED ===
+✖ Failed to run function "agentSessions:recordSessionGrant":
+Uncaught Error: recordSessionGrant: refusing a session with an empty call
+allowlist - Altana treats omitted/empty `calls` as all-targets-allowed.
+    at handler (../convex/agentSessions.ts:71:8)
+
+=== a real bounded grant must SUCCEED ===
+"k175fv8yph7c2cbjexcrrk3v458de6c9"
+
+=== read it back ===
+  allowlist:    [{ 0xfD36E2c2a6789Db23113685031d7F16329158384,
+                   "Venus Core Pool Comptroller" }]
+  spendCapWei:  10000000000000000        (0.01 BNB)
+  spendPeriod:  day
+  status:       expired      <- derived from the clock, not stored
+
+=== after markSessionRevoked ===
+  revokedAt: 2026-08-30T22:18:19.836Z
+  status:    revoked
+```
+
+Two behaviours confirmed by that output rather than asserted: the derived
+`expired` status really is computed on read (the expiry used was in the past),
+and a revoked row keeps `revoked` rather than being overwritten by the expiry
+derivation. The probe row was deleted afterwards; `agentSessions` is empty.
+
+### The per-category split, live in both products
+
+Website, production build, Chromium:
+
+```
+health-factor   token 45381    AS POLICY SAYS   offers a session: true
+rebalancing     token 265375   AS POLICY SAYS   offers a session: true
+yield           token 12046    AS POLICY SAYS   offers a session: true
+grid-trading    token 292939   AS POLICY SAYS   offers a session: false
+                                                says none needed: true
+=== ERRORS: 0 ===
+```
+
+grid-trading was re-checked **with a Dolphin Wallet present** and still refuses,
+so the refusal is the policy talking, not a missing precondition.
+
+The health-factor grant step, read out of the live DOM:
+
+```
+   Give this agent a spending permission
+   A health-factor agent's entire value is acting before a liquidation, not
+   reporting that one is coming. Without authority to repay it can only warn.
+   It can only call
+   Venus Core Pool Comptroller
+   0xfD36E2c2a6789Db23113685031d7F16329158384
+   Anything else
+   Rejected on-chain
+   Most it can spend
+   0.01 BNB / day    0.05 BNB / day    0.1 BNB / day
+   Permission expires after
+   7 days    30 days    90 days
+   You are authorizing at most 0.01 BNB per day for 30 days, against the
+   contract listed above and nothing else. You can revoke it at any time from
+   your wallet, and it stops working on its own when it expires.
+   Grant 0.01 BNB / day
+   Granting is an on-chain transaction on BNB Smart Chain and costs gas from
+   your Dolphin Wallet.
+```
+
+Mobile web export, with a real Dolphin Wallet
+(`0x2E8EA2738724d6028b09c13268BD1597d7CdA734`):
+
+```
+health-factor   45381    AS POLICY SAYS   0xfD36E2c2a6789Db23113685031d7F16329158384
+rebalancing     265375   AS POLICY SAYS   0x46A15B0b27311cedF172AB29E4f4766fbE7F4364
+yield           12046    AS POLICY SAYS   0x6807dc923806fE8Fd134338EABCA509979a7e0cB
+grid-trading    292939   AS POLICY SAYS   refuses, with its reason
+
+all three grant steps showed: "Rejected on-chain" true | gas warning true
+                              cap choices 0.01 / 0.05 / 0.1 BNB per day
+=== ERRORS: console=0 page=0 ===
+```
+
+Each category offers exactly its own verified contract — a good sign the policy
+is genuinely wired through rather than one constant rendered three times.
+
+### What was NOT verified, stated plainly
+
+**The on-chain enforcement itself.** The network decision was mainnet (§0.5),
+so a grant costs real BNB, and the owner chose not to fund an address. This
+session did **not** run grant → in-bounds call → out-of-bounds call rejected →
+revoke, and does not claim to have. The revert-at-validation-time behaviour is
+Altana's documented guarantee and is what the code is built against; it is not
+something this repo has watched happen.
+
+`scripts/spike-b-auth.mjs` produces exactly that proof against chain 97 the
+moment a disposable address is funded. Both relays are reachable from this
+network (§0.3), so this is purely a funding question, not an environment one.
+
+---
+
+## Task 6 — parity
+
+Both products end the session with the same real capability set: wallet
+creation, recovery, live balance display, scoped session granting, and
+revocation from both the wallet screen and the hire record. The UIs differ, as
+they always have in this project; the substance does not.
+
+| | Website | Mobile (web export) | Mobile (native) |
+|---|---|---|---|
+| Create / recover wallet | yes | yes | no — stated reason |
+| Live balance | yes | yes | no |
+| Grant a scoped session | yes | yes | no |
+| Revoke from wallet screen | yes | yes | n/a |
+| Revoke from hire record | yes | yes | n/a |
+
+**The one real gap, logged rather than papered over:** native Expo cannot host
+a Dolphin Wallet at all, for the reasons in §0.4. It renders an honest
+unavailable state naming the cause and pointing at the browser, where the same
+passkey opens the same wallet. A platform limit, not an unfinished feature.
+
+### A bundling problem found by measuring, not by reading
+
+Adding the SDK to the mobile app risked shipping a browser-oriented dependency
+tree (porto, ox) to a phone that can never use it. Two separate causes, each
+found with a real `expo export`:
+
+1. **The platform-router pattern already used by `wallet-provider.ts` bundles
+   both modules on both platforms.** `import * as Native` + `import * as Web`
+   then branching on `Platform.OS` is a *runtime* branch over *static* imports,
+   so Metro ships both. Measured: the Android bundle carried
+   `createPasskeyWallet` (4 hits) and the Altana relay URL. Replaced with
+   Metro's own platform resolution plus a `.d.ts`, which needs no `tsconfig`
+   change — worth noting, because HANDOVER records an earlier attempt at
+   platform resolution being reverted for needing `moduleSuffixes`, which broke
+   expo-video's types.
+2. **That alone was not enough.** `altana-policy.ts` imported the SDK's `BNB`
+   constant, and the package root is a barrel, so one chain id dragged the
+   whole SDK in anyway. The policy is now plain data (`ALTANA_CHAIN_ID`) and
+   each provider resolves `BNB` itself, asserting the two agree.
+
+Measured on the real bundles after both fixes:
+
+```
+android   createPasskeyWallet 0   relay.altana.network 0   (SDK excluded)
+web       createPasskeyWallet 5   relay.altana.network 1   (SDK present)
+```
+
+This is also a finding about the **existing** `wallet-provider.ts`: the whole
+Reown/wagmi native stack ships inside the web bundle for the same reason, which
+HANDOVER already noted as a 6.4 MB bundle. The fix demonstrated here would
+apply there too.
+
+---
+
+## Gate status, both products
+
+| | Mobile (root) | Website (`web/`) |
+|---|---|---|
+| `tsc --noEmit` | clean | clean |
+| lint | 0 errors, 2 pre-existing warnings | 0 errors |
+| build | `expo export` OK, web **and** android | `next build` OK |
+| Convex | pushes; `agentSessions` + 2 indexes added | same backend |
+
+The website's lint was **not** clean at the start of this session — a
+pre-existing `prefer-const` error in `wallet-provider.tsx`, in a file this
+session had not touched. Fixed in its own commit so the gate could be honestly
+reported as clean.
+
+`/wallet` still prerenders as static content under `next build`, which is the
+check that matters for the SSR class of bug this project has hit before.

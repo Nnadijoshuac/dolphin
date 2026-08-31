@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 
+import { BnbLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { StatusBadge } from "@/components/status-badge";
-import { useNow } from "@/hooks/use-now";
-import {
-  ALTANA_FUNDING_HINT,
-  formatBnb,
-} from "@/wallet/altana-policy";
+import { StatePanel } from "@/components/state-panel";
 import type { AgentSessionRow } from "@/convex/api";
+import { useNow } from "@/hooks/use-now";
+import { ALTANA_FUNDING_HINT, formatBnb } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -18,7 +16,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   return (
     <button
       aria-label={label}
-      className="pressable-scale inline-flex items-center gap-1.5 rounded-xl border border-[#ECE8DE] bg-[#FBF9F4] px-2.5 py-1.5 text-[11px] font-bold text-[#6E706B] hover:border-[#F3E3A6] hover:bg-[#FEF5D6] hover:text-[#946B00]"
+      className="interactive inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-paper px-3 text-[0.7rem] font-medium text-muted hover:bg-canvas hover:text-ink"
       onClick={() => {
         void navigator.clipboard?.writeText(value).then(
           () => {
@@ -30,39 +28,31 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       }}
       type="button"
     >
-      <CategoryGlyph color="currentColor" name={copied ? "check" : "copy"} size={12} strokeWidth={2.5} />
+      <CategoryGlyph
+        color="currentColor"
+        name={copied ? "check" : "copy"}
+        size={12}
+        strokeWidth={2}
+      />
       {copied ? "Copied" : "Copy"}
     </button>
   );
 }
 
-/**
- * The one piece of copy on this screen that must not be softened: an Altana
- * wallet is a separate wallet with its own balance. Altana's SDK has no
- * injected signer (verified this session), so this can never be the user's
- * MetaMask account, and letting the two blur would be a money-shaped
- * misunderstanding rather than a cosmetic one.
- */
 function SeparateWalletNotice() {
   return (
-    <div className="rounded-2xl border border-[#F3E3A6] bg-[#FEF5D6] p-4">
-      <div className="flex items-center gap-2">
-        <CategoryGlyph color="#946B00" name="info" size={15} strokeWidth={2.5} />
-        <p className="text-xs font-black text-[#946B00]">
-          This is a separate wallet
-        </p>
-      </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-[#6E706B]">
-        A Dolphin Wallet is its own account with its own balance. It is{" "}
-        <strong className="font-bold text-[#111214]">not</strong> your MetaMask
-        or browser-extension wallet, and it does not hold or see those funds.
-        Anything you want it to spend has to be sent to it.
+    <div className="border-l-2 border-accent pl-4">
+      <p className="text-xs font-semibold text-ink">Separate from your identity wallet</p>
+      <p className="mt-1 text-xs leading-5 text-muted">
+        The Dolphin Wallet has its own address and balance. It cannot see or use
+        funds in MetaMask, Trust Wallet, or another browser wallet. BNB must be
+        sent here before a scoped session can spend it.
       </p>
     </div>
   );
 }
 
-function SessionCard({
+function SessionRow({
   session,
   onRevoke,
   isBusy,
@@ -73,461 +63,524 @@ function SessionCard({
   isBusy: boolean;
   isLiveThisTab: boolean;
 }) {
-  // From the shared ticker, not Date.now(): reading the clock during render is
-  // impure and the countdown should tick on its own anyway. `now` is 0 during
-  // SSR, where a day count is simply not knowable yet.
   const now = useNow();
   const expiresAt = new Date(session.expiry * 1000);
   const daysLeft =
     now === 0
       ? null
-      : Math.max(0, Math.ceil((expiresAt.getTime() - now) / (24 * 60 * 60 * 1000)));
+      : Math.max(
+          0,
+          Math.ceil((expiresAt.getTime() - now) / (24 * 60 * 60 * 1000)),
+        );
 
   return (
-    <li className="rounded-2xl border border-[#ECE8DE] bg-white p-4">
-      <div className="flex items-start justify-between gap-3">
+    <li className="border-t border-line py-5 first:border-t-0">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="truncate text-sm font-black text-[#111214]">
-            {session.agentName}
-          </p>
-          <p className="mt-0.5 text-[11px] font-semibold text-[#A5A79F]">
-            Agent #{session.tokenId} · {session.category}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h3 className="truncate text-base font-semibold tracking-[-0.025em] text-ink">
+              {session.agentName}
+            </h3>
+            <span className="text-xs text-faint">Agent #{session.tokenId}</span>
+          </div>
+          <p className="mt-1 text-xs capitalize text-muted">
+            {session.category.replaceAll("-", " ")}
           </p>
         </div>
-        <StatusBadge
-          label={daysLeft === null ? "Active" : `${daysLeft}d left`}
-          tone={daysLeft !== null && daysLeft <= 3 ? "stale" : "live"}
-        />
+        <div className="flex items-center gap-4">
+          <span
+            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+              daysLeft !== null && daysLeft <= 3 ? "text-accent-ink" : "text-success"
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`h-1.5 w-1.5 rounded-full ${
+                daysLeft !== null && daysLeft <= 3 ? "bg-accent" : "bg-success"
+              }`}
+            />
+            {daysLeft === null ? "Active" : `${daysLeft} days left`}
+          </span>
+          <button
+            className="interactive text-xs font-medium text-muted underline-offset-4 hover:text-danger hover:underline disabled:opacity-50"
+            disabled={isBusy}
+            onClick={onRevoke}
+            type="button"
+          >
+            Revoke
+          </button>
+        </div>
       </div>
 
-      <dl className="mt-3 space-y-2 border-t border-[#F3F0E8] pt-3 text-[11px]">
-        <div className="flex items-start justify-between gap-3">
-          <dt className="font-semibold text-[#6E706B]">Can spend up to</dt>
-          <dd className="text-right font-black text-[#111214]">
+      <dl className="mt-5 grid border-l border-t border-line text-xs sm:grid-cols-2">
+        <div className="border-b border-r border-line p-3.5">
+          <dt className="text-faint">Spend cap</dt>
+          <dd className="mt-1 font-semibold text-ink">
             {formatBnb(BigInt(session.spendCapWei))} BNB / {session.spendPeriod}
           </dd>
         </div>
-        <div className="flex items-start justify-between gap-3">
-          <dt className="shrink-0 font-semibold text-[#6E706B]">Can only call</dt>
-          <dd className="text-right">
+        <div className="border-b border-r border-line p-3.5">
+          <dt className="text-faint">Expires</dt>
+          <dd className="mt-1 font-semibold text-ink">
+            {expiresAt.toISOString().slice(0, 16).replace("T", " ")} UTC
+          </dd>
+        </div>
+        <div className="border-b border-r border-line p-3.5 sm:col-span-2">
+          <dt className="text-faint">Allowed contracts</dt>
+          <dd className="mt-2 space-y-2">
             {session.allowlist.map((contract) => (
-              <div key={contract.address} className="mb-1 last:mb-0">
-                <span className="block font-bold text-[#111214]">{contract.label}</span>
-                <span className="block break-all font-mono text-[10px] text-[#A5A79F]">
+              <div
+                className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)]"
+                key={contract.address}
+              >
+                <span className="font-medium text-ink">{contract.label}</span>
+                <span className="break-all font-mono text-[0.65rem] text-muted">
                   {contract.address}
                 </span>
               </div>
             ))}
           </dd>
         </div>
-        <div className="flex items-start justify-between gap-3">
-          <dt className="font-semibold text-[#6E706B]">Expires</dt>
-          <dd className="text-right font-bold text-[#303236]">
-            {expiresAt.toISOString().slice(0, 16).replace("T", " ")} UTC
-          </dd>
-        </div>
-        {session.grantTransactionHash && (
-          <div className="flex items-start justify-between gap-3">
-            <dt className="font-semibold text-[#6E706B]">Grant transaction</dt>
-            <dd className="break-all text-right font-mono text-[10px] text-[#A5A79F]">
-              {session.grantTransactionHash}
-            </dd>
-          </div>
-        )}
       </dl>
 
-      {!isLiveThisTab && (
-        <p className="mt-3 rounded-xl bg-[#F5F3EB] p-2.5 text-[10px] leading-relaxed text-[#6E706B]">
-          This session&apos;s signing key is not held in this browser tab, so it
-          cannot execute from here. It is still active on-chain and still
-          revocable below — Dolphin deliberately does not store a spend-capable
-          key in your browser.
+      {!isLiveThisTab ? (
+        <p className="mt-4 border-l-2 border-line-strong pl-3 text-[0.7rem] leading-5 text-muted">
+          This tab does not hold the session signing key. The permission remains
+          active on-chain and can still be revoked here.
         </p>
-      )}
+      ) : null}
 
-      <button
-        className="pressable-scale mt-3 flex min-h-[40px] w-full items-center justify-center gap-2 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] px-4 text-xs font-black text-[#6E706B] hover:border-[#FECACA] hover:bg-[#FEE2E2] hover:text-[#B91C1C] disabled:opacity-50"
-        disabled={isBusy}
-        onClick={onRevoke}
-        type="button"
-      >
-        <CategoryGlyph color="currentColor" name="revoke" size={14} strokeWidth={2.5} />
-        Revoke this permission
-      </button>
+      {session.grantTransactionHash ? (
+        <a
+          className="interactive mt-4 inline-flex text-xs font-medium text-ink underline-offset-4 hover:text-accent-ink hover:underline"
+          href={`https://bscscan.com/tx/${session.grantTransactionHash}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          View grant transaction ↗
+        </a>
+      ) : null}
     </li>
+  );
+}
+
+function WalletSetup() {
+  const wallet = useAltanaWallet();
+
+  return (
+    <section aria-labelledby="wallet-setup-heading">
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-16">
+        <div>
+          <p className="eyebrow">Dolphin Wallet</p>
+          <h2
+            className="mt-4 max-w-[16ch] text-4xl font-semibold tracking-[-0.05em] text-ink sm:text-5xl"
+            id="wallet-setup-heading"
+          >
+            Create a spending account you can bound.
+          </h2>
+          <p className="body-copy mt-5 max-w-[58ch]">
+            A passkey secures this smart account. It is the only Dolphin account
+            that can hold funds or issue a scoped permission to an agent.
+          </p>
+
+          <div className="mt-9 border-t border-line">
+            {[
+              {
+                number: "01",
+                title: "Passkey secured",
+                body: "Confirm with your device biometrics or PIN instead of entering a seed phrase into Dolphin.",
+              },
+              {
+                number: "02",
+                title: "Separate balance",
+                body: "Only funds sent to this address can be used by a session.",
+              },
+              {
+                number: "03",
+                title: "Explicit limits",
+                body: "Every session shows its allowed contracts, daily cap, expiry, and revoke action.",
+              },
+            ].map((item) => (
+              <article
+                className="grid grid-cols-[36px_minmax(0,1fr)] gap-3 border-b border-line py-4"
+                key={item.number}
+              >
+                <span className="text-xs font-medium text-faint">{item.number}</span>
+                <div>
+                  <h3 className="text-sm font-semibold text-ink">{item.title}</h3>
+                  <p className="mt-1 text-sm leading-6 text-muted">{item.body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="mt-7 max-w-xl">
+            <SeparateWalletNotice />
+          </div>
+        </div>
+
+        <div className="surface-raised self-start p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm font-semibold text-ink">Set up Dolphin Wallet</p>
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-faint" />
+              Not created
+            </span>
+          </div>
+
+          <p className="mt-4 text-sm leading-6 text-muted">
+            Your browser will open its native passkey confirmation. Dolphin stores
+            the public credential required to recover this account, not a private key.
+          </p>
+
+          <button
+            className="interactive mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-ink hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60"
+            disabled={wallet.isBusy}
+            onClick={() => void wallet.createWallet()}
+            type="button"
+          >
+            <CategoryGlyph color="currentColor" name="wallet" size={16} strokeWidth={2} />
+            {wallet.isBusy ? "Waiting for passkey…" : "Create with a passkey"}
+          </button>
+
+          <div className="my-5 flex items-center gap-3 text-[0.68rem] uppercase tracking-[0.1em] text-faint">
+            <span className="h-px flex-1 bg-line" />
+            or
+            <span className="h-px flex-1 bg-line" />
+          </div>
+
+          <button
+            className="interactive flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-line bg-paper px-5 text-xs font-semibold text-ink hover:bg-canvas disabled:opacity-50"
+            disabled={wallet.isBusy}
+            onClick={() => void wallet.recoverWallet()}
+            type="button"
+          >
+            Recover an existing wallet
+          </button>
+
+          <details className="mt-5 border-t border-line pt-4 text-xs leading-5 text-muted">
+            <summary className="cursor-pointer font-medium text-ink underline-offset-4 hover:underline">
+              What recovery requires
+            </summary>
+            <p className="mt-2">
+              Recovery uses a Dolphin passkey on this device. The wallet must have
+              completed at least one prior transaction so its admin key exists in
+              Altana&apos;s on-chain registry. A never-used wallet has no on-chain
+              recovery record yet.
+            </p>
+          </details>
+
+          {wallet.error ? (
+            <p className="mt-5 border-l-2 border-danger bg-danger-soft p-3 text-xs font-medium leading-5 text-danger">
+              {wallet.error}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ConnectedWallet() {
+  const wallet = useAltanaWallet();
+  const [confirmForget, setConfirmForget] = useState(false);
+  const address = wallet.address!;
+  const activeSessions = (wallet.sessions ?? []).filter(
+    (session) => session.status === "active",
+  );
+  const pastSessions = (wallet.sessions ?? []).filter(
+    (session) => session.status !== "active",
+  );
+
+  return (
+    <div>
+      <section aria-labelledby="wallet-overview-heading">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="eyebrow">Dolphin Wallet</p>
+            <h2
+              className="mt-3 text-3xl font-semibold tracking-[-0.045em] text-ink sm:text-4xl"
+              id="wallet-overview-heading"
+            >
+              Account overview
+            </h2>
+          </div>
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-success">
+            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-success" />
+            {wallet.networkLabel} · {wallet.chainId}
+          </span>
+        </div>
+
+        <div className="mt-8 grid border-l border-t border-line lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.65fr)]">
+          <div className="border-b border-r border-line p-5 sm:p-7">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-faint">
+                Account address
+              </p>
+              <CopyButton label="Copy Dolphin Wallet address" value={address} />
+            </div>
+            <p className="mt-6 break-all font-mono text-base font-medium leading-7 text-ink sm:text-lg">
+              {address}
+            </p>
+            <a
+              className="interactive mt-5 inline-flex text-xs font-medium text-muted underline-offset-4 hover:text-ink hover:underline"
+              href={`https://bscscan.com/address/${address}`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Open on BscScan ↗
+            </a>
+          </div>
+
+          <div className="border-b border-r border-line p-5 sm:p-7">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-faint">
+                Native balance
+              </p>
+              <button
+                className="interactive text-xs font-medium text-muted underline-offset-4 hover:text-ink hover:underline disabled:opacity-50"
+                disabled={wallet.isReadingBalance}
+                onClick={() => void wallet.refreshBalance()}
+                type="button"
+              >
+                {wallet.isReadingBalance ? "Reading…" : "Refresh"}
+              </button>
+            </div>
+            <div className="mt-6 flex items-end gap-3">
+              <BnbLogo size={30} />
+              {wallet.balanceError ? (
+                <p className="text-2xl font-semibold tracking-[-0.035em] text-danger">
+                  Unavailable
+                </p>
+              ) : wallet.balanceWei === null ? (
+                <p className="text-2xl font-semibold tracking-[-0.035em] text-faint">
+                  {wallet.isReadingBalance ? "Reading…" : "Not read yet"}
+                </p>
+              ) : (
+                <p className="text-4xl font-semibold tracking-[-0.055em] text-ink">
+                  {formatBnb(wallet.balanceWei)} <span className="text-lg text-muted">BNB</span>
+                </p>
+              )}
+            </div>
+            <p className="mt-4 text-xs text-faint">
+              {wallet.balanceWei === null
+                ? "No balance is assumed while the read is unresolved."
+                : `Read from BNB Smart Chain · ${wallet.chainId}`}
+            </p>
+          </div>
+        </div>
+
+        {wallet.balanceError ? (
+          <p className="mt-3 break-words text-xs leading-5 text-danger">{wallet.balanceError}</p>
+        ) : null}
+
+        {wallet.balanceWei !== null && wallet.balanceWei === BigInt(0) ? (
+          <div className="mt-7 grid gap-5 border-y border-line py-5 sm:grid-cols-[180px_minmax(0,1fr)]">
+            <div>
+              <p className="text-sm font-semibold text-ink">Fund this wallet</p>
+              <p className="mt-1 text-xs leading-5 text-muted">Balance is currently 0 BNB.</p>
+            </div>
+            <div>
+              <p className="text-xs leading-5 text-muted">{ALTANA_FUNDING_HINT}</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <span className="min-w-0 flex-1 break-all font-mono text-xs font-medium text-ink">
+                  {address}
+                </span>
+                <CopyButton label="Copy funding address" value={address} />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-7 max-w-2xl">
+          <SeparateWalletNotice />
+        </div>
+
+        {wallet.error ? (
+          <p className="mt-5 border-l-2 border-danger bg-danger-soft p-3 text-xs font-medium leading-5 text-danger">
+            {wallet.error}
+          </p>
+        ) : null}
+      </section>
+
+      <section aria-labelledby="permissions-heading" className="mt-14 border-t border-line pt-10 sm:mt-20 sm:pt-12">
+        <div className="grid gap-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-14">
+          <header>
+            <p className="eyebrow">Agent access</p>
+            <h2
+              className="mt-3 text-xl font-semibold tracking-[-0.035em] text-ink"
+              id="permissions-heading"
+            >
+              Permissions
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Exact spend caps, allowed contracts, expiry, and revocation status.
+            </p>
+          </header>
+
+          <div>
+            <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
+              <p className="text-sm font-semibold text-ink">Active sessions</p>
+              {!wallet.sessionsUnavailable && wallet.sessions !== undefined ? (
+                <span className="text-sm text-muted">{activeSessions.length} active</span>
+              ) : null}
+            </div>
+
+            {wallet.sessionsUnavailable ? (
+              <div className="pt-5">
+                <StatePanel
+                  body="Dolphin's backend is not configured, so this page cannot make a claim about active sessions. New grants are refused in this state."
+                  compact
+                  state="unavailable"
+                  title="Permission records unavailable"
+                />
+              </div>
+            ) : wallet.sessions === undefined ? (
+              <div className="pt-5">
+                <StatePanel
+                  body="Reading the durable permission records attached to this Dolphin Wallet."
+                  compact
+                  state="syncing"
+                  title="Checking permissions"
+                />
+              </div>
+            ) : activeSessions.length === 0 ? (
+              <div className="py-7">
+                <div className="flex gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success-soft text-success">
+                    <CategoryGlyph color="currentColor" name="shield" size={18} strokeWidth={2} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-ink">No active spending permissions</p>
+                    <p className="mt-1 max-w-xl text-sm leading-6 text-muted">
+                      Read-only hires do not appear here because they receive no
+                      spending authority.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <ul>
+                {activeSessions.map((session) => (
+                  <SessionRow
+                    isBusy={wallet.isBusy}
+                    isLiveThisTab={wallet.liveSessionKeys.includes(session.sessionPublicKey)}
+                    key={session.sessionPublicKey}
+                    onRevoke={() => void wallet.revokeSession(session.sessionPublicKey)}
+                    session={session}
+                  />
+                ))}
+              </ul>
+            )}
+
+            {pastSessions.length > 0 ? (
+              <details className="border-t border-line pt-5">
+                <summary className="cursor-pointer text-sm font-medium text-ink underline-offset-4 hover:underline">
+                  {pastSessions.length} inactive permission
+                  {pastSessions.length === 1 ? "" : "s"}
+                </summary>
+                <ul className="mt-3 border-t border-line">
+                  {pastSessions.map((session) => (
+                    <li
+                      className="flex items-center justify-between gap-4 border-b border-line py-3 text-xs"
+                      key={session.sessionPublicKey}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-ink">{session.agentName}</p>
+                        <p className="mt-1 text-muted">
+                          {formatBnb(BigInt(session.spendCapWei))} BNB / {session.spendPeriod}
+                          {" · "}agent #{session.tokenId}
+                        </p>
+                      </div>
+                      <span className="shrink-0 capitalize text-faint">{session.status}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-14 border-t border-line pt-8 sm:mt-20">
+        <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+          <div>
+            <h2 className="text-base font-semibold tracking-[-0.025em] text-ink">
+              Device access
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+              Remove the local wallet record from this browser. This does not
+              change the wallet or revoke active permissions on-chain.
+            </p>
+          </div>
+          {confirmForget ? (
+            <div className="min-w-[260px]">
+              <p className="text-xs font-semibold text-ink">Remove it from this browser?</p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  className="interactive min-h-10 flex-1 rounded-xl border border-line px-3 text-xs font-medium text-muted hover:text-ink"
+                  onClick={() => setConfirmForget(false)}
+                  type="button"
+                >
+                  Keep it
+                </button>
+                <button
+                  className="interactive min-h-10 flex-1 rounded-xl bg-danger-soft px-3 text-xs font-semibold text-danger hover:bg-danger hover:text-white"
+                  onClick={() => {
+                    wallet.forgetWallet();
+                    setConfirmForget(false);
+                  }}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="interactive shrink-0 text-sm font-medium text-muted underline-offset-4 hover:text-danger hover:underline"
+              onClick={() => setConfirmForget(true)}
+              type="button"
+            >
+              Remove from this browser
+            </button>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
 export function AltanaWalletPanel() {
   const wallet = useAltanaWallet();
-  const [confirmForget, setConfirmForget] = useState(false);
 
   if (wallet.status === "loading") {
     return (
-      <section className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm">
-        <p className="text-sm font-semibold text-[#A5A79F]">Checking this device…</p>
-      </section>
+      <div className="max-w-3xl">
+        <StatePanel
+          body="Checking this browser for an existing Dolphin Wallet credential."
+          state="syncing"
+          title="Checking this device"
+        />
+      </div>
     );
   }
 
   if (wallet.status === "unsupported") {
     return (
-      <section className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-black tracking-tight text-[#111214]">
-          Dolphin Wallet
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-[#6E706B]">
-          {wallet.unsupportedReason}
-        </p>
-      </section>
+      <div className="max-w-3xl">
+        <StatePanel
+          body={wallet.unsupportedReason ?? "This browser cannot create a passkey wallet."}
+          state="unavailable"
+          title="Dolphin Wallet is not supported here"
+        />
+      </div>
     );
   }
 
   if (wallet.status === "no-wallet") {
-    return (
-      <section className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <span className="text-[11px] font-black uppercase tracking-wider text-[#946B00]">
-              Dolphin native
-            </span>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-[#111214]">
-              Create a Dolphin Wallet
-            </h2>
-          </div>
-          <StatusBadge label="Not created" tone="neutral" />
-        </div>
-
-        <p className="mt-3 text-sm leading-relaxed text-[#6E706B]">
-          A smart account secured by a passkey — your device&apos;s Face ID,
-          Touch ID or Windows Hello. There is no seed phrase to write down and
-          Dolphin never sees or stores a key. It is what lets you give an agent
-          a bounded, revocable spending permission instead of unrestricted
-          access.
-        </p>
-
-        <div className="mt-5">
-          <SeparateWalletNotice />
-        </div>
-
-        <div className="mt-5 space-y-3">
-          <button
-            className="pressable-scale flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#F5B300] px-5 text-sm font-black text-[#111214] shadow-sm hover:bg-[#E2A500] disabled:cursor-wait disabled:opacity-60"
-            disabled={wallet.isBusy}
-            onClick={() => void wallet.createWallet()}
-            type="button"
-          >
-            <CategoryGlyph color="#111214" name="wallet" size={16} strokeWidth={2.4} />
-            {wallet.isBusy ? "Waiting for your passkey…" : "Create with a passkey"}
-          </button>
-
-          <button
-            className="pressable-scale flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] px-5 text-xs font-bold text-[#6E706B] hover:border-[#F3E3A6] hover:bg-[#FEF5D6] hover:text-[#946B00] disabled:opacity-50"
-            disabled={wallet.isBusy}
-            onClick={() => void wallet.recoverWallet()}
-            type="button"
-          >
-            <CategoryGlyph color="currentColor" name="shield" size={14} strokeWidth={2.5} />
-            I already have one — recover it
-          </button>
-          <p className="text-center text-[11px] leading-relaxed text-[#A5A79F]">
-            Recovering asks your device which Dolphin passkeys it holds and
-            rebuilds the wallet from the one you pick. Use it on a new browser
-            or after clearing site data.
-          </p>
-          {/* Verified live this session, and it surprises people: recovery
-              reads the wallet's admin key out of Altana's on-chain KeyStore,
-              and a key only lands there on the wallet's FIRST transaction. So
-              a wallet that was created and never used cannot be recovered —
-              it can only be created again. Saying so here is cheaper than
-              letting someone meet that as a raw error. */}
-          <p className="rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-3 text-center text-[11px] leading-relaxed text-[#6E706B]">
-            <strong className="font-bold text-[#111214]">
-              Recovery needs one prior transaction.
-            </strong>{" "}
-            A wallet&apos;s key is written to Altana&apos;s on-chain registry the
-            first time the wallet does something. A wallet that was created and
-            never used has nothing on-chain to recover from — create a new one
-            instead.
-          </p>
-        </div>
-
-        {wallet.error && (
-          <p className="mt-4 rounded-2xl border border-[#FECACA] bg-[#FEE2E2] p-3 text-xs font-semibold leading-relaxed text-[#B91C1C]">
-            {wallet.error}
-          </p>
-        )}
-      </section>
-    );
+    return <WalletSetup />;
   }
 
-  // status === "connected"
-  const address = wallet.address!;
-  const activeSessions = (wallet.sessions ?? []).filter((s) => s.status === "active");
-  const pastSessions = (wallet.sessions ?? []).filter((s) => s.status !== "active");
-
-  return (
-    <section className="space-y-4">
-      {/* --- Account + assets ------------------------------------------- */}
-      <div className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <span className="text-[11px] font-black uppercase tracking-wider text-[#946B00]">
-              Dolphin native
-            </span>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-[#111214]">
-              Dolphin Wallet
-            </h2>
-          </div>
-          <StatusBadge
-            label={`${wallet.networkLabel} · ${wallet.chainId}`}
-            tone="live"
-          />
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[10px] font-black uppercase tracking-wider text-[#A5A79F]">
-              Wallet address
-            </span>
-            <CopyButton label="Copy wallet address" value={address} />
-          </div>
-          <p className="mt-1.5 break-all font-mono text-sm font-bold text-[#111214]">
-            {address}
-          </p>
-        </div>
-
-        {/* Asset list. Native BNB is the whole list on purpose: every Dolphin
-            hire is free (0 BNB) and a session's spend cap is denominated in
-            native BNB, so there is no other token this app's flows touch. A
-            padded-out token list would be decoration, not information. */}
-        <div className="mt-5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-black text-[#111214]">Assets</h3>
-            <button
-              className="pressable-scale rounded-xl border border-[#ECE8DE] bg-[#FBF9F4] px-2.5 py-1.5 text-[11px] font-bold text-[#6E706B] hover:border-[#F3E3A6] hover:bg-[#FEF5D6] hover:text-[#946B00] disabled:opacity-50"
-              disabled={wallet.isReadingBalance}
-              onClick={() => void wallet.refreshBalance()}
-              type="button"
-            >
-              {wallet.isReadingBalance ? "Reading…" : "Refresh"}
-            </button>
-          </div>
-
-          <div className="mt-2.5 overflow-hidden rounded-2xl border border-[#ECE8DE]">
-            <div className="flex items-center justify-between gap-3 bg-white px-4 py-3.5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FEF5D6] text-sm font-black text-[#946B00]">
-                  B
-                </div>
-                <div>
-                  <p className="text-sm font-black text-[#111214]">BNB</p>
-                  <p className="text-[11px] font-semibold text-[#A5A79F]">
-                    {wallet.networkLabel} · native
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                {wallet.balanceError ? (
-                  <>
-                    <p className="text-sm font-black text-[#B9473A]">Unavailable</p>
-                    <p className="text-[10px] font-semibold text-[#A5A79F]">
-                      Balance could not be read
-                    </p>
-                  </>
-                ) : wallet.balanceWei === null ? (
-                  <p className="text-sm font-black text-[#A5A79F]">
-                    {wallet.isReadingBalance ? "Reading…" : "Not read yet"}
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-sm font-black text-[#111214]">
-                      {formatBnb(wallet.balanceWei)}
-                    </p>
-                    <p className="text-[10px] font-semibold text-[#A5A79F]">
-                      Read live from chain {wallet.chainId}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {wallet.balanceError && (
-            <p className="mt-2 break-words text-[10px] leading-relaxed text-[#A5A79F]">
-              {wallet.balanceError}
-            </p>
-          )}
-        </div>
-
-        {/* Funding path — the wallet is counterfactual and empty until funded,
-            so a zero balance without a next step is a dead end. */}
-        {wallet.balanceWei !== null && wallet.balanceWei === BigInt(0) && (
-          <div className="mt-5 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-4">
-            <div className="flex items-center gap-2">
-              <CategoryGlyph color="#946B00" name="sparkle" size={15} strokeWidth={2.5} />
-              <p className="text-xs font-black text-[#111214]">Fund this wallet</p>
-            </div>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-[#6E706B]">
-              {ALTANA_FUNDING_HINT}
-            </p>
-            <div className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border border-[#ECE8DE] bg-white px-3 py-2">
-              <span className="break-all font-mono text-[11px] font-bold text-[#111214]">
-                {address}
-              </span>
-              <CopyButton label="Copy funding address" value={address} />
-            </div>
-          </div>
-        )}
-
-        <div className="mt-5">
-          <SeparateWalletNotice />
-        </div>
-
-        {wallet.error && (
-          <p className="mt-4 rounded-2xl border border-[#FECACA] bg-[#FEE2E2] p-3 text-xs font-semibold leading-relaxed text-[#B91C1C]">
-            {wallet.error}
-          </p>
-        )}
-      </div>
-
-      {/* --- Granted permissions ---------------------------------------- */}
-      <div className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm sm:p-8">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black tracking-tight text-[#111214]">
-              What you&apos;ve authorized
-            </h2>
-            <p className="mt-1 text-xs leading-relaxed text-[#6E706B]">
-              Every permission you have handed to an agent, with exactly what it
-              can spend and which contracts it can touch.
-            </p>
-          </div>
-          <StatusBadge
-            label={
-              wallet.sessions === undefined
-                ? "Loading"
-                : `${activeSessions.length} active`
-            }
-            tone={
-              wallet.sessions === undefined
-                ? "syncing"
-                : activeSessions.length > 0
-                  ? "live"
-                  : "neutral"
-            }
-          />
-        </div>
-
-        {wallet.sessions === undefined ? (
-          // "Loading" is not "none". Rendering an empty list while the answer
-          // is still in flight would tell a user no agent can spend from their
-          // wallet, which is a claim this screen has no business making early.
-          <p className="mt-4 text-sm font-semibold text-[#A5A79F]">
-            Checking what you have authorized…
-          </p>
-        ) : activeSessions.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-[#ECE8DE] bg-[#FBF9F4] p-5 text-center">
-            <CategoryGlyph color="#A5A79F" name="shield" size={20} strokeWidth={2.2} />
-            <p className="mt-2 text-sm font-black text-[#111214]">
-              No agent can spend from this wallet
-            </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-[#6E706B]">
-              You have granted no permissions. Agents you hire for information
-              only never appear here — they are never given spending authority
-              in the first place.
-            </p>
-          </div>
-        ) : (
-          <ul className="mt-4 space-y-3">
-            {activeSessions.map((session) => (
-              <SessionCard
-                isBusy={wallet.isBusy}
-                isLiveThisTab={wallet.liveSessionKeys.includes(session.sessionPublicKey)}
-                key={session.sessionPublicKey}
-                onRevoke={() => void wallet.revokeSession(session.sessionPublicKey)}
-                session={session}
-              />
-            ))}
-          </ul>
-        )}
-
-        {/* Revoked and expired grants are kept and shown, not deleted: "I did
-            revoke that" should stay checkable after the fact. */}
-        {pastSessions.length > 0 && (
-          <details className="mt-4">
-            <summary className="cursor-pointer text-xs font-bold text-[#6E706B]">
-              {pastSessions.length} permission{pastSessions.length === 1 ? "" : "s"} no
-              longer active
-            </summary>
-            <ul className="mt-3 space-y-2">
-              {pastSessions.map((session) => (
-                <li
-                  className="flex items-center justify-between gap-3 rounded-xl border border-[#ECE8DE] bg-[#FBF9F4] px-3 py-2.5"
-                  key={session.sessionPublicKey}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-[#111214]">
-                      {session.agentName}
-                    </p>
-                    <p className="text-[10px] font-semibold text-[#A5A79F]">
-                      {formatBnb(BigInt(session.spendCapWei))} BNB /{" "}
-                      {session.spendPeriod} · agent #{session.tokenId}
-                    </p>
-                  </div>
-                  <StatusBadge
-                    label={session.status === "revoked" ? "Revoked" : "Expired"}
-                    tone="unavailable"
-                  />
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </div>
-
-      {/* --- Remove from this browser ----------------------------------- */}
-      <div className="rounded-3xl border border-[#ECE8DE] bg-white p-5 shadow-sm">
-        {confirmForget ? (
-          <div>
-            <p className="text-xs font-bold text-[#111214]">
-              Remove this wallet from this browser?
-            </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-[#6E706B]">
-              Nothing on-chain changes and your passkey stays on your device —
-              &ldquo;recover it&rdquo; brings the same wallet straight back. Any
-              permissions you granted stay active until you revoke them.
-            </p>
-            <div className="mt-3 flex gap-2">
-              <button
-                className="pressable-scale min-h-[40px] flex-1 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] px-4 text-xs font-bold text-[#6E706B]"
-                onClick={() => setConfirmForget(false)}
-                type="button"
-              >
-                Keep it
-              </button>
-              <button
-                className="pressable-scale min-h-[40px] flex-1 rounded-2xl bg-[#FEE2E2] px-4 text-xs font-black text-[#B91C1C]"
-                onClick={() => {
-                  wallet.forgetWallet();
-                  setConfirmForget(false);
-                }}
-                type="button"
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            className="pressable-scale w-full text-center text-xs font-bold text-[#A5A79F] hover:text-[#B91C1C]"
-            onClick={() => setConfirmForget(true)}
-            type="button"
-          >
-            Remove this wallet from this browser
-          </button>
-        )}
-      </div>
-    </section>
-  );
+  return <ConnectedWallet />;
 }

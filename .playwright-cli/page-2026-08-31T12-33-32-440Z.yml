@@ -1,0 +1,137 @@
+- generic [active] [ref=f4e1]:
+  - generic [ref=f4e2]:
+    - link "Skip to content" [ref=f4e3] [cursor=pointer]:
+      - /url: "#main-content"
+    - banner [ref=f4e4]:
+      - generic [ref=f4e5]:
+        - link "Dolphin home" [ref=f4e6] [cursor=pointer]:
+          - /url: /
+          - img "Dolphin" [ref=f4e7]
+          - generic [ref=f4e8]: Dolphin
+        - navigation "Primary navigation" [ref=f4e9]:
+          - link "Discover" [ref=f4e10] [cursor=pointer]:
+            - /url: /
+          - link "Search" [ref=f4e12] [cursor=pointer]:
+            - /url: /search
+          - link "My agents" [ref=f4e13] [cursor=pointer]:
+            - /url: /my-agents
+          - link "Wallet" [ref=f4e14] [cursor=pointer]:
+            - /url: /wallet
+        - generic [ref=f4e15]:
+          - generic [ref=f4e16]:
+            - img "BNB" [ref=f4e17]
+            - generic [ref=f4e18]: BNB Chain
+          - button "Connect wallet" [ref=f4e19] [cursor=pointer]
+    - main [ref=f4e20]:
+      - generic [ref=f4e21]:
+        - region [ref=f4e22]:
+          - generic [ref=f4e23]:
+            - generic [ref=f4e24]:
+              - paragraph [ref=f4e25]: ERC-8004 discovery on BNB Chain
+              - heading "Know the agent. Hire with context." [level=1] [ref=f4e26]:
+                - generic [ref=f4e27]: Know the agent.
+                - generic [ref=f4e28]: Hire with context.
+              - paragraph [ref=f4e29]: Compare each job, its evidence, and required access before you commit.
+              - generic [ref=f4e30]:
+                - link "Search agents, protocols, or skills" [ref=f4e31] [cursor=pointer]:
+                  - /url: /search
+                - link "Browse by role" [ref=f4e41] [cursor=pointer]:
+                  - /url: "#browse-by-role"
+              - list "What Dolphin shows before hiring" [ref=f4e42]:
+                - listitem [ref=f4e43]: Registry identity
+                - listitem [ref=f4e48]: Sources in view
+                - listitem [ref=f4e53]: Access before hire
+            - generic [ref=f4e58]:
+              - img "Dolphin mascot carrying a gold BNB cube through an orbital ring" [ref=f4e60]
+              - generic [ref=f4e61]:
+                - paragraph [ref=f4e62]: Catalog preview
+                - status [ref=f4e63]:
+                  - generic [ref=f4e64]: Loading catalog preview
+        - region [ref=f4e68]:
+          - generic [ref=f4e69]:
+            - generic [ref=f4e70]:
+              - heading "Choose the job, not a generic score." [level=2] [ref=f4e71]
+              - paragraph [ref=f4e72]: Each role is compared using evidence that fits the work.
+            - radiogroup "Filter agents by role" [ref=f4e74]:
+              - radio "All agents, Syncing" [checked] [ref=f4e75] [cursor=pointer]:
+                - generic [ref=f4e76]: Syncing
+                - generic [ref=f4e84]: All agents
+                - generic [ref=f4e85]: Explore every role in the shared catalog.
+              - radio "Rebalancing, Syncing" [ref=f4e86] [cursor=pointer]:
+                - generic [ref=f4e87]: Syncing
+                - generic [ref=f4e94]: Rebalancing
+                - generic [ref=f4e95]: LP-range agents that reset concentrated-liquidity positions automatically.
+              - radio "Grid Trading, Syncing" [ref=f4e96] [cursor=pointer]:
+                - generic [ref=f4e97]: Syncing
+                - generic [ref=f4e102]: Grid Trading
+                - generic [ref=f4e103]: Price-ladder agents and their available track-record evidence.
+              - radio "Health Factor, Syncing" [ref=f4e104] [cursor=pointer]:
+                - generic [ref=f4e105]: Syncing
+                - generic [ref=f4e112]: Health Factor
+                - generic [ref=f4e113]: Lending-risk agents and their published liquidation-buffer data.
+              - radio "Yield, Syncing" [ref=f4e114] [cursor=pointer]:
+                - generic [ref=f4e115]: Syncing
+                - generic [ref=f4e122]: Yield
+                - generic [ref=f4e123]: Yield agents and their available protocol and performance sources.
+        - region [ref=f4e124]:
+          - generic [ref=f4e125]:
+            - complementary [ref=f4e126]:
+              - paragraph [ref=f4e127]: Catalog
+              - heading "All agents" [level=2] [ref=f4e128]
+              - paragraph [ref=f4e129]: Explore every role in the shared catalog.
+              - paragraph [ref=f4e130]: Syncing with the catalog
+              - generic [ref=f4e131]:
+                - paragraph [ref=f4e132]: Read the record first
+                - list [ref=f4e133]:
+                  - listitem [ref=f4e134]: Confirm the agent identity and publisher.
+                  - listitem [ref=f4e135]: Check the source behind every available metric.
+                  - listitem [ref=f4e136]: Review requested access before you hire.
+            - status [ref=f4e138]:
+              - generic [ref=f4e139]: Loading agent catalog
+    - contentinfo [ref=f4e188]:
+      - generic [ref=f4e189]:
+        - generic [ref=f4e190]:
+          - generic [ref=f4e191]:
+            - link "Dolphin home" [ref=f4e192] [cursor=pointer]:
+              - /url: /
+              - img "Dolphin" [ref=f4e193]
+              - generic [ref=f4e194]: Dolphin
+            - paragraph [ref=f4e195]: A clearer way to discover and control ERC-8004 agents on BNB Chain. Data sources, freshness, and permission boundaries stay visible where they matter.
+            - generic [ref=f4e196]:
+              - img "BNB" [ref=f4e197]
+              - generic [ref=f4e198]: Built on BNB Smart Chain
+          - navigation "Browse agents" [ref=f4e199]:
+            - heading "Browse" [level=2] [ref=f4e200]
+            - list [ref=f4e201]:
+              - listitem [ref=f4e202]:
+                - link "Rebalancing" [ref=f4e203] [cursor=pointer]:
+                  - /url: /search?category=rebalancing
+              - listitem [ref=f4e204]:
+                - link "Grid trading" [ref=f4e205] [cursor=pointer]:
+                  - /url: /search?category=grid-trading
+              - listitem [ref=f4e206]:
+                - link "Health factor" [ref=f4e207] [cursor=pointer]:
+                  - /url: /search?category=health-factor
+              - listitem [ref=f4e208]:
+                - link "Yield" [ref=f4e209] [cursor=pointer]:
+                  - /url: /search?category=yield
+          - navigation "Account controls" [ref=f4e210]:
+            - heading "Control" [level=2] [ref=f4e211]
+            - list [ref=f4e212]:
+              - listitem [ref=f4e213]:
+                - link "My agents" [ref=f4e214] [cursor=pointer]:
+                  - /url: /my-agents
+              - listitem [ref=f4e215]:
+                - link "Wallet & permissions" [ref=f4e216] [cursor=pointer]:
+                  - /url: /wallet
+              - listitem [ref=f4e217]:
+                - link "Search the catalog" [ref=f4e218] [cursor=pointer]:
+                  - /url: /search
+        - generic [ref=f4e219]:
+          - paragraph [ref=f4e220]: © 2026 Dolphin. Built for the BNB Chain Smart Money Era Hackathon.
+          - generic [ref=f4e221]:
+            - link "ERC-8004 registry" [ref=f4e222] [cursor=pointer]:
+              - /url: https://8004scan.io
+            - link "BscScan" [ref=f4e223] [cursor=pointer]:
+              - /url: https://bscscan.com
+  - button "Open Next.js Dev Tools" [ref=f4e229] [cursor=pointer]

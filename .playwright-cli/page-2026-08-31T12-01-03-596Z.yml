@@ -1,0 +1,121 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - link "Skip to content" [ref=e3] [cursor=pointer]:
+      - /url: "#main-content"
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "Dolphin home" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - img "Dolphin" [ref=e7]
+          - generic [ref=e8]: Dolphin
+        - navigation "Primary navigation" [ref=e9]:
+          - link "Discover" [ref=e10] [cursor=pointer]:
+            - /url: /
+          - link "Search" [ref=e12] [cursor=pointer]:
+            - /url: /search
+          - link "My agents" [ref=e13] [cursor=pointer]:
+            - /url: /my-agents
+          - link "Wallet" [ref=e14] [cursor=pointer]:
+            - /url: /wallet
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - img "BNB" [ref=e17]
+            - generic [ref=e18]: BNB Chain
+          - button "Connect wallet" [ref=e19] [cursor=pointer]
+    - main [ref=e20]:
+      - generic [ref=e21]:
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - paragraph [ref=e25]: ERC-8004 agents · BNB Chain
+            - heading "Find an agent you can actually understand." [level=1] [ref=e26]
+            - paragraph [ref=e27]: Compare what each agent does, where its data comes from, and what access it needs before you decide to hire it.
+            - link "Search agents, protocols, or skills" [ref=e29] [cursor=pointer]:
+              - /url: /search
+              - generic [ref=e34]: ↗
+          - generic [ref=e35]:
+            - paragraph [ref=e36]: A clear place to start
+            - generic "Loading featured agent" [ref=e37]
+        - region [ref=e41]:
+          - generic [ref=e42]:
+            - generic [ref=e43]:
+              - generic [ref=e44]:
+                - paragraph [ref=e45]: Browse by job
+                - heading "Four different kinds of help." [level=2] [ref=e46]
+              - paragraph [ref=e47]: Each category is evaluated with metrics that fit the work—not a one-size-fits-all score.
+            - generic [ref=e48]:
+              - button "01 0 in catalog Rebalancing LP-range agents that reset concentrated-liquidity positions automatically." [ref=e49] [cursor=pointer]:
+                - generic [ref=e50]:
+                  - generic [ref=e51]: "01"
+                  - generic [ref=e52]: 0 in catalog
+                - heading "Rebalancing" [level=3] [ref=e58]
+                - paragraph [ref=e59]: LP-range agents that reset concentrated-liquidity positions automatically.
+              - button "02 0 in catalog Grid Trading Price-ladder agents and their available track-record evidence." [ref=e60] [cursor=pointer]:
+                - generic [ref=e61]:
+                  - generic [ref=e62]: "02"
+                  - generic [ref=e63]: 0 in catalog
+                - heading "Grid Trading" [level=3] [ref=e67]
+                - paragraph [ref=e68]: Price-ladder agents and their available track-record evidence.
+              - button "03 0 in catalog Health Factor Lending-risk agents and their published liquidation-buffer data." [ref=e69] [cursor=pointer]:
+                - generic [ref=e70]:
+                  - generic [ref=e71]: "03"
+                  - generic [ref=e72]: 0 in catalog
+                - heading "Health Factor" [level=3] [ref=e78]
+                - paragraph [ref=e79]: Lending-risk agents and their published liquidation-buffer data.
+              - button "04 0 in catalog Yield Yield agents and their available protocol and performance sources." [ref=e80] [cursor=pointer]:
+                - generic [ref=e81]:
+                  - generic [ref=e82]: "04"
+                  - generic [ref=e83]: 0 in catalog
+                - heading "Yield" [level=3] [ref=e89]
+                - paragraph [ref=e90]: Yield agents and their available protocol and performance sources.
+        - region [ref=e91]:
+          - generic [ref=e93]:
+            - paragraph [ref=e94]: Catalog
+            - heading "All agents" [level=2] [ref=e95]
+          - generic "Loading agent catalog" [ref=e97]
+    - contentinfo [ref=e113]:
+      - generic [ref=e114]:
+        - generic [ref=e115]:
+          - generic [ref=e116]:
+            - link "Dolphin home" [ref=e117] [cursor=pointer]:
+              - /url: /
+              - img "Dolphin" [ref=e118]
+              - generic [ref=e119]: Dolphin
+            - paragraph [ref=e120]: A clearer way to discover and control ERC-8004 agents on BNB Chain. Data sources, freshness, and permission boundaries stay visible where they matter.
+            - generic [ref=e121]:
+              - img "BNB" [ref=e122]
+              - generic [ref=e123]: Built on BNB Smart Chain
+          - navigation "Browse agents" [ref=e124]:
+            - heading "Browse" [level=2] [ref=e125]
+            - list [ref=e126]:
+              - listitem [ref=e127]:
+                - link "Rebalancing" [ref=e128] [cursor=pointer]:
+                  - /url: /search?category=rebalancing
+              - listitem [ref=e129]:
+                - link "Grid trading" [ref=e130] [cursor=pointer]:
+                  - /url: /search?category=grid-trading
+              - listitem [ref=e131]:
+                - link "Health factor" [ref=e132] [cursor=pointer]:
+                  - /url: /search?category=health-factor
+              - listitem [ref=e133]:
+                - link "Yield" [ref=e134] [cursor=pointer]:
+                  - /url: /search?category=yield
+          - navigation "Account controls" [ref=e135]:
+            - heading "Control" [level=2] [ref=e136]
+            - list [ref=e137]:
+              - listitem [ref=e138]:
+                - link "My agents" [ref=e139] [cursor=pointer]:
+                  - /url: /my-agents
+              - listitem [ref=e140]:
+                - link "Wallet & permissions" [ref=e141] [cursor=pointer]:
+                  - /url: /wallet
+              - listitem [ref=e142]:
+                - link "Search the catalog" [ref=e143] [cursor=pointer]:
+                  - /url: /search
+        - generic [ref=e144]:
+          - paragraph [ref=e145]: © 2026 Dolphin. Built for the BNB Chain Smart Money Era Hackathon.
+          - generic [ref=e146]:
+            - link "ERC-8004 registry" [ref=e147] [cursor=pointer]:
+              - /url: https://8004scan.io
+            - link "BscScan" [ref=e148] [cursor=pointer]:
+              - /url: https://bscscan.com
+  - button "Open Next.js Dev Tools" [ref=e154] [cursor=pointer]

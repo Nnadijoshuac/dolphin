@@ -1,0 +1,163 @@
+- generic [active] [ref=e1]:
+  - progressbar [ref=e2]
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - link [ref=e5] [cursor=pointer]:
+        - /url: /
+      - button [ref=e7] [cursor=pointer]
+    - main [ref=e12]:
+      - generic [ref=e13]:
+        - button "Go back" [ref=e15] [cursor=pointer]
+        - button "Draft" [ref=e20] [cursor=pointer]
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - link "Design System Tessera" [ref=e24] [cursor=pointer]:
+            - /url: https://uiverse.io/design/systems/tessera
+            - generic [ref=e25]:
+              - generic [ref=e26]: Design System
+              - generic [ref=e27]: Tessera
+          - generic [ref=e30]:
+            - button "Start the rotation" [ref=e33] [cursor=pointer]
+            - generic [ref=e38]:
+              - generic [ref=e39]: "#162B27"
+              - generic [ref=e40] [cursor=pointer]:
+                - checkbox
+              - generic [ref=e46] [cursor=pointer]:
+                - textbox: "#162b27"
+        - generic [ref=e47]:
+          - button "Expand code" [ref=e49] [cursor=pointer]
+          - tablist [ref=e55]:
+            - tab "HTML" [ref=e56] [cursor=pointer]
+            - tab "CSS" [selected] [ref=e60] [cursor=pointer]
+          - generic [ref=e64]:
+            - button "Copy" [ref=e65] [cursor=pointer]
+            - generic [ref=e67]:
+              - generic: ".tess-pulse-btn { --_bg: var(--tess-chartreuse-pulse, #c9f24a); --_bg-hover: var(--tess-citron-glow, #ede57a); --_fg: var(--tess-forest-ink, #0f1f1c); display: inline-flex; align-items: center; gap: 14px; padding: 6px 8px 6px 24px; font-family: \"Inter\", \"Helvetica Neue\", Arial, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.01em; color: var(--_fg); background: var(--_bg); border: 1px solid var(--_bg); border-radius: 999px; cursor: pointer; position: relative; box-shadow: 0 18px 36px -18px rgba(201, 242, 74, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.08); transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 200ms cubic-bezier(0.2, 0.7, 0.2, 1), background 200ms cubic-bezier(0.2, 0.7, 0.2, 1); } .tess-pulse-btn:hover { background: var(--_bg-hover); border-color: var(--_bg-hover); transform: translateY(-2px); box-shadow: 0 24px 48px -16px rgba(237, 229, 122, 0.45), inset 0 -2px 0 rgba(0, 0, 0, 0.08); } .tess-pulse-btn:active { transform: translateY(0); } .tess-pulse-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(201, 242, 74, 0.45); } .tess-pulse-btn__label { line-height: 1; } .tess-pulse-btn__chip { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; background: var(--tess-forest-ink, #0f1f1c); color: var(--tess-chartreuse-pulse, #c9f24a); transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1); } .tess-pulse-btn:hover .tess-pulse-btn__chip { transform: translateX(3px); }"
+              - textbox [ref=e68]: ".tess-pulse-btn { --_bg: var(--tess-chartreuse-pulse, #c9f24a); --_bg-hover: var(--tess-citron-glow, #ede57a); --_fg: var(--tess-forest-ink, #0f1f1c); display: inline-flex; align-items: center; gap: 14px; padding: 6px 8px 6px 24px; font-family: \"Inter\", \"Helvetica Neue\", Arial, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.01em; color: var(--_fg); background: var(--_bg); border: 1px solid var(--_bg); border-radius: 999px; cursor: pointer; position: relative; box-shadow: 0 18px 36px -18px rgba(201, 242, 74, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.08); transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 200ms cubic-bezier(0.2, 0.7, 0.2, 1), background 200ms cubic-bezier(0.2, 0.7, 0.2, 1); } .tess-pulse-btn:hover { background: var(--_bg-hover); border-color: var(--_bg-hover); transform: translateY(-2px); box-shadow: 0 24px 48px -16px rgba(237, 229, 122, 0.45), inset 0 -2px 0 rgba(0, 0, 0, 0.08); } .tess-pulse-btn:active { transform: translateY(0); } .tess-pulse-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(201, 242, 74, 0.45); } .tess-pulse-btn__label { line-height: 1; } .tess-pulse-btn__chip { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 999px; background: var(--tess-forest-ink, #0f1f1c); color: var(--tess-chartreuse-pulse, #c9f24a); transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1); } .tess-pulse-btn:hover .tess-pulse-btn__chip { transform: translateX(3px); }"
+      - generic [ref=e70]:
+        - generic [ref=e71]:
+          - generic [ref=e73]:
+            - generic [ref=e74]:
+              - heading "Comments" [level=3] [ref=e75]
+              - paragraph [ref=e76]:
+                - link "Log in" [ref=e77] [cursor=pointer]:
+                  - /url: /uiverse-astronaut/horrible-bulldog-87?create-account
+                - text: to add comments
+            - generic [ref=e79]:
+              - textbox "Send a first comment..." [disabled] [ref=e80]
+              - generic [ref=e81]:
+                - button "Send" [disabled]
+                - paragraph: 0/244
+          - link "No variations yet, create one!" [ref=e84] [cursor=pointer]:
+            - /url: /uiverse-astronaut/horrible-bulldog-87?create-account
+        - complementary [ref=e88]:
+          - generic [ref=e89]:
+            - heading "Pulse Pill Button" [level=2] [ref=e90]
+            - paragraph [ref=e91]: A chartreuse pill action button with an inset dark arrow chip — editorial dark surface energy with a vivid signal accent.
+            - generic [ref=e92]:
+              - link "button" [ref=e93] [cursor=pointer]:
+                - /url: /tags/button
+              - link "dark" [ref=e94] [cursor=pointer]:
+                - /url: /tags/dark
+              - link "pill" [ref=e95] [cursor=pointer]:
+                - /url: /tags/pill
+              - link "editorial" [ref=e96] [cursor=pointer]:
+                - /url: /tags/editorial
+              - link "chartreuse" [ref=e97] [cursor=pointer]:
+                - /url: /tags/chartreuse
+            - generic [ref=e98]:
+              - generic [ref=e99]: Jun 6, 2026
+              - button "Report" [ref=e102] [cursor=pointer]
+          - generic [ref=e108]:
+            - link "UI" [ref=e109] [cursor=pointer]:
+              - /url: /profile/uiverse-astronaut
+            - generic [ref=e112]:
+              - link "uiverse-astronaut" [ref=e113] [cursor=pointer]:
+                - /url: /profile/uiverse-astronaut
+              - paragraph [ref=e114]: Astronaut
+            - paragraph [ref=e115]: ✨ Just floating around
+        - generic [ref=e119]:
+          - generic [ref=e120]: MIT License
+          - textbox [ref=e124]: "Copyright - 2026 uiverse-astronaut (Astronaut) Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."
+    - contentinfo "Site Footer" [ref=e125]:
+      - generic [ref=e126]:
+        - generic [ref=e127]:
+          - generic [ref=e128]:
+            - paragraph [ref=e130]: Uiverse | The universe of UI
+            - generic [ref=e131]:
+              - paragraph [ref=e132]: MIT License
+              - paragraph [ref=e135]:
+                - text: All content (UI elements) on this site are published under the
+                - link "MIT License" [ref=e136] [cursor=pointer]:
+                  - /url: https://opensource.org/license/mit
+                - text: .
+            - list [ref=e137]:
+              - listitem [ref=e138]:
+                - link "Instagram" [ref=e139] [cursor=pointer]:
+                  - /url: https://www.instagram.com/uiverse.io/
+              - listitem [ref=e143]:
+                - link "Twitter" [ref=e144] [cursor=pointer]:
+                  - /url: https://twitter.com/uiverse_io
+              - listitem [ref=e148]:
+                - link "Discord" [ref=e149] [cursor=pointer]:
+                  - /url: https://discord.gg/KD8ba2uUpT
+          - generic [ref=e153]:
+            - generic [ref=e154]:
+              - paragraph [ref=e155]: Games
+              - navigation "Footer Navigation - Legal" [ref=e156]:
+                - list [ref=e157]:
+                  - listitem [ref=e158]:
+                    - link "Azeron.ai" [ref=e159] [cursor=pointer]:
+                      - /url: https://azeron.ai
+                  - listitem [ref=e160]:
+                    - link "Tavernia.io" [ref=e161] [cursor=pointer]:
+                      - /url: https://tavernia.io
+            - generic [ref=e162]:
+              - paragraph [ref=e163]: Resources
+              - navigation "Footer Navigation - Legal" [ref=e164]:
+                - list [ref=e165]:
+                  - listitem [ref=e166]:
+                    - link "Design Systems" [ref=e167] [cursor=pointer]:
+                      - /url: https://uiverse.io/design
+                  - listitem [ref=e168]:
+                    - link "Cssbuttons.io" [ref=e169] [cursor=pointer]:
+                      - /url: https://cssbuttons.io
+                  - listitem [ref=e170]:
+                    - link "Neumorphism.io" [ref=e171] [cursor=pointer]:
+                      - /url: https://neumorphism.io
+                  - listitem [ref=e172]:
+                    - link "Browsergames.gg" [ref=e173] [cursor=pointer]:
+                      - /url: https://browsergames.gg
+            - generic [ref=e174]:
+              - paragraph [ref=e175]: Information
+              - navigation "Footer Navigation - Legal" [ref=e176]:
+                - list [ref=e177]:
+                  - listitem [ref=e178]:
+                    - link "Blog" [ref=e179] [cursor=pointer]:
+                      - /url: /blog
+                  - listitem [ref=e180]:
+                    - link "Post Guidelines" [ref=e181] [cursor=pointer]:
+                      - /url: /guidelines
+                  - listitem [ref=e182]:
+                    - link "Give feedback" [ref=e183] [cursor=pointer]:
+                      - /url: /feedback
+                  - listitem [ref=e184]:
+                    - link "Report bug" [ref=e185] [cursor=pointer]:
+                      - /url: /bug
+            - generic [ref=e186]:
+              - paragraph [ref=e187]: Legal
+              - navigation "Footer Navigation - Company" [ref=e188]:
+                - list [ref=e189]:
+                  - listitem [ref=e190]:
+                    - link "Terms and Conditions" [ref=e191] [cursor=pointer]:
+                      - /url: https://app.termly.io/document/terms-of-service/bdc0e7cf-cb88-4f24-9cb5-13761e20dedb
+                  - listitem [ref=e192]:
+                    - link "Privacy policy" [ref=e193] [cursor=pointer]:
+                      - /url: https://app.termly.io/document/privacy-policy/fe317b39-7972-4f85-b7c6-d4f562e429d4
+                  - listitem [ref=e194]:
+                    - link "Cookie policy" [ref=e195] [cursor=pointer]:
+                      - /url: https://app.termly.io/document/cookie-policy/4e4bbc89-b80d-43d6-98bc-02ee075cc311
+                  - listitem [ref=e196]:
+                    - link "Disclaimer" [ref=e197] [cursor=pointer]:
+                      - /url: https://app.termly.io/document/disclaimer/eabc96f8-640d-4858-aadc-c30f646265ed
+        - paragraph [ref=e198]: 2026 Pixel Galaxies. All rights reserved. - Uiverse.io

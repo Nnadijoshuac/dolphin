@@ -158,10 +158,10 @@ export function WalletConnectButton({
     <div className="w-full">
       <button
         aria-busy={wallet.isConnecting}
-        className={`pressable-scale min-h-[48px] w-full rounded-2xl px-5 text-sm font-black transition-all disabled:cursor-wait disabled:opacity-60 shadow-sm ${
+        className={`interactive min-h-12 w-full rounded-xl px-5 text-sm font-semibold disabled:cursor-wait disabled:opacity-60 ${
           wallet.isConnected
-            ? "border border-[#ECE8DE] bg-[#F5F3EB] text-[#111214] hover:border-[#FECACA] hover:bg-[#FEE2E2] hover:text-[#B91C1C]"
-            : "bg-[#F5B300] text-[#111214] hover:bg-[#E2A500]"
+            ? "border border-line bg-paper text-ink hover:border-danger hover:bg-danger-soft hover:text-danger"
+            : "bg-accent text-ink hover:bg-accent-hover"
         }`}
         disabled={wallet.isConnecting}
         onClick={() => {
@@ -176,7 +176,7 @@ export function WalletConnectButton({
         {label}
       </button>
       {wallet.error && (
-        <p className="mt-2 text-xs font-semibold text-[#B9473A]">
+        <p className="mt-3 border-l-2 border-danger bg-danger-soft p-3 text-xs font-medium leading-5 text-danger">
           {wallet.error}
         </p>
       )}

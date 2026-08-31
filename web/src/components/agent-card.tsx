@@ -5,118 +5,143 @@ import Link from "next/link";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AGENT_CATEGORIES } from "@/constants/agents";
-import type { Agent, AgentCategory } from "@/types/agent";
-
-const categoryPillStyles: Record<AgentCategory, { bg: string; text: string; border: string }> = {
-  rebalancing: { bg: "#FEF5D6", text: "#946B00", border: "#F3E3A6" },
-  "grid-trading": { bg: "#DDE9F8", text: "#295C92", border: "#C6D8EE" },
-  "health-factor": { bg: "#DCEFE4", text: "#1C6A44", border: "#BFE0CC" },
-  yield: { bg: "#E9E1F4", text: "#65478A", border: "#D8CAE8" },
-  monitoring: { bg: "#F5F3EB", text: "#4A4B4F", border: "#ECE8DE" },
-};
+import type { Agent, LiveMetric, LiveMetricStatus } from "@/types/agent";
 
 type AgentCardProps = {
   agent: Agent;
   className?: string;
 };
 
+type MetricPreview = {
+  label: string;
+  value: string | null;
+  status: LiveMetricStatus;
+  source: string;
+  asOf: string | null;
+};
+
+function metricPreview<T>(
+  label: string,
+  metric: LiveMetric<T>,
+  format: (value: T) => string,
+): MetricPreview {
+  const hasValue = metric.status === "live" || metric.status === "stale";
+
+  return {
+    label,
+    value: hasValue ? format(metric.value) : null,
+    status: metric.status,
+    source: metric.source.label,
+    asOf: metric.asOf,
+  };
+}
+
+function getMetricPreview(agent: Agent): MetricPreview {
+  switch (agent.liveStats.category) {
+    case "rebalancing":
+    case "grid-trading":
+      return metricPreview(
+        "Current P&L",
+        agent.liveStats.currentPnl,
+        (value) => value,
+      );
+    case "health-factor":
+      return metricPreview(
+        "Health factor",
+        agent.liveStats.averageHealthFactor,
+        (value) => value.toFixed(2),
+      );
+    case "yield":
+      return metricPreview(
+        "Current APY",
+        agent.liveStats.currentApy,
+        (value) => `${value.toFixed(2)}%`,
+      );
+    case "monitoring":
+      return metricPreview(
+        "Alert frequency",
+        agent.liveStats.alertFrequency,
+        (value) => value,
+      );
+  }
+}
+
+function formatCheckedAt(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+const statusLabels: Record<LiveMetricStatus, string> = {
+  live: "Live",
+  stale: "Stale",
+  syncing: "Syncing",
+  unavailable: "Not available",
+};
+
 export function AgentCard({ agent, className = "" }: AgentCardProps) {
-  const categoryConfig =
-    AGENT_CATEGORIES.find((c) => c.slug === agent.category) ?? AGENT_CATEGORIES[0];
-  const pillStyle = categoryPillStyles[agent.category] ?? categoryPillStyles.monitoring;
-
-  // Shorten publisher address
-  const displayPublisher = agent.publisher
-    ? agent.publisher.startsWith("0x") && agent.publisher.length > 16
-      ? `${agent.publisher.slice(0, 6)}...${agent.publisher.slice(-4)}`
-      : agent.publisher
-    : "Verified Publisher";
-
-  // App Store rating display (e.g. 4.9 or score)
-  const ratingScore = agent.reputationScore !== undefined && typeof agent.reputationScore === "number"
-    ? (agent.reputationScore / 20).toFixed(1)
-    : "4.9";
+  const categoryLabel =
+    AGENT_CATEGORIES.find((category) => category.slug === agent.category)?.label ??
+    "Monitoring";
+  const preview = getMetricPreview(agent);
+  const checkedAt = formatCheckedAt(preview.asOf);
+  const displayPublisher = agent.publisher?.startsWith("0x")
+    ? `${agent.publisher.slice(0, 6)}…${agent.publisher.slice(-4)}`
+    : agent.publisher || "Publisher not listed";
 
   return (
     <Link
-      className={`pressable-scale group relative flex flex-col justify-between rounded-3xl border border-[#ECE8DE] bg-white p-6 no-underline shadow-[0_2px_12px_rgba(17,18,20,0.04)] hover:border-[#F5B300]/50 hover:shadow-[0_12px_32px_rgba(17,18,20,0.08)] ${className}`}
+      className={`interactive group block border-t border-line py-5 no-underline first:border-t-0 sm:py-6 ${className}`}
       href={`/agent/${agent.tokenId}`}
     >
-      <div>
-        {/* App Store Top Header: Icon + Details + GET CTA */}
-        <div className="flex items-start gap-4">
-          <AgentIcon category={agent.category} size={64} uri={agent.iconUrl} />
+      <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_170px_auto] sm:items-center sm:gap-5">
+        <div className="flex items-start gap-4 sm:contents">
+          <AgentIcon category={agent.category} size={56} uri={agent.iconUrl} />
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <h3 className="truncate text-lg font-black tracking-tight text-[#111214] group-hover:text-[#946B00] transition-colors">
-                {agent.name}
-              </h3>
-              <span title="ERC-8004 Verified on BSC">
-                <CategoryGlyph color="#1C6A44" name="shield" size={14} strokeWidth={2.4} />
-              </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.69rem] font-semibold uppercase tracking-[0.09em] text-faint">
+              <span>{categoryLabel}</span>
+              <span aria-hidden="true">·</span>
+              <span>ERC-8004 #{agent.tokenId}</span>
             </div>
-
-            <p className="mt-0.5 truncate text-xs font-semibold text-[#6E706B]">
-              {categoryConfig.label} • {displayPublisher}
+            <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-ink transition-colors group-hover:text-accent-ink sm:text-xl">
+              {agent.name}
+            </h3>
+            <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-6 text-muted">
+              {agent.tagline}
             </p>
-
-            {/* App Store Rating & Status Row */}
-            <div className="mt-2 flex items-center gap-2 text-[11px]">
-              <span className="flex items-center gap-1 font-black text-[#946B00]">
-                <span>★</span>
-                <span>{ratingScore}</span>
-              </span>
-              <span className="text-[#A5A79F]">•</span>
-              <span
-                className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase"
-                style={{
-                  backgroundColor: pillStyle.bg,
-                  color: pillStyle.text,
-                }}
-              >
-                {categoryConfig.label}
-              </span>
-            </div>
+            <p className="mt-2 truncate text-xs text-faint">By {displayPublisher}</p>
           </div>
         </div>
 
-        {/* Tagline / Pitch */}
-        <p className="mt-4 line-clamp-2 text-xs leading-relaxed text-[#4A4B4F]">
-          {agent.tagline}
-        </p>
-
-        {/* Verified Skills / Feature Tags */}
-        {agent.verifiedSkills && agent.verifiedSkills.length > 0 && (
-          <div className="mt-3.5 flex flex-wrap gap-1.5">
-            {agent.verifiedSkills.slice(0, 2).map((skill) => (
-              <span
-                className="rounded-lg border border-[#ECE8DE] bg-[#FBF9F4] px-2 py-0.5 text-[10.5px] font-semibold text-[#303236]"
-                key={skill}
-              >
-                {skill}
-              </span>
-            ))}
+        <div className="border-t border-line pt-4 sm:border-l sm:border-t-0 sm:py-1 sm:pl-5">
+          <div className="flex items-center justify-between gap-3 sm:block">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
+              {preview.label}
+            </p>
+            <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
+              {preview.value ?? statusLabels[preview.status]}
+            </p>
           </div>
-        )}
-      </div>
-
-      {/* Card Footer: Pricing & App Store GET button */}
-      <div className="mt-5 flex items-center justify-between border-t border-[#F3F0E8] pt-3.5">
-        <div className="flex items-center gap-1.5 text-xs">
-          <span className="font-mono text-[11px] font-semibold text-[#A5A79F]">
-            #{agent.tokenId}
-          </span>
-          <span className="text-[#A5A79F]">•</span>
-          <span className="font-extrabold uppercase tracking-wider text-[#1C6A44]">
-            Free Proof
-          </span>
+          <p className="mt-1 truncate text-[0.69rem] text-faint" title={preview.source}>
+            {preview.source}
+            {checkedAt ? ` · ${checkedAt}` : ""}
+          </p>
         </div>
 
-        <div className="flex items-center gap-1.5 rounded-full bg-[#F5B300] px-4 py-1.5 text-xs font-black text-[#111214] shadow-sm group-hover:bg-[#E2A500] transition-colors">
-          <span>GET</span>
-        </div>
-      </div>
+        <span
+          aria-hidden="true"
+          className="hidden text-muted transition-transform group-hover:translate-x-0.5 sm:block"
+        >
+          <CategoryGlyph color="currentColor" name="arrow-right" size={18} strokeWidth={2} />
+        </span>
+      </article>
     </Link>
   );
 }

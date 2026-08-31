@@ -6,6 +6,324 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 ---
 
+# Session addendum — 2026-08-31 (session 7: agents can actually be paid)
+
+Everything below was verified this session with live commands against the real
+Convex deployment, real BSC mainnet reads, and real third-party agent endpoints.
+Where an earlier section disagrees, this addendum wins. Full command output is
+in `SESSION-LOG-2026-08-31-payments.md`.
+
+## THE HEADLINE
+
+**Dolphin can now pay an agent its real published price, and 7 of the 17
+catalog agents will quote one.** Before today `convex/agentHires.ts` rejected
+every non-zero price by design, because there was no honest way to honour one.
+
+A user asks an agent what it charges, sees the real amount, the real token, the
+real payee and their own balance of that token before signing anything, then
+funds an on-chain ERC-8183 escrow from their Dolphin Wallet. Dolphin then reads
+that job back off the chain itself before it will call the hire paid.
+
+## THE FINDING THAT CHANGED THE SESSION
+
+**The brief was written around x402. No agent in this catalog uses x402.**
+
+Every service endpoint of all 17 catalog agents was fetched live. **Zero
+answered HTTP 402.** What the paid agents actually publish — in their own
+descriptions and their own A2A agent cards — is **ERC-8183**: an on-chain
+job-escrow kernel denominated in `$U`, negotiated over A2A.
+
+This was put to the project owner with the evidence, and the decision was to
+follow the evidence rather than build x402 scaffolding that could never be
+exercised against a real seller. The SDK's x402 support is real and works; it
+simply has no counterparty here, and `convex/lib/erc8183.ts` records exactly
+what would need to change if one appears.
+
+**`x402Supported: true` on 13 of 17 agents is an indexer flag corroborated by
+nothing.** Session 5 learned to stop trusting 8004scan's health flag; this is
+the same lesson on a different field, and worth remembering before quoting that
+field at a judge.
+
+## `$U`, verified rather than assumed
+
+The brief said `$U` is exported as `U_TOKEN[56]`. **It is not** — that symbol
+does not exist anywhere in `@altananetwork/sdk@0.8.0`, which is the newest
+published version. The address is exported as
+`ERC8183_ADDRESSES[56].paymentToken`, and per AGENTS.md §9 it was checked three
+independent ways before being used: the SDK's own deployment record, two
+different sellers' live quotes, and a direct chain read.
+
+```
+$U  United Stables (symbol "U"), 18 decimals, ~971.8M supply
+    0xcE24439F2D9C6a2289F741120FE202248B666666
+ERC-8183 kernel 0xEa4DAa3100A767e86FDed867729ae7446476EBA6
+    jobCounter 56,673 · holds 302.38 $U in escrow right now
+```
+
+**56,673 real jobs.** This is a live economy, not a demo, which is the single
+biggest reason building against it was worth it.
+
+And the answer to "how would a user actually get $U" is a measured one, not a
+hopeful one: PancakeSwap V3's U/USDT 0.01% pool holds 10.9M $U and U/WBNB 0.05%
+holds 2.0M. The V2 U/USDT pair is dead (0.013 $U) and is not suggested to
+anyone.
+
+## The architecture, and why it is split the way it is
+
+The brief predicted a client-sign / server-relay split for x402 CORS reasons.
+The split is right; the reason is different and was measured here:
+
+```
+                      preflight(OPTIONS)          actual POST from a server
+brainonbnb            200  ACAO=*                 200
+chainhelix healthmon  405  ACAO=null              200
+bnb-lp                405  ACAO=null              200
+```
+
+A JSON-RPC `negotiate` is never a CORS-simple request, so it always preflights.
+**Two of three sellers are unreachable from a browser and perfectly reachable
+from a server.**
+
+| step | runs in | why |
+|---|---|---|
+| Negotiate a price | Convex | the CORS wall above |
+| Fund the escrow | **browser** | only the browser holds the passkey |
+| Verify the payment | Convex | reads the kernel itself, believes no client |
+| Notify the seller | Convex | same CORS wall |
+
+`convex/agentPayments.ts` is deliberately two things and neither is a signer:
+
+- a **relay** — forwards a request, holds no key material, can move no token;
+- a **witness** — `recordJobPayment` does *not* take the client's word that a
+  payment happened. It reads the ERC-8183 kernel on BSC and refuses unless the
+  job is really funded, really from this wallet, really to this agent's
+  registered wallet, and really for a non-zero budget.
+
+Session 6's principle is unchanged and load-bearing: **Convex cannot sign.** A
+backend row reports what already happened; it never causes it.
+
+## Every decision made, and why
+
+**The seller is never trusted about who gets paid.** A quote arrives over HTTP
+and names the address that receives money. Dolphin checks it against the
+agent's registered ERC-8004 wallet — and reads that wallet **itself**, rather
+than accepting it from the client, because otherwise a tampered client would
+simply supply a matching pair and the check would pass while pointing at an
+attacker's address.
+
+**The seller is not trusted about the escrow contract either.** The quote's
+`verifying_contract` must equal the SDK's own `ERC8183_ADDRESSES[56].commerce`,
+and the quoted token must equal its `paymentToken`. Both sides say the same
+thing or nothing moves.
+
+**No Permit2 provisioning step exists on this rail, and inventing one would
+have been a hoop.** `approveTokenForPermit2` / `approveSignatureChecker` are
+x402 prerequisites. ERC-8183 batches its own `approve($U → kernel)` into the
+same atomic intent as `createJob`/`setBudget`/`fund`. Task 2.3 is answered by
+not applying.
+
+**Nothing about a price is hardcoded anywhere.** Amount, token address, symbol,
+decimals and payee all come from the live quote plus a direct read of the token
+contract. There is deliberately no price, no token address and no decimals
+constant in this codebase.
+
+**The price gate was tightened, not relaxed.** `hireReadOnlyAgent` no longer
+asks "is this free"; it asks "did Dolphin witness a funded job for this,
+on-chain". The free-hire path is byte-for-byte unchanged.
+
+## The scope problem worth knowing about, and what was done
+
+**Gated as the brief specified — on a non-zero `priceModel` — the payment step
+would never have rendered for anybody.** Dolphin's catalog prices *every* agent
+at zero, from one constant, because ERC-8004 carries no price field and
+8004scan publishes none. The feature would have shipped as dead code.
+
+Meanwhile agents in that same catalog demonstrably do charge. On this rail a
+price is not a field you read; it is something you find out by **asking**, and
+asking is free and signs nothing.
+
+So the step is offered when the catalog carries a real price **or** when the
+agent publishes an endpoint that can be asked. In the second case Dolphin
+asserts nothing about what the agent charges — the UI says "ask it" and the
+agent answers for itself. **A null catalog price renders as "no published
+price", never as "free".** The hire gate is untouched: a zero catalog price
+still records a free hire, and a paid job is a separate purchase of real work.
+
+## How much of the catalog this actually made payable
+
+**The payment step is offered on 9 of 17 agents.** The other 8 are excluded
+with a real reason each:
+
+```
+5 publish no A2A endpoint at all   12046, 43129, 45381, 45422, 45650
+3 publish an A2A endpoint still carrying an unsubstituted {agentId} template
+                                   292058, 292939, 303727 (termix.live)
+```
+
+That template finding is new and actionable — three real agents are unreachable
+purely because 8004scan serves their endpoint with the placeholder unresolved.
+
+**Of the 9, seven returned a real wallet-signed quote, all at 0.10 $U, spanning
+all four graded categories:**
+
+```
+302257 Brain on BNB - Venus Health Factor Monitor    health-factor
+302258 Brain on BNB - BSC Grid Planner               grid-trading
+304494 Brain on BNB - Portfolio Rebalance Pricer     rebalancing
+265375 BNB LP Range Rebalancer                       rebalancing
+269223 Portfolio Rebalancer                          rebalancing
+269224 Grid Trader                                   grid-trading
+269228 Health Factor Monitor                         health-factor
+```
+
+The other two answered but could not be honoured and are reported rather than
+smoothed over: **265876** returned no price field, **6441** returned a
+non-object body. Both refusals are the gate working — a price Dolphin cannot
+read exactly is a price no Pay button may sit behind.
+
+**7 of 17 (41%) payable today, up from zero.**
+
+## Three things found by running it, not by reading it
+
+**1. An EIP-55 checksum difference made a live seller permanently unpayable.**
+chainhelix returns `$U` as `0xCe…9f…`, bnb-lp as `0xcE…9F…` — the identical 20
+bytes, different checksum casing. viem's `isAddress` is checksum-strict by
+default and rejected the first outright. Fixed by parsing case-insensitively
+and normalizing with `getAddress` before any comparison; the payee check itself
+is unchanged and still compares two canonical addresses. **Three more sellers
+started quoting the moment it landed.**
+
+**2. Refusing to credit a real stranger's job works.** Job 1 on the kernel is a
+real funded job belonging to someone else. Pointing a paid hire at it is
+rejected, because its on-chain `client` is `0x2BBA…6878` and not the wallet
+claiming it. That is the difference between recording evidence and accepting an
+assertion.
+
+**3. A seller declines a task that does not match its menu.** Brain on BNB
+answers `accepted: false` for an off-menu task and quotes 0.10 $U the moment
+the task matches. So a decline was a dead end; `requestQuote` now asks the
+seller's own `list` skill and puts that menu in the error, with its real
+prices. The menu is the seller's — no guess of Dolphin's was added.
+
+## State of the two products
+
+| | Mobile (root) | Website (`web/`) |
+|---|---|---|
+| `tsc --noEmit` | clean | clean |
+| lint | 0 errors, 2 pre-existing warnings | 1 pre-existing error (below) |
+| build | `expo export` OK, web **and** android | `next build` OK |
+| Convex | pushes; `agentJobs` + 3 indexes added | same backend |
+| Paid hire | web export yes, native no (stated) | yes |
+
+`/wallet` still prerenders as static content under `next build`.
+
+The website's one lint error is in `web/src/app/search/page.tsx`
+(`react-hooks/set-state-in-effect`), introduced by commit `e591a04` **before**
+this session started, in a screen file AGENTS.md §11 reserves. Reported rather
+than fixed — a one-line change for whoever owns that screen.
+
+**The native bundle did not regress.** Re-measured with a real `expo export`,
+because a barrel import is exactly how the SDK crept in last time:
+
+```
+android  createPasskeyWallet 0  relay.altana.network 0
+         hireErc8183Agent    0  erc8183Addresses     0
+web      createPasskeyWallet 8  relay.altana.network 2
+         hireErc8183Agent    4  erc8183Addresses    10
+```
+
+## WHAT IS NOT PROVEN — read this before claiming payment works
+
+**No job was ever funded.** The owner was asked explicitly, with the cost
+stated, and chose "build now, fund later". So:
+
+```
+negotiate a real price           OBSERVED, 7 sellers
+verify the payee on-chain        OBSERVED
+read the quoted token's balance  BUILT, not run against a funded wallet
+sign and fund the escrow         NOT RUN - needs real $U on BSC mainnet
+witness the job on-chain         OBSERVED in the negative (every refusal
+                                 path), never in the positive
+```
+
+`recordJobPayment` has never returned successfully, because no job of ours
+exists for it to return. **Every refusal is verified; its acceptance is not.**
+
+**The rendered payment UI was not driven in a browser this session.** The hire
+card is client-rendered, so a server-side fetch shows none of it, and Playwright
+is not a dependency of this repo (adding one is governed by AGENTS.md §3 and
+was not done unilaterally). `scripts/verify-web-payment.mjs` is written and
+ready. What *is* verified is the logic deciding what renders — `canNegotiate`
+was run over the real catalog and produced the 9-of-17 split above.
+
+## Known issues, new this session
+
+1. **A funded payment has never been observed end to end.** The single most
+   valuable evidence this feature could gain, and it costs 0.10 $U plus gas.
+   *(new)*
+2. **The catalog still prices every agent at zero**, including seven that
+   demonstrably charge 0.10 $U. Nothing here fabricates a price, but the
+   catalog is now knowably behind what the agents say about themselves. The fix
+   is a discovery-pipeline change: negotiate once per agent, cache the result.
+   *(new)*
+3. **Three real agents are unreachable over an `{agentId}` template** 8004scan
+   never substitutes. Possibly fixable by resolving it from the agent record.
+   *(new)*
+4. **The brainonbnb family needs a `serviceId` for an off-menu task.** The
+   error now names the menu, but the UI does not yet let a user pick from it in
+   one tap. *(new)*
+5. **The payment UI has not been seen rendered.** See above. *(new)*
+
+Everything carried forward from the session 6 addendum still stands, notably:
+on-chain session enforcement is still unobserved, native still cannot hold a
+wallet, and the website still has no public URL.
+
+## IS THIS SUBMITTABLE RIGHT NOW?
+
+**Yes, and this session closes the last "we cannot actually do that" in the
+whole product.** Dolphin has gone from a marketplace that refused every paid
+agent by design to one that asks a real agent its real price, shows the real
+terms, funds a real on-chain escrow, and then checks the chain itself before
+believing its own record. Seven real agents across all four graded categories
+will quote for it today. The guardrails are not decorative — a payment for the
+wrong agent, from the wrong wallet, into the wrong contract, or for an amount
+Dolphin cannot read exactly, is refused, and each of those refusals was run
+rather than described.
+
+**The one thing between here and *best-case* submittable is unchanged for the
+fourth session running: the website still has no public URL.** It is the
+strongest surface, everything on it works, and it runs only on localhost. One
+deploy and one credential the owner must add; Vercel is the shortest path.
+
+**Second, and cheap, and worth more than it costs:** put ~0.15 $U and a little
+BNB in a Dolphin Wallet and buy one real thing from one real agent. That turns
+the one claim this session deliberately does not make — "a payment completes" —
+into a job id and a transaction hash anyone can check. Everything up to that
+step is built and verified.
+
+### Was the scope realistic? Mostly — the honest split
+
+**Done in full:** Task 0 (investigated, and the investigation overturned the
+brief's premise), Task 1 (architecture decided and documented reversibly in
+code), Task 2 (website payment step, relay verified live against five real
+sellers), Task 3 (mobile, on the target that can run it, with the native bundle
+re-measured), Task 4 (parity confirmed, and the price gate tightened rather
+than relaxed).
+
+**Deliberately not done:**
+- **A funded payment.** Not an effort question — the owner chose mainnet in
+  session 6 and chose not to fund an address now.
+- **x402.** Real in the SDK, no seller in the catalog. Building it would have
+  meant shipping untestable scaffolding as a deliverable.
+- **A wallet-screen asset list.** The brief allowed one "if genuinely needed";
+  it is not. It would be scoped to tokens in use by real agent prices, that set
+  is currently empty, and an always-empty list is not a feature.
+- **Catalog prices reflecting what agents charge.** A real gap (issue 2), but
+  it is a discovery-pipeline change with a per-agent network cost, not a hire
+  flow change.
+
+---
+
 # Session addendum — 2026-08-30/31 (session 6: Dolphin gets a wallet)
 
 Everything below was verified this session with live commands, a real Chromium

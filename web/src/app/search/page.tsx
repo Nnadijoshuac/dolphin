@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
 
 import { AgentCard } from "@/components/agent-card";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { ConstellationBg } from "@/components/constellation-bg";
 import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
 import { useAgents } from "@/hooks/use-agents";
@@ -18,14 +18,21 @@ const suggestedSearches = [
   "Liquidation",
   "Rebalancing",
   "Yield",
-  "Grid Trading",
-  "Wallet Watch",
+  "Grid trading",
 ] as const;
 
-export default function SearchPage() {
-  const [query, setQuery] = useState("");
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<AgentCategory | "all">("all");
-  const { data: allAgents, isError, isLoading } = useAgents();
+function isAgentCategory(value: string | null): value is AgentCategory {
+  return AGENT_CATEGORIES.some((category) => category.slug === value);
+}
+
+function SearchContent() {
+  const searchParams = useSearchParams();
+  const initialCategory = searchParams.get("category");
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  const [selectedCategory, setSelectedCategory] = useState<AgentCategory | "all">(
+    isAgentCategory(initialCategory) ? initialCategory : "all",
+  );
+  const { data: agents, isError, isLoading } = useAgents();
 
   const recentSearches = useAppStore((state) => state.recentSearches);
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
@@ -33,231 +40,242 @@ export default function SearchPage() {
   const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
 
   const normalizedQuery = query.trim();
-
   const searchResults = useMemo(() => {
-    if (!allAgents) return [];
-    let list = allAgents;
+    if (!agents) return [];
 
-    if (selectedCategoryFilter !== "all") {
-      list = list.filter((agent) => agent.category === selectedCategoryFilter);
-    }
+    const categoryResults =
+      selectedCategory === "all"
+        ? agents
+        : agents.filter((agent) => agent.category === selectedCategory);
 
-    if (normalizedQuery) {
-      list = searchAgentsLocally(list, normalizedQuery);
-    }
+    return normalizedQuery
+      ? searchAgentsLocally(categoryResults, normalizedQuery)
+      : categoryResults;
+  }, [agents, normalizedQuery, selectedCategory]);
 
-    return list;
-  }, [allAgents, normalizedQuery, selectedCategoryFilter]);
-
-  const runSuggestedSearch = (term: string) => {
+  const runSearch = (term: string) => {
     setQuery(term);
     addRecentSearch(term);
   };
 
+  const hasActiveSearch = normalizedQuery.length > 0 || selectedCategory !== "all";
+
   return (
-    <div className="relative min-h-screen py-10 sm:py-16">
-      <ConstellationBg opacity={0.4} />
+    <div className="site-frame page-shell">
+      <header className="page-intro">
+        <p className="eyebrow">Search the catalog</p>
+        <h1 className="display-title mt-5">Search by what you need done.</h1>
+        <p className="body-copy mt-6 max-w-[56ch]">
+          Use a strategy, protocol, skill, publisher, or agent name. Results come
+          from the same shared catalog as the mobile app.
+        </p>
+      </header>
 
-      <div className="site-frame">
-        {/* Header Title */}
-        <header className="max-w-3xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3.5 py-1 text-xs font-bold text-[#946B00]">
-            <CategoryGlyph color="#946B00" name="search" size={13} strokeWidth={2.4} />
-            <span>STORE SEARCH</span>
-          </div>
-          <h1 className="mt-4 text-4xl font-black tracking-tight text-[#111214] sm:text-5xl lg:text-6xl">
-            Search Agents & Handlers
-          </h1>
-          <p className="mt-3 text-base leading-relaxed text-[#6E706B]">
-            Query agents by strategy, protocol, or verified skill. Discover verified ERC-8004 agents across BNB Smart Chain.
-          </p>
-        </header>
-
-        {/* Search Bar Input Container */}
-        <div className="mt-8 rounded-3xl border border-[#ECE8DE] bg-white p-4 shadow-sm sm:p-6">
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (normalizedQuery) addRecentSearch(normalizedQuery);
-            }}
-            role="search"
-          >
-            <div className="flex items-center gap-4">
-              <CategoryGlyph color="#F5B300" name="search" size={24} strokeWidth={2.4} />
-              <input
-                autoComplete="off"
-                className="min-w-0 flex-1 bg-transparent text-lg font-bold text-[#111214] outline-none placeholder:text-[#A5A79F] sm:text-2xl"
-                id="agent-search"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Try Venus, PancakeSwap, or LP..."
-                type="search"
-                value={query}
-              />
-              {query.length > 0 && (
-                <button
-                  aria-label="Clear search"
-                  className="pressable-scale rounded-xl bg-[#F5F3EB] px-3.5 py-1.5 text-xs font-bold text-[#6E706B] hover:bg-[#ECE8DE] hover:text-[#111214]"
-                  onClick={() => setQuery("")}
-                  type="button"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </form>
-
-          {/* Category Filter Chips */}
-          <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-[#F3F0E8] pt-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#A5A79F] mr-1">
-              Category:
-            </span>
-            <button
-              className={`rounded-full px-3.5 py-1 text-xs font-bold transition-all ${
-                selectedCategoryFilter === "all"
-                  ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00] shadow-sm"
-                  : "border border-[#ECE8DE] bg-[#FBF9F4] text-[#6E706B] hover:border-[#F5B300]"
-              }`}
-              onClick={() => setSelectedCategoryFilter("all")}
-              type="button"
-            >
-              All Categories
-            </button>
-            {AGENT_CATEGORIES.map((cat) => (
+      <section aria-label="Agent search" className="mt-12 border-y border-line py-6 sm:py-8">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (normalizedQuery) addRecentSearch(normalizedQuery);
+          }}
+          role="search"
+        >
+          <label className="sr-only" htmlFor="agent-search">
+            Search agents
+          </label>
+          <div className="flex items-center gap-4">
+            <CategoryGlyph color="#6c6d64" name="search" size={24} strokeWidth={2} />
+            <input
+              autoComplete="off"
+              autoFocus
+              className="min-w-0 flex-1 bg-transparent text-2xl font-medium tracking-[-0.035em] outline-none placeholder:text-faint sm:text-4xl"
+              id="agent-search"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Agent, protocol, or skill"
+              type="search"
+              value={query}
+            />
+            {query ? (
               <button
-                className={`rounded-full px-3.5 py-1 text-xs font-bold transition-all ${
-                  selectedCategoryFilter === cat.slug
-                    ? "border border-[#F3E3A6] bg-[#FEF5D6] text-[#946B00] shadow-sm"
-                    : "border border-[#ECE8DE] bg-[#FBF9F4] text-[#6E706B] hover:border-[#F5B300]"
-                }`}
-                key={cat.slug}
-                onClick={() => setSelectedCategoryFilter(cat.slug)}
+                className="interactive shrink-0 text-sm font-semibold text-muted underline-offset-4 hover:text-ink hover:underline"
+                onClick={() => setQuery("")}
                 type="button"
               >
-                {cat.label}
+                Clear
               </button>
-            ))}
+            ) : null}
           </div>
+        </form>
+
+        <div className="no-scrollbar mt-7 flex gap-1 overflow-x-auto border-b border-line" role="group" aria-label="Filter by category">
+          <button
+            aria-pressed={selectedCategory === "all"}
+            className={`interactive relative shrink-0 px-4 pb-3 text-sm font-medium ${
+              selectedCategory === "all" ? "text-ink" : "text-muted hover:text-ink"
+            }`}
+            onClick={() => setSelectedCategory("all")}
+            type="button"
+          >
+            All agents
+            {selectedCategory === "all" ? (
+              <span className="absolute inset-x-3 bottom-0 h-0.5 bg-accent" />
+            ) : null}
+          </button>
+          {AGENT_CATEGORIES.map((category) => {
+            const isSelected = selectedCategory === category.slug;
+
+            return (
+              <button
+                aria-pressed={isSelected}
+                className={`interactive relative shrink-0 px-4 pb-3 text-sm font-medium ${
+                  isSelected ? "text-ink" : "text-muted hover:text-ink"
+                }`}
+                key={category.slug}
+                onClick={() => setSelectedCategory(category.slug)}
+                type="button"
+              >
+                {category.label}
+                {isSelected ? (
+                  <span className="absolute inset-x-3 bottom-0 h-0.5 bg-accent" />
+                ) : null}
+              </button>
+            );
+          })}
         </div>
+      </section>
 
-        {/* Suggested Searches & Recent Searches */}
-        {!normalizedQuery && selectedCategoryFilter === "all" && (
-          <div className="mt-8 grid gap-8 md:grid-cols-2">
-            {/* Suggested Searches */}
-            <div className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm">
-              <h2 className="text-sm font-black uppercase tracking-wider text-[#111214]">
-                Suggested Searches
-              </h2>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {suggestedSearches.map((term) => (
-                  <button
-                    className="pressable-scale rounded-full border border-[#ECE8DE] bg-[#FBF9F4] px-3.5 py-1.5 text-xs font-bold text-[#303236] hover:border-[#F3E3A6] hover:bg-[#FEF5D6] hover:text-[#946B00]"
-                    key={term}
-                    onClick={() => runSuggestedSearch(term)}
-                    type="button"
-                  >
-                    {term}
-                  </button>
-                ))}
-              </div>
+      {!hasActiveSearch ? (
+        <section className="grid gap-10 border-b border-line py-10 md:grid-cols-2 md:gap-16">
+          <div>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-sm font-semibold tracking-[-0.01em]">Try a search</h2>
+              <span className="text-xs text-faint">Suggestions</span>
             </div>
+            <div className="mt-4 border-t border-line">
+              {suggestedSearches.map((term) => (
+                <button
+                  className="interactive group flex w-full items-center justify-between border-b border-line py-3 text-left text-sm text-muted hover:text-ink"
+                  key={term}
+                  onClick={() => runSearch(term)}
+                  type="button"
+                >
+                  <span>{term}</span>
+                  <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">
+                    →
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
-            {/* Recent Searches */}
-            <div className="rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-black uppercase tracking-wider text-[#111214]">
-                  Recent Searches
-                </h2>
-                {recentSearches.length > 0 && (
-                  <button
-                    className="text-xs font-bold text-[#946B00] hover:underline"
-                    onClick={clearRecentSearches}
-                    type="button"
-                  >
-                    Clear All
-                  </button>
-                )}
-              </div>
-
+          <div>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-sm font-semibold tracking-[-0.01em]">Recent searches</h2>
               {recentSearches.length > 0 ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {recentSearches.slice(0, 6).map((term) => (
-                    <div
-                      className="flex items-center gap-1.5 rounded-full border border-[#ECE8DE] bg-[#FBF9F4] px-3 py-1 text-xs font-bold text-[#303236]"
-                      key={term}
+                <button
+                  className="interactive text-xs text-muted underline-offset-4 hover:text-ink hover:underline"
+                  onClick={clearRecentSearches}
+                  type="button"
+                >
+                  Clear all
+                </button>
+              ) : null}
+            </div>
+            {recentSearches.length > 0 ? (
+              <ul className="mt-4 border-t border-line">
+                {recentSearches.slice(0, 6).map((term) => (
+                  <li className="flex items-center border-b border-line" key={term}>
+                    <button
+                      className="interactive flex-1 py-3 text-left text-sm text-muted hover:text-ink"
+                      onClick={() => runSearch(term)}
+                      type="button"
                     >
-                      <button
-                        className="hover:text-[#946B00]"
-                        onClick={() => runSuggestedSearch(term)}
-                        type="button"
-                      >
-                        {term}
-                      </button>
-                      <button
-                        aria-label={`Remove ${term}`}
-                        className="text-[#A5A79F] hover:text-[#B9473A]"
-                        onClick={() => removeRecentSearch(term)}
-                        type="button"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-4 text-xs text-[#A5A79F]">
-                  No recent searches recorded yet.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Results Section */}
-        <section aria-labelledby="results-heading" className="mt-12">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-black tracking-tight text-[#111214]" id="results-heading">
-                {normalizedQuery || selectedCategoryFilter !== "all"
-                  ? `Search Results (${searchResults.length})`
-                  : "All Catalog Agents"}
-              </h2>
-              {normalizedQuery && (
-                <p className="mt-1 text-xs text-[#6E706B]">
-                  Matching query: <span className="font-bold text-[#111214]">“{normalizedQuery}”</span>
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6">
-            {isLoading ? (
-              <StatePanel
-                body="Querying Dolphin catalog for matching records."
-                state="syncing"
-                title="Searching..."
-              />
-            ) : isError ? (
-              <StatePanel
-                body="Could not reach the catalog API."
-                state="unavailable"
-                title="Search Unavailable"
-              />
-            ) : searchResults.length === 0 ? (
-              <StatePanel
-                body="No agents matched your search query or category filter. Try a different keyword or view all categories."
-                state="empty"
-                title="No Agents Found"
-              />
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {searchResults.map((agent) => (
-                  <AgentCard agent={agent} key={agent.id} />
+                      {term}
+                    </button>
+                    <button
+                      aria-label={`Remove ${term} from recent searches`}
+                      className="interactive px-2 py-3 text-xs text-faint hover:text-danger"
+                      onClick={() => removeRecentSearch(term)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </li>
                 ))}
-              </div>
+              </ul>
+            ) : (
+              <p className="mt-4 border-t border-line py-4 text-sm leading-6 text-faint">
+                Searches you submit will appear here on this device.
+              </p>
             )}
           </div>
         </section>
-      </div>
+      ) : null}
+
+      <section aria-labelledby="results-heading" className="pt-12 sm:pt-16">
+        <div className="flex flex-col gap-3 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="eyebrow">Results</p>
+            <h2 className="section-title mt-3" id="results-heading">
+              {normalizedQuery ? `Matching “${normalizedQuery}”` : "Agent catalog"}
+            </h2>
+          </div>
+          {!isLoading && !isError ? (
+            <p aria-live="polite" className="text-sm text-muted">
+              {searchResults.length} {searchResults.length === 1 ? "record" : "records"}
+            </p>
+          ) : null}
+        </div>
+
+        {isLoading ? (
+          <div className="pt-8">
+            <StatePanel
+              body="Reading the shared Dolphin catalog and applying your filters."
+              state="syncing"
+              title="Searching the catalog"
+            />
+          </div>
+        ) : isError ? (
+          <div className="pt-8">
+            <StatePanel
+              body="The shared catalog could not be reached. No fallback results are being substituted."
+              state="unavailable"
+              title="Search unavailable"
+            />
+          </div>
+        ) : searchResults.length === 0 ? (
+          <div className="pt-8">
+            <StatePanel
+              body="Try a broader term, remove the category filter, or search for a protocol such as Venus or PancakeSwap."
+              state="empty"
+              title="No matching agents"
+            />
+          </div>
+        ) : (
+          <div>
+            {searchResults.map((agent) => (
+              <AgentCard agent={agent} key={agent.id} />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="site-frame page-shell">
+          <StatePanel
+            body="Preparing the catalog filters."
+            state="syncing"
+            title="Opening search"
+          />
+        </div>
+      }
+    >
+      <SearchContent />
+    </Suspense>
   );
 }

@@ -1,3 +1,4 @@
+import { CategoryGlyph } from "@/components/category-glyph";
 import type { LiveMetricStatus } from "@/types/agent";
 
 type StatePanelProps = {
@@ -9,41 +10,36 @@ type StatePanelProps = {
 
 const stateConfigs: Record<
   LiveMetricStatus | "empty",
-  { label: string; bg: string; border: string; text: string; icon: "sparkle" | "shield" | "info" | "close" }
+  { label: string; bg: string; text: string; icon: "sparkle" | "shield" | "info" }
 > = {
   syncing: {
     label: "Syncing",
-    bg: "#FEF5D6",
-    border: "#F3E3A6",
-    text: "#946B00",
+    bg: "#fff2bd",
+    text: "#654b00",
     icon: "sparkle",
   },
   live: {
     label: "Live",
-    bg: "#DCEFE4",
-    border: "#BFE0CC",
-    text: "#1C6A44",
+    bg: "#e4f2ea",
+    text: "#267052",
     icon: "shield",
   },
   stale: {
     label: "Stale",
-    bg: "#FEF5D6",
-    border: "#F3E3A6",
-    text: "#946B00",
+    bg: "#fff2bd",
+    text: "#654b00",
     icon: "info",
   },
   unavailable: {
     label: "Unavailable",
-    bg: "#F5F3EB",
-    border: "#ECE8DE",
-    text: "#6E706B",
+    bg: "#eeede6",
+    text: "#6c6d64",
     icon: "info",
   },
   empty: {
-    label: "Empty",
-    bg: "#F5F3EB",
-    border: "#ECE8DE",
-    text: "#6E706B",
+    label: "Nothing here yet",
+    bg: "#eeede6",
+    text: "#6c6d64",
     icon: "info",
   },
 };
@@ -54,32 +50,28 @@ export function StatePanel({ title, body, state, compact }: StatePanelProps) {
   return (
     <div
       aria-live={state === "syncing" ? "polite" : undefined}
-      className={`rounded-3xl border border-[#ECE8DE] bg-white p-6 shadow-sm ${
-        compact ? "py-4 sm:py-5" : "py-8 sm:py-10"
+      className={`surface ${
+        compact ? "p-5" : "p-6 sm:p-8"
       }`}
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
-        <div className="shrink-0">
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider"
-            style={{
-              backgroundColor: config.bg,
-              borderColor: config.border,
-              color: config.text,
-              borderWidth: 1,
-            }}
-          >
-            {state === "syncing" && (
-              <span className="h-2 w-2 animate-pulse rounded-full bg-[#F5B300]" />
-            )}
-            {config.label}
-          </span>
+      <div className="flex gap-4 sm:gap-5">
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+          style={{ backgroundColor: config.bg, color: config.text }}
+        >
+          <CategoryGlyph color="currentColor" name={config.icon} size={18} strokeWidth={2} />
         </div>
-        <div>
-          <h3 className="text-lg font-black tracking-tight text-[#111214]">
+        <div className="min-w-0">
+          <p
+            className="text-[0.68rem] font-semibold uppercase tracking-[0.11em]"
+            style={{ color: config.text }}
+          >
+            {config.label}
+          </p>
+          <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-ink">
             {title}
           </h3>
-          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-[#6E706B]">
+          <p className="mt-1.5 max-w-2xl text-sm leading-6 text-muted">
             {body}
           </p>
         </div>

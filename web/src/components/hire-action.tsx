@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
+import { PaymentAction } from "@/components/payment-action";
 import { SessionGrantAction } from "@/components/session-grant-action";
 import { agentHiresApi } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
@@ -27,19 +28,30 @@ export function HireAction({ agent }: { agent: Agent }) {
     | { kind: "done"; id: string }
     | { kind: "error"; message: string }
   >({ kind: "idle" });
+  /**
+   * The verified ERC-8183 job that paid for this hire, once PaymentAction has
+   * one. Held here rather than read back from Convex so the hire can be
+   * completed in the same interaction the payment finished in.
+   */
+  const [paidJobId, setPaidJobId] = useState<string | null>(null);
 
   const access = assessAuthorizationCapability(agent.category, "read_only_hire");
   const price = agent.priceModel;
   const priceModel =
     price.status === "live" || price.status === "stale" ? price.value : null;
   const priceIsFree = priceModel !== null && Number(priceModel.amount) === 0;
-  const priceBlocksHire = priceModel !== null && !priceIsFree;
+  const priceRequiresPayment = priceModel !== null && !priceIsFree;
+  // A paid agent is hireable once, and only once, its payment is settled and
+  // verified. Before that the button stays disabled - it is not a refusal of
+  // the agent, it is the payment step not being done yet.
+  const paymentOutstanding = priceRequiresPayment && paidJobId === null;
   const alreadyHired =
     hiredAgents?.some((record) => record.tokenId === agent.tokenId) ?? false;
   const showMyAgents = alreadyHired || state.kind === "done";
 
   async function onHire() {
-    if (!wallet.address || !priceModel || !priceIsFree) return;
+    if (!wallet.address || !priceModel) return;
+    if (priceRequiresPayment && paidJobId === null) return;
 
     setState({ kind: "hiring" });
     try {
@@ -48,6 +60,7 @@ export function HireAction({ agent }: { agent: Agent }) {
         category: agent.category,
         walletAddress: wallet.address,
         priceModel,
+        paymentJobId: paidJobId,
       });
       setState({ kind: "done", id: String(id) });
     } catch (cause) {
@@ -73,9 +86,12 @@ export function HireAction({ agent }: { agent: Agent }) {
     noticeTitle = "Price policy unavailable";
     noticeBody =
       "Dolphin will not assume a price while the catalog value is unresolved.";
-  } else if (priceBlocksHire) {
-    noticeTitle = "Paid hiring is not configured";
-    noticeBody = `This record publishes a price of ${priceModel.amount} ${priceModel.token}, but no seller payment facilitator is configured.`;
+  } else if (paymentOutstanding) {
+    noticeTitle = "Payment required first";
+    noticeBody = `This agent publishes a price of ${priceModel.amount} ${priceModel.token}. Settle it in the payment step below — Dolphin verifies the escrow on-chain before it will record a paid hire.`;
+  } else if (priceRequiresPayment) {
+    noticeTitle = "Paid — ready to hire";
+    noticeBody = `Escrow job #${paidJobId} is funded and was verified on-chain. Hiring records it against this address.`;
   } else if (state.kind === "error") {
     noticeTitle = "Hire failed";
     noticeBody = state.message;
@@ -158,14 +174,37 @@ export function HireAction({ agent }: { agent: Agent }) {
         ) : (
           <button
             className="interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-paper-muted disabled:text-faint"
-            disabled={state.kind === "hiring" || priceModel === null || priceBlocksHire}
+            disabled={state.kind === "hiring" || priceModel === null || paymentOutstanding}
             onClick={() => void onHire()}
             type="button"
           >
-            {state.kind === "hiring" ? "Adding agent…" : "Hire read-only agent"}
+            {state.kind === "hiring"
+              ? "Adding agent…"
+              : priceRequiresPayment
+                ? "Hire paid agent"
+                : "Hire read-only agent"}
           </button>
         )}
       </div>
+
+      {/* The payment step, deliberately its own step above the authorization
+          one and below the hire. It renders only for an agent that actually
+          publishes a non-zero price, which today is none of them - the catalog
+          prices every agent at zero because no publisher exposes a price field
+          Dolphin can read. See SESSION-LOG-2026-08-31-payments.md §0.2. */}
+      {priceRequiresPayment && !showMyAgents ? (
+        <div className="mt-7 border-t border-line pt-6">
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
+            Payment · separate step
+          </p>
+          <PaymentAction
+            agent={agent}
+            onPaid={(job) => setPaidJobId(job.jobId)}
+            priceAmount={priceModel.amount}
+            priceToken={priceModel.token}
+          />
+        </div>
+      ) : null}
 
       <div className="mt-7 border-t border-line pt-6">
         <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">

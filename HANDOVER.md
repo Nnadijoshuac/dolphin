@@ -6,6 +6,247 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 ---
 
+# Session addendum — 2026-08-31 (session 8: your wallet now tells you the truth)
+
+Everything below was verified this session with live reads against BSC mainnet
+and BSC testnet and against the real `@altananetwork/sdk@0.8.0` source. Where an
+earlier section disagrees, this addendum wins. Full output is in
+`SESSION-LOG-2026-08-31-recovery.md`.
+
+## THE HEADLINE
+
+**A Dolphin Wallet now tells you, accurately and specifically, whether you
+could get back into it from another device — and offers to fix it if you
+can't.**
+
+Session 6 found that a wallet cannot be recovered until it has transacted, and
+shipped one fixed sentence about it on both wallet screens. That sentence was
+the same for every wallet, which made it wrong for half of them: it under-warns
+a fresh wallet whose funds really are at risk, and over-warns a used wallet
+that is genuinely safe. Both screens now read the wallet's actual on-chain
+KeyStore entry and say which side of the line *that* wallet is on.
+
+## The check, and why it is not a judgement call
+
+`recoverFromPasskey` reads `getKeys(wallet)` from Altana's KeyStore, and the
+SDK states the rule outright in `internal/keystore.d.ts`:
+
+```
+/** Reads the active key ids for a user. Empty array = not yet registered. */
+```
+
+So recoverability is **one `eth_call`**, exact and different per wallet. There
+was never a good reason to hedge about it.
+
+Read live on BSC mainnet — every Dolphin Wallet this project has ever created:
+
+```
+session6 WEBSITE  0xfE16aBCc199bB3F9935aa7B6b6466341833130C3   0 keys  NOT RECOVERABLE
+session6 MOBILE   0xfb0b95a5C1c4Af1Aa7883AFAB543502028ad22ef   0 keys  NOT RECOVERABLE
+session6 failed   0xd5a593b83b66cc4cfe1adf0c7082e0a1cb272bba   0 keys  NOT RECOVERABLE
+```
+
+**The gap is real, still open, and every wallet this project has made is on the
+wrong side of it.**
+
+## The decision: tell the truth always, offer the fix as a choice
+
+Documented reversibly in `altana-policy.ts` under `DECISION (2026-08-31)`, and
+hand-mirrored into the mobile twin in the same commit.
+
+**Why not register automatically at creation.** Registration costs a fee paid
+*by the wallet*, plus relay gas. A brand-new wallet holds nothing and literally
+cannot pay. Registering silently on first funding would spend someone's money
+without asking — the one thing every spend-shaped action in this project has
+refused to do.
+
+**The fee is real, and it moves.** `getRegistrationFeeInWei()` read twice,
+minutes apart, on BSC mainnet:
+
+```
+728732271782491 wei   = 0.000728732271782491 BNB
+727666842218717 wei   = 0.000727666842218717 BNB
+```
+
+Oracle-priced. So it is read live at the moment of asking and never cached to a
+constant — the same rule Session 7 reached for agent prices, arrived at
+independently here.
+
+**Three states, not two.** `unknown` | `registered` | `unregistered`. A failed
+read renders as "not checked" and never collapses into a reassurance or a
+warning. That distinction is the entire point: this feature exists because the
+screen was previously making a claim it had not checked.
+
+## The registration action
+
+`client.execute({ wallet, signer, calls: [] })` — an admin-signed intent with
+no calls of its own. `internal/relay.js`'s `submitCalls` calls itself *"the
+universal choke point for every userOp leaving the SDK"* and prepends the
+KeyStore registration to any admin intent whose wallet is unregistered, so the
+whole intent becomes exactly that one call. Deliberately not a contrived
+self-call or dust transfer, which would move value or burn extra gas for the
+same result.
+
+Consent and price, to the standard Sessions 6 and 7 set: the live fee is in the
+button label before the button is pressable; it is disabled outright when the
+wallet cannot cover fee + gas and says how much it actually holds; and a *null*
+balance disables it too, because "could not read" is never "enough".
+
+**Worth knowing, because it makes the button less necessary than it looks:**
+granting an agent a session or paying one already registers the wallet as a
+side effect, via the same prepend. The screen says so, so nobody is nudged into
+paying for something their next action would have done anyway. All those paths
+now re-read recoverability afterwards rather than leaving a stale "not yet" on
+screen.
+
+## The read is proven both ways — on real data, for nothing
+
+The negative side is the three mainnet wallets above. The positive side could
+not come from a Dolphin wallet, because **none has ever transacted**. So it was
+proven against real third-party Altana wallets found by walking KeyStore logs
+on chain 97:
+
+```
+0xBB62A403F8b582b49bcB05E1a7a678Da4Ebde48f   1 key    REGISTERED
+0xb69385da73e15AAB012ffa0407B3B63AF67AF3C1   3 keys   REGISTERED
+0x5C7C544e86119378a64B12bA9d92CE335018EA9D   7 keys   REGISTERED
+0x0000000000000000000000000000000000000000   0 keys   unregistered
+```
+
+**The `registered` branch is not dead code.** The exact call the providers make
+returns non-empty for real registered wallets and empty for one that is not.
+
+## Two findings about the external identity wallet (Task 3)
+
+Nothing was built here — Task 3 says build nothing unless something is broken,
+and identity connection is not broken. But two things are worth recording, and
+one corrects a standing entry in this file.
+
+**1. OKX Wallet is auto-discovered, and then ignored.** wagmi 2.19.5 turns
+EIP-6963 multi-injected discovery on by default
+(`multiInjectedProviderDiscovery = true`), so an installed OKX Wallet appears as
+its own connector (`com.okex.wallet`). But `connect()` only ever selects
+`c.id === "injected"` or the WalletConnect one, so the per-wallet connectors are
+discovered and never used.
+
+In practice: **with OKX installed alone it works exactly like any other wallet**
+— it owns `window.ethereum` and the bare `injected` connector picks it up,
+which is what Task 3 asked to confirm. With OKX *and* MetaMask both installed
+they contend for `window.ethereum` and the user cannot choose, because the one
+affordance that would let them is thrown away. Small, real, logged not fixed.
+
+**2. The WalletConnect relay blocker recorded in the session-4 addendum is
+gone.** That entry says this network refuses to resolve
+`relay.walletconnect.org`, and it is why `injected()` was chosen. Re-checked:
+
+```
+relay.walletconnect.org  ->  HTTP 400   (correct for a GET to a WS relay)
+relay.altana.network     ->  HTTP 405
+```
+
+It resolves and is reachable. The QR path — how an OKX *mobile* wallet would
+connect — is no longer environment-blocked. It is configured with a real project
+id and was not exercised, because that needs a phone.
+
+## State of the two products
+
+| | Mobile (root) | Website (`web/`) |
+|---|---|---|
+| `tsc --noEmit` | clean | clean |
+| lint | 0 errors, 2 pre-existing warnings | 1 pre-existing error (below) |
+| build | `expo export` OK, web **and** android | `next build` OK |
+| Recoverability | web export yes, native no (stated) | yes |
+
+Two warnings this session introduced were fixed in the same change. The
+website's one error is in `web/src/app/search/page.tsx`
+(`react-hooks/set-state-in-effect`), introduced in `e591a04` before session 7,
+in a screen file AGENTS.md §11 reserves.
+
+**The native bundle still carries no SDK** — re-measured with a real export:
+
+```
+android  createPasskeyWallet 0   relay.altana.network 0
+web      createPasskeyWallet 8   relay.altana.network 2
+```
+
+Android *does* contain `getRegistrationFeeInWei`, `registerWallet` and
+`recoverabilityCopy`, one each. That is intended: they live in the SDK-free
+policy and types modules both targets share. The policy travels; the SDK does
+not.
+
+## WHAT IS NOT PROVEN
+
+**`registerWallet()` has never run to completion.** The owner was asked, with
+the cost stated (~0.002 BNB all-in), and chose "build now, fund later" — the
+same call as sessions 6 and 7. So:
+
+```
+the getKeys read, unregistered side   OBSERVED (3 mainnet wallets)
+the getKeys read, registered side     OBSERVED (3 real testnet wallets)
+the fee read                          OBSERVED, and observed to move
+the "cannot afford" refusal           BUILT - and it is what every Dolphin
+                                      wallet renders today, since all are empty
+registerWallet() succeeding           NOT RUN
+recovery working after registering    NOT RUN
+```
+
+**The UI was not driven in a browser.** Playwright is still not a dependency
+here (AGENTS.md §3 governs adding one). The logic behind the panels was
+verified; the panels themselves were not clicked.
+
+## Known issues, new this session
+
+1. **No Dolphin Wallet has ever been registered**, so the whole
+   unrecoverable → recoverable transition is unobserved. ~0.002 BNB closes it.
+   *(new)*
+2. **EIP-6963 connectors are discovered and discarded**, so a user with two
+   wallet extensions cannot choose between them. *(new)*
+3. **The registration action is unreachable for every wallet that exists
+   today**, because all of them are empty and the button correctly refuses. It
+   is not dead code — it is gated on funding, which is the honest gate. *(new)*
+
+Everything carried forward from the session 7 addendum still stands, notably:
+no ERC-8183 job has ever been funded, the catalog still prices every agent at
+zero, and the website still has no public URL.
+
+## IS THIS SUBMITTABLE RIGHT NOW?
+
+**Yes, and this session removes the one thing in the product that could have
+cost a user real money through no fault of their own.** A person can now look
+at their own wallet and know whether logging out would lock them out — and if
+it would, fix it in one priced, consented click. That is a small feature with a
+disproportionate honesty payoff, and it is the kind of thing that is much more
+convincing to a judge than another capability: the app is telling you something
+inconvenient about itself, accurately, per wallet, read from the chain.
+
+**The one thing between here and *best-case* submittable is unchanged for the
+fifth session running: the website still has no public URL.** It is the
+strongest surface, everything on it works, and it runs only on localhost. One
+deploy and one credential the owner must add; Vercel is the shortest path.
+
+**Second, and now cheaper than ever:** ~0.002 BNB in one Dolphin Wallet would
+close *two* open claims at once — this session's unrecoverable→recoverable
+transition, and session 6's on-chain session enforcement, since granting a
+session registers the wallet as a side effect. One funded wallet, two proofs.
+
+### Was the scope realistic? Yes — the honest split
+
+**Done in full:** Task 0 (gap reconfirmed on-chain, cheap path found, real cost
+measured), Task 1 (decision documented reversibly in code, mirrored), Task 2
+(built on both web targets, read verified both ways), Task 3 (checked rather
+than assumed — and turned up a correction to a standing blocker in this file).
+
+**Deliberately not done:**
+- **A funded registration.** The owner's call, asked with the cost stated.
+- **Fixing EIP-6963 connector selection.** Task 3 says build nothing unless
+  something is broken; identity connection works. Logged as issue 2.
+- **Native recoverability.** Native has no Dolphin Wallet at all, per the
+  documented limit from Session 6. It reports "unknown" rather than
+  "unregistered" — there is no wallet here to be unregistered, and saying
+  otherwise would be a claim about something that does not exist.
+
+---
+
 # Session addendum — 2026-08-31 (session 7: agents can actually be paid)
 
 Everything below was verified this session with live commands against the real

@@ -138,3 +138,186 @@ The gap cannot be closed silently for free, so the honest options are:
 3. Say nothing and let people discover it on a new device. Not an option.
 
 1 and 2 together are what this session builds.
+
+---
+
+## TASK 1 — THE DECISION
+
+**Both, and the order matters: tell the truth always, offer the fix as a
+choice.** Recorded in `altana-policy.ts` under
+`DECISION (2026-08-31): recoverability is READ per wallet, never assumed`,
+hand-mirrored into the mobile twin in the same commit.
+
+**Why not just register at creation.** A brand-new wallet holds nothing, and
+registration is paid by the wallet. It *cannot* pay. Registering silently the
+moment it is funded would spend someone's money without asking, which is the
+one thing every spend-shaped action in this project refuses to do.
+
+**Why a blanket warning was rejected.** Session 6 shipped one fixed sentence
+about recovery on both wallet screens. The same sentence for every wallet is
+wrong for half of them: it under-warns a fresh wallet whose funds really are at
+risk, and over-warns a used wallet that is genuinely safe. The brief calls that
+hedging rather than honesty, and it is right — especially when the true answer
+is one `eth_call` away.
+
+**Three states, not two.** `unknown` | `registered` | `unregistered`. A read
+that fails renders as "not checked" and never collapses into either a
+reassurance or a warning. That distinction is the whole point: this feature
+exists because the screen was previously making a claim it had not checked.
+
+## TASK 2 — WHAT WAS BUILT
+
+**The read.** `getKeys(wallet)` against `NetworkConfig.keyStore`. The KeyStore
+address and the RPC both come from the SDK's own config object, so no contract
+address is hand-typed anywhere. The ABI fragment lives in `altana-policy.ts`
+because the SDK does not export its `readActiveKeys` helper — and the policy
+module must stay SDK-free so the native bundle never carries the SDK, the
+constraint Session 6 measured.
+
+**The action.** `client.execute({ wallet, signer, calls: [] })` — an
+admin-signed intent with no calls of its own. `submitCalls` prepends the
+KeyStore registration to any admin intent whose wallet is unregistered, so the
+whole intent becomes exactly that one call. Deliberately not a contrived
+self-call or dust transfer: those would move value or burn extra gas to achieve
+the same registration.
+
+**Consent and price**, to the standard Sessions 6 and 7 set:
+
+- the live fee is rendered in the button label before it is pressable;
+- the button is `disabled` outright when the wallet cannot cover fee + gas, and
+  says how much it actually holds;
+- a *null* balance disables it too, with its own sentence — "could not read" is
+  never treated as "enough";
+- the screen states that granting a session or paying an agent registers the
+  wallet anyway, so nobody is nudged into paying for something their next
+  action would have done for free.
+
+**Staleness.** `grantSession`, `payForAgent`, `createWallet`, `recoverWallet`
+and `registerWallet` all re-read recoverability afterwards. A screen whose
+entire purpose is stating a checked fact must not go on showing a stale "not
+yet" after the action that changed it.
+
+### Verification — the read is proven BOTH ways, on real data
+
+The negative side, on BSC mainnet (§0.1): all three wallets Session 6 created
+return 0 keys → `unregistered`.
+
+The positive side could not come from a Dolphin wallet, because none has ever
+transacted. So it was proven against **real third-party Altana wallets** on
+chain 97, found by walking KeyStore logs:
+
+```
+testnet KeyStore 0x6b8361C29d05D498b1a12B54A37310f94171E94A
+  0xBB62A403F8b582b49bcB05E1a7a678Da4Ebde48f  getKeys -> 1 key   REGISTERED
+  0xb69385da73e15AAB012ffa0407B3B63AF67AF3C1  getKeys -> 3 keys  REGISTERED
+  0x5C7C544e86119378a64B12bA9d92CE335018EA9D  getKeys -> 7 keys  REGISTERED
+  0x0000000000000000000000000000000000000000  getKeys -> 0 keys  unregistered
+```
+
+**So the `registered` branch is not dead code** — the exact call the providers
+make returns non-empty for real registered wallets and empty for one that is
+not. What remains unproven is narrower and is stated as such below.
+
+## TASK 3 — THE EXTERNAL IDENTITY WALLET
+
+Nothing was built here. Two things were checked, and one of them is a
+correction to a standing entry in HANDOVER.md.
+
+**1. OKX Wallet and friends are discovered automatically — but the app never
+picks them.** `web/src/wallet/wallet-provider.tsx` configures
+`injected({ shimDisconnect: true })` plus `walletConnect`. wagmi 2.19.5 turns
+EIP-6963 multi-injected discovery **on by default**:
+
+```js
+// node_modules/@wagmi/core/dist/esm/createConfig.js:12
+const { multiInjectedProviderDiscovery = true, ... }
+```
+
+so an installed OKX Wallet is surfaced as its own connector with an id like
+`com.okex.wallet`. But `connect()` only ever selects
+`connectors.find((c) => c.id === "injected")` or the WalletConnect one, so a
+6963-discovered connector is never chosen.
+
+**What that means in practice**, stated precisely rather than as a pass/fail:
+with OKX Wallet installed *alone*, it sets `window.ethereum`, the bare
+`injected` connector picks it up, and identity connection works exactly as for
+any other wallet — which is what Task 3 asked to confirm. With OKX **and**
+MetaMask both installed, they contend for `window.ethereum` and the user cannot
+choose between them, because the one UI affordance that would let them (the
+per-wallet 6963 connectors) is discovered and then ignored. That is a real,
+small gap; it is logged, not fixed, because Task 3 says build nothing unless
+something is found broken, and identity connection itself is not broken.
+
+**2. The WalletConnect relay blocker from Session 4 is GONE.** That addendum
+recorded this network refusing to resolve `relay.walletconnect.org`, and it was
+the reason `injected()` was chosen. Re-checked live:
+
+```
+relay.walletconnect.org  ->  HTTP 400
+relay.altana.network     ->  HTTP 405
+```
+
+400 is the correct answer from a WebSocket relay to a plain GET — it resolves
+and it is reachable. So the QR path (which is how an OKX *mobile* wallet would
+connect) is no longer environment-blocked. It is configured with a real project
+id and was not exercised, because that needs a phone.
+
+**Not verified, and it cannot be from here:** no wallet extension is installed
+on this machine — the same limit Session 4 recorded for MetaMask. So the OKX
+extension's own approval UI is untested. What is established is that the wiring
+selects a connector correctly and that nothing about Sessions 6–8 changed this
+path.
+
+## GATES
+
+| | Mobile (root) | Website (`web/`) |
+|---|---|---|
+| `tsc --noEmit` | clean | clean |
+| lint | 0 errors, 2 pre-existing warnings | 1 pre-existing error (below) |
+| build | `expo export` OK, web **and** android | `next build` OK, `/wallet` still static |
+
+Two lint warnings this session introduced (a missing `refreshRecoverability`
+dependency in two `useCallback`s) were fixed in the same change rather than
+left. The website's one error is in `web/src/app/search/page.tsx`
+(`react-hooks/set-state-in-effect`), introduced in commit `e591a04` before
+session 7 began, in a screen file AGENTS.md §11 reserves.
+
+### The native bundle still carries no SDK
+
+```
+android   createPasskeyWallet 0   relay.altana.network 0
+web       createPasskeyWallet 8   relay.altana.network 2
+```
+
+The Android bundle *does* contain `getRegistrationFeeInWei`, `registerWallet`
+and `recoverabilityCopy` — one occurrence each. That is correct and intended:
+those live in `altana-policy.ts` and `altana-types.ts`, which are deliberately
+SDK-free and shared by both targets. The policy travels; the SDK does not.
+
+## WHAT IS NOT PROVEN
+
+**No Dolphin Wallet has ever been registered, so `registerWallet` has never
+run to completion.** The owner was asked, with the cost stated
+(~0.002 BNB all-in), and chose "build now, fund later" — the same call as
+sessions 6 and 7.
+
+Precisely what that leaves:
+
+```
+the getKeys read, unregistered side   OBSERVED (3 mainnet wallets)
+the getKeys read, registered side     OBSERVED (3 real testnet wallets)
+the fee read                          OBSERVED, and observed to move
+the "cannot afford" refusal           BUILT - every Dolphin wallet is in
+                                      this state, so it is what renders today
+registerWallet() succeeding           NOT RUN
+recovery working after registering    NOT RUN
+```
+
+The gap is now *visible to the user it affects*, which it was not before, and
+the fix is one funded click away. But nobody here has watched a Dolphin Wallet
+go from unrecoverable to recoverable.
+
+**The UI was not driven in a browser.** Playwright is still not a dependency of
+this repo (AGENTS.md §3 governs adding one), so the rendered panels were not
+exercised. What was verified is the logic behind them: the on-chain read both
+ways, and the fee.

@@ -9,6 +9,7 @@
  */
 
 import type * as agentHires from "../agentHires.js";
+import type * as agentPayments from "../agentPayments.js";
 import type * as agentSessions from "../agentSessions.js";
 import type * as agentSubmissions from "../agentSubmissions.js";
 import type * as agents from "../agents.js";
@@ -23,6 +24,7 @@ import type * as lib_agentScoring from "../lib/agentScoring.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
 import type * as lib_classification from "../lib/classification.js";
 import type * as lib_dataSources from "../lib/dataSources.js";
+import type * as lib_erc8183 from "../lib/erc8183.js";
 import type * as lib_liveMetric from "../lib/liveMetric.js";
 import type * as lib_liveness from "../lib/liveness.js";
 import type * as lib_manualExclusions from "../lib/manualExclusions.js";
@@ -43,6 +45,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agentHires: typeof agentHires;
+  agentPayments: typeof agentPayments;
   agentSessions: typeof agentSessions;
   agentSubmissions: typeof agentSubmissions;
   agents: typeof agents;
@@ -57,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   "lib/bscClient": typeof lib_bscClient;
   "lib/classification": typeof lib_classification;
   "lib/dataSources": typeof lib_dataSources;
+  "lib/erc8183": typeof lib_erc8183;
   "lib/liveMetric": typeof lib_liveMetric;
   "lib/liveness": typeof lib_liveness;
   "lib/manualExclusions": typeof lib_manualExclusions;

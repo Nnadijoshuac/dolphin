@@ -3,13 +3,15 @@
 import {
   BNB,
   createClient,
+  erc8183Addresses,
+  hireErc8183Agent,
   signerFromPasskey,
   type Client,
   type Session,
   type Signer,
 } from "@altananetwork/sdk";
 import { useQuery as useTanstackQuery, useQueryClient } from "@tanstack/react-query";
-import { useMutation, useQuery as useConvexQuery } from "convex/react";
+import { useAction, useMutation, useQuery as useConvexQuery } from "convex/react";
 import {
   createContext,
   useCallback,
@@ -22,7 +24,12 @@ import {
 } from "react";
 import type { Address, Hex } from "viem";
 
-import { agentSessionsApi, type AgentSessionRow } from "@/convex/api";
+import {
+  agentPaymentsApi,
+  agentSessionsApi,
+  type AgentQuote,
+  type AgentSessionRow,
+} from "@/convex/api";
 import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
 import type { AgentCategory } from "@/types/agent";
@@ -33,6 +40,7 @@ import {
   expiryFromNow,
   sessionPolicyFor,
 } from "./altana-policy";
+import { ERC8183_CHAIN_ID, JOB_DEADLINE_SECONDS } from "./erc8183-policy";
 import {
   forgetLocalWallet,
   getAltanaServerSnapshot,
@@ -72,6 +80,21 @@ if (ALTANA_NETWORK.chainId !== ALTANA_CHAIN_ID) {
       `chain ${ALTANA_NETWORK.chainId}. Reconcile altana-policy.ts with the SDK before shipping.`,
   );
 }
+
+if (ERC8183_CHAIN_ID !== ALTANA_NETWORK.chainId) {
+  throw new Error(
+    `ERC-8183 policy says chain ${ERC8183_CHAIN_ID}, but the wallet is on ` +
+      `chain ${ALTANA_NETWORK.chainId}. A paid hire must settle on the chain the wallet holds funds on.`,
+  );
+}
+
+/**
+ * The ERC-8183 deployment for this chain, resolved from the SDK rather than
+ * written down here - same rule as ALTANA_NETWORK above and the same reason:
+ * an address a human typed is an address a human can mistype, and this one
+ * decides where a user's money goes.
+ */
+const ERC8183 = erc8183Addresses(ALTANA_NETWORK.chainId);
 
 let cachedClient: Client | null = null;
 
@@ -120,6 +143,33 @@ export type GrantSessionInput = {
   hirerWalletAddress: string | null;
 };
 
+export type PayForAgentInput = {
+  tokenId: string;
+  category: AgentCategory;
+  /** The already-negotiated quote. Never re-derived on the client. */
+  quote: AgentQuote;
+  /** The wagmi address on the matching agentHires row, when connected. */
+  hirerWalletAddress: string | null;
+};
+
+export type PaidJob = {
+  jobId: string;
+  transactionHash: string | null;
+  jobStatus: string;
+  budgetRaw: string;
+  /** What the seller said when told its escrow was funded. */
+  sellerAccepted: boolean;
+  sellerReply: string;
+};
+
+/** One ERC-20 balance, read on-chain. Decimals and symbol come from the token. */
+export type TokenHolding = {
+  address: string;
+  raw: bigint;
+  decimals: number;
+  symbol: string;
+};
+
 export type AltanaWalletValue = Readonly<{
   status: AltanaWalletStatus;
   /** Why a wallet cannot exist here. Null unless status is "unsupported". */
@@ -155,6 +205,21 @@ export type AltanaWalletValue = Readonly<{
 
   grantSession: (input: GrantSessionInput) => Promise<void>;
   revokeSession: (publicKey: string) => Promise<void>;
+
+  /**
+   * Reads one ERC-20 balance from this wallet. Takes the token address rather
+   * than consulting a list, because the only token that matters is the one the
+   * agent being hired actually quoted - there is deliberately no hardcoded
+   * token list anywhere in this flow.
+   */
+  readTokenBalance: (token: string) => Promise<TokenHolding>;
+
+  /**
+   * Pays an agent's published price by funding an ERC-8183 escrow job, then
+   * has Dolphin verify that job on-chain and tell the seller to start work.
+   * Signed here, in the browser, by the passkey - never on a server.
+   */
+  payForAgent: (input: PayForAgentInput) => Promise<PaidJob>;
 }>;
 
 const AltanaContext = createContext<AltanaWalletValue | null>(null);
@@ -203,6 +268,11 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   );
   const recordGrant = useMutation(agentSessionsApi.agentSessions.recordSessionGrant);
   const markRevoked = useMutation(agentSessionsApi.agentSessions.markSessionRevoked);
+  // Actions, not mutations: both reach outside Convex - one to read the escrow
+  // kernel on BSC, one to POST to the seller's endpoint past the CORS wall a
+  // browser cannot get through.
+  const recordPayment = useAction(agentPaymentsApi.agentPayments.recordJobPayment);
+  const notifyFunded = useAction(agentPaymentsApi.agentPayments.notifyJobFunded);
 
   const balanceQuery = useTanstackQuery({
     queryKey: ["altana-balance", ALTANA_NETWORK.chainId, address],
@@ -381,6 +451,160 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     [adminSigner, markRevoked, sessionsUnavailable],
   );
 
+  const readTokenBalance = useCallback(async (token: string): Promise<TokenHolding> => {
+    const wallet = getAltanaSnapshot();
+    if (!wallet) throw new Error("No Dolphin Wallet on this device.");
+
+    const result = await altanaClient().balances({
+      wallet: { address: wallet.address },
+      chainId: ALTANA_NETWORK.chainId,
+      tokens: [token as Address],
+    });
+    const holding = result.tokens?.[0];
+    if (!holding) {
+      throw new Error(`Could not read a balance for token ${token} on this wallet.`);
+    }
+    if (!holding.ok) {
+      // An unreadable balance reads as unreadable, never as zero - the same
+      // rule the native balance already follows. "Could not read" and "is
+      // empty" are different claims and only one of them permits a payment.
+      throw new Error(`Could not read the token balance: ${holding.error}`);
+    }
+    return {
+      address: holding.address,
+      raw: holding.raw,
+      decimals: holding.decimals,
+      symbol: holding.symbol,
+    };
+  }, []);
+
+  const payForAgent = useCallback(
+    async (input: PayForAgentInput): Promise<PaidJob> => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) {
+        throw new Error("Create a Dolphin Wallet before paying for a hire.");
+      }
+      if (sessionsUnavailable) {
+        // Same refusal as grantSession, for the same reason and with more at
+        // stake: a payment nothing would have a record of is a payment the
+        // user could never point at afterwards.
+        throw new Error(
+          "Dolphin's backend is not configured, so a payment could not be verified or recorded " +
+            "anywhere. Refusing to spend from your wallet with no record of what it bought.",
+        );
+      }
+
+      const { quote } = input;
+
+      // Cross-check the seller's named escrow against the SDK's own deployment
+      // record. The seller tells Dolphin which contract to put money into;
+      // agreeing with it blindly would let a compromised endpoint name any
+      // contract at all. Both sides must say the same thing or nothing moves.
+      if (quote.verifyingContract.toLowerCase() !== ERC8183.commerce.toLowerCase()) {
+        throw new Error(
+          `This agent asked for payment into ${quote.verifyingContract}, but the ERC-8183 escrow ` +
+            `kernel on this chain is ${ERC8183.commerce}. Dolphin will not fund an escrow contract ` +
+            "the SDK's own deployment record does not recognise.",
+        );
+      }
+      if (quote.paymentToken.toLowerCase() !== ERC8183.paymentToken.toLowerCase()) {
+        throw new Error(
+          `This agent quoted in token ${quote.paymentToken}, but the ERC-8183 kernel settles in ` +
+            `${ERC8183.paymentToken}. A job funded in a different token would not pay this agent.`,
+        );
+      }
+      if (quote.chainId !== ALTANA_NETWORK.chainId) {
+        throw new Error(
+          `This agent quoted on chain ${quote.chainId}; your Dolphin Wallet holds funds on chain ` +
+            `${ALTANA_NETWORK.chainId}.`,
+        );
+      }
+
+      // Balance is checked before signing rather than after failing. A user
+      // should be told what they are short of, not watch a transaction revert.
+      const holding = await readTokenBalance(quote.paymentToken);
+      const price = BigInt(quote.priceRaw);
+      if (holding.raw < price) {
+        throw new Error(
+          `This agent charges ${quote.priceRaw} atomic units of ${holding.symbol} and this Dolphin ` +
+            `Wallet holds ${holding.raw.toString()}. Fund the wallet before paying.`,
+        );
+      }
+
+      setIsBusy(true);
+      setError(null);
+      try {
+        // THE PAYMENT. Five calls - createJob, registerJob, setBudget, approve
+        // and fund - batched into one atomic relay intent and signed by the
+        // passkey. Note there is no separate Permit2 approval step to walk the
+        // user through: this rail batches its own token approval, unlike x402.
+        const funded = await hireErc8183Agent(
+          { address: wallet.address },
+          adminSigner(),
+          {
+            provider: quote.provider as Address,
+            task: quote.taskDescription,
+            budget: price,
+            deadlineSeconds: JOB_DEADLINE_SECONDS,
+          },
+          { network: ALTANA_NETWORK },
+        );
+
+        // Recorded only AFTER the escrow is funded, and even then Convex does
+        // not take this result's word for it - recordJobPayment reads the job
+        // back off the kernel itself and refuses if anything disagrees. Same
+        // principle as recordSessionGrant, one notch stricter because this one
+        // is about money.
+        const verified = await recordPayment({
+          tokenId: input.tokenId,
+          category: input.category,
+          altanaWalletAddress: wallet.address,
+          hirerWalletAddress: input.hirerWalletAddress,
+          escrowContract: quote.verifyingContract,
+          jobId: funded.jobId.toString(),
+          transactionHash: funded.transactionHash ?? null,
+          paymentToken: quote.paymentToken,
+          paymentTokenSymbol: quote.paymentTokenSymbol,
+          paymentTokenDecimals: quote.paymentTokenDecimals,
+        });
+
+        // Only now does the seller get told to start work. Notifying earlier
+        // would ask an agent to work against an escrow Dolphin had not
+        // confirmed. A failure here does not undo the payment, so it is
+        // reported rather than thrown - the escrow exists either way and the
+        // user needs to see what the seller said.
+        let sellerAccepted = false;
+        let sellerReply = "";
+        try {
+          const notified = await notifyFunded({
+            tokenId: input.tokenId,
+            jobId: funded.jobId.toString(),
+          });
+          sellerAccepted = notified.accepted;
+          sellerReply = notified.detail;
+        } catch (cause) {
+          sellerReply = cause instanceof Error ? cause.message : String(cause);
+        }
+
+        refreshBalance();
+        return {
+          jobId: funded.jobId.toString(),
+          transactionHash: funded.transactionHash ?? null,
+          jobStatus: verified.jobStatus,
+          budgetRaw: verified.budgetRaw,
+          sellerAccepted,
+          sellerReply,
+        };
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner, notifyFunded, readTokenBalance, recordPayment, refreshBalance, sessionsUnavailable],
+  );
+
   const value = useMemo<AltanaWalletValue>(() => {
     const status: AltanaWalletStatus = !isClient
       ? "loading"
@@ -420,6 +644,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       forgetWallet,
       grantSession,
       revokeSession,
+      readTokenBalance,
+      payForAgent,
     };
   }, [
     balanceQuery.data,
@@ -433,6 +659,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     isClient,
     liveSessions,
     now,
+    payForAgent,
+    readTokenBalance,
     recoverWallet,
     refreshBalance,
     revokeSession,

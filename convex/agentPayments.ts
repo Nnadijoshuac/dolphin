@@ -77,6 +77,12 @@ const quoteValidator = v.object({
   taskDescription: v.string(),
   deliverables: v.union(v.string(), v.null()),
   endpoint: v.string(),
+  /**
+   * The seller's untouched response. Returned rather than dropped so a
+   * disagreement between what Dolphin rendered and what the agent actually
+   * said is settleable after the fact, by looking rather than by arguing.
+   */
+  rawResponse: v.string(),
 });
 
 export type PublicQuote = NormalizedQuote & {
@@ -306,7 +312,13 @@ export const recordJobPayment = action({
     paymentTokenDecimals: v.number(),
   },
   returns: v.object({ recordId: v.string(), jobStatus: v.string(), budgetRaw: v.string() }),
-  handler: async (ctx, args) => {
+  // Annotated explicitly: this handler calls ctx.runMutation on a function in
+  // its OWN module, so inferring its type needs the module's type, which needs
+  // this handler's type. TS7022/7023. The annotation breaks the cycle.
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ recordId: string; jobStatus: string; budgetRaw: string }> => {
     const agent = await ctx.runQuery(api.agents.getAgent, { reference: args.tokenId });
     if (!agent) {
       throw new Error(`recordJobPayment: agent ${args.tokenId} is not in Dolphin's catalog.`);

@@ -91,12 +91,15 @@ export const categoryStatsApi = anyApi as unknown as {
 };
 
 /**
- * convex/agentHires.ts. A hire is a read-only subscription row - no signature,
- * no spend cap, no transaction. `priceModel` must be the agent's ALREADY
+ * convex/agentHires.ts. A hire is a subscription row - no signature, no spend
+ * cap, no transaction of its own. `priceModel` must be the agent's ALREADY
  * RESOLVED priceModel.value, or null; passing null makes the mutation reject
- * rather than assume free, and a non-zero price also rejects because no x402
- * seller-side integration exists. Both of those refusals are deliberate and
- * must not be worked around on the client.
+ * rather than assume free.
+ *
+ * A NON-ZERO price additionally requires `paymentJobId` - the id of an
+ * ERC-8183 job that convex/agentPayments.ts already verified on-chain. The
+ * mutation looks that row up itself, so passing an id nothing paid for is an
+ * error rather than a hire. Neither refusal may be worked around on the client.
  */
 export const agentHiresApi = anyApi as unknown as {
   agentHires: {
@@ -106,6 +109,7 @@ export const agentHiresApi = anyApi as unknown as {
         category: AgentCategory;
         walletAddress: string;
         priceModel: AgentPriceModel | null;
+        paymentJobId?: string | null;
       },
       string
     >;
@@ -181,5 +185,99 @@ export const agentSessionsApi = anyApi as unknown as {
       { tokenId: string; altanaWalletAddress: string },
       AgentSessionRow | null
     >;
+  };
+};
+
+/**
+ * convex/agentPayments.ts. Paid hires over ERC-8183 escrow.
+ *
+ * Two of these are a RELAY and one is a WITNESS, and the distinction matters:
+ *
+ * - `requestQuote` / `notifyJobFunded` POST to a third-party agent endpoint on
+ *   the browser's behalf, because the browser genuinely cannot - 2 of the 3
+ *   live sellers answer a CORS preflight with 405 and no
+ *   Access-Control-Allow-Origin. They forward a request and return a response.
+ *   They hold no key material and cannot move a token.
+ * - `recordJobPayment` does not believe the client. It reads the ERC-8183
+ *   kernel on BSC itself and refuses unless the job is really funded, really
+ *   from this wallet, really to this agent's registered address, and really
+ *   for a non-zero budget.
+ *
+ * The payment itself is signed in the browser by the passkey. Nothing in this
+ * namespace signs anything - Convex cannot, and this project's whole
+ * authorization story depends on it never starting.
+ */
+export type AgentQuote = {
+  dialect: "instructions" | "signed-envelope";
+  /** Checked server-side to equal the agent's registered ERC-8004 wallet. */
+  provider: string;
+  /** Atomic units as a decimal string. Never parse this into a number. */
+  priceRaw: string;
+  paymentToken: string;
+  /** Read on-chain from the quoted token itself, not assumed. */
+  paymentTokenSymbol: string;
+  paymentTokenDecimals: number;
+  verifyingContract: string;
+  chainId: number;
+  estimatedCompletionSeconds: number | null;
+  quoteExpiresAt: number | null;
+  negotiationHash: string | null;
+  providerSignature: string | null;
+  taskDescription: string;
+  /** The seller's own words about what it will deliver. */
+  deliverables: string | null;
+  endpoint: string;
+  rawResponse: string;
+};
+
+export type AgentJobRow = {
+  tokenId: string;
+  agentName: string;
+  category: AgentCategory;
+  altanaWalletAddress: string;
+  hirerWalletAddress: string | null;
+  providerAddress: string;
+  escrowContract: string;
+  jobId: string;
+  jobStatus: string;
+  budgetRaw: string;
+  paymentToken: string;
+  paymentTokenSymbol: string;
+  paymentTokenDecimals: number;
+  taskDescription: string;
+  transactionHash: string | null;
+  verifiedAt: string;
+};
+
+export const agentPaymentsApi = anyApi as unknown as {
+  agentPayments: {
+    requestQuote: Action<
+      { tokenId: string; taskDescription: string; serviceId?: string },
+      AgentQuote
+    >;
+    notifyJobFunded: Action<
+      { tokenId: string; jobId: string },
+      { accepted: boolean; detail: string }
+    >;
+    recordJobPayment: Action<
+      {
+        tokenId: string;
+        category: AgentCategory;
+        altanaWalletAddress: string;
+        hirerWalletAddress: string | null;
+        escrowContract: string;
+        jobId: string;
+        transactionHash: string | null;
+        paymentToken: string;
+        paymentTokenSymbol: string;
+        paymentTokenDecimals: number;
+      },
+      { recordId: string; jobStatus: string; budgetRaw: string }
+    >;
+    getJobsForAgent: Query<
+      { tokenId: string; altanaWalletAddress: string },
+      AgentJobRow[]
+    >;
+    getJobsForAltanaWallet: Query<{ altanaWalletAddress: string }, AgentJobRow[]>;
   };
 };

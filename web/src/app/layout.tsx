@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
-import { AppShell } from "@/components/app-shell";
+import { AppFrame } from "@/components/app-frame";
 import { AppProviders } from "@/providers/app-providers";
 
 import "./globals.css";
@@ -53,7 +53,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="min-h-screen bg-canvas text-ink">
         <AppProviders>
-          <AppShell>{children}</AppShell>
+          <AppFrame>{children}</AppFrame>
         </AppProviders>
       </body>
     </html>

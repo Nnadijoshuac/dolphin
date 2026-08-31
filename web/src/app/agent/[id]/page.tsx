@@ -4,7 +4,6 @@ import Link from "next/link";
 import { use } from "react";
 
 import { AgentDetail } from "@/components/agent-detail";
-import { ConstellationBg } from "@/components/constellation-bg";
 import { StatePanel } from "@/components/state-panel";
 import { useAgentDetail } from "@/hooks/use-agents";
 
@@ -18,13 +17,12 @@ export default function AgentPage({
 
   if (isLoading) {
     return (
-      <div className="relative min-h-screen py-20">
-        <ConstellationBg opacity={0.3} />
-        <div className="site-frame">
+      <div className="site-frame page-shell">
+        <div className="max-w-3xl">
           <StatePanel
-            body="Reading Dolphin's catalog and re-checking ERC-8004 identity on BNB Smart Chain."
+            body="Reading the shared catalog and checking the ERC-8004 identity on BNB Smart Chain."
             state="syncing"
-            title="Loading Agent Dossier"
+            title="Loading agent record"
           />
         </div>
       </div>
@@ -33,9 +31,8 @@ export default function AgentPage({
 
   if (isError || !agent) {
     return (
-      <div className="relative min-h-screen py-20">
-        <ConstellationBg opacity={0.3} />
-        <div className="site-frame">
+      <div className="site-frame page-shell">
+        <div className="max-w-3xl">
           <StatePanel
             body={
               error instanceof Error
@@ -43,14 +40,14 @@ export default function AgentPage({
                 : "This agent was not found in Dolphin's active catalog on BNB Smart Chain."
             }
             state="unavailable"
-            title="Agent Record Not Found"
+            title="Agent record not found"
           />
-          <div className="mt-6">
+          <div className="mt-5">
             <Link
-              className="inline-flex rounded-xl bg-[#F5B300] px-5 py-2.5 text-xs font-black text-[#111214] shadow-sm hover:bg-[#E2A500]"
+              className="interactive inline-flex min-h-11 items-center rounded-xl bg-accent px-5 text-sm font-semibold text-ink no-underline hover:bg-accent-hover"
               href="/search"
             >
-              Search Agent Catalog
+              Search the catalog
             </Link>
           </div>
         </div>
@@ -58,10 +55,5 @@ export default function AgentPage({
     );
   }
 
-  return (
-    <div className="relative min-h-screen">
-      <ConstellationBg opacity={0.35} />
-      <AgentDetail agent={agent} />
-    </div>
-  );
+  return <AgentDetail agent={agent} />;
 }

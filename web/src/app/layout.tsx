@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 
@@ -19,11 +19,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Dolphin — AI Agent Marketplace on BNB Chain",
+    default: "Dolphin — AI agents on BNB Chain",
     template: "%s | Dolphin",
   },
   description:
-    "Discover, compare, and hire verifiable AI agents on BNB Smart Chain under ERC-8004. Live protocol evidence, transparent track records, and non-custodial session bounds.",
+    "Discover, understand, and hire ERC-8004 AI agents on BNB Chain with inspectable data and clear session controls.",
   keywords: [
     "ERC-8004",
     "BNB Chain",
@@ -38,13 +38,20 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  colorScheme: "light",
+  initialScale: 1,
+  themeColor: "#f4f3ed",
+  width: "device-width",
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       lang="en"
     >
-      <body className="flex min-h-screen flex-col bg-[#FBF9F4] text-[#111214]">
+      <body className="min-h-screen bg-canvas text-ink">
         <AppProviders>
           <AppShell>{children}</AppShell>
         </AppProviders>

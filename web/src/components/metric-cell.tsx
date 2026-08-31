@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { StatusBadge } from "@/components/status-badge";
 import type { LiveMetric } from "@/types/agent";
 
 type MetricCellProps<T> = {
@@ -17,6 +16,7 @@ function formatCheckedAt(value: string | null) {
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "UTC",
   }).format(date);
 }
 
@@ -27,33 +27,53 @@ export function MetricCell<T>({ label, metric, format }: MetricCellProps<T>) {
   return (
     <article
       aria-live={metric.status === "syncing" ? "polite" : undefined}
-      className="min-w-0 rounded-2xl border border-[#ECE8DE] bg-white p-5 shadow-sm"
+      className="min-w-0 border-b border-r border-line bg-paper p-5 sm:p-6"
     >
       <div className="flex items-start justify-between gap-4">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-[#6E706B]">{label}</h3>
-        <StatusBadge label={metric.status} tone={metric.status} />
+        <h3 className="text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-muted">
+          {label}
+        </h3>
+        <span
+          className={`inline-flex items-center gap-1.5 text-[0.68rem] font-semibold capitalize ${
+            metric.status === "live"
+              ? "text-success"
+              : metric.status === "stale" || metric.status === "syncing"
+                ? "text-accent-ink"
+                : "text-faint"
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`h-1.5 w-1.5 rounded-full ${
+              metric.status === "live"
+                ? "bg-success"
+                : metric.status === "stale" || metric.status === "syncing"
+                  ? "bg-accent"
+                  : "bg-faint"
+            } ${metric.status === "syncing" ? "animate-pulse" : ""}`}
+          />
+          {metric.status}
+        </span>
       </div>
 
       {hasValue ? (
-        <p className="mt-4 break-words text-2xl font-black tracking-tight text-[#111214]">
+        <p className="mt-5 break-words text-2xl font-semibold tracking-[-0.035em] text-ink">
           {format(metric.value) || "None"}
         </p>
       ) : metric.status === "syncing" ? (
         <div aria-label="Metric syncing" className="mt-4">
-          <div className="skeleton-sheen h-8 w-32 rounded-xl" />
+          <div className="skeleton h-8 w-32 rounded-md" />
         </div>
       ) : (
-        <p className="mt-4 text-base font-bold text-[#A5A79F]">
-          Unavailable
-        </p>
+        <p className="mt-5 text-base font-medium text-faint">Unavailable</p>
       )}
 
-      <div className="mt-4 space-y-1 border-t border-[#F3F0E8] pt-3 text-[11px] leading-5 text-[#6E706B]">
+      <div className="mt-5 space-y-1 border-t border-line pt-3 text-[0.7rem] leading-5 text-muted">
         <p>
-          <span className="font-semibold text-[#111214]">Source:</span>{" "}
+          <span className="font-medium text-ink">Source:</span>{" "}
           {metric.source.url ? (
             <Link
-              className="font-bold text-[#946B00] hover:underline"
+              className="font-medium text-accent-ink underline-offset-4 hover:underline"
               href={metric.source.url}
               rel="noreferrer"
               target="_blank"
@@ -61,14 +81,27 @@ export function MetricCell<T>({ label, metric, format }: MetricCellProps<T>) {
               {metric.source.label} ↗
             </Link>
           ) : (
-            <span className="font-semibold text-[#303236]">
-              {metric.source.label}
-            </span>
+            <span>{metric.source.label}</span>
           )}
         </p>
-        {checkedAt && <p><span className="font-semibold text-[#111214]">Checked:</span> {checkedAt}</p>}
-        {metric.methodology && <p><span className="font-semibold text-[#111214]">Method:</span> {metric.methodology}</p>}
-        {!hasValue && metric.reason && <p><span className="font-semibold text-[#111214]">Note:</span> {metric.reason}</p>}
+        {checkedAt ? (
+          <p>
+            <span className="font-medium text-ink">Checked:</span> {checkedAt} UTC
+          </p>
+        ) : null}
+        {!hasValue && metric.reason ? (
+          <p>
+            <span className="font-medium text-ink">Note:</span> {metric.reason}
+          </p>
+        ) : null}
+        {metric.methodology ? (
+          <details className="pt-1">
+            <summary className="cursor-pointer font-medium text-ink underline-offset-4 hover:underline">
+              Methodology
+            </summary>
+            <p className="mt-1 text-pretty">{metric.methodology}</p>
+          </details>
+        ) : null}
       </div>
     </article>
   );

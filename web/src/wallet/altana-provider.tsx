@@ -379,6 +379,18 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     });
   }, [address, queryClient]);
 
+  /**
+   * Creates a new Dolphin Wallet behind one platform passkey prompt.
+   *
+   * The address that comes back is COUNTERFACTUAL: no transaction has happened,
+   * the account is not deployed, and `balances` reads it as zero until someone
+   * funds it. That is why the wallet screen's funding banner is not an error
+   * state - it is the normal condition of a wallet that has just been made.
+   *
+   * Only the public credential handle is persisted (see altana-storage.ts). The
+   * private half never leaves the device's secure element, so this app is never
+   * in a position to lose or leak it.
+   */
   const createWallet = useCallback(async () => {
     setIsBusy(true);
     setError(null);
@@ -395,6 +407,16 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
+  /**
+   * Rebuilds an existing wallet from its passkey alone - no seed phrase, no
+   * export, nothing for the user to have kept.
+   *
+   * Only works for a wallet whose admin key is already in Altana's on-chain
+   * KeyStore, which happens on its FIRST admin-signed transaction and not at
+   * creation. A wallet created and never used cannot be recovered, which is the
+   * entire reason the recoverability panel exists and reads `getKeys` live
+   * rather than reassuring by default.
+   */
   const recoverWallet = useCallback(async () => {
     setIsBusy(true);
     setError(null);
@@ -411,6 +433,15 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
+  /**
+   * Forgets this BROWSER's record of the wallet. Nothing else.
+   *
+   * The wallet still exists on-chain, the passkey still exists on the device,
+   * its balance is untouched, and every session granted from it stays exactly
+   * as active as it was. This clears local state only - the in-memory signer,
+   * any session keys held for this tab, and the stored credential handle. The
+   * UI must never imply that it destroys anything, because it cannot.
+   */
   const forgetWallet = useCallback(() => {
     signerRef.current = null;
     setLiveSessions({});

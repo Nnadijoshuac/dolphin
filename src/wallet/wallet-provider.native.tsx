@@ -28,7 +28,7 @@ import {
   useMemo,
   type PropsWithChildren,
 } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { bsc, bscTestnet } from "viem/chains";
 import { WagmiProvider } from "wagmi";
 
@@ -38,23 +38,12 @@ import type {
   WalletProviderProps,
 } from "./wallet-types";
 
-// TEMPORARY DIAGNOSTIC (remove once the relay publish issue is confirmed
-// fixed): proves whether react-native-get-random-values above actually
-// installed a working getRandomValues, rather than continuing to guess
-// from relay symptoms alone.
-try {
-  const probe = new Uint8Array(8);
-  crypto.getRandomValues(probe);
-  console.log(
-    "[wallet-diagnostic] crypto.getRandomValues OK, sample:",
-    Array.from(probe).join(","),
-  );
-} catch (error) {
-  console.log(
-    "[wallet-diagnostic] crypto.getRandomValues FAILED:",
-    error instanceof Error ? error.message : String(error),
-  );
-}
+// The getRandomValues probe that used to sit here is removed: it was marked
+// TEMPORARY, its question ("did react-native-get-random-values actually
+// install?") has been settled, and it logged a crypto sample to the console on
+// every launch. The import it was checking is still the first line of this
+// file, and the comment above it explains why the order matters - which is the
+// part worth keeping.
 
 const MISSING_PROJECT_ID_MESSAGE =
   "Wallet connection is not configured. Add EXPO_PUBLIC_REOWN_PROJECT_ID to a local .env file.";
@@ -242,12 +231,40 @@ export function WalletConnectButton({
       ? connectLabel
       : "Wallet setup required";
 
+  /**
+   * Connect is one tap; disconnect asks first.
+   *
+   * The button's label when connected is the user's own address, so a stray tap
+   * on what looks like an identity chip used to drop the session outright. The
+   * confirm mirrors the website's two-step disconnect and the revoke dialog in
+   * altana-wallet-card, so every wallet action that undoes something behaves the
+   * same way across both products.
+   *
+   * Connecting stays a single tap: it is trivially reversible, and asking twice
+   * to start would be friction for nothing.
+   */
   const handlePress = () => {
     if (isDisabled) {
       return;
     }
 
-    void (wallet.isConnected ? wallet.disconnect() : wallet.connect());
+    if (!wallet.isConnected) {
+      void wallet.connect();
+      return;
+    }
+
+    Alert.alert(
+      "Disconnect this wallet?",
+      "Your hire records are kept and reappear when you reconnect this address. Nothing on-chain changes.",
+      [
+        { text: "Stay connected", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: () => void wallet.disconnect(),
+        },
+      ],
+    );
   };
 
   return (

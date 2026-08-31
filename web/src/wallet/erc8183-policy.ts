@@ -96,6 +96,59 @@ export function defaultTaskDescription(
   );
 }
 
+/* ---------------------------------------------------------------------------
+ * DECISION (2026-08-31): who gets offered a payment step, and why it is not
+ * "whoever the catalog says has a price".
+ * ---------------------------------------------------------------------------
+ * The obvious trigger is a non-zero `priceModel`. That alone would make this
+ * entire feature dead code, and it is worth being precise about why rather
+ * than quietly widening the condition.
+ *
+ * Dolphin's catalog prices EVERY agent at zero, from one constant
+ * (DEFAULT_READ_ONLY_PRICE_MODEL), because ERC-8004 carries no price field and
+ * 8004scan publishes none. So no agent's `priceModel` is ever non-zero, and a
+ * payment step gated only on that would never render for anybody.
+ *
+ * Meanwhile five agents in this very catalog demonstrably DO charge - they
+ * returned real wallet-signed quotes for 0.10 $U this session. The price is
+ * real; it simply is not a field anyone publishes. On this rail a price is
+ * something you find out by ASKING, over A2A, and asking is free and signs
+ * nothing.
+ *
+ * So the step is offered when either is true:
+ *   1. the catalog carries a real non-zero price - honoured if one ever
+ *      appears, which is the brief's original trigger, unchanged; or
+ *   2. the agent publishes an endpoint that can be asked for a price.
+ *
+ * In case 2 nothing is asserted about what the agent charges, or whether it
+ * charges at all. The UI says "ask it" and the agent answers for itself. That
+ * is the opposite of inventing a price: it is declining to guess one when a
+ * real source exists and can be consulted on demand.
+ *
+ * What deliberately does NOT change: the hire gate. A zero catalog price
+ * still records a free hire, and a paid ERC-8183 job is a separate purchase of
+ * actual work. Those are two different transactions and the UI keeps them
+ * apart.
+ */
+
+/**
+ * Whether this agent publishes an endpoint Dolphin could negotiate against.
+ *
+ * MIRRORS selectNegotiationEndpoint in convex/lib/erc8183.ts and must agree
+ * with it - this decides whether to OFFER the step, that one decides where the
+ * request actually goes, and a disagreement would mean offering a button that
+ * always errors. Same two exclusions for the same reasons: only A2A speaks
+ * this protocol, and an endpoint still carrying an un-substituted `{agentId}`
+ * template is not a URL anyone can call.
+ */
+export function canNegotiate(
+  services: readonly { name: string; endpoint: string }[],
+): boolean {
+  return services.some(
+    (service) => service.name === "a2a" && !service.endpoint.includes("{"),
+  );
+}
+
 /**
  * Atomic units -> a display string, using the decimals the TOKEN ITSELF
  * reported. Display only: every comparison, balance check and on-chain amount

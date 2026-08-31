@@ -39,8 +39,14 @@ export function PaymentCard({
   onPaid,
 }: {
   agent: Agent;
-  priceAmount: string;
-  priceToken: string;
+  /**
+   * The agent's resolved catalog price, or null when the catalog carries none.
+   * Null is the normal case today and is NOT treated as "free" - it means
+   * Dolphin does not know what this agent charges, which is why this step's
+   * whole job is to go and ask.
+   */
+  priceAmount: string | null;
+  priceToken: string | null;
   onPaid: (job: PaidJob) => void;
 }) {
   const altana = useAltanaWallet();
@@ -56,6 +62,11 @@ export function PaymentCard({
   const [paid, setPaid] = useState<PaidJob | null>(null);
   const [busy, setBusy] = useState<"idle" | "quoting" | "paying">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Null whenever the catalog has no price for this agent, which is every
+  // agent today. Deliberately not defaulted to "free" or to a number.
+  const catalogPrice =
+    priceAmount !== null && priceToken !== null ? `${priceAmount} ${priceToken}` : null;
 
   const paidJobs = useConvexQuery(
     api.agentPayments.getJobsForAgent,
@@ -120,9 +131,11 @@ export function PaymentCard({
           Dolphin Wallet required to pay
         </Text>
         <Text className="mt-1.5 text-[11px] leading-4" style={{ color: colors.muted }}>
-          This agent charges {priceAmount} {priceToken}. Payment settles from the
-          Dolphin Wallet, a separate passkey account from the connected browser
-          wallet — the two do not share a balance.
+          {catalogPrice
+            ? `This agent charges ${catalogPrice}. `
+            : "This agent sells its work over ERC-8183 escrow. "}
+          Payment settles from the Dolphin Wallet, a separate passkey account from
+          the connected browser wallet — the two do not share a balance.
         </Text>
         {altana.status === "unsupported" ? (
           <Text className="mt-2 text-[11px] leading-4" style={{ color: colors.danger }}>
@@ -272,13 +285,15 @@ export function PaymentCard({
       style={{ backgroundColor: "#FBF9F4", borderColor: colors.line }}
     >
       <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
-        This agent charges for its work
+        {catalogPrice ? "This agent charges for its work" : "Buy a task from this agent"}
       </Text>
       <Text className="mt-1.5 text-[11px] leading-4" style={{ color: colors.muted }}>
-        Dolphin&apos;s catalog lists {priceAmount} {priceToken}. Ask the agent itself
-        for a firm quote before paying anything — the price, the token and the payee
-        all come from the agent, and Dolphin checks the payee against its registered
-        on-chain identity.
+        {catalogPrice
+          ? `Dolphin's catalog lists ${catalogPrice}. Ask the agent itself for a firm quote before paying anything — `
+          : "Dolphin has no published price for this agent — ERC-8004 carries no price field, so no price here would be a real one. This agent does publish an endpoint that can be asked, and asking is free. "}
+        The price, the token and the payee all come from the agent, and Dolphin
+        checks the payee against its registered on-chain identity before showing
+        you anything.
       </Text>
 
       <Text className="mt-3 text-[11px] font-bold" style={{ color: colors.ink }}>

@@ -11,6 +11,7 @@ import { agentHiresApi } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent } from "@/types/agent";
+import { canNegotiate } from "@/wallet/erc8183-policy";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
 function shortAddress(value: string | null) {
@@ -48,6 +49,9 @@ export function HireAction({ agent }: { agent: Agent }) {
   const alreadyHired =
     hiredAgents?.some((record) => record.tokenId === agent.tokenId) ?? false;
   const showMyAgents = alreadyHired || state.kind === "done";
+  // Offered for a real catalog price, or for an agent Dolphin could ask.
+  const showPaymentStep =
+    !showMyAgents && (priceRequiresPayment || canNegotiate(agent.services));
 
   async function onHire() {
     if (!wallet.address || !priceModel) return;
@@ -188,20 +192,20 @@ export function HireAction({ agent }: { agent: Agent }) {
       </div>
 
       {/* The payment step, deliberately its own step above the authorization
-          one and below the hire. It renders only for an agent that actually
-          publishes a non-zero price, which today is none of them - the catalog
-          prices every agent at zero because no publisher exposes a price field
-          Dolphin can read. See SESSION-LOG-2026-08-31-payments.md §0.2. */}
-      {priceRequiresPayment && !showMyAgents ? (
+          one. Offered when the catalog carries a real price OR when the agent
+          publishes an endpoint that can be asked for one - see the decision
+          note in erc8183-policy.ts for why the second condition is not a way
+          of inventing a price but the opposite of one. */}
+      {showPaymentStep ? (
         <div className="mt-7 border-t border-line pt-6">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-            Payment · separate step
+            {priceRequiresPayment ? "Payment · required" : "Buy a task · optional"}
           </p>
           <PaymentAction
             agent={agent}
             onPaid={(job) => setPaidJobId(job.jobId)}
-            priceAmount={priceModel.amount}
-            priceToken={priceModel.token}
+            priceAmount={priceModel?.amount ?? null}
+            priceToken={priceModel?.token ?? null}
           />
         </div>
       ) : null}

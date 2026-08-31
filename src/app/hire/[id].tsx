@@ -17,6 +17,7 @@ import { useAgentDetail } from "@/hooks/use-agents";
 import { useHireReadOnlyAgent, useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
+import { canNegotiate } from "@/wallet/erc8183-policy";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
 type AgentDetail = NonNullable<ReturnType<typeof useAgentDetail>["data"]>;
@@ -365,6 +366,9 @@ function ReadOnlyHireAction({
   // verified on-chain. Before that the button stays disabled - that is the
   // payment step not being done yet, not a refusal of the agent.
   const paymentOutstanding = priceRequiresPayment && paidJobId === null;
+  // Offered for a real catalog price, or for an agent Dolphin could ask.
+  const showPaymentStep =
+    !alreadyHired && (priceRequiresPayment || canNegotiate(agent.services));
 
   const handleHire = async () => {
     if (!walletAddress) return;
@@ -440,16 +444,16 @@ function ReadOnlyHireAction({
       </View>
 
       {/* The payment step, deliberately its own step rather than folded into
-          the hire button. It renders only for an agent that actually publishes
-          a non-zero price, which today is none of them - the catalog prices
-          every agent at zero because no publisher exposes a price field
-          Dolphin can read. See SESSION-LOG-2026-08-31-payments.md §0.2. */}
-      {priceRequiresPayment && !alreadyHired ? (
+          the hire button. Offered when the catalog carries a real price OR
+          when the agent publishes an endpoint that can be asked for one - see
+          the decision note in erc8183-policy.ts for why the second condition
+          is not a way of inventing a price but the opposite of one. */}
+      {showPaymentStep ? (
         <PaymentCard
           agent={agent}
           onPaid={(job) => setPaidJobId(job.jobId)}
-          priceAmount={priceModel.amount}
-          priceToken={priceModel.token}
+          priceAmount={priceModel?.amount ?? null}
+          priceToken={priceModel?.token ?? null}
         />
       ) : null}
 

@@ -46,7 +46,7 @@ export default function DiscoverPage() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
-                className="interactive inline-flex min-h-12 items-center justify-between gap-8 rounded-xl border border-line bg-paper px-4 text-sm text-muted no-underline hover:bg-paper-strong sm:min-w-[340px]"
+                className="interactive inline-flex min-h-12 items-center justify-between gap-8 rounded-xl border border-line bg-paper px-4 text-sm text-muted no-underline hover:bg-paper-strong sm:min-w-[480px]"
                 href="/search"
               >
                 <span className="flex items-center gap-3">
@@ -55,12 +55,7 @@ export default function DiscoverPage() {
                 </span>
                 <span aria-hidden="true" className="text-faint">↗</span>
               </Link>
-              <a
-                className="interactive inline-flex min-h-12 items-center px-2 text-sm font-semibold text-ink-soft underline-offset-4 hover:text-ink hover:underline"
-                href="#how-it-works"
-              >
-                How Dolphin evaluates records
-              </a>
+
             </div>
           </div>
 
@@ -254,42 +249,6 @@ export default function DiscoverPage() {
               ) : null}
             </div>
           )}
-        </div>
-      </section>
-
-      <section className="border-y border-line bg-paper" id="how-it-works">
-        <div className="site-frame py-14 sm:py-20">
-          <div className="grid gap-10 lg:grid-cols-[0.8fr_1.4fr]">
-            <div>
-              <p className="eyebrow">Proof before permission</p>
-              <h2 className="section-title mt-3">Know what is real—and what is not.</h2>
-            </div>
-            <div className="grid border-t border-line md:grid-cols-3">
-              {[
-                {
-                  number: "01",
-                  title: "Identity",
-                  body: "Every record keeps its ERC-8004 reference and publisher information visible.",
-                },
-                {
-                  number: "02",
-                  title: "Evidence",
-                  body: "Metrics carry a source and check time. Missing feeds remain clearly unavailable.",
-                },
-                {
-                  number: "03",
-                  title: "Control",
-                  body: "Session-enabled hires expose their cap, expiry, scope, and revoke action.",
-                },
-              ].map((item) => (
-                <article className="border-b border-line py-6 md:border-l md:px-6" key={item.number}>
-                  <p className="text-xs font-medium text-faint">{item.number}</p>
-                  <h3 className="mt-8 text-lg font-semibold tracking-[-0.03em]">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-muted">{item.body}</p>
-                </article>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
     </div>

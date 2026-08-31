@@ -45,9 +45,14 @@ export function PaymentAction({
   onPaid,
 }: {
   agent: Agent;
-  /** The agent's resolved, non-zero catalog price. */
-  priceAmount: string;
-  priceToken: string;
+  /**
+   * The agent's resolved catalog price, or null when the catalog carries none.
+   * Null is the normal case today and is NOT treated as "free" - it means
+   * Dolphin does not know what this agent charges, which is why the step's
+   * whole job is to go and ask.
+   */
+  priceAmount: string | null;
+  priceToken: string | null;
   /** Handed the verified job id so the hire can reference it. */
   onPaid: (job: PaidJob) => void;
 }) {
@@ -59,6 +64,11 @@ export function PaymentAction({
     defaultTaskDescription(agent.category, altana.address),
   );
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+
+  // Null whenever the catalog has no price for this agent, which is every
+  // agent today. Deliberately not defaulted to "free" or to a number.
+  const catalogPrice =
+    priceAmount !== null && priceToken !== null ? `${priceAmount} ${priceToken}` : null;
 
   const paidJobs = useConvexQuery(
     agentPaymentsApi.agentPayments.getJobsForAgent,
@@ -102,9 +112,11 @@ export function PaymentAction({
       <div className="mt-4 border-l-2 border-accent pl-4">
         <p className="text-xs font-semibold text-ink">Dolphin Wallet required to pay</p>
         <p className="mt-1.5 text-xs leading-5 text-muted">
-          This agent charges {priceAmount} {priceToken}. Payment settles from the
-          Dolphin Wallet, a separate passkey account from the connected browser
-          wallet — the two do not share a balance.
+          {catalogPrice
+            ? `This agent charges ${catalogPrice}. `
+            : "This agent sells its work over ERC-8183 escrow. "}
+          Payment settles from the Dolphin Wallet, a separate passkey account from
+          the connected browser wallet — the two do not share a balance.
         </p>
         {altana.status === "unsupported" ? (
           <p className="mt-2 text-xs font-medium leading-5 text-danger">
@@ -294,12 +306,16 @@ export function PaymentAction({
   /* --- idle / quoting / error -------------------------------------------- */
   return (
     <div className="mt-4">
-      <p className="text-xs font-semibold text-ink">This agent charges for its work</p>
+      <p className="text-xs font-semibold text-ink">
+        {catalogPrice ? "This agent charges for its work" : "Buy a task from this agent"}
+      </p>
       <p className="mt-1.5 text-xs leading-5 text-muted">
-        Dolphin&apos;s catalog lists {priceAmount} {priceToken}. Ask the agent itself
-        for a firm quote before paying anything — the price, the token and the payee
-        all come from the agent, and Dolphin checks the payee against its registered
-        on-chain identity.
+        {catalogPrice
+          ? `Dolphin's catalog lists ${catalogPrice}. Ask the agent itself for a firm quote before paying anything — `
+          : "Dolphin has no published price for this agent — ERC-8004 carries no price field, so no price here would be a real one. This agent does publish an endpoint that can be asked, and asking is free. "}
+        The price, the token and the payee all come from the agent, and Dolphin
+        checks the payee against its registered on-chain identity before showing
+        you anything.
       </p>
 
       <label className="mt-4 block">

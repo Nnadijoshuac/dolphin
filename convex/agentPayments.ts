@@ -173,6 +173,37 @@ async function postA2A(endpoint: string, data: Record<string, unknown>): Promise
 }
 
 /**
+ * Asks a seller's `list` skill what it sells, for use in an error message when
+ * it declines to quote. Best-effort by design: a seller that does not publish
+ * a menu, or fails this call, simply produces no extra sentence. Never throws -
+ * the caller is already reporting a different failure and must not lose it.
+ */
+async function describeMenu(endpoint: string): Promise<string> {
+  try {
+    const listed = await postA2A(endpoint, { skill: "list" });
+    const services = (listed as { services?: unknown })?.services;
+    if (!Array.isArray(services) || services.length === 0) return "";
+
+    const lines = services
+      .map((entry) => {
+        const service = entry as { id?: unknown; name?: unknown; price_display?: unknown };
+        const id = typeof service.id === "string" ? service.id : null;
+        const name = typeof service.name === "string" ? service.name : null;
+        if (!id && !name) return null;
+        const price =
+          typeof service.price_display === "string" ? ` (${service.price_display})` : "";
+        return `“${name ?? id}”${price}`;
+      })
+      .filter((line): line is string => line !== null);
+
+    if (lines.length === 0) return "";
+    return ` This agent does sell: ${lines.join("; ")}. Rewrite the task to ask for one of those.`;
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Ask an agent what it charges for a task, and return the answer only if it
  * survives every check in normalizeQuote plus a live read of the quoted token.
  *
@@ -228,7 +259,15 @@ export const requestQuote = action({
         taskDescription,
       });
     } catch (cause) {
-      if (cause instanceof QuoteRejected) throw new Error(cause.message);
+      if (cause instanceof QuoteRejected) {
+        // A decline is a dead end unless the user is told what this agent
+        // DOES sell. Verified live: Brain on BNB declines a task that does not
+        // match one of its services and quotes 0.10 $U the moment it does. The
+        // menu comes from the seller's own `list` skill, so this adds no
+        // guess of Dolphin's - it just stops relaying a "no" without the
+        // "but here is what I do" the seller already publishes beside it.
+        throw new Error(`${cause.message}${await describeMenu(endpoint)}`);
+      }
       throw cause;
     }
 

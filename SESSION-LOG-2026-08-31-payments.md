@@ -274,3 +274,213 @@ Both were asked explicitly rather than assumed, per the brief.
    funded round-trip is logged as the one explicitly unverified piece, the same
    honest gap Session 6 left for on-chain session enforcement. **No real funds
    were spent in this session.**
+
+---
+
+## TASKS 1-4 — WHAT WAS BUILT, AND WHAT WAS OBSERVED
+
+### The architecture, and how the brief's shape changed under the evidence
+
+The brief anticipated "sign client-side, relay server-side" because x402's
+`X-PAYMENT` header hits a CORS wall. There is no `X-PAYMENT` header on this
+rail. But the split turned out to be right anyway, for a reason measured here
+rather than read from docs — the wall is on the A2A `negotiate` call:
+
+| step | where it runs | why |
+|---|---|---|
+| Negotiate a price | **Convex** | 2 of 3 sellers 405 a browser preflight with no ACAO |
+| Fund the escrow | **browser** | only the browser holds the passkey; Convex cannot sign |
+| Verify the payment | **Convex** | reads the kernel on BSC itself, believes no client |
+| Notify the seller | **Convex** | same CORS wall as negotiate |
+
+`convex/agentPayments.ts` is therefore two things that its own header comment
+keeps distinguishable: a **relay** (forwards a request, holds no key, can move
+no token) and a **witness** (reads the chain and refuses if anything
+disagrees). It is never a signer.
+
+### Every guardrail, exercised live against the deployment
+
+Not described — run. Each is a real command against the real backend:
+
+```
+A  chainhelix 269228 signed-envelope quote        0.10 U, provider 0x91F4...8Da2   OK
+B  bnb-lp 265375 signed-envelope quote            0.10 U, provider 0x20f1...d64b   OK
+C  roboclaw 12046, no A2A endpoint                REFUSED, names the reason
+D  tokenId 999999999, not in catalog              REFUSED
+E  record a job that does not exist               REFUSED (client 0x000...000)
+F  claim a REAL STRANGER'S job (job 1) as ours    REFUSED - job 1's client is
+                                                  0x2BBA...6878, not our wallet
+G  paid hire with a made-up paymentJobId          REFUSED, no verified record
+H  paid hire with no payment at all               REFUSED, names what to do
+```
+
+**F is the one that matters most.** Job 1 is a real, funded job on the real
+kernel belonging to a real stranger. A client pointing at it to fake a paid
+hire is rejected because the on-chain `client` address is not the wallet
+claiming it. That is the difference between recording evidence and accepting an
+assertion.
+
+### A real bug, found by running it rather than reading it
+
+The first pass rejected chainhelix outright:
+
+```
+Uncaught Error: The agent did not name a payment token address
+(got "0xCe24439F2D9C6a2289f741120FE202248B666666").
+```
+
+That address *is* `$U`. chainhelix returns it with different EIP-55 checksum
+casing than bnb-lp does (`0xCe...9f...` vs `0xcE...9F...`); both name the
+identical 20 bytes. viem's `isAddress` is checksum-strict by default, so a
+real, live, correctly-behaving seller was permanently unpayable over
+capitalisation.
+
+Fixed by parsing addresses case-insensitively and normalizing with `getAddress`
+before any comparison. This is not a weakening of the payee check — it happens
+before it, and every comparison downstream is still between two canonical
+addresses. Three more sellers started quoting the moment it landed.
+
+### The decisive scope problem, and what was done about it
+
+**The payment step, gated on a non-zero `priceModel` as the brief specified,
+would never have rendered for anybody.** Every catalog price is zero, from one
+constant, because nobody publishes a price field (§0.2). The feature would have
+been dead code shipped as a deliverable.
+
+Meanwhile agents in that same catalog demonstrably *do* charge. On this rail a
+price is not a field you read; it is something you find out by **asking** — and
+asking is free, signs nothing, and moves nothing.
+
+So the step is offered when the catalog carries a real price **or** when the
+agent publishes an endpoint that can be asked. In the second case Dolphin
+asserts nothing about what the agent charges: the UI says "ask it" and the
+agent answers for itself. A null catalog price renders as *"no published
+price"*, never as *"free"*. The hire gate is untouched — a zero catalog price
+still records a free hire, and a paid job is a separate purchase of real work.
+
+### DELIVERABLE 3 — what fraction of the catalog this actually made payable
+
+Measured against the live catalog, not estimated.
+
+**The payment step is offered on 9 of 17 agents.** The other 8 are excluded
+with a real reason each, and the reasons are worth reading:
+
+```
+5 publish no A2A endpoint at all      12046, 43129, 45381, 45422, 45650
+                                      (the HeyAnon family + roboclaw)
+3 publish an A2A endpoint still carrying an unsubstituted {agentId} template
+                                      292058, 292939, 303727 (termix.live)
+```
+
+That template finding is new and actionable: three real agents are unreachable
+because 8004scan serves their endpoint with the placeholder unresolved. Dolphin
+treats an un-substituted template as no endpoint rather than fetching it
+literally.
+
+**Of the 9 offered, 7 returned a real, live, wallet-signed quote:**
+
+```
+302257  Brain on BNB - Venus Health Factor Monitor   0.10 $U  instructions
+302258  Brain on BNB - BSC Grid Planner              0.10 $U  instructions
+304494  Brain on BNB - Portfolio Rebalance Pricer    0.10 $U  instructions
+265375  BNB LP Range Rebalancer                      0.10 $U  signed-envelope
+269223  Portfolio Rebalancer                         0.10 $U  signed-envelope
+269224  Grid Trader                                  0.10 $U  signed-envelope
+269228  Health Factor Monitor                        0.10 $U  signed-envelope
+```
+
+Those seven span all four graded categories, and every payee was independently
+cross-checked against the agent's registered ERC-8004 wallet.
+
+The remaining 2 of the 9 answered but could not be honoured, and are reported
+rather than smoothed over:
+
+```
+265876  BNB Yield Optimizer   answered with no price field      refused
+6441    DeFi Trading Agent    answered with a non-object body   refused
+```
+
+Both refusals are the gate working: a price Dolphin cannot read exactly is a
+price no Pay button may sit behind.
+
+**So: 7 of 17 catalog agents (41%) are payable today, all at 0.10 $U, across
+all four graded categories.** Before this session the number was zero and the
+backend refused every one of them by design.
+
+### One more thing found by running it
+
+Brain on BNB **declines** a task that does not match one of its published
+services (`accepted: false`), and quotes 0.10 $U the moment the task does. So a
+decline was a dead end. `requestQuote` now asks the seller's own `list` skill
+what it sells and puts that in the error. Verified live:
+
+```
+The agent declined to quote for this task. It answered `accepted: false`.
+This agent does sell: "Venus health factor & liquidation distance" (0.10 $U);
+"Grid trading plan, costed against the real pool" (0.10 $U); "Venus yield
+ranking, and whether moving pays for itself" (0.10 $U); "Portfolio rebalance,
+priced against the pools that would execute it" (0.10 $U); "Which PancakeSwap
+fee tier is actually paying its liquidity providers" (0.10 $U).
+Rewrite the task to ask for one of those.
+```
+
+The menu is the seller's, not Dolphin's — no guess was added.
+
+### Gates
+
+| | Mobile (root) | Website (`web/`) |
+|---|---|---|
+| `tsc --noEmit` | clean | clean |
+| lint | 0 errors, 2 pre-existing warnings | 1 pre-existing error (below) |
+| build | `expo export` OK, web **and** android | `next build` OK, `/wallet` still static |
+| Convex | pushes; `agentJobs` + 3 indexes added | same backend |
+
+The website's lint error is in `web/src/app/search/page.tsx`
+(`react-hooks/set-state-in-effect`), introduced by commit `e591a04` **before**
+this session's first commit, in a screen file AGENTS.md §11 reserves. Reported
+rather than fixed.
+
+### The native bundle did not regress
+
+Session 6's hard-won lesson re-checked with a real `expo export`, because a
+barrel import is exactly how the SDK crept in last time:
+
+```
+android   createPasskeyWallet 0   relay.altana.network 0
+          hireErc8183Agent    0   erc8183Addresses     0
+web       createPasskeyWallet 8   relay.altana.network 2
+          hireErc8183Agent    4   erc8183Addresses    10
+```
+
+Zero SDK symbols in the Android bundle. `erc8183-policy.ts` stays free of SDK
+imports for exactly this reason, and each provider resolves `erc8183Addresses`
+itself, asserting the chain ids agree.
+
+## WHAT IS NOT PROVEN — read this before claiming payment works
+
+**No job was ever funded.** The project owner was asked explicitly, with the
+cost stated, and chose "build now, fund later". So the chain of evidence runs:
+
+```
+negotiate a real price          OBSERVED, 7 sellers
+verify the payee on-chain       OBSERVED
+read the quoted token's balance BUILT - SDK balances({tokens}); not run against
+                                a funded wallet
+sign and fund the escrow        NOT RUN - needs real $U on BSC mainnet
+witness the job on-chain        OBSERVED in the negative (every refusal path),
+                                never in the positive
+```
+
+`recordJobPayment` has never returned successfully, because no job of ours
+exists for it to return. Its refusals are all verified; its acceptance is not.
+That is the single most valuable evidence this feature could gain, and it costs
+0.10 $U plus gas.
+
+**The rendered payment UI was not driven in a browser this session.** The hire
+card is client-rendered, so a server-side fetch shows none of it, and Playwright
+is not installed in this repo (adding it is a dependency change AGENTS.md §3
+governs, and this session did not make one unilaterally).
+`scripts/verify-web-payment.mjs` is written and ready to produce that evidence
+the moment `npm i -D playwright` is acceptable. What IS verified is the logic
+that decides what renders: `canNegotiate` was run over the real catalog and
+produced the 9-of-17 table above.

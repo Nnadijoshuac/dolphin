@@ -53,6 +53,17 @@ const unavailable: AltanaWalletValue = {
   revokeSession: async () => {
     throw new Error(NATIVE_PASSKEY_UNAVAILABLE_MESSAGE);
   },
+  // Paying needs the same passkey signature granting does, so it is
+  // unavailable here for exactly the same reason and says exactly the same
+  // thing. Note this refuses rather than degrading to some other signer: the
+  // alternative the SDK offers is a raw private key, and taking custody of one
+  // to sell someone an agent would be a worse trade than not selling it.
+  readTokenBalance: async () => {
+    throw new Error(NATIVE_PASSKEY_UNAVAILABLE_MESSAGE);
+  },
+  payForAgent: async () => {
+    throw new Error(NATIVE_PASSKEY_UNAVAILABLE_MESSAGE);
+  },
 };
 
 const AltanaContext = createContext<AltanaWalletValue | null>(null);

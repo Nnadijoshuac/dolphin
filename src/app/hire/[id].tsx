@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
 import { NavigationButton } from "@/components/navigation-button";
+import { PaymentCard } from "@/components/payment-card";
 import { SessionGrantCard } from "@/components/session-grant-card";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
@@ -346,6 +347,12 @@ function ReadOnlyHireAction({
   const hiredAgents = useHiredAgents(walletAddress);
   const [status, setStatus] = useState<"idle" | "hiring" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  /**
+   * The verified ERC-8183 job that paid for this hire, once PaymentCard has
+   * one. Held here rather than read back from Convex so the hire can be
+   * completed in the same interaction the payment finished in.
+   */
+  const [paidJobId, setPaidJobId] = useState<string | null>(null);
 
   const alreadyHired = hiredAgents?.some((hire) => hire.tokenId === agent.tokenId) ?? false;
   const priceModel =
@@ -353,14 +360,25 @@ function ReadOnlyHireAction({
       ? agent.priceModel.value
       : null;
   const priceIsFree = priceModel !== null && Number(priceModel.amount) === 0;
-  const priceBlocksHire = priceModel !== null && !priceIsFree;
+  const priceRequiresPayment = priceModel !== null && !priceIsFree;
+  // A paid agent is hireable once, and only once, its payment is settled and
+  // verified on-chain. Before that the button stays disabled - that is the
+  // payment step not being done yet, not a refusal of the agent.
+  const paymentOutstanding = priceRequiresPayment && paidJobId === null;
 
   const handleHire = async () => {
     if (!walletAddress) return;
+    if (paymentOutstanding) return;
     setStatus("hiring");
     setErrorMessage(null);
     try {
-      await hireReadOnlyAgent(agent.tokenId, agent.category, walletAddress, priceModel);
+      await hireReadOnlyAgent(
+        agent.tokenId,
+        agent.category,
+        walletAddress,
+        priceModel,
+        paidJobId,
+      );
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onHired();
     } catch (error) {
@@ -390,10 +408,14 @@ function ReadOnlyHireAction({
     tone = "amber";
     title = "Waiting on published price";
     body = "This agent's price hasn't resolved yet. Try again once it loads.";
-  } else if (priceBlocksHire) {
-    tone = "coral";
-    title = "Payment required - not supported yet";
-    body = `This agent charges ${priceModel.amount} ${priceModel.token}. Paid hiring isn't available in this build - no x402 seller-side integration is wired up.`;
+  } else if (paymentOutstanding) {
+    tone = "amber";
+    title = "Payment required first";
+    body = `This agent charges ${priceModel.amount} ${priceModel.token}. Settle it in the payment step below - Dolphin verifies the escrow on-chain before it will record a paid hire.`;
+  } else if (priceRequiresPayment) {
+    tone = "mint";
+    title = "Paid - ready to hire";
+    body = `Escrow job #${paidJobId} is funded and was verified on-chain. Hiring records it against this address.`;
   } else if (status === "error") {
     tone = "coral";
     title = "Hire failed";
@@ -406,7 +428,9 @@ function ReadOnlyHireAction({
   }
 
   const bannerStyle = HIRE_BANNER_STYLES[tone];
-  const disabled = alreadyHired ? false : !isWalletConnected || priceModel === null || priceBlocksHire;
+  const disabled = alreadyHired
+    ? false
+    : !isWalletConnected || priceModel === null || paymentOutstanding;
 
   return (
     <View className="gap-4">
@@ -415,9 +439,31 @@ function ReadOnlyHireAction({
         <Text className={`mt-1 text-[12px] leading-5 ${bannerStyle.body}`}>{body}</Text>
       </View>
 
+      {/* The payment step, deliberately its own step rather than folded into
+          the hire button. It renders only for an agent that actually publishes
+          a non-zero price, which today is none of them - the catalog prices
+          every agent at zero because no publisher exposes a price field
+          Dolphin can read. See SESSION-LOG-2026-08-31-payments.md §0.2. */}
+      {priceRequiresPayment && !alreadyHired ? (
+        <PaymentCard
+          agent={agent}
+          onPaid={(job) => setPaidJobId(job.jobId)}
+          priceAmount={priceModel.amount}
+          priceToken={priceModel.token}
+        />
+      ) : null}
+
       <Button
         disabled={disabled}
-        label={alreadyHired ? "Open in My Agents" : status === "hiring" ? "Hiring…" : "Hire — Free"}
+        label={
+          alreadyHired
+            ? "Open in My Agents"
+            : status === "hiring"
+              ? "Hiring…"
+              : priceRequiresPayment
+                ? "Hire paid agent"
+                : "Hire — Free"
+        }
         loading={status === "hiring"}
         onPress={alreadyHired ? onHired : handleHire}
       />

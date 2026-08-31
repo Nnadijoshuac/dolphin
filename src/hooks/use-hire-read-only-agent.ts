@@ -15,10 +15,12 @@ import type { AgentCategory, AgentPriceModel } from "@/types/agent";
  * LiveMetric status was already "live" or "stale" when read) or `null` if
  * that LiveMetric hasn't resolved yet. Passing `null` makes the mutation
  * reject the hire rather than guess it's free - resolve the price first.
- * A resolved price model with a non-zero amount also rejects: this backend
- * has no x402 seller-side integration wired up yet (no @x402/express
- * dependency, no facilitator configured), so it refuses to fake a payment
- * step for a paid agent instead of "hiring" it for free.
+ *
+ * A resolved price model with a NON-ZERO amount additionally requires
+ * `paymentJobId`: the id of an ERC-8183 escrow job that
+ * convex/agentPayments.ts already read back off the chain and verified. The
+ * mutation looks that record up itself, so passing an id nothing paid for is
+ * an error rather than a hire. Neither refusal may be worked around here.
  */
 export function useHireReadOnlyAgent() {
   const hire = useMutation(api.agentHires.hireReadOnlyAgent);
@@ -28,8 +30,9 @@ export function useHireReadOnlyAgent() {
     category: AgentCategory,
     walletAddress: string,
     priceModel: AgentPriceModel | null,
+    paymentJobId: string | null = null,
   ) => {
-    return hire({ tokenId, category, walletAddress, priceModel });
+    return hire({ tokenId, category, walletAddress, priceModel, paymentJobId });
   };
 }
 

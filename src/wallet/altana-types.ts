@@ -30,6 +30,82 @@ export type AltanaSession = Readonly<{
   status: "active" | "revoked" | "expired";
 }>;
 
+/**
+ * One seller's quote, as convex/agentPayments.ts normalized and checked it.
+ * MIRRORS the AgentQuote type in web/src/convex/api.ts - both describe the same
+ * Convex action's return shape and must change together.
+ *
+ * Every field here was READ - from the seller's live response, from the token
+ * contract itself, or from the agent's own registered identity. Nothing in this
+ * type has a default and nothing about it is hardcoded anywhere in this repo.
+ */
+export type AgentQuote = Readonly<{
+  dialect: "instructions" | "signed-envelope";
+  /** Checked server-side to equal the agent's registered ERC-8004 wallet. */
+  provider: string;
+  /** Atomic units as a decimal string. Never parse this into a number. */
+  priceRaw: string;
+  paymentToken: string;
+  /** Read on-chain from the quoted token itself, not assumed. */
+  paymentTokenSymbol: string;
+  paymentTokenDecimals: number;
+  verifyingContract: string;
+  chainId: number;
+  estimatedCompletionSeconds: number | null;
+  quoteExpiresAt: number | null;
+  negotiationHash: string | null;
+  providerSignature: string | null;
+  taskDescription: string;
+  deliverables: string | null;
+  endpoint: string;
+  rawResponse: string;
+}>;
+
+/** A paid ERC-8183 job, after Dolphin read it back off the chain. */
+export type AgentJobRow = Readonly<{
+  tokenId: string;
+  agentName: string;
+  category: AgentCategory;
+  altanaWalletAddress: string;
+  hirerWalletAddress: string | null;
+  providerAddress: string;
+  escrowContract: string;
+  jobId: string;
+  jobStatus: string;
+  budgetRaw: string;
+  paymentToken: string;
+  paymentTokenSymbol: string;
+  paymentTokenDecimals: number;
+  taskDescription: string;
+  transactionHash: string | null;
+  verifiedAt: string;
+}>;
+
+export type PayForAgentInput = Readonly<{
+  tokenId: string;
+  category: AgentCategory;
+  quote: AgentQuote;
+  hirerWalletAddress: string | null;
+}>;
+
+export type PaidJob = Readonly<{
+  jobId: string;
+  transactionHash: string | null;
+  jobStatus: string;
+  budgetRaw: string;
+  /** What the seller said when told its escrow was funded. */
+  sellerAccepted: boolean;
+  sellerReply: string;
+}>;
+
+/** One ERC-20 balance, read on-chain. Decimals and symbol come from the token. */
+export type TokenHolding = Readonly<{
+  address: string;
+  raw: bigint;
+  decimals: number;
+  symbol: string;
+}>;
+
 export type GrantSessionInput = Readonly<{
   tokenId: string;
   agentName: string;
@@ -68,6 +144,21 @@ export type AltanaWalletValue = Readonly<{
 
   grantSession: (input: GrantSessionInput) => Promise<void>;
   revokeSession: (publicKey: string) => Promise<void>;
+
+  /**
+   * Reads one ERC-20 balance from this wallet. Takes the token address rather
+   * than consulting a list, because the only token that matters is the one the
+   * agent being hired actually quoted - there is deliberately no hardcoded
+   * token list anywhere in this flow.
+   */
+  readTokenBalance: (token: string) => Promise<TokenHolding>;
+
+  /**
+   * Pays an agent's published price by funding an ERC-8183 escrow job, then
+   * has Dolphin verify that job on-chain and tell the seller to start work.
+   * Signed here, by the passkey - never on a server.
+   */
+  payForAgent: (input: PayForAgentInput) => Promise<PaidJob>;
 }>;
 
 /**

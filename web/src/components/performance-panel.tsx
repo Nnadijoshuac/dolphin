@@ -42,6 +42,7 @@ function formatDate(value: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   }).format(date);
 }
 
@@ -51,10 +52,10 @@ export function PerformancePanel({ points, series }: PerformancePanelProps) {
   if (dataPoints.length < 2) {
     return (
       <StatePanel
-        body="This agent does not have enough on-chain data points yet to plot a historical performance series."
+        body="This record does not contain enough sourced data points to plot a historical series."
         compact
         state="unavailable"
-        title="No Track Record Points Yet"
+        title="No performance series yet"
       />
     );
   }
@@ -67,22 +68,34 @@ export function PerformancePanel({ points, series }: PerformancePanelProps) {
   );
 
   return (
-    <figure className="rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-6 shadow-sm">
-      <div className="flex items-center justify-between border-b border-[#ECE8DE] pb-3 text-xs font-bold">
-        <span className="text-[#111214]">Historical Trajectory</span>
-        <span className="text-[#946B00]">{dataPoints.length} Auditable Samples</span>
+    <figure className="border-y border-line py-6">
+      <div className="flex items-center justify-between gap-4 text-xs font-medium">
+        <span className="text-ink">Historical trajectory</span>
+        <span className="text-muted">{dataPoints.length} sourced data points</span>
       </div>
 
-      <div className="relative mt-4">
+      <div className="relative mt-6 bg-paper">
         <svg
-          aria-label={`Performance series with ${dataPoints.length} auditable data points`}
-          className="h-48 w-full overflow-visible"
+          aria-label={`Performance series with ${dataPoints.length} sourced data points`}
+          className="h-52 w-full overflow-visible"
           preserveAspectRatio="none"
           role="img"
           viewBox={`0 0 ${width} ${height}`}
         >
+          {[0.25, 0.5, 0.75].map((position) => (
+            <line
+              key={position}
+              stroke="#deddd4"
+              strokeDasharray="3 5"
+              strokeWidth="1"
+              x1="0"
+              x2={width}
+              y1={height * position}
+              y2={height * position}
+            />
+          ))}
           <line
-            stroke="#ECE8DE"
+            stroke="#c9c8bd"
             strokeWidth="1"
             x1="0"
             x2={width}
@@ -92,15 +105,15 @@ export function PerformancePanel({ points, series }: PerformancePanelProps) {
           <path
             d={path}
             fill="none"
-            stroke="#F5B300"
+            stroke="#dba807"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeWidth="4"
+            strokeWidth="3"
           />
         </svg>
       </div>
 
-      <figcaption className="mt-4 flex flex-col justify-between gap-2 border-t border-[#ECE8DE] pt-3 text-[11px] text-[#6E706B] sm:flex-row">
+      <figcaption className="mt-5 flex flex-col justify-between gap-2 border-t border-line pt-4 text-[0.7rem] leading-5 text-muted sm:flex-row">
         <span>
           Range: {formatDate(dataPoints[0].timestamp)} – {formatDate(dataPoints[dataPoints.length - 1].timestamp)}
         </span>
@@ -111,7 +124,7 @@ export function PerformancePanel({ points, series }: PerformancePanelProps) {
               {index > 0 && ", "}
               {source.url ? (
                 <Link
-                  className="font-bold text-[#946B00] hover:underline"
+                  className="font-medium text-accent-ink underline-offset-4 hover:underline"
                   href={source.url}
                   rel="noreferrer"
                   target="_blank"
@@ -119,7 +132,7 @@ export function PerformancePanel({ points, series }: PerformancePanelProps) {
                   {source.label}
                 </Link>
               ) : (
-                <span className="font-semibold text-[#111214]">{source.label}</span>
+                <span className="font-medium text-ink">{source.label}</span>
               )}
             </span>
           ))}

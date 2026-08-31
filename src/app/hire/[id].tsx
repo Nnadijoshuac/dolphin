@@ -8,7 +8,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
 import { NavigationButton } from "@/components/navigation-button";
 import { PaymentCard } from "@/components/payment-card";
-import { SessionGrantCard } from "@/components/session-grant-card";
+import { JobDeliveryCard } from "@/components/job-delivery-card";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
@@ -157,13 +157,18 @@ export default function HireModalRoute() {
               walletAddress={wallet.address}
             />
 
-            {/* The authorization step, deliberately separate from the hire
-                above. A hire is a free Dolphin record; a session is real,
-                on-chain spend authority against the user's Dolphin Wallet.
-                Collapsing them into one button would hide the only
-                consequential decision on this screen. Agents that need no
-                session render the reason rather than nothing. */}
-            <SessionGrantCard agent={agent} />
+            {/* What happened after the money moved. Placed where the payment
+                step leaves off, so the waiting state appears without any
+                navigation. Renders nothing when there is no paid job for this
+                agent, so the free-hire path is untouched. */}
+            <JobDeliveryCard tokenId={agent.tokenId} />
+
+            {/* The session-grant step used to sit here, gated now by
+                FEATURE_SESSION_EXECUTION (see altana-policy.ts). Removed from
+                the rendered tree rather than disabled: a granted session's key
+                is never delivered to an agent and nothing in this app can
+                execute with one, so offering it charged real gas for an
+                unusable permission. */}
 
             <View className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <Text className="text-[13px] font-bold text-amber-900">

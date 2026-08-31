@@ -1,8 +1,7 @@
-"use client";
 
 import { useQuery } from "@tanstack/react-query";
 
-import type { AgentJobRow } from "@/convex/api";
+import type { AgentJobRow } from "@/wallet/altana-types";
 import {
   DELIVERY_TIMEOUT_MS,
   POLL_INTERVAL_MS,
@@ -16,6 +15,9 @@ import {
 
 /**
  * Polls one ERC-8183 job until the agent delivers.
+ *
+ * MIRRORED BY HAND from web/src/hooks/use-job-delivery.ts - identical except
+ * for where AgentJobRow is imported from. Edit both in one change.
  *
  * See erc8183-job.ts for why this polls rather than subscribing (there is no
  * push signal on this rail, and `eth_getLogs` is unavailable on this project's

@@ -7,7 +7,12 @@ import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors, shadows } from "@/constants/theme";
-import { ALTANA_FUNDING_HINT, formatBnb, recoverabilityCopy } from "@/wallet/altana-policy";
+import {
+  ALTANA_FUNDING_HINT,
+  FEATURE_SESSION_EXECUTION,
+  formatBnb,
+  recoverabilityCopy,
+} from "@/wallet/altana-policy";
 import { useAltanaWallet, type AltanaSession } from "@/wallet/altana-provider";
 
 /**
@@ -252,45 +257,80 @@ function RecoverabilityBlock() {
         </Text>
       ) : null}
 
+      {/*
+       * Three mutually exclusive branches, never a disabled button. Mirrors the
+       * website's RecoverabilityPanel.
+       *
+       * This used to render "Make recoverable — 0.000723 BNB + gas" greyed out
+       * above a line explaining the balance was too low. That is a dead end:
+       * the only control offered is one the user cannot use, and the thing that
+       * WOULD unblock them (depositing) is not offered at all. Every Dolphin
+       * Wallet in existence is empty, so that dead end was the state every user
+       * actually saw.
+       */}
       {altana.recoverability === "unregistered" ? (
         <View className="mt-3">
-          <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
-            You can register it now without doing anything else. This is an on-chain
-            transaction paid from this wallet:{" "}
-            {fee === null ? "reading fee…" : `${formatBnb(fee)} BNB`} registration fee
-            plus gas. Granting an agent permission or paying one does the same thing
-            automatically, so this is only worth doing if you want the wallet secured
-            first.
-          </Text>
-
-          {fee !== null && !canAffordFee ? (
-            <Text className="mt-1.5 text-[11px] leading-4" style={{ color: colors.danger }}>
-              {altana.balanceWei === null
-                ? "This wallet's balance could not be read, so Dolphin will not start a transaction it cannot price against your funds."
-                : `This wallet holds ${formatBnb(altana.balanceWei)} BNB, which will not cover the ${formatBnb(fee)} BNB fee plus gas. Fund it first.`}
+          {fee === null ? (
+            <Text className="text-[11px] leading-4" style={{ color: colors.danger }}>
+              The registration fee could not be read just now, so Dolphin will not
+              offer an action it cannot price for you. Re-check to try again.
             </Text>
-          ) : null}
+          ) : !canAffordFee ? (
+            <>
+              <Text className="text-[11px] font-bold" style={{ color: colors.ink }}>
+                Deposit BNB to make this wallet recoverable
+              </Text>
+              <Text
+                className="mt-1 text-[11px] leading-4"
+                selectable
+                style={{ color: colors.inkSecondary }}
+              >
+                {altana.address}
+              </Text>
+              <Text className="mt-1.5 text-[11px] leading-4" style={{ color: colors.muted }}>
+                {/*
+                 * The fee is stated exactly because it was read from the chain.
+                 * Gas is named but NOT quantified - Dolphin has not measured it
+                 * and will not print a plausible-looking guess beside a real
+                 * figure (AGENTS.md §5).
+                 */}
+                Registration costs {formatBnb(fee)} BNB plus relay gas, paid by this
+                wallet. It currently holds{" "}
+                {altana.balanceWei === null
+                  ? "an amount Dolphin could not read"
+                  : `${formatBnb(altana.balanceWei)} BNB`}
+                . Send BNB to the address above, then re-check.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
+                You can register it now without doing anything else. This is an
+                on-chain transaction paid from this wallet: {formatBnb(fee)} BNB
+                registration fee plus gas. Granting an agent permission or paying one
+                does the same thing automatically, so this is only worth doing if you
+                want the wallet secured first.
+              </Text>
+              <View className="mt-2.5">
+                <Button
+                  disabled={isRegistering || altana.isBusy}
+                  label={
+                    isRegistering
+                      ? "Confirm with passkey…"
+                      : `Make recoverable — ${formatBnb(fee)} BNB + gas`
+                  }
+                  loading={isRegistering}
+                  onPress={() => void handleRegister()}
+                />
+              </View>
+            </>
+          )}
 
           {errorMessage ? (
             <Text className="mt-1.5 text-[11px] leading-4" style={{ color: colors.danger }}>
               {errorMessage}
             </Text>
           ) : null}
-
-          <View className="mt-2.5">
-            <Button
-              disabled={!canAffordFee || isRegistering || altana.isBusy}
-              label={
-                isRegistering
-                  ? "Confirm with passkey…"
-                  : fee === null
-                    ? "Make this wallet recoverable"
-                    : `Make recoverable — ${formatBnb(fee)} BNB + gas`
-              }
-              loading={isRegistering}
-              onPress={() => void handleRegister()}
-            />
-          </View>
         </View>
       ) : null}
     </View>
@@ -576,7 +616,21 @@ export function AltanaWalletCard() {
         </View>
       </View>
 
-      {/* --- granted permissions ------------------------------------------ */}
+      {/*
+       * --- granted permissions ---
+       *
+       * Gated off by FEATURE_SESSION_EXECUTION (see altana-policy.ts for the
+       * full reasoning). `false &&` removes this from the rendered tree
+       * entirely rather than disabling controls inside it, while keeping the
+       * markup type-checked and one flag away from returning.
+       *
+       * Why it is off: a granted session's signing key never reaches an agent
+       * and nothing in this app can execute with one, so this section listed
+       * permissions no party could exercise - and the Grant button that fed it
+       * charged real BNB in gas to create them.
+       */}
+      {FEATURE_SESSION_EXECUTION && (
+      <>
       <Text
         className="mb-2.5 mt-5 text-[14px] font-bold"
         style={{ color: colors.ink }}
@@ -644,6 +698,8 @@ export function AltanaWalletCard() {
             />
           ))}
         </View>
+      )}
+      </>
       )}
     </View>
   );

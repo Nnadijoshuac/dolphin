@@ -1,3 +1,20 @@
+// ─────────────────────────────────────────────────────────
+// FUTURE WORK — NOT LIVE IN THIS BUILD
+// This implements the delegated-portfolio-management permission layer:
+// spend caps, protocol allowlist, session duration. The permission
+// plumbing is complete, but no execution path exists yet — a granted
+// session's signing key is never delivered to an agent and never used
+// by this app (see altana-storage.ts for why it's intentionally not
+// persisted). Do not wire this to UI until key-custody and an
+// agent-side execution runtime are designed.
+// ─────────────────────────────────────────────────────────
+//
+// No caller renders this component today: app/hire/[id].tsx dropped its
+// <SessionGrantCard> in the same change that added FEATURE_SESSION_EXECUTION.
+// The guard below is a second line of defence, so re-adding the tag somewhere
+// cannot quietly put a gas-charging Grant button back in front of a user
+// without the flag also being flipped.
+
 import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useRouter } from "expo-router";
@@ -10,6 +27,7 @@ import type { Agent } from "@/types/agent";
 import {
   DEFAULT_SESSION_DURATION_DAYS,
   DEFAULT_SPEND_CAP_WEI,
+  FEATURE_SESSION_EXECUTION,
   SESSION_DURATION_CHOICES_DAYS,
   SPEND_CAP_CHOICES_WEI,
   formatBnb,
@@ -42,6 +60,10 @@ export function SessionGrantCard({ agent }: { agent: Agent }) {
   const existing = (altana.sessions ?? []).find(
     (s) => s.tokenId === agent.tokenId && s.status === "active",
   );
+
+  // See the banner at the top of this file. Placed after every hook, so this
+  // is a legal early return rather than a conditional hook call.
+  if (!FEATURE_SESSION_EXECUTION) return null;
 
   /* --- categories that honestly need no session -------------------------- */
   if (policy.kind === "read-only") {

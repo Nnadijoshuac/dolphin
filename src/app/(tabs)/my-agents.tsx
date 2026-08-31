@@ -12,6 +12,7 @@ import { Surface } from "@/components/surface";
 import { colors, radii, shadows } from "@/constants/theme";
 import { EDITORIAL_AGENTS } from "@/data/editorial-agents";
 import { useAgents } from "@/hooks/use-agents";
+import { JobDeliveryCard } from "@/components/job-delivery-card";
 import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import { useAppStore } from "@/store/use-app-store";
 import type { Agent } from "@/types/agent";
@@ -84,16 +85,21 @@ export default function MyAgentsScreen() {
                   </View>
 
                   {hiredAgents?.map((hire) => (
-                    <AgentListCard
-                      agent={findAgent(hire.tokenId)}
-                      badgeLabel="Hired"
-                      badgeTone="live"
-                      dateLabel="Hired"
-                      dateValue={hire.hiredAt}
-                      fallbackAgentId={hire.tokenId}
-                      key={hire._id}
-                      onPress={() => handleManage(hire.tokenId)}
-                    />
+                    <View key={hire._id}>
+                      <AgentListCard
+                        agent={findAgent(hire.tokenId)}
+                        badgeLabel="Hired"
+                        badgeTone="live"
+                        dateLabel="Hired"
+                        dateValue={hire.hiredAt}
+                        fallbackAgentId={hire.tokenId}
+                        onPress={() => handleManage(hire.tokenId)}
+                      />
+                      {/* What the hire actually bought, read back off the
+                          ERC-8183 kernel. Renders nothing for a free hire,
+                          which bought nothing and has nothing to report. */}
+                      <JobDeliveryCard tokenId={hire.tokenId} />
+                    </View>
                   ))}
                 </View>
               ) : null}

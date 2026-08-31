@@ -27,6 +27,7 @@ export default function DiscoverPage() {
         : catalog,
     [catalog, selectedCategory],
   );
+  const displayedAgents = selectedCategory ? visibleAgents : visibleAgents.slice(0, 8);
   const selectedLabel = AGENT_CATEGORIES.find(
     (category) => category.slug === selectedCategory,
   )?.label;
@@ -232,9 +233,25 @@ export default function DiscoverPage() {
             </div>
           ) : (
             <div>
-              {visibleAgents.map((agent) => (
+              {displayedAgents.map((agent) => (
                 <AgentCard agent={agent} key={agent.id} />
               ))}
+              {!selectedCategory && visibleAgents.length > displayedAgents.length ? (
+                <div className="border-t border-line pt-6 text-center">
+                  <Link
+                    className="interactive inline-flex items-center gap-2 text-sm font-semibold text-ink underline-offset-4 hover:text-accent-ink hover:underline"
+                    href="/search"
+                  >
+                    View all {visibleAgents.length} records
+                    <CategoryGlyph
+                      color="currentColor"
+                      name="arrow-right"
+                      size={16}
+                      strokeWidth={2}
+                    />
+                  </Link>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

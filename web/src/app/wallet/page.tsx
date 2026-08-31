@@ -12,8 +12,7 @@ export default function WalletPage() {
 
   return (
     <div className="site-frame page-shell">
-
-      <div className="py-12 sm:py-16">
+      <div className="pb-12 sm:pb-16">
         <AltanaWalletPanel />
       </div>
 

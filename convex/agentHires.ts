@@ -22,10 +22,14 @@ function isFreePriceModel(priceModel: { amount: string }): boolean {
 /**
  * Generalized from what used to be monitoring-only hireMonitoringAgent -
  * the underlying logic was already category-agnostic (reject an unresolved
- * price, reject a non-zero price since no x402 seller-side integration is
- * wired up, upsert a hire record), it was just locked to one category's
- * name and table. Any category's free-tier agent can now be hired the same
- * way: no session, no spend cap, no call allowlist - just a wallet address.
+ * price, gate a non-zero price, upsert a hire record), it was just locked to
+ * one category's name and table. Any category's free-tier agent can be hired
+ * the same way: no session, no spend cap, no call allowlist - just a wallet
+ * address.
+ *
+ * A NON-ZERO price is now honourable rather than refused outright, but only
+ * against a payment Dolphin verified itself - see the gate below and
+ * convex/agentPayments.ts. The free path is byte-for-byte what it always was.
  */
 export const hireReadOnlyAgent = mutation({
   args: {
@@ -41,8 +45,21 @@ export const hireReadOnlyAgent = mutation({
     // categoryStats.refreshAgentCategoryStats: the caller is responsible for
     // handing over a value it actually trusts.
     priceModel: v.union(v.null(), priceModelValidator),
+    /**
+     * For a NON-ZERO price only: the ERC-8183 job id that paid for it.
+     *
+     * This is not the client asserting a payment. The row it points at can
+     * only have been written by convex/agentPayments.ts's recordJobPayment,
+     * which reads the escrow kernel on BSC and refuses unless the job is
+     * really funded, really from this wallet, and really to this agent. So the
+     * check below is "did Dolphin itself witness a payment for this", not
+     * "did the caller claim one".
+     *
+     * Free hires never pass this and are completely unaffected.
+     */
+    paymentJobId: v.optional(v.union(v.null(), v.string())),
   },
-  handler: async (ctx, { tokenId, category, walletAddress, priceModel }) => {
+  handler: async (ctx, { tokenId, category, walletAddress, priceModel, paymentJobId }) => {
     if (!isAddress(walletAddress)) {
       throw new Error(`hireReadOnlyAgent: "${walletAddress}" is not a valid EVM address.`);
     }
@@ -57,16 +74,52 @@ export const hireReadOnlyAgent = mutation({
     }
 
     if (!isFreePriceModel(priceModel)) {
-      // project-scope.md SS3: seller-side x402 stays backend-only, but no
-      // @x402/express dependency or facilitator is installed/configured
-      // anywhere in this repo yet (checked package.json and convex/ - see
-      // Task 2 report). Rather than fake a payment step, fail loudly so a
-      // caller can't silently "hire" a paid agent for free.
-      throw new Error(
-        `hireReadOnlyAgent: agent ${tokenId}'s priceModel requires payment ` +
-          `(${priceModel.amount} ${priceModel.token}, ${priceModel.type}), but no x402 seller-side ` +
-          "integration is wired up in this backend yet. Not implemented - see project-scope.md SS3 and SS6.",
-      );
+      // ---------------------------------------------------------------------
+      // CHANGED 2026-08-31. This used to refuse every non-zero price outright,
+      // because there was no honest way to honour one. There is now: paid
+      // agents in this catalog sell over ERC-8183 escrow, and
+      // convex/agentPayments.ts can both relay the negotiation and WITNESS the
+      // resulting payment on-chain.
+      //
+      // The gate was TIGHTENED, not relaxed. It no longer asks "is this free";
+      // it asks "did Dolphin itself read a funded job for this, off the chain".
+      // A caller cannot talk its way past this by passing a price of zero for a
+      // paid agent either - that path creates a free hire record, and the paid
+      // agent's own seller would never have been paid or notified, so nothing
+      // false is claimed about it anywhere.
+      // ---------------------------------------------------------------------
+      if (!paymentJobId) {
+        throw new Error(
+          `hireReadOnlyAgent: agent ${tokenId} charges ${priceModel.amount} ${priceModel.token} ` +
+            `(${priceModel.type}), so a hire needs a paid ERC-8183 job to point at. Pay through ` +
+            "agentPayments.recordJobPayment first - it verifies the escrow on-chain - then pass " +
+            "its jobId as paymentJobId. Dolphin will not record a paid hire on an unpaid promise.",
+        );
+      }
+
+      const payment = await ctx.db
+        .query("agentJobs")
+        .withIndex("by_job", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("jobId", paymentJobId))
+        .unique();
+
+      if (!payment) {
+        throw new Error(
+          `hireReadOnlyAgent: no verified payment record exists for job ${paymentJobId}. ` +
+            "Only agentPayments.recordJobPayment can create one, and only after reading the " +
+            "funded job back off the ERC-8183 kernel.",
+        );
+      }
+      if (payment.tokenId !== tokenId) {
+        throw new Error(
+          `hireReadOnlyAgent: job ${paymentJobId} paid for agent ${payment.tokenId}, not ${tokenId}. ` +
+            "One payment cannot be spent on two hires.",
+        );
+      }
+      if (payment.jobStatus === "OPEN") {
+        throw new Error(
+          `hireReadOnlyAgent: job ${paymentJobId} is still OPEN - its escrow was never funded.`,
+        );
+      }
     }
 
     const existing = await ctx.db

@@ -393,7 +393,7 @@ export const recordJobPayment = action({
  * which is what does the on-chain checking. A public mutation writing this
  * table would be a way to assert a payment happened without one having.
  */
-export const insertJobRecord = mutation({
+export const insertJobRecord = internalMutation({
   args: {
     chainId: v.number(),
     tokenId: v.string(),
@@ -453,13 +453,15 @@ export const getJobsForAgent = query({
   args: { tokenId: v.string(), altanaWalletAddress: v.string() },
   handler: async (ctx, { tokenId, altanaWalletAddress }) => {
     if (!isAddress(altanaWalletAddress)) return [];
-    const rows = await ctx.db
+    return ctx.db
       .query("agentJobs")
-      .withIndex("by_altana_wallet", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("altanaWalletAddress", getAddress(altanaWalletAddress)),
+      .withIndex("by_agent_wallet", (q) =>
+        q
+          .eq("chainId", BSC_CHAIN_ID)
+          .eq("tokenId", tokenId)
+          .eq("altanaWalletAddress", getAddress(altanaWalletAddress)),
       )
       .order("desc")
       .collect();
-    return rows.filter((row) => row.tokenId === tokenId);
   },
 });

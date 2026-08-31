@@ -77,6 +77,57 @@ export default defineSchema({
     .index("by_session_key", ["chainId", "sessionPublicKey"])
     .index("by_altana_wallet", ["chainId", "altanaWalletAddress"]),
 
+  /**
+   * ERC-8183 escrow jobs — the evidence that a paid hire was actually paid.
+   *
+   * Every row here was written only after convex/agentPayments.ts read the
+   * kernel on BSC and confirmed the job exists, is funded, was funded by this
+   * wallet, pays this agent's registered wallet, and carries a real budget.
+   * Nothing writes to this table on a client's say-so: insertJobRecord is an
+   * internalMutation precisely so there is no public way to assert a payment
+   * without one having happened (AGENTS.md §5).
+   *
+   * `jobId` and `transactionHash` are the checkable references - anyone can
+   * take a jobId to the kernel at `escrowContract` and read back the same job.
+   *
+   * The token's symbol and decimals are DENORMALIZED on purpose. They are read
+   * on-chain from the token the seller quoted, at payment time, and a receipt
+   * should keep reading the way it read then. They are also what makes this
+   * row renderable without a second contract read per row.
+   */
+  agentJobs: defineTable({
+    chainId: v.number(),
+    tokenId: v.string(),
+    /** The agent's name as shown when the payment was made. See agentSessions. */
+    agentName: v.string(),
+    category: agentCategoryValidator,
+    /** The Altana smart account that paid - the job's on-chain `client`. */
+    altanaWalletAddress: v.string(),
+    /** The wagmi address on the matching agentHires row, when there is one. */
+    hirerWalletAddress: v.union(v.string(), v.null()),
+    /** The job's on-chain `provider`, checked to equal the agent's own wallet. */
+    providerAddress: v.string(),
+    /** The ERC-8183 kernel this job lives in. Where to go to re-check it. */
+    escrowContract: v.string(),
+    /** Decimal string: a bigint is not a Convex value. */
+    jobId: v.string(),
+    /** OPEN | FUNDED | SUBMITTED | COMPLETED | REJECTED | EXPIRED, as last read. */
+    jobStatus: v.string(),
+    /** Budget in atomic token units, read from the chain rather than the client. */
+    budgetRaw: v.string(),
+    paymentToken: v.string(),
+    paymentTokenSymbol: v.string(),
+    paymentTokenDecimals: v.number(),
+    /** The job description as the chain holds it - what was actually bought. */
+    taskDescription: v.string(),
+    transactionHash: v.union(v.string(), v.null()),
+    /** When Dolphin last read this job back off the chain. */
+    verifiedAt: v.string(),
+  })
+    .index("by_job", ["chainId", "jobId"])
+    .index("by_altana_wallet", ["chainId", "altanaWalletAddress"])
+    .index("by_agent_wallet", ["chainId", "tokenId", "altanaWalletAddress"]),
+
   // 8004scan's indexed view of one agent, refreshed server-side by
   // agents.refreshAgentDirectory. Before this table the mobile app fetched
   // 8004scan per agent from the client on every list render, and the website

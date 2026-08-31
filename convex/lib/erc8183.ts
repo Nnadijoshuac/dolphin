@@ -1,4 +1,4 @@
-import { getAddress, isAddress } from "viem";
+import { getAddress } from "viem";
 
 import { BSC_CHAIN_ID } from "./bscClient";
 
@@ -86,6 +86,29 @@ export type NormalizedQuote = {
 /** A decimal string of atomic units, e.g. "100000000000000000". */
 function isAtomicAmount(value: unknown): value is string {
   return typeof value === "string" && /^[0-9]+$/.test(value) && value !== "0";
+}
+
+/**
+ * Parses an address out of a seller's response, tolerating any casing.
+ *
+ * FOUND BY RUNNING IT, not by reading it: chainhelix returns the same $U token
+ * as `0xCe24439F2D9C6a2289f741120FE202248B666666` while bnb-lp returns
+ * `0xcE24439F2D9C6a2289F741120FE202248B666666`. Both name the identical 20
+ * bytes; they disagree only on EIP-55 checksum casing. viem's `isAddress` is
+ * checksum-strict by default and rejected the first outright, which would have
+ * made a real, live, correctly-behaving seller permanently unpayable over a
+ * capitalisation difference.
+ *
+ * Lowercasing before `getAddress` loses nothing - an address IS the 20 bytes,
+ * and the casing is only a checksum over them - and `getAddress` then re-emits
+ * the canonical checksummed form. So every comparison downstream is still made
+ * between two canonical addresses, and this is not a weakening of the payee
+ * check: it happens before it, and the check itself is unchanged.
+ */
+function parseAddress(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(value)) return null;
+  return getAddress(value.toLowerCase());
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -197,18 +220,21 @@ export function normalizeQuote(
         "A price is only honoured when it arrives as an exact integer amount.",
     );
   }
-  if (typeof paymentToken !== "string" || !isAddress(paymentToken)) {
+  const parsedToken = parseAddress(paymentToken);
+  if (parsedToken === null) {
     throw new QuoteRejected(
       `The agent did not name a payment token address (got ${JSON.stringify(paymentToken)}). ` +
         "Dolphin will not guess which token a price is denominated in.",
     );
   }
-  if (typeof verifyingContract !== "string" || !isAddress(verifyingContract)) {
+  const parsedEscrow = parseAddress(verifyingContract);
+  if (parsedEscrow === null) {
     throw new QuoteRejected(
       "The agent did not name the ERC-8183 escrow contract its job would live in.",
     );
   }
-  if (typeof provider !== "string" || !isAddress(provider)) {
+  const parsedProvider = parseAddress(provider);
+  if (parsedProvider === null) {
     throw new QuoteRejected("The agent did not name a valid provider address to pay.");
   }
 
@@ -221,20 +247,30 @@ export function normalizeQuote(
   }
 
   // The check the whole trust model rests on. See the decision comment above.
-  if (getAddress(provider) !== getAddress(expected.agentWallet)) {
+  // Both sides are canonical checksummed addresses by this point, so this is a
+  // comparison of 20 bytes against 20 bytes, not of two strings that happen to
+  // be spelled the same way.
+  const expectedWallet = parseAddress(expected.agentWallet);
+  if (expectedWallet === null) {
     throw new QuoteRejected(
-      `The agent's endpoint asked to be paid at ${getAddress(provider)}, but this agent's ` +
-        `registered ERC-8004 wallet is ${getAddress(expected.agentWallet)}. Dolphin refuses to ` +
+      "Dolphin holds no valid registered wallet for this agent, so it cannot check who a payment " +
+        "would go to. Refusing to quote a price it could not verify the payee for.",
+    );
+  }
+  if (parsedProvider !== expectedWallet) {
+    throw new QuoteRejected(
+      `The agent's endpoint asked to be paid at ${parsedProvider}, but this agent's ` +
+        `registered ERC-8004 wallet is ${expectedWallet}. Dolphin refuses to ` +
         "pay an address the agent's own on-chain identity does not vouch for.",
     );
   }
 
   return {
     dialect,
-    provider: getAddress(provider),
+    provider: parsedProvider,
     priceRaw,
-    paymentToken: getAddress(paymentToken),
-    verifyingContract: getAddress(verifyingContract),
+    paymentToken: parsedToken,
+    verifyingContract: parsedEscrow,
     chainId: quotedChain,
     estimatedCompletionSeconds: asFiniteNumber(estimated),
     quoteExpiresAt: asFiniteNumber(expiresAt),

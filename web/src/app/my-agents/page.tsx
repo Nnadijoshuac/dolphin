@@ -195,7 +195,7 @@ export default function MyAgentsPage() {
     <div className="site-frame page-shell">
       <header className="page-intro">
         <p className="eyebrow">My agents</p>
-        <h1 className="display-title mt-5">Every hire, session, and revoke path in one place.</h1>
+        <h1 className="display-title mt-5">Every agent. Every permission. One place.</h1>
         <p className="body-copy mt-6 max-w-[58ch]">
           Review agents associated with your connected address and reach any
           attached spending permission without hunting through settings.

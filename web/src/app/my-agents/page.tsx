@@ -4,10 +4,8 @@ import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { ConstellationBg } from "@/components/constellation-bg";
-import { StatePanel } from "@/components/state-panel";
-import { StatusBadge } from "@/components/status-badge";
 import { HireSessionRow } from "@/components/hire-session-row";
+import { StatePanel } from "@/components/state-panel";
 import { useAgents } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { convexClient } from "@/providers/convex-provider";
@@ -20,10 +18,11 @@ function formatDate(value: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   }).format(new Date(value));
 }
 
-function AgentRecordCard({
+function AgentRecordRow({
   agent,
   fallbackId,
   date,
@@ -40,30 +39,42 @@ function AgentRecordCard({
 
   return (
     <Link
-      className="pressable-scale group flex flex-col justify-between rounded-3xl border border-[#ECE8DE] bg-white p-6 no-underline shadow-sm hover:border-[#F5B300]/50 hover:shadow-md sm:flex-row sm:items-center sm:gap-6"
+      className="interactive group block border-t border-line py-5 no-underline first:border-t-0 sm:py-6"
       href={`/agent/${agent?.tokenId ?? fallbackId}`}
     >
-      <div className="flex items-center gap-4">
-        <AgentIcon category={category} size={64} uri={agent?.iconUrl} />
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-xl font-black tracking-tight text-[#111214] group-hover:text-[#946B00] transition-colors">
+      <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-5">
+        <div className="flex items-start gap-4 sm:contents">
+          <AgentIcon category={category} size={56} uri={agent?.iconUrl} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
+              <span>{category.replaceAll("-", " ")}</span>
+              <span aria-hidden="true">·</span>
+              <span>Hired {formatDate(date)}</span>
+            </div>
+            <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-ink transition-colors group-hover:text-accent-ink sm:text-xl">
               {agent?.name ?? `Agent #${fallbackId}`}
             </h3>
-            <StatusBadge label={label} tone={tone} />
+            <span
+              className={`mt-2 inline-flex items-center gap-1.5 text-xs font-medium ${
+                tone === "live" ? "text-success" : "text-accent-ink"
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 rounded-full ${
+                  tone === "live" ? "bg-success" : "bg-accent"
+                }`}
+              />
+              {label}
+            </span>
           </div>
-          <p className="mt-1 text-xs capitalize text-[#6E706B]">
-            {category.replaceAll("-", " ")} • Hired on {formatDate(date)}
-          </p>
         </div>
-      </div>
 
-      <div className="mt-4 flex items-center justify-end gap-2 border-t border-[#F3F0E8] pt-3 sm:mt-0 sm:border-0 sm:pt-0">
-        <span className="flex items-center gap-1 text-xs font-bold text-[#111214] group-hover:text-[#946B00]">
-          Manage Agent
-          <CategoryGlyph color="currentColor" name="arrow-right" size={13} strokeWidth={2.5} />
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink">
+          Manage
+          <CategoryGlyph color="currentColor" name="arrow-right" size={16} strokeWidth={2} />
         </span>
-      </div>
+      </article>
     </Link>
   );
 }
@@ -75,114 +86,104 @@ function ConnectedRecords({ address }: { address: string }) {
 
   const findAgent = (reference: string) =>
     agents?.find(
-      (candidate) =>
-        candidate.tokenId === reference || candidate.id === reference,
+      (candidate) => candidate.tokenId === reference || candidate.id === reference,
     );
 
   if (hires === undefined || catalogLoading) {
     return (
       <StatePanel
-        body="Querying active agent subscriptions and matching catalog entries for this wallet."
+        body="Reading hire records for this address and matching them to the shared catalog."
         state="syncing"
-        title="Loading Your Agents"
+        title="Loading your agents"
       />
     );
   }
 
   if (hires.length === 0 && previews.length === 0) {
     return (
-      <div className="rounded-3xl border border-[#ECE8DE] bg-white p-8 text-center sm:p-12 shadow-sm">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#F3E3A6] bg-[#FEF5D6]">
-          <CategoryGlyph color="#946B00" name="bot" size={32} strokeWidth={2.2} />
+      <div className="grid gap-6 border-y border-line py-8 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-ink">
+            <CategoryGlyph color="currentColor" name="bot" size={21} strokeWidth={2} />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold tracking-[-0.035em] text-ink">
+              No agents hired yet
+            </h2>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-muted">
+              Inspect a catalog record, review its evidence, and add it to this address.
+            </p>
+          </div>
         </div>
-        <h2 className="mt-6 text-2xl font-black tracking-tight text-[#111214]">
-          No Active Agents Hired Yet
-        </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#6E706B]">
-          Explore the Dolphin catalog, inspect real protocol performance, and add an autonomous agent to this wallet.
-        </p>
-        <div className="mt-6">
-          <Link
-            className="pressable-scale inline-flex items-center gap-2 rounded-2xl bg-[#F5B300] px-6 py-3 text-xs font-black text-[#111214] shadow-sm hover:bg-[#E2A500]"
-            href="/search"
-          >
-            <CategoryGlyph color="#111214" name="search" size={14} strokeWidth={2.4} />
-            Browse Agent Catalog
-          </Link>
-        </div>
+        <Link
+          className="interactive inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-ink no-underline hover:bg-accent-hover"
+          href="/search"
+        >
+          Browse agents
+          <CategoryGlyph color="currentColor" name="arrow-right" size={15} strokeWidth={2} />
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="space-y-10">
-      {hires.length > 0 && (
-        <section aria-labelledby="backend-hires-heading">
-          <div>
-            <span className="text-[11px] font-black uppercase tracking-wider text-[#946B00]">
-              ON-CHAIN SUBSCRIPTIONS
-            </span>
-            <h2
-              className="mt-1 text-2xl font-black tracking-tight text-[#111214]"
-              id="backend-hires-heading"
-            >
-              Active Agent Hires ({hires.length})
-            </h2>
-            <p className="mt-1 text-xs text-[#6E706B]">
-              Real Dolphin subscription records attached to this wallet address on BNB Chain.
-            </p>
+    <div className="space-y-14">
+      {hires.length > 0 ? (
+        <section aria-labelledby="active-hires-heading">
+          <div className="flex items-end justify-between gap-4 border-b border-line pb-5">
+            <div>
+              <p className="eyebrow">Catalog hires</p>
+              <h2 className="section-title mt-3" id="active-hires-heading">
+                Active records
+              </h2>
+            </div>
+            <span className="text-sm text-muted">{hires.length}</span>
           </div>
-          <div className="mt-6 grid gap-4">
+          <div>
             {hires.map((hire) => (
               <div key={`${hire.tokenId}-${hire.hiredAt}`}>
-                <AgentRecordCard
+                <AgentRecordRow
                   agent={findAgent(hire.tokenId)}
                   date={hire.hiredAt}
                   fallbackId={hire.tokenId}
-                  label="Active"
+                  label="Active hire"
                   tone="live"
                 />
-                {/* Task 5: revocation has to be reachable from the hire record
-                    itself, not only from the wallet screen. Rendered as a
-                    sibling rather than inside AgentRecordCard because that card
-                    is a <Link> and a button cannot be nested in an anchor. */}
                 <HireSessionRow tokenId={hire.tokenId} />
               </div>
             ))}
           </div>
         </section>
-      )}
+      ) : null}
 
-      {previews.length > 0 && (
+      {previews.length > 0 ? (
         <section aria-labelledby="previews-heading">
-          <div>
-            <span className="text-[11px] font-black uppercase tracking-wider text-[#A5A79F]">
-              LOCAL PREVIEWS
-            </span>
-            <h2
-              className="mt-1 text-2xl font-black tracking-tight text-[#111214]"
-              id="previews-heading"
-            >
-              Device Previews ({previews.length})
-            </h2>
-            <p className="mt-1 text-xs text-[#6E706B]">
-              Saved on this browser only. No on-chain transaction was submitted.
-            </p>
+          <div className="flex items-end justify-between gap-4 border-b border-line pb-5">
+            <div>
+              <p className="eyebrow">This browser only</p>
+              <h2 className="section-title mt-3" id="previews-heading">
+                Device previews
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-muted">
+                No on-chain transaction or backend hire record was created.
+              </p>
+            </div>
+            <span className="text-sm text-muted">{previews.length}</span>
           </div>
-          <div className="mt-6 grid gap-4">
+          <div>
             {previews.map((preview) => (
-              <AgentRecordCard
+              <AgentRecordRow
                 agent={findAgent(preview.agentId)}
                 date={preview.savedAt}
                 fallbackId={preview.agentId}
                 key={preview.agentId}
-                label="Preview"
+                label="Local preview"
                 tone="preview"
               />
             ))}
           </div>
         </section>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -191,50 +192,39 @@ export default function MyAgentsPage() {
   const wallet = useWallet();
 
   return (
-    <div className="relative min-h-screen py-10 sm:py-16">
-      <ConstellationBg opacity={0.4} />
+    <div className="site-frame page-shell">
+      <header className="page-intro">
+        <p className="eyebrow">My agents</p>
+        <h1 className="display-title mt-5">Every hire, session, and revoke path in one place.</h1>
+        <p className="body-copy mt-6 max-w-[58ch]">
+          Review agents associated with your connected address and reach any
+          attached spending permission without hunting through settings.
+        </p>
+      </header>
 
-      <div className="site-frame">
-        {/* Header Title */}
-        <div className="max-w-3xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[#F3E3A6] bg-[#FEF5D6] px-3.5 py-1 text-xs font-bold text-[#946B00]">
-            <CategoryGlyph color="#946B00" name="bot" size={13} strokeWidth={2.4} />
-            <span>AGENT CONTROL ROOM</span>
-          </div>
-          <h1 className="mt-4 text-4xl font-black tracking-tight text-[#111214] sm:text-5xl lg:text-6xl">
-            My Hired Agents
-          </h1>
-          <p className="mt-3 text-base leading-relaxed text-[#6E706B]">
-            Manage your active agents, monitor operational statuses, review session boundaries, and inspect live activity logs on BNB Smart Chain.
-          </p>
-        </div>
-
-        {/* Content Area */}
-        <div className="mt-10">
-          {!wallet.isConnected || !wallet.address ? (
-            <div className="rounded-3xl border border-[#ECE8DE] bg-white p-8 shadow-sm sm:p-10">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight text-[#111214]">
-                    Connect Your Wallet to View Hired Agents
-                  </h2>
-                  <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#6E706B]">
-                    Connect your wallet to retrieve your active subscription records on BNB Smart Chain.
-                  </p>
-                </div>
-                <WalletConnectButton />
-              </div>
+      <div className="mt-12 sm:mt-16">
+        {!wallet.isConnected || !wallet.address ? (
+          <div className="grid gap-7 border-y border-line py-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-[-0.04em] text-ink">
+                Connect your identity wallet
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+                Dolphin uses the public address to retrieve its hire records. This
+                connection does not grant an agent spending access.
+              </p>
             </div>
-          ) : !convexClient ? (
-            <StatePanel
-              body="NEXT_PUBLIC_CONVEX_URL is not set, so hire records cannot be retrieved."
-              state="unavailable"
-              title="Backend Not Configured"
-            />
-          ) : (
-            <ConnectedRecords address={wallet.address} />
-          )}
-        </div>
+            <WalletConnectButton />
+          </div>
+        ) : !convexClient ? (
+          <StatePanel
+            body="NEXT_PUBLIC_CONVEX_URL is not set, so Dolphin cannot retrieve durable hire records."
+            state="unavailable"
+            title="Hire records unavailable"
+          />
+        ) : (
+          <ConnectedRecords address={wallet.address} />
+        )}
       </div>
     </div>
   );

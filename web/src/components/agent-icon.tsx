@@ -20,31 +20,10 @@ export function AgentIcon({ category, size = 48, uri }: AgentIconProps) {
   const config = categoryBgColors[category] ?? categoryBgColors.monitoring;
   const dimensions = { width: size, height: size, flexShrink: 0 };
 
-  if (uri) {
-    return (
-      <div
-        className="overflow-hidden rounded-2xl border shadow-sm"
-        style={{
-          ...dimensions,
-          backgroundColor: config.bg,
-          borderColor: config.border,
-        }}
-      >
-        <img
-          alt=""
-          className="h-full w-full object-cover"
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-          }}
-          src={uri}
-        />
-      </div>
-    );
-  }
-
   return (
     <div
-      className="flex items-center justify-center rounded-2xl border shadow-sm"
+      aria-hidden="true"
+      className="relative flex items-center justify-center overflow-hidden rounded-[14px] border"
       style={{
         ...dimensions,
         backgroundColor: config.bg,
@@ -54,9 +33,19 @@ export function AgentIcon({ category, size = 48, uri }: AgentIconProps) {
       <CategoryGlyph
         color={config.glyphColor}
         name={category}
-        size={size * 0.48}
-        strokeWidth={2.2}
+        size={size * 0.44}
+        strokeWidth={2}
       />
+      {uri ? (
+        <img
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+          src={uri}
+        />
+      ) : null}
     </div>
   );
 }

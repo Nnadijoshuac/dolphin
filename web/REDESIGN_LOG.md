@@ -9,7 +9,7 @@ Last updated: 2026-08-31
 - Baseline `npm run typecheck`: passing before redesign work
 - Product source of truth: `../project-scope.md`
 - Data source of truth: existing Convex queries, hooks, wallet provider, and session-grant logic
-- Resume from: Discover and Search redesign
+- Resume from: agent detail and hire redesign
 
 ## Visual direction
 
@@ -43,7 +43,7 @@ Non-negotiable guardrails:
 | Research and route audit | Complete | `111470f` | Product constraints and reference set recorded |
 | Shared design foundation | Complete | `cd8820c` | `npx tsc --noEmit` passed |
 | Navigation and application shell | Complete | `75e7fea` | `npx tsc --noEmit` passed |
-| Discover and Search | Not started | — | — |
+| Discover and Search | Complete | `3e5ae3a` | Desktop/mobile browser check, lint, and TypeScript passed |
 | Agent detail and Hire | Not started | — | — |
 | My Agents | Not started | — | — |
 | Wallet | Not started | — | — |

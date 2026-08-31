@@ -32,18 +32,18 @@ export function HireSessionRow({ tokenId }: { tokenId: string }) {
   if (!session) return null;
 
   return (
-    <div className="mt-2 rounded-2xl border border-[#F3E3A6] bg-[#FEF5D6] px-4 py-3">
+    <div className="mb-5 border-l-2 border-accent bg-paper px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <CategoryGlyph color="#946B00" name="shield" size={13} strokeWidth={2.5} />
-            <p className="text-[11px] font-black text-[#946B00]">
+            <CategoryGlyph color="#654b00" name="shield" size={13} strokeWidth={2} />
+            <p className="text-xs font-semibold text-accent-ink">
               Spending permission active
             </p>
           </div>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-[#6E706B]">
+          <p className="mt-1 text-xs leading-5 text-muted">
             Up to{" "}
-            <strong className="font-bold text-[#111214]">
+            <strong className="font-semibold text-ink">
               {formatBnb(BigInt(session.spendCapWei))} BNB / {session.spendPeriod}
             </strong>
             , only against {session.allowlist.map((c) => c.label).join(", ")}.
@@ -51,7 +51,7 @@ export function HireSessionRow({ tokenId }: { tokenId: string }) {
         </div>
 
         <button
-          className="pressable-scale min-h-[36px] shrink-0 rounded-xl border border-[#ECE8DE] bg-white px-3 text-[11px] font-black text-[#6E706B] hover:border-[#FECACA] hover:bg-[#FEE2E2] hover:text-[#B91C1C] disabled:opacity-50"
+          className="interactive min-h-9 shrink-0 text-xs font-medium text-muted underline-offset-4 hover:text-danger hover:underline disabled:opacity-50"
           disabled={altana.isBusy}
           onClick={() => {
             setError(null);
@@ -63,12 +63,12 @@ export function HireSessionRow({ tokenId }: { tokenId: string }) {
           }}
           type="button"
         >
-          Revoke
+          Revoke permission
         </button>
       </div>
 
       {error && (
-        <p className="mt-2 text-[10px] font-semibold leading-relaxed text-[#B91C1C]">
+        <p className="mt-2 text-[0.7rem] font-medium leading-5 text-danger">
           {error}
         </p>
       )}

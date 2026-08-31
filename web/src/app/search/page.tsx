@@ -1,7 +1,7 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 import { AgentCard } from "@/components/agent-card";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -26,6 +26,7 @@ function isAgentCategory(value: string | null): value is AgentCategory {
 }
 
 function SearchContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category");
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
@@ -38,6 +39,13 @@ function SearchContent() {
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
   const removeRecentSearch = useAppStore((state) => state.removeRecentSearch);
   const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
+
+  useEffect(() => {
+    const urlCategory = searchParams.get("category");
+
+    setQuery(searchParams.get("q") ?? "");
+    setSelectedCategory(isAgentCategory(urlCategory) ? urlCategory : "all");
+  }, [searchParams]);
 
   const normalizedQuery = query.trim();
   const searchResults = useMemo(() => {
@@ -53,9 +61,26 @@ function SearchContent() {
       : categoryResults;
   }, [agents, normalizedQuery, selectedCategory]);
 
+  const syncSearchUrl = (
+    nextQuery: string,
+    nextCategory: AgentCategory | "all",
+  ) => {
+    const params = new URLSearchParams();
+    const trimmedQuery = nextQuery.trim();
+
+    if (trimmedQuery) params.set("q", trimmedQuery);
+    if (nextCategory !== "all") params.set("category", nextCategory);
+
+    const nextUrl = params.size > 0 ? `/search?${params.toString()}` : "/search";
+    router.replace(nextUrl, { scroll: false });
+  };
+
   const runSearch = (term: string) => {
-    setQuery(term);
-    addRecentSearch(term);
+    const trimmedTerm = term.trim();
+
+    setQuery(trimmedTerm);
+    if (trimmedTerm) addRecentSearch(trimmedTerm);
+    syncSearchUrl(trimmedTerm, selectedCategory);
   };
 
   const hasActiveSearch = normalizedQuery.length > 0 || selectedCategory !== "all";
@@ -76,6 +101,7 @@ function SearchContent() {
           onSubmit={(event) => {
             event.preventDefault();
             if (normalizedQuery) addRecentSearch(normalizedQuery);
+            syncSearchUrl(normalizedQuery, selectedCategory);
           }}
           role="search"
         >
@@ -86,18 +112,21 @@ function SearchContent() {
             <CategoryGlyph color="#6c6d64" name="search" size={24} strokeWidth={2} />
             <input
               autoComplete="off"
-              autoFocus
-              className="min-w-0 flex-1 bg-transparent text-2xl font-medium tracking-[-0.035em] outline-none placeholder:text-faint sm:text-4xl"
+              className="min-w-0 flex-1 bg-transparent text-2xl font-medium tracking-[-0.035em] placeholder:text-faint sm:text-4xl"
               id="agent-search"
+              name="q"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Agent, protocol, or skill"
+              placeholder="Try Venus, rebalancing, or yield…"
               type="search"
               value={query}
             />
             {query ? (
               <button
                 className="interactive shrink-0 text-sm font-semibold text-muted underline-offset-4 hover:text-ink hover:underline"
-                onClick={() => setQuery("")}
+                onClick={() => {
+                  setQuery("");
+                  syncSearchUrl("", selectedCategory);
+                }}
                 type="button"
               >
                 Clear
@@ -112,7 +141,10 @@ function SearchContent() {
             className={`interactive relative shrink-0 px-4 pb-3 text-sm font-medium ${
               selectedCategory === "all" ? "text-ink" : "text-muted hover:text-ink"
             }`}
-            onClick={() => setSelectedCategory("all")}
+            onClick={() => {
+              setSelectedCategory("all");
+              syncSearchUrl(query, "all");
+            }}
             type="button"
           >
             All agents
@@ -130,7 +162,10 @@ function SearchContent() {
                   isSelected ? "text-ink" : "text-muted hover:text-ink"
                 }`}
                 key={category.slug}
-                onClick={() => setSelectedCategory(category.slug)}
+                onClick={() => {
+                  setSelectedCategory(category.slug);
+                  syncSearchUrl(query, category.slug);
+                }}
                 type="button"
               >
                 {category.label}
@@ -211,7 +246,7 @@ function SearchContent() {
         </section>
       ) : null}
 
-      <section aria-labelledby="results-heading" className="pt-12 sm:pt-16">
+      <section aria-labelledby="results-heading" className="pt-12 sm:pt-16" id="search-results">
         <div className="flex flex-col gap-3 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="eyebrow">Results</p>

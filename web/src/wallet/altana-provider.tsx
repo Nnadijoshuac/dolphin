@@ -10,6 +10,7 @@ import {
   type Session,
   type Signer,
 } from "@altananetwork/sdk";
+import { createPublicClient, http } from "viem";
 import { useQuery as useTanstackQuery, useQueryClient } from "@tanstack/react-query";
 import { useAction, useMutation, useQuery as useConvexQuery } from "convex/react";
 import {
@@ -36,9 +37,12 @@ import type { AgentCategory } from "@/types/agent";
 import {
   ALTANA_CHAIN_ID,
   ALTANA_WALLET_LABEL,
+  KEYSTORE_GET_KEYS_ABI,
+  KEYSTORE_REGISTRATION_FEE_ABI,
   buildSessionPermissions,
   expiryFromNow,
   sessionPolicyFor,
+  type RecoverabilityState,
 } from "./altana-policy";
 import { ERC8183_CHAIN_ID, JOB_DEADLINE_SECONDS } from "./erc8183-policy";
 import {
@@ -95,6 +99,19 @@ if (ERC8183_CHAIN_ID !== ALTANA_NETWORK.chainId) {
  * decides where a user's money goes.
  */
 const ERC8183 = erc8183Addresses(ALTANA_NETWORK.chainId);
+
+/**
+ * A plain read client for the two KeyStore calls recoverability needs.
+ *
+ * Separate from the SDK's own client because the SDK does not expose its
+ * `readActiveKeys` / `readRegistrationFee` helpers (they live in `internal/`).
+ * Both the RPC URL and the contract addresses come from the SDK's NetworkConfig,
+ * so nothing here is a hand-typed address.
+ */
+const keystoreReader = createPublicClient({
+  chain: ALTANA_NETWORK.chain,
+  transport: http(ALTANA_NETWORK.publicRpcUrl),
+});
 
 let cachedClient: Client | null = null;
 
@@ -177,6 +194,29 @@ export type AltanaWalletValue = Readonly<{
   address: Address | null;
   chainId: number;
   networkLabel: string;
+
+  /**
+   * Whether THIS wallet's admin key is in Altana's on-chain KeyStore, which is
+   * exactly whether a passkey could rebuild it on another device. Read live -
+   * "unknown" while unread or on error, and never defaulted either way.
+   */
+  recoverability: RecoverabilityState;
+  recoverabilityError: string | null;
+  isCheckingRecoverability: boolean;
+  refreshRecoverability: () => void;
+
+  /**
+   * Live KeyStore registration fee in wei. Oracle-priced and observed to move
+   * between reads, so it is never cached to a constant. Null while unread.
+   */
+  registrationFeeWei: bigint | null;
+
+  /**
+   * Registers this wallet's admin key on-chain so it becomes recoverable,
+   * without doing anything else. Costs the fee above plus relay gas, both paid
+   * by the wallet - so the caller must have shown the price and got consent.
+   */
+  registerWallet: () => Promise<void>;
 
   /** Native balance in wei. Null while unread - never shown as zero. */
   balanceWei: bigint | null;
@@ -289,6 +329,49 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       return result.native;
     },
   });
+
+  /**
+   * The recoverability read. A wallet's KeyStore entry changes at most once in
+   * its life (registration is one-way), so unlike the balance this does not
+   * need polling - but it MUST be re-read after any admin action, which is why
+   * every such path below invalidates it.
+   */
+  const recoverabilityQuery = useTanstackQuery({
+    queryKey: ["altana-recoverability", ALTANA_NETWORK.chainId, address],
+    enabled: Boolean(address),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const keys = await keystoreReader.readContract({
+        address: ALTANA_NETWORK.keyStore,
+        abi: KEYSTORE_GET_KEYS_ABI,
+        functionName: "getKeys",
+        args: [address as Address],
+      });
+      // The SDK's own rule, quoted in internal/keystore.d.ts: "Empty array =
+      // not yet registered." Nothing is inferred beyond that.
+      return keys.length > 0;
+    },
+  });
+
+  const registrationFeeQuery = useTanstackQuery({
+    queryKey: ["altana-registration-fee", ALTANA_NETWORK.chainId],
+    // Read regardless of wallet, so the price can be shown before a user
+    // commits. Short staleTime because the fee is oracle-priced and was
+    // observed moving between two reads minutes apart.
+    staleTime: 60_000,
+    queryFn: () =>
+      keystoreReader.readContract({
+        address: ALTANA_NETWORK.keyStoreController,
+        abi: KEYSTORE_REGISTRATION_FEE_ABI,
+        functionName: "getRegistrationFeeInWei",
+      }),
+  });
+
+  const refreshRecoverability = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["altana-recoverability", ALTANA_NETWORK.chainId, address],
+    });
+  }, [address, queryClient]);
 
   const refreshBalance = useCallback(() => {
     void queryClient.invalidateQueries({
@@ -406,6 +489,10 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         });
 
         setLiveSessions((current) => ({ ...current, [granted.publicKey]: granted }));
+        // An admin intent registers the wallet's key as a side effect (see
+        // registerWallet), so this may have just become recoverable. Re-read
+        // rather than let the screen go on showing a now-stale "not yet".
+        refreshRecoverability();
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
         throw cause;
@@ -413,7 +500,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, recordGrant, sessionsUnavailable],
+    [adminSigner, recordGrant, refreshRecoverability, sessionsUnavailable],
   );
 
   const revokeSession = useCallback(
@@ -450,6 +537,40 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     },
     [adminSigner, markRevoked, sessionsUnavailable],
   );
+
+  const registerWallet = useCallback(async (): Promise<void> => {
+    const wallet = getAltanaSnapshot();
+    if (!wallet) throw new Error("No Dolphin Wallet on this device.");
+
+    setIsBusy(true);
+    setError(null);
+    try {
+      // An admin-signed intent with NO calls of its own. submitCalls prepends
+      // the KeyStore registration to any admin intent whose wallet is not yet
+      // registered, so the whole intent becomes exactly that one call - the
+      // smallest thing that makes a wallet recoverable, and no side effects.
+      //
+      // Deliberately NOT a contrived transfer or self-call: those would move
+      // value or burn extra gas to achieve the same registration.
+      await altanaClient().execute({
+        wallet: { address: wallet.address },
+        signer: adminSigner(),
+        calls: [],
+        chainId: ALTANA_NETWORK.chainId,
+      });
+
+      // Re-read rather than assume it worked. The whole point of this feature
+      // is that the screen states a checked fact, and that has to keep being
+      // true immediately after the action that changed it.
+      refreshRecoverability();
+      refreshBalance();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      throw cause;
+    } finally {
+      setIsBusy(false);
+    }
+  }, [adminSigner, refreshBalance, refreshRecoverability]);
 
   const readTokenBalance = useCallback(async (token: string): Promise<TokenHolding> => {
     const wallet = getAltanaSnapshot();
@@ -587,6 +708,9 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         }
 
         refreshBalance();
+        // Paying is an admin intent too, so it also registers the key. Same
+        // reasoning as grantSession above.
+        refreshRecoverability();
         return {
           jobId: funded.jobId.toString(),
           transactionHash: funded.transactionHash ?? null,
@@ -602,7 +726,15 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, notifyFunded, readTokenBalance, recordPayment, refreshBalance, sessionsUnavailable],
+    [
+      adminSigner,
+      notifyFunded,
+      readTokenBalance,
+      recordPayment,
+      refreshBalance,
+      refreshRecoverability,
+      sessionsUnavailable,
+    ],
   );
 
   const value = useMemo<AltanaWalletValue>(() => {
@@ -625,6 +757,24 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       address: stored?.address ?? null,
       chainId: ALTANA_NETWORK.chainId,
       networkLabel: ALTANA_NETWORK.chain.name,
+      // Three states, and "we could not read it" is its own. A failed read
+      // must never render as either a reassurance or a warning.
+      recoverability:
+        recoverabilityQuery.data === undefined
+          ? "unknown"
+          : recoverabilityQuery.data
+            ? "registered"
+            : "unregistered",
+      recoverabilityError:
+        recoverabilityQuery.error instanceof Error
+          ? recoverabilityQuery.error.message
+          : recoverabilityQuery.error
+            ? String(recoverabilityQuery.error)
+            : null,
+      isCheckingRecoverability: recoverabilityQuery.isFetching,
+      refreshRecoverability,
+      registrationFeeWei: registrationFeeQuery.data ?? null,
+      registerWallet,
       balanceWei: balanceQuery.data ?? null,
       balanceError:
         balanceQuery.error instanceof Error
@@ -662,7 +812,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     payForAgent,
     readTokenBalance,
     recoverWallet,
+    recoverabilityQuery.data,
+    recoverabilityQuery.error,
+    recoverabilityQuery.isFetching,
     refreshBalance,
+    refreshRecoverability,
+    registerWallet,
+    registrationFeeQuery.data,
     revokeSession,
     sessions,
     sessionsUnavailable,

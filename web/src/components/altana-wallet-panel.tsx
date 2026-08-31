@@ -7,7 +7,11 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { StatePanel } from "@/components/state-panel";
 import type { AgentSessionRow } from "@/convex/api";
 import { useNow } from "@/hooks/use-now";
-import { ALTANA_FUNDING_HINT, formatBnb } from "@/wallet/altana-policy";
+import {
+  ALTANA_FUNDING_HINT,
+  formatBnb,
+  recoverabilityCopy,
+} from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -187,9 +191,15 @@ function WalletSetup() {
               What recovery requires
             </summary>
             <p className="mt-2">
-              Recovery uses a Dolphin passkey on this device. The wallet must have
-              completed at least one prior transaction so its admin key exists in
-              Altana on-chain registry.
+              Recovery uses a Dolphin passkey on this device, and works only for a
+              wallet whose admin key is already in Altana&apos;s on-chain KeyStore.
+              A key lands there on the wallet&apos;s first on-chain action, so a
+              wallet that was created and never used cannot be recovered.
+            </p>
+            <p className="mt-2">
+              This applies to a wallet you are about to create, too. Once it exists,
+              this screen reads its KeyStore entry and tells you exactly which side
+              of that line it is on — and offers to register it for you.
             </p>
           </details>
           {wallet.error && (
@@ -200,6 +210,107 @@ function WalletSetup() {
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Whether THIS wallet could be rebuilt from its passkey on another device.
+ *
+ * Deliberately not a fixed disclaimer. The answer genuinely differs per wallet
+ * and is one `eth_call` away, so the screen reads it and says which it is - see
+ * the decision note in altana-policy.ts for why a blanket warning was rejected
+ * as hedging rather than honesty.
+ */
+function RecoverabilityPanel() {
+  const wallet = useAltanaWallet();
+  const [state, setState] = useState<
+    { kind: "idle" } | { kind: "registering" } | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  const copy = recoverabilityCopy(wallet.recoverability);
+  const fee = wallet.registrationFeeWei;
+  // Compared as bigints. A null balance is "unread", never "enough".
+  const canAffordFee =
+    fee !== null && wallet.balanceWei !== null && wallet.balanceWei > fee;
+
+  const tone =
+    wallet.recoverability === "registered"
+      ? { border: "border-success", text: "text-success" }
+      : wallet.recoverability === "unregistered"
+        ? { border: "border-danger", text: "text-danger" }
+        : { border: "border-line", text: "text-muted" };
+
+  return (
+    <div className={`mt-6 border-l-2 pl-4 ${tone.border}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className={`text-xs font-semibold ${tone.text}`}>{copy.title}</p>
+        <button
+          className="interactive shrink-0 text-[0.68rem] font-medium text-muted underline-offset-4 hover:text-ink hover:underline disabled:opacity-50"
+          disabled={wallet.isCheckingRecoverability}
+          onClick={() => wallet.refreshRecoverability()}
+          type="button"
+        >
+          {wallet.isCheckingRecoverability ? "Checking..." : "Re-check"}
+        </button>
+      </div>
+      <p className="mt-1.5 text-xs leading-5 text-muted">{copy.body}</p>
+
+      {wallet.recoverabilityError && (
+        <p className="mt-2 text-xs leading-5 text-danger">{wallet.recoverabilityError}</p>
+      )}
+
+      {wallet.recoverability === "unregistered" && (
+        <div className="mt-4">
+          <p className="text-xs leading-5 text-muted">
+            You can register it now without doing anything else. This is an on-chain
+            transaction paid from this wallet:{" "}
+            <strong className="font-semibold text-ink">
+              {fee === null ? "reading fee..." : `${formatBnb(fee)} BNB`}
+            </strong>{" "}
+            registration fee plus gas. Granting an agent permission or paying one
+            does the same thing automatically, so this is only worth doing if you
+            want the wallet secured first.
+          </p>
+
+          {!canAffordFee && fee !== null && (
+            <p className="mt-2 text-xs leading-5 text-danger">
+              {wallet.balanceWei === null
+                ? "This wallet's balance could not be read, so Dolphin will not start a transaction it cannot price against your funds."
+                : `This wallet holds ${formatBnb(wallet.balanceWei)} BNB, which will not cover the ${formatBnb(fee)} BNB fee plus gas. Fund it first.`}
+            </p>
+          )}
+
+          <button
+            className="interactive mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-xs font-semibold text-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-paper-muted disabled:text-faint"
+            disabled={state.kind === "registering" || wallet.isBusy || !canAffordFee}
+            onClick={() => {
+              setState({ kind: "registering" });
+              void wallet.registerWallet().then(
+                () => setState({ kind: "idle" }),
+                (cause: unknown) =>
+                  setState({
+                    kind: "error",
+                    message: cause instanceof Error ? cause.message : String(cause),
+                  }),
+              );
+            }}
+            type="button"
+          >
+            {state.kind === "registering"
+              ? "Confirm with passkey..."
+              : fee === null
+                ? "Make this wallet recoverable"
+                : `Make recoverable - ${formatBnb(fee)} BNB + gas`}
+          </button>
+
+          {state.kind === "error" && (
+            <p className="mt-3 border-l-2 border-danger bg-danger-soft p-3 text-[0.7rem] font-medium leading-5 text-danger">
+              {state.message}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -285,6 +396,8 @@ function ConnectedWallet() {
             {wallet.error}
           </p>
         )}
+
+        <RecoverabilityPanel />
       </section>
 
       {/* Agent permissions */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useBalance } from "wagmi";
 
 import { BnbLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -13,6 +14,7 @@ import {
   recoverabilityCopy,
 } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
+import { useWallet } from "@/wallet/wallet-provider";
 
 /* ─────────────── tiny helpers ─────────────── */
 
@@ -277,6 +279,67 @@ function WalletSetup() {
   );
 }
 
+/* ─────────────── identity wallet card (wagmi) ─────────────── */
+
+function IdentityWalletCard() {
+  const identity = useWallet();
+  const { data: balData, isLoading: balLoading } = useBalance({
+    address: identity.address as `0x${string}` | undefined,
+    query: { enabled: Boolean(identity.isConnected && identity.address) },
+  });
+
+  if (!identity.isConnected || !identity.address) {
+    return (
+      <div className="wcard wcard--identity wcard--dim" aria-label="Identity wallet">
+        <div className="wcard__eyebrow">
+          <span className="wcard__eyebrow-icon">👤</span>
+          Your wallet
+        </div>
+        <p className="wcard__title">Not connected</p>
+        <p className="wcard__sub">Identifies you for hire records</p>
+        <div className="wcard__balance wcard__balance--muted">—</div>
+        <div className="wcard__footer">
+          <span className="wcard__addr-placeholder">Connect above ↑</span>
+        </div>
+      </div>
+    );
+  }
+
+  const bnbFmt = balData
+    ? Number(balData.value / BigInt(10 ** 14)) / 10000
+    : null;
+
+  return (
+    <div className="wcard wcard--identity surface-raised" aria-label="Identity wallet">
+      <div className="wcard__eyebrow">
+        <span className="wcard__eyebrow-icon">👤</span>
+        Your wallet
+      </div>
+      <p className="wcard__title">Identity</p>
+      <p className="wcard__sub">Identifies you for hire records</p>
+
+      <div className="wcard__balance">
+        {balLoading ? (
+          <span className="wcard__balance--muted">Reading…</span>
+        ) : bnbFmt !== null ? (
+          <>
+            <BnbLogo size={20} />
+            <span className="wcard__balance-figure">{bnbFmt.toFixed(4)}</span>
+            <span className="wcard__balance-unit">BNB</span>
+          </>
+        ) : (
+          <span className="wcard__balance--muted">—</span>
+        )}
+      </div>
+
+      <div className="wcard__footer">
+        <code className="wcard__addr">{truncateAddress(identity.address)}</code>
+        <CopyButton label="Copy identity address" value={identity.address} />
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────── connected state ─────────────── */
 
 function ConnectedWallet() {
@@ -289,46 +352,38 @@ function ConnectedWallet() {
   return (
     <div className="wallet-dashboard">
 
-      {/* ── Balance card ── */}
-      <section className="wallet-balance-card surface-raised" aria-label="Wallet overview">
-        <div className="wallet-balance-card__top">
-          <div className="wallet-balance-card__badge">
-            <span aria-hidden="true" className="wallet-live-dot" />
-            <span>Dolphin Wallet</span>
+      {/* ── Dual wallet cards ── */}
+      <section aria-label="Wallets overview" className="wallet-dual-section">
+        {/* Agent card (Dolphin / Altana passkey) */}
+        <div className="wcard wcard--agent surface-raised">
+          <div className="wcard__eyebrow">
+            <span className="wcard__eyebrow-icon">⚡</span>
+            For agents
           </div>
-          <span className="wallet-balance-card__network">
-            {wallet.networkLabel} · {wallet.chainId}
-          </span>
-        </div>
+          <p className="wcard__title">Dolphin Wallet</p>
+          <p className="wcard__sub">Passkey-secured · agents spend from here</p>
 
-        <div className="wallet-balance-card__body">
-          <p className="wallet-balance-card__label">Balance</p>
-          <div className="wallet-balance-card__amount">
-            <BnbLogo size={28} />
+          <div className="wcard__balance">
             {wallet.balanceError ? (
-              <span className="wallet-balance-card__figure wallet-balance-card__figure--error">Unavailable</span>
+              <span className="wcard__balance--error">Unavailable</span>
             ) : wallet.balanceWei === null ? (
-              <span className="wallet-balance-card__figure wallet-balance-card__figure--muted">
+              <span className="wcard__balance--muted">
                 {wallet.isReadingBalance ? "Reading…" : "—"}
               </span>
             ) : (
-              <span className="wallet-balance-card__figure">
-                {formatBnb(wallet.balanceWei)}
-                <span className="wallet-balance-card__unit">BNB</span>
-              </span>
+              <>
+                <BnbLogo size={20} />
+                <span className="wcard__balance-figure">{formatBnb(wallet.balanceWei)}</span>
+                <span className="wcard__balance-unit">BNB</span>
+              </>
             )}
           </div>
-          {wallet.balanceError && (
-            <p className="wallet-inline-error mt-1">{wallet.balanceError}</p>
-          )}
-        </div>
 
-        <div className="wallet-balance-card__footer">
-          <div className="wallet-balance-card__address">
-            <code className="wallet-balance-card__addr-text">{truncateAddress(address)}</code>
-            <CopyButton label="Copy wallet address" value={address} />
+          <div className="wcard__footer">
+            <code className="wcard__addr">{truncateAddress(address)}</code>
+            <CopyButton label="Copy Dolphin Wallet address" value={address} />
             <a
-              className="interactive wallet-balance-card__bscscan"
+              className="interactive wcard__ext-link"
               href={`https://bscscan.com/address/${address}`}
               rel="noreferrer"
               target="_blank"
@@ -336,28 +391,39 @@ function ConnectedWallet() {
               BscScan ↗
             </a>
           </div>
-          <button
-            className="interactive wallet-balance-card__refresh"
-            disabled={wallet.isReadingBalance}
-            onClick={() => void wallet.refreshBalance()}
-            type="button"
-          >
-            {wallet.isReadingBalance ? "Reading…" : "Refresh"}
-          </button>
+
+          {/* Agent-flavour watermark glyph */}
+          <span aria-hidden="true" className="wcard__watermark">⚡</span>
         </div>
 
-        {/* Zero balance funding prompt */}
-        {wallet.balanceWei !== null && wallet.balanceWei === BigInt(0) && (
-          <div className="wallet-fund-banner">
-            <div className="wallet-fund-banner__row">
-              <p className="wallet-fund-banner__title">Fund this wallet to get started</p>
-              <CopyButton label="Copy funding address" value={address} />
-            </div>
-            <code className="wallet-fund-banner__address">{address}</code>
-            <p className="wallet-fund-banner__hint">{ALTANA_FUNDING_HINT}</p>
-          </div>
-        )}
+        {/* Identity card (wagmi MetaMask / WalletConnect) */}
+        <IdentityWalletCard />
       </section>
+
+      {/* Refresh + network row */}
+      <div className="wallet-meta-row">
+        <span className="wallet-meta-row__network">{wallet.networkLabel} · {wallet.chainId}</span>
+        <button
+          className="interactive wallet-balance-card__refresh"
+          disabled={wallet.isReadingBalance}
+          onClick={() => void wallet.refreshBalance()}
+          type="button"
+        >
+          {wallet.isReadingBalance ? "Reading…" : "Refresh agent balance"}
+        </button>
+      </div>
+
+      {/* Zero balance funding prompt */}
+      {wallet.balanceWei !== null && wallet.balanceWei === BigInt(0) && (
+        <div className="wallet-fund-banner">
+          <div className="wallet-fund-banner__row">
+            <p className="wallet-fund-banner__title">Fund the agent wallet to get started</p>
+            <CopyButton label="Copy funding address" value={address} />
+          </div>
+          <code className="wallet-fund-banner__address">{address}</code>
+          <p className="wallet-fund-banner__hint">{ALTANA_FUNDING_HINT}</p>
+        </div>
+      )}
 
       {wallet.error && <p className="wallet-error-banner">{wallet.error}</p>}
 

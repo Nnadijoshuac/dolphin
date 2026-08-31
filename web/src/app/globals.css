@@ -595,3 +595,176 @@ video {
 .wallet-identity-section__action { flex-shrink: 0; min-width: 180px; }
 .wallet-identity-disconnect { font-size: 0.75rem; font-weight: 650; color: var(--muted); }
 .wallet-identity-disconnect:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   DUAL WALLET CARDS
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Grid container */
+.wallet-dual-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: stretch;
+}
+@media (max-width: 640px) {
+  .wallet-dual-section { grid-template-columns: 1fr; }
+}
+
+/* Network / refresh row between cards and permissions */
+.wallet-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: -0.75rem; /* pull slightly closer to cards */
+}
+.wallet-meta-row__network {
+  font-size: 0.7rem;
+  color: var(--faint);
+  letter-spacing: 0.03em;
+}
+
+/* ── Shared card anatomy ── */
+.wcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.375rem;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  transition: border-color 200ms ease;
+}
+
+/* eyebrow label row */
+.wcard__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.wcard__eyebrow-icon {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+/* title */
+.wcard__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+/* subtitle */
+.wcard__sub {
+  margin: -0.25rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* balance row */
+.wcard__balance {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+.wcard__balance-figure {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  color: var(--ink);
+  line-height: 1;
+}
+.wcard__balance-unit {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+  align-self: flex-end;
+  padding-bottom: 0.1rem;
+}
+.wcard__balance--muted { font-size: 1.25rem; font-weight: 600; color: var(--faint); }
+.wcard__balance--error { font-size: 1.1rem; font-weight: 600; color: var(--danger); }
+
+/* footer (address + copy) */
+.wcard__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--line);
+}
+.wcard__addr {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink);
+  min-width: 0;
+}
+.wcard__addr-placeholder {
+  font-size: 0.72rem;
+  color: var(--faint);
+  font-style: italic;
+}
+.wcard__ext-link {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+}
+.wcard__ext-link:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── Agent card — amber accent ── */
+.wcard--agent {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 30%, var(--paper-strong));
+}
+.wcard--agent .wcard__eyebrow {
+  color: var(--accent-ink);
+}
+.wcard--agent .wcard__balance { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.wcard--agent .wcard__footer { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+
+/* subtle lightning watermark */
+.wcard__watermark {
+  position: absolute;
+  bottom: -0.5rem;
+  right: 0.75rem;
+  font-size: 5rem;
+  line-height: 1;
+  opacity: 0.045;
+  pointer-events: none;
+  user-select: none;
+  filter: grayscale(1);
+}
+
+/* ── Identity card — neutral ── */
+.wcard--identity {
+  /* inherits surface-raised when connected */
+}
+.wcard--identity .wcard__eyebrow {
+  color: var(--muted);
+}
+
+/* dim state — identity wallet not connected */
+.wcard--dim {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: none;
+  opacity: 0.7;
+}
+.wcard--dim .wcard__balance {
+  margin-top: 0;
+}
+

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
-import { StatusBadge } from "@/components/status-badge";
 import { agentSessionsApi } from "@/convex/api";
 import type { Agent } from "@/types/agent";
 import {
@@ -19,15 +18,6 @@ import {
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { useWallet } from "@/wallet/wallet-provider";
 
-/**
- * The session-grant step of the hire flow.
- *
- * Only rendered where a session is honestly warranted. For every other agent
- * this component says so plainly rather than quietly disappearing - a user
- * being told "this agent needs no spending permission, and here is why" is the
- * point, not an omission. See CATEGORY_SESSION_POLICY in altana-policy.ts for
- * how that call is made per category.
- */
 export function SessionGrantAction({ agent }: { agent: Agent }) {
   const altana = useAltanaWallet();
   const hirer = useWallet();
@@ -48,137 +38,114 @@ export function SessionGrantAction({ agent }: { agent: Agent }) {
       : "skip",
   );
 
-  /* --- read-only categories: say why, do not offer a session ------------- */
   if (policy.kind === "read-only") {
     return (
-      <div className="mt-4 rounded-2xl border border-[#ECE8DE] bg-[#FBF9F4] p-4">
-        <div className="flex items-center gap-2">
-          <CategoryGlyph color="#1C6A44" name="shield" size={15} strokeWidth={2.5} />
-          <p className="text-xs font-black text-[#111214]">
-            No spending permission needed
-          </p>
+      <div className="mt-4 flex gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success-soft text-success">
+          <CategoryGlyph color="currentColor" name="shield" size={16} strokeWidth={2} />
         </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-[#6E706B]">
-          {policy.reason}
-        </p>
+        <div>
+          <p className="text-xs font-semibold text-ink">No spending permission needed</p>
+          <p className="mt-1 text-xs leading-5 text-muted">{policy.reason}</p>
+        </div>
       </div>
     );
   }
 
-  /* --- already granted --------------------------------------------------- */
   if (existing) {
     return (
-      <div className="mt-4 rounded-2xl border border-[#BFE0CC] bg-[#DCEFE4] p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <CategoryGlyph color="#1C6A44" name="check" size={15} strokeWidth={2.5} />
-            <p className="text-xs font-black text-[#1C6A44]">
-              Spending permission active
-            </p>
-          </div>
-          <StatusBadge label="Granted" tone="live" />
+      <div className="mt-4 border-l-2 border-success pl-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold text-success">Permission active</p>
+          <span className="inline-flex items-center gap-1.5 text-[0.68rem] font-medium text-success">
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
+            Granted
+          </span>
         </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-[#1C6A44]">
-          Up to {formatBnb(BigInt(existing.spendCapWei))} BNB per{" "}
-          {existing.spendPeriod}, and only against{" "}
-          {existing.allowlist.map((c) => c.label).join(", ")}.
+        <p className="mt-1.5 text-xs leading-5 text-muted">
+          Up to {formatBnb(BigInt(existing.spendCapWei))} BNB per {existing.spendPeriod},
+          and only against {existing.allowlist.map((contract) => contract.label).join(", ")}.
         </p>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <Link
-            className="pressable-scale flex min-h-[40px] flex-1 items-center justify-center rounded-2xl border border-[#BFE0CC] bg-white px-4 text-xs font-black text-[#1C6A44] no-underline"
+            className="interactive flex min-h-10 items-center justify-center rounded-xl border border-line bg-paper px-3 text-xs font-semibold text-ink no-underline hover:bg-canvas"
             href="/wallet"
           >
-            See it in your wallet
+            Review in Wallet
           </Link>
           <button
-            className="pressable-scale min-h-[40px] flex-1 rounded-2xl border border-[#ECE8DE] bg-white px-4 text-xs font-black text-[#6E706B] hover:border-[#FECACA] hover:bg-[#FEE2E2] hover:text-[#B91C1C] disabled:opacity-50"
+            className="interactive min-h-10 rounded-xl border border-line bg-paper px-3 text-xs font-semibold text-muted hover:border-danger hover:bg-danger-soft hover:text-danger disabled:opacity-50"
             disabled={altana.isBusy}
             onClick={() => void altana.revokeSession(existing.sessionPublicKey)}
             type="button"
           >
-            Revoke now
+            Revoke permission
           </button>
         </div>
       </div>
     );
   }
 
-  /* --- no Dolphin wallet yet --------------------------------------------- */
   if (altana.status !== "connected") {
     return (
-      <div className="mt-4 rounded-2xl border border-[#F3E3A6] bg-[#FEF5D6] p-4">
-        <div className="flex items-center gap-2">
-          <CategoryGlyph color="#946B00" name="wallet" size={15} strokeWidth={2.5} />
-          <p className="text-xs font-black text-[#946B00]">
-            This agent can be given a spending permission
-          </p>
-        </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-[#6E706B]">
-          {policy.reason} That needs a Dolphin Wallet — a separate passkey
-          account, not your browser extension wallet.
+      <div className="mt-4 border-l-2 border-accent pl-4">
+        <p className="text-xs font-semibold text-ink">Dolphin Wallet required</p>
+        <p className="mt-1.5 text-xs leading-5 text-muted">
+          {policy.reason} This uses a separate passkey account, not the connected
+          browser wallet.
         </p>
         {altana.status === "unsupported" ? (
-          <p className="mt-2 text-[11px] font-semibold text-[#B9473A]">
+          <p className="mt-2 text-xs font-medium leading-5 text-danger">
             {altana.unsupportedReason}
           </p>
         ) : (
           <Link
-            className="pressable-scale mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-[#F5B300] px-5 text-xs font-black text-[#111214] no-underline hover:bg-[#E2A500]"
+            className="interactive mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-line bg-paper px-4 text-xs font-semibold text-ink no-underline hover:bg-canvas"
             href="/wallet"
           >
-            <CategoryGlyph color="#111214" name="wallet" size={14} strokeWidth={2.4} />
-            Set up a Dolphin Wallet
+            Set up Dolphin Wallet
+            <CategoryGlyph color="currentColor" name="arrow-right" size={14} strokeWidth={2} />
           </Link>
         )}
       </div>
     );
   }
 
-  /* --- the grant step ---------------------------------------------------- */
   return (
-    <div className="mt-4 rounded-2xl border border-[#ECE8DE] bg-white p-4">
-      <div className="flex items-center gap-2">
-        <CategoryGlyph color="#946B00" name="shield" size={15} strokeWidth={2.5} />
-        <p className="text-xs font-black text-[#111214]">
-          Give this agent a spending permission
-        </p>
-      </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-[#6E706B]">
-        {policy.reason}
-      </p>
+    <div className="mt-4">
+      <p className="text-xs font-semibold text-ink">Set a spending permission</p>
+      <p className="mt-1.5 text-xs leading-5 text-muted">{policy.reason}</p>
 
-      {/* Exactly what is being authorized, before anything is signed. */}
-      <dl className="mt-3 space-y-2 rounded-xl border border-[#ECE8DE] bg-[#FBF9F4] p-3 text-[11px]">
-        <div className="flex items-start justify-between gap-3">
-          <dt className="font-semibold text-[#6E706B]">It can only call</dt>
-          <dd className="text-right">
-            {policy.allowlist.map((c) => (
-              <div key={c.address} className="mb-1 last:mb-0">
-                <span className="block font-bold text-[#111214]">{c.label}</span>
-                <span className="block break-all font-mono text-[10px] text-[#A5A79F]">
-                  {c.address}
+      <dl className="mt-4 border-y border-line text-xs">
+        <div className="grid gap-2 py-3 sm:grid-cols-[110px_minmax(0,1fr)]">
+          <dt className="text-muted">Allowed calls</dt>
+          <dd className="space-y-2 sm:text-right">
+            {policy.allowlist.map((contract) => (
+              <div key={contract.address}>
+                <span className="block font-medium text-ink">{contract.label}</span>
+                <span className="block break-all font-mono text-[0.64rem] leading-4 text-faint">
+                  {contract.address}
                 </span>
               </div>
             ))}
           </dd>
         </div>
-        <div className="flex items-center justify-between gap-3 border-t border-[#ECE8DE] pt-2">
-          <dt className="font-semibold text-[#6E706B]">Anything else</dt>
-          <dd className="font-bold text-[#1C6A44]">Rejected on-chain</dd>
+        <div className="flex items-center justify-between gap-3 border-t border-line py-3">
+          <dt className="text-muted">Other contracts</dt>
+          <dd className="font-medium text-success">Rejected on-chain</dd>
         </div>
       </dl>
 
-      <fieldset className="mt-3">
-        <legend className="text-[11px] font-black text-[#111214]">
-          Most it can spend
-        </legend>
-        <div className="mt-1.5 flex gap-2">
+      <fieldset className="mt-5">
+        <legend className="text-xs font-semibold text-ink">Daily spend cap</legend>
+        <div className="mt-2 grid grid-cols-3 gap-2">
           {SPEND_CAP_CHOICES_WEI.map((choice) => (
             <button
-              className={`min-h-[36px] flex-1 rounded-xl border px-2 text-[11px] font-bold transition-colors ${
+              aria-pressed={spendCapWei === choice.wei}
+              className={`interactive min-h-9 rounded-lg border px-2 text-[0.7rem] font-medium ${
                 spendCapWei === choice.wei
-                  ? "border-[#F5B300] bg-[#FEF5D6] text-[#946B00]"
-                  : "border-[#ECE8DE] bg-white text-[#6E706B] hover:border-[#F3E3A6]"
+                  ? "border-accent bg-accent-soft text-accent-ink"
+                  : "border-line bg-paper text-muted hover:text-ink"
               }`}
               key={choice.label}
               onClick={() => setSpendCapWei(choice.wei)}
@@ -190,17 +157,16 @@ export function SessionGrantAction({ agent }: { agent: Agent }) {
         </div>
       </fieldset>
 
-      <fieldset className="mt-3">
-        <legend className="text-[11px] font-black text-[#111214]">
-          Permission expires after
-        </legend>
-        <div className="mt-1.5 flex gap-2">
+      <fieldset className="mt-5">
+        <legend className="text-xs font-semibold text-ink">Expires after</legend>
+        <div className="mt-2 grid grid-cols-3 gap-2">
           {SESSION_DURATION_CHOICES_DAYS.map((days) => (
             <button
-              className={`min-h-[36px] flex-1 rounded-xl border px-2 text-[11px] font-bold transition-colors ${
+              aria-pressed={durationDays === days}
+              className={`interactive min-h-9 rounded-lg border px-2 text-[0.7rem] font-medium ${
                 durationDays === days
-                  ? "border-[#F5B300] bg-[#FEF5D6] text-[#946B00]"
-                  : "border-[#ECE8DE] bg-white text-[#6E706B] hover:border-[#F3E3A6]"
+                  ? "border-accent bg-accent-soft text-accent-ink"
+                  : "border-line bg-paper text-muted hover:text-ink"
               }`}
               key={days}
               onClick={() => setDurationDays(days)}
@@ -212,18 +178,15 @@ export function SessionGrantAction({ agent }: { agent: Agent }) {
         </div>
       </fieldset>
 
-      <p className="mt-3 rounded-xl bg-[#F5F3EB] p-2.5 text-[10px] leading-relaxed text-[#6E706B]">
-        You are authorizing at most{" "}
-        <strong className="font-bold text-[#111214]">
-          {formatBnb(spendCapWei)} BNB per day
-        </strong>{" "}
-        for {durationDays} days, against the contract{policy.allowlist.length === 1 ? "" : "s"}{" "}
-        listed above and nothing else. You can revoke it at any time from your
-        wallet, and it stops working on its own when it expires.
+      <p className="mt-5 border-y border-line bg-canvas px-3 py-3 text-[0.7rem] leading-5 text-muted">
+        Maximum <strong className="font-semibold text-ink">{formatBnb(spendCapWei)} BNB per day</strong>{" "}
+        for {durationDays} days, limited to the contract
+        {policy.allowlist.length === 1 ? "" : "s"} above. The permission can be
+        revoked and expires automatically.
       </p>
 
       <button
-        className="pressable-scale mt-3 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-[#F5B300] px-5 text-xs font-black text-[#111214] hover:bg-[#E2A500] disabled:cursor-wait disabled:opacity-60"
+        className="interactive mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-xs font-semibold text-ink hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60"
         disabled={state.kind === "granting" || altana.isBusy}
         onClick={() => {
           setState({ kind: "granting" });
@@ -247,24 +210,20 @@ export function SessionGrantAction({ agent }: { agent: Agent }) {
         }}
         type="button"
       >
-        <CategoryGlyph color="#111214" name="shield" size={14} strokeWidth={2.4} />
         {state.kind === "granting"
-          ? "Confirm with your passkey…"
+          ? "Confirm with passkey…"
           : `Grant ${formatBnb(spendCapWei)} BNB / day`}
       </button>
 
-      {state.kind === "error" && (
-        <p className="mt-2 rounded-xl border border-[#FECACA] bg-[#FEE2E2] p-2.5 text-[10px] font-semibold leading-relaxed text-[#B91C1C]">
+      {state.kind === "error" ? (
+        <p className="mt-3 border-l-2 border-danger bg-danger-soft p-3 text-[0.7rem] font-medium leading-5 text-danger">
           {state.message}
         </p>
-      )}
+      ) : null}
 
-      {/* This costs real BNB. Saying so before the button is pressed, not
-          after it fails, is the difference between a bounded surprise and an
-          unbounded one - see the mainnet decision in altana-policy.ts. */}
-      <p className="mt-2 text-center text-[10px] leading-relaxed text-[#A5A79F]">
-        Granting is an on-chain transaction on BNB Smart Chain and costs gas
-        from your Dolphin Wallet.
+      <p className="mt-3 text-center text-[0.68rem] leading-5 text-faint">
+        Granting is an on-chain BNB Smart Chain transaction and uses gas from
+        the Dolphin Wallet.
       </p>
     </div>
   );

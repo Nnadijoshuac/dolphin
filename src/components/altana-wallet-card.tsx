@@ -3,10 +3,11 @@ import { Alert, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 
+import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors, shadows } from "@/constants/theme";
-import { ALTANA_FUNDING_HINT, formatBnb } from "@/wallet/altana-policy";
+import { ALTANA_FUNDING_HINT, formatBnb, recoverabilityCopy } from "@/wallet/altana-policy";
 import { useAltanaWallet, type AltanaSession } from "@/wallet/altana-provider";
 
 /**
@@ -181,6 +182,121 @@ function SessionRow({
   );
 }
 
+/**
+ * Whether THIS wallet could be rebuilt from its passkey on another device.
+ *
+ * Counterpart to the website's RecoverabilityPanel, reading the same live
+ * KeyStore state and quoting the same copy from altana-policy.ts, so the two
+ * products cannot tell a user different things about the same wallet.
+ */
+function RecoverabilityBlock() {
+  const altana = useAltanaWallet();
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const copy = recoverabilityCopy(altana.recoverability);
+  const fee = altana.registrationFeeWei;
+  // Compared as bigints. A null balance is "unread", never "enough".
+  const canAffordFee =
+    fee !== null && altana.balanceWei !== null && altana.balanceWei > fee;
+
+  const accent =
+    altana.recoverability === "registered"
+      ? "#1C6A44"
+      : altana.recoverability === "unregistered"
+        ? colors.danger
+        : colors.muted;
+
+  const handleRegister = async () => {
+    setIsRegistering(true);
+    setErrorMessage(null);
+    try {
+      await altana.registerWallet();
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (cause) {
+      setErrorMessage(cause instanceof Error ? cause.message : String(cause));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  return (
+    <View
+      className="rounded-2xl border p-3.5"
+      style={{ backgroundColor: "#FBF9F4", borderColor: colors.line }}
+    >
+      <View className="flex-row items-start justify-between gap-3">
+        <Text className="flex-1 text-[12px] font-bold" style={{ color: accent }}>
+          {copy.title}
+        </Text>
+        <PressableScale
+          accessibilityLabel="Re-check whether this wallet is recoverable"
+          accessibilityRole="button"
+          disabled={altana.isCheckingRecoverability}
+          onPress={() => altana.refreshRecoverability()}
+        >
+          <Text className="text-[11px] font-bold" style={{ color: colors.muted }}>
+            {altana.isCheckingRecoverability ? "Checking…" : "Re-check"}
+          </Text>
+        </PressableScale>
+      </View>
+
+      <Text className="mt-1 text-[11px] leading-4" style={{ color: colors.muted }}>
+        {copy.body}
+      </Text>
+
+      {altana.recoverabilityError ? (
+        <Text className="mt-1.5 text-[11px] leading-4" style={{ color: colors.danger }}>
+          {altana.recoverabilityError}
+        </Text>
+      ) : null}
+
+      {altana.recoverability === "unregistered" ? (
+        <View className="mt-3">
+          <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
+            You can register it now without doing anything else. This is an on-chain
+            transaction paid from this wallet:{" "}
+            {fee === null ? "reading fee…" : `${formatBnb(fee)} BNB`} registration fee
+            plus gas. Granting an agent permission or paying one does the same thing
+            automatically, so this is only worth doing if you want the wallet secured
+            first.
+          </Text>
+
+          {fee !== null && !canAffordFee ? (
+            <Text className="mt-1.5 text-[11px] leading-4" style={{ color: colors.danger }}>
+              {altana.balanceWei === null
+                ? "This wallet's balance could not be read, so Dolphin will not start a transaction it cannot price against your funds."
+                : `This wallet holds ${formatBnb(altana.balanceWei)} BNB, which will not cover the ${formatBnb(fee)} BNB fee plus gas. Fund it first.`}
+            </Text>
+          ) : null}
+
+          {errorMessage ? (
+            <Text className="mt-1.5 text-[11px] leading-4" style={{ color: colors.danger }}>
+              {errorMessage}
+            </Text>
+          ) : null}
+
+          <View className="mt-2.5">
+            <Button
+              disabled={!canAffordFee || isRegistering || altana.isBusy}
+              label={
+                isRegistering
+                  ? "Confirm with passkey…"
+                  : fee === null
+                    ? "Make this wallet recoverable"
+                    : `Make recoverable — ${formatBnb(fee)} BNB + gas`
+              }
+              loading={isRegistering}
+              onPress={() => void handleRegister()}
+            />
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function AltanaWalletCard() {
   const altana = useAltanaWallet();
 
@@ -302,7 +418,7 @@ export function AltanaWalletCard() {
             className="mt-2.5 text-[11px] leading-4"
             style={{ color: "#A5A79F" }}
           >
-            Recovery needs one prior transaction — a wallet&apos;s key is written
+            Recovery needs one prior on-chain action — a wallet&apos;s key is written
             on-chain the first time the wallet does something. A wallet created
             and never used has nothing to recover from.
           </Text>
@@ -450,6 +566,10 @@ export function AltanaWalletCard() {
             </View>
           </View>
         ) : null}
+
+        <View className="mt-3.5">
+          <RecoverabilityBlock />
+        </View>
 
         <View className="mt-3.5">
           <SeparateWalletNotice />

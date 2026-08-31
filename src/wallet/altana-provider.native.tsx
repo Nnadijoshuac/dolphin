@@ -31,6 +31,16 @@ const unavailable: AltanaWalletValue = {
   address: null,
   chainId: ALTANA_CHAIN_ID,
   networkLabel: ALTANA_NETWORK_LABEL,
+  // A runtime that cannot hold a wallet has no wallet to report on. "unknown"
+  // rather than "unregistered": there is nothing here to be unregistered.
+  recoverability: "unknown",
+  recoverabilityError: null,
+  isCheckingRecoverability: false,
+  refreshRecoverability: () => undefined,
+  registrationFeeWei: null,
+  registerWallet: async () => {
+    throw new Error(NATIVE_PASSKEY_UNAVAILABLE_MESSAGE);
+  },
   balanceWei: null,
   balanceError: null,
   isReadingBalance: false,

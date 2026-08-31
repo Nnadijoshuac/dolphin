@@ -22,12 +22,17 @@ import {
 
 import { api } from "../../convex/_generated/api";
 import { convexClient } from "@/providers/convex-provider";
+import { createPublicClient, http } from "viem";
+
 import {
   ALTANA_CHAIN_ID,
   ALTANA_WALLET_LABEL,
+  KEYSTORE_GET_KEYS_ABI,
+  KEYSTORE_REGISTRATION_FEE_ABI,
   buildSessionPermissions,
   expiryFromNow,
   sessionPolicyFor,
+  type RecoverabilityState,
 } from "./altana-policy";
 import { ERC8183_CHAIN_ID, JOB_DEADLINE_SECONDS } from "./erc8183-policy";
 import type {
@@ -89,6 +94,19 @@ if (ERC8183_CHAIN_ID !== ALTANA_NETWORK.chainId) {
  * decides where a user's money goes.
  */
 const ERC8183 = erc8183Addresses(ALTANA_NETWORK.chainId);
+
+/**
+ * A plain read client for the two KeyStore calls recoverability needs.
+ *
+ * Separate from the SDK's own client because the SDK does not expose its
+ * `readActiveKeys` / `readRegistrationFee` helpers (they live in `internal/`).
+ * Both the RPC URL and the contract addresses come from the SDK's NetworkConfig,
+ * so nothing here is a hand-typed address.
+ */
+const keystoreReader = createPublicClient({
+  chain: ALTANA_NETWORK.chain,
+  transport: http(ALTANA_NETWORK.publicRpcUrl),
+});
 
 let cachedClient: Client | null = null;
 
@@ -205,6 +223,52 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   const recordPayment = useAction(api.agentPayments.recordJobPayment);
   const notifyFunded = useAction(api.agentPayments.notifyJobFunded);
 
+  const [recoverability, setRecoverability] = useState<RecoverabilityState>("unknown");
+  const [recoverabilityError, setRecoverabilityError] = useState<string | null>(null);
+  const [isCheckingRecoverability, setIsCheckingRecoverability] = useState(false);
+  const [registrationFeeWei, setRegistrationFeeWei] = useState<bigint | null>(null);
+
+  /**
+   * Reads whether this wallet's admin key is in KeyStore. The SDK's own rule,
+   * quoted from internal/keystore.d.ts: "Empty array = not yet registered."
+   * Nothing is inferred beyond that, and a failed read leaves the state
+   * "unknown" rather than guessing in either direction.
+   */
+  const refreshRecoverability = useCallback(() => {
+    const current = getStoredSnapshot();
+    if (!current) return;
+    setIsCheckingRecoverability(true);
+    setRecoverabilityError(null);
+    void keystoreReader
+      .readContract({
+        address: ALTANA_NETWORK.keyStore,
+        abi: KEYSTORE_GET_KEYS_ABI,
+        functionName: "getKeys",
+        args: [current.address as `0x${string}`],
+      })
+      .then(
+        (keys) => setRecoverability(keys.length > 0 ? "registered" : "unregistered"),
+        (cause: unknown) => {
+          setRecoverability("unknown");
+          setRecoverabilityError(cause instanceof Error ? cause.message : String(cause));
+        },
+      )
+      .finally(() => setIsCheckingRecoverability(false));
+
+    // The fee is oracle-priced and was observed moving between two reads
+    // minutes apart, so it is re-read here rather than cached anywhere.
+    void keystoreReader
+      .readContract({
+        address: ALTANA_NETWORK.keyStoreController,
+        abi: KEYSTORE_REGISTRATION_FEE_ABI,
+        functionName: "getRegistrationFeeInWei",
+      })
+      .then(
+        (fee) => setRegistrationFeeWei(fee),
+        () => setRegistrationFeeWei(null),
+      );
+  }, []);
+
   const refreshBalance = useCallback(() => {
     const current = getStoredSnapshot();
     if (!current) return;
@@ -237,12 +301,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       signerRef.current = result.signer;
       writeStored({ address: result.address, credential: result.signer.credential });
       refreshBalance();
+      refreshRecoverability();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setIsBusy(false);
     }
-  }, [refreshBalance]);
+  }, [refreshBalance, refreshRecoverability]);
 
   const recoverWallet = useCallback(async () => {
     setIsBusy(true);
@@ -254,12 +319,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       signerRef.current = result.signer;
       writeStored({ address: result.address, credential: result.signer.credential });
       refreshBalance();
+      refreshRecoverability();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setIsBusy(false);
     }
-  }, [refreshBalance]);
+  }, [refreshBalance, refreshRecoverability]);
 
   const forgetWallet = useCallback(() => {
     signerRef.current = null;
@@ -328,6 +394,9 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         });
 
         setLiveSessions((live) => ({ ...live, [granted.publicKey]: granted }));
+        // An admin intent registers the wallet's key as a side effect (see
+        // registerWallet), so this may have just become recoverable.
+        refreshRecoverability();
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause));
         throw cause;
@@ -335,7 +404,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, recordGrant, sessionsUnavailable],
+    [adminSigner, recordGrant, refreshRecoverability, sessionsUnavailable],
   );
 
   const revokeSession = useCallback(
@@ -369,6 +438,36 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     },
     [adminSigner, markRevoked, sessionsUnavailable],
   );
+
+  const registerWallet = useCallback(async (): Promise<void> => {
+    const current = getStoredSnapshot();
+    if (!current) throw new Error("No Dolphin Wallet on this device.");
+
+    setIsBusy(true);
+    setError(null);
+    try {
+      // An admin-signed intent with NO calls of its own. submitCalls prepends
+      // the KeyStore registration to any admin intent whose wallet is not yet
+      // registered, so the whole intent becomes exactly that one call - the
+      // smallest thing that makes a wallet recoverable, and no side effects.
+      await altanaClient().execute({
+        wallet: { address: current.address as `0x${string}` },
+        signer: adminSigner(),
+        calls: [],
+        chainId: ALTANA_NETWORK.chainId,
+      });
+
+      // Re-read rather than assume it worked - the point of this feature is
+      // that the screen states a checked fact.
+      refreshRecoverability();
+      refreshBalance();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      throw cause;
+    } finally {
+      setIsBusy(false);
+    }
+  }, [adminSigner, refreshBalance, refreshRecoverability]);
 
   const readTokenBalance = useCallback(async (token: string): Promise<TokenHolding> => {
     const current = getStoredSnapshot();
@@ -500,6 +599,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         }
 
         refreshBalance();
+        // Paying is an admin intent too, so it also registers the key.
+        refreshRecoverability();
         return {
           jobId: funded.jobId.toString(),
           transactionHash: funded.transactionHash ?? null,
@@ -515,7 +616,15 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, notifyFunded, readTokenBalance, recordPayment, refreshBalance, sessionsUnavailable],
+    [
+      adminSigner,
+      notifyFunded,
+      readTokenBalance,
+      recordPayment,
+      refreshBalance,
+      refreshRecoverability,
+      sessionsUnavailable,
+    ],
   );
 
   const value = useMemo<AltanaWalletValue>(() => {
@@ -531,6 +640,12 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       address,
       chainId: ALTANA_NETWORK.chainId,
       networkLabel: ALTANA_NETWORK.chain.name,
+      recoverability,
+      recoverabilityError,
+      isCheckingRecoverability,
+      refreshRecoverability,
+      registrationFeeWei,
+      registerWallet,
       balanceWei,
       balanceError,
       isReadingBalance,
@@ -557,12 +672,18 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     forgetWallet,
     grantSession,
     isBusy,
+    isCheckingRecoverability,
     isReadingBalance,
     liveSessions,
     payForAgent,
     readTokenBalance,
     recoverWallet,
+    recoverability,
+    recoverabilityError,
     refreshBalance,
+    refreshRecoverability,
+    registerWallet,
+    registrationFeeWei,
     revokeSession,
     sessions,
     sessionsUnavailable,

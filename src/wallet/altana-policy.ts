@@ -119,6 +119,124 @@ export const ALTANA_FUNDING_HINT =
   `balance and cannot pay for a transaction.`;
 
 /* ---------------------------------------------------------------------------
+ * DECISION (2026-08-31): recoverability is READ per wallet, never assumed —
+ * and registration is offered, never forced.
+ * ---------------------------------------------------------------------------
+ * Session 6 found that a Dolphin Wallet cannot be recovered on a new device
+ * until it has executed at least one on-chain transaction, because Altana only
+ * writes a wallet's admin key into its on-chain KeyStore on that first action.
+ * It logged the finding in a handover file and shipped a fixed sentence on the
+ * wallet screen. That sentence is the same for every wallet, which means it is
+ * wrong for half of them: it under-warns a fresh wallet whose funds really are
+ * at risk, and over-warns a used wallet that is genuinely safe.
+ *
+ * THE CHECK. `recoverFromPasskey` reads `getKeys(wallet)` from KeyStore, and
+ * the SDK states the rule outright: "Empty array = not yet registered". So
+ * recoverability is not a thing to hedge about — it is one `eth_call`, exact,
+ * and different per wallet. Both wallet screens now read it live and say what
+ * is actually true of the wallet in front of the user.
+ *
+ * WHY NOT JUST REGISTER AUTOMATICALLY AT CREATION. Registration costs a real
+ * fee, paid by the wallet as msg.value, plus relay gas. Measured live on BSC
+ * mainnet at ~0.00073 BNB — and it MOVED between two reads minutes apart
+ * (728732271782491 then 727666842218717 wei), so it is oracle-priced and must
+ * be read at the moment of asking rather than cached or written down here.
+ *
+ * That cost lands on a wallet that, by the design Session 6 chose and both
+ * screens advertise, is free to create and holds nothing until its owner
+ * decides to fund it. A brand-new wallet therefore CANNOT pay to register even
+ * if Dolphin wanted it to. Registering silently on first funding would also
+ * mean spending someone's money without asking, which is the one thing every
+ * spend-shaped action in this project has refused to do (session grants,
+ * ERC-8183 payments).
+ *
+ * SO: tell the truth always, and offer the fix as a choice. A funded but
+ * unregistered wallet gets an explicit, priced action with the live fee shown
+ * before anything is signed. An unfunded one is told what it needs first.
+ *
+ * WORTH KNOWING, because it makes the action less necessary than it looks:
+ * the SDK registers the admin key automatically on the wallet's first
+ * admin-signed intent of ANY kind — `internal/relay.js`'s `submitCalls` calls
+ * it "the universal choke point for every userOp leaving the SDK" and prepends
+ * the registration there. So granting a session or paying an agent already
+ * fixes this as a side effect. The explicit action exists for the person who
+ * wants to secure the wallet BEFORE doing either.
+ *
+ * TO REVERSE: delete the registration action and the two constants below; the
+ * live read is independent of it and should stay regardless, because a screen
+ * that cannot say whether your funds are reachable is worse than one that can.
+ */
+
+/**
+ * The KeyStore's `getKeys(user)` — the single call recoverability turns on.
+ *
+ * Declared here rather than imported because the SDK does not export its
+ * `readActiveKeys` helper (it lives in `internal/`), and this module must stay
+ * free of SDK imports so the native Expo bundle never carries it — the same
+ * constraint documented beside ALTANA_CHAIN_ID. The KeyStore ADDRESS is not
+ * written here: each provider takes it from the SDK's own NetworkConfig, so
+ * there is still no hand-typed contract address anywhere in this flow.
+ */
+export const KEYSTORE_GET_KEYS_ABI = [
+  {
+    name: "getKeys",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [{ type: "bytes32[]" }],
+  },
+] as const;
+
+/** `KeyStoreController.getRegistrationFeeInWei()` — oracle-priced, read live. */
+export const KEYSTORE_REGISTRATION_FEE_ABI = [
+  {
+    name: "getRegistrationFeeInWei",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+] as const;
+
+/**
+ * What a user is told about their own wallet's recoverability. Deliberately
+ * three states and not two: "we have not checked" must never render as "no".
+ */
+export type RecoverabilityState = "unknown" | "registered" | "unregistered";
+
+export function recoverabilityCopy(state: RecoverabilityState): {
+  title: string;
+  body: string;
+} {
+  switch (state) {
+    case "registered":
+      return {
+        title: "Recoverable on another device",
+        body:
+          "This wallet's key is registered in Altana's on-chain KeyStore, so your " +
+          "passkey can rebuild it on a new device or after clearing this browser. " +
+          "Read live from the chain just now, not assumed.",
+      };
+    case "unregistered":
+      return {
+        title: "Not recoverable yet — read this before you clear this browser",
+        body:
+          "This wallet has never transacted, so its key is not yet in Altana's " +
+          "on-chain KeyStore and there is nothing for a passkey to recover from. " +
+          "If you clear this browser or move to another device now, you will lose " +
+          "access to it. Its first on-chain action fixes this automatically.",
+      };
+    default:
+      return {
+        title: "Recoverability not checked",
+        body:
+          "Dolphin has not been able to read this wallet's KeyStore entry, so it " +
+          "will not tell you either way. Refresh to try again.",
+      };
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * DECISION (2026-08-30): which agents may be granted a spend-capable session.
  * ---------------------------------------------------------------------------
  * Not every agent should get one. Granting spend authority to an agent that

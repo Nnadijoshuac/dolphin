@@ -1,4 +1,5 @@
 import type { AgentCategory } from "@/types/agent";
+import type { RecoverabilityState } from "./altana-policy";
 
 /**
  * Shared shape for the Altana wallet across both Expo targets, so the web
@@ -122,6 +123,29 @@ export type AltanaWalletValue = Readonly<{
   address: string | null;
   chainId: number;
   networkLabel: string;
+
+  /**
+   * Whether THIS wallet's admin key is in Altana's on-chain KeyStore, which is
+   * exactly whether a passkey could rebuild it on another device. Read live -
+   * "unknown" while unread or on error, and never defaulted either way.
+   */
+  recoverability: RecoverabilityState;
+  recoverabilityError: string | null;
+  isCheckingRecoverability: boolean;
+  refreshRecoverability: () => void;
+
+  /**
+   * Live KeyStore registration fee in wei. Oracle-priced and observed to move
+   * between reads, so it is never cached to a constant. Null while unread.
+   */
+  registrationFeeWei: bigint | null;
+
+  /**
+   * Registers this wallet's admin key on-chain so it becomes recoverable,
+   * without doing anything else. Costs the fee above plus relay gas, both paid
+   * by the wallet - so the caller must have shown the price and got consent.
+   */
+  registerWallet: () => Promise<void>;
 
   /** Native balance in wei. Null while unread - never rendered as zero. */
   balanceWei: bigint | null;

@@ -150,37 +150,76 @@ function RecoverabilityPanel() {
         <p className="wallet-inline-error">{wallet.recoverabilityError}</p>
       )}
 
+      {/*
+       * Three mutually exclusive branches, never a disabled button.
+       *
+       * This used to render "Make recoverable — 0.000723 BNB + gas" greyed out
+       * above a line explaining the balance was too low. That is a dead end: the
+       * only control offered is one the user cannot use, and the thing that
+       * WOULD unblock them (depositing) is not offered at all. Every Dolphin
+       * Wallet in existence is empty, so that dead end was the state every user
+       * actually saw.
+       *
+       * Now the panel offers the action that is genuinely available at each
+       * point: deposit when short, register when funded, and neither when the
+       * fee could not be read — because an action Dolphin cannot price is one it
+       * must not put a button behind (AGENTS.md §5).
+       */}
       {isUnregistered && (
         <div className="mt-4">
-          {!canAffordFee && fee !== null && (
+          {fee === null ? (
             <p className="wallet-inline-error">
-              {wallet.balanceWei === null
-                ? "Balance unread — Dolphin won't start a transaction it can't price."
-                : `Balance (${formatBnb(wallet.balanceWei)} BNB) too low for the ${formatBnb(fee)} BNB fee + gas.`}
+              The registration fee could not be read just now, so Dolphin will not
+              offer an action it cannot price for you. Re-check to try again.
             </p>
-          )}
-          <button
-            className="wallet-action-btn wallet-action-btn--accent interactive mt-3"
-            disabled={state.kind === "registering" || wallet.isBusy || !canAffordFee}
-            onClick={() => {
-              setState({ kind: "registering" });
-              void wallet.registerWallet().then(
-                () => setState({ kind: "idle" }),
-                (cause: unknown) =>
-                  setState({
-                    kind: "error",
-                    message: cause instanceof Error ? cause.message : String(cause),
-                  }),
-              );
-            }}
-            type="button"
-          >
-            {state.kind === "registering"
-              ? "Confirm with passkey…"
-              : fee === null
-                ? "Make recoverable"
+          ) : !canAffordFee ? (
+            <div className="wallet-fund-banner">
+              <div className="wallet-fund-banner__row">
+                <p className="wallet-fund-banner__title">
+                  Deposit BNB to make this wallet recoverable
+                </p>
+                {wallet.address && (
+                  <CopyButton label="Copy wallet address" value={wallet.address} />
+                )}
+              </div>
+              <code className="wallet-fund-banner__address">{wallet.address}</code>
+              <p className="wallet-fund-banner__hint">
+                {/*
+                 * The fee is stated exactly because it was read from the chain.
+                 * Gas is named but NOT quantified — Dolphin has not measured it
+                 * and will not print a plausible-looking guess beside a real
+                 * figure. "plus relay gas" is the honest amount of precision.
+                 */}
+                Registration costs {formatBnb(fee)} BNB plus relay gas, paid by
+                this wallet. It currently holds{" "}
+                {wallet.balanceWei === null
+                  ? "an amount Dolphin could not read"
+                  : `${formatBnb(wallet.balanceWei)} BNB`}
+                . Send BNB to the address above, then re-check.
+              </p>
+            </div>
+          ) : (
+            <button
+              className="wallet-action-btn wallet-action-btn--accent interactive"
+              disabled={state.kind === "registering" || wallet.isBusy}
+              onClick={() => {
+                setState({ kind: "registering" });
+                void wallet.registerWallet().then(
+                  () => setState({ kind: "idle" }),
+                  (cause: unknown) =>
+                    setState({
+                      kind: "error",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                    }),
+                );
+              }}
+              type="button"
+            >
+              {state.kind === "registering"
+                ? "Confirm with passkey…"
                 : `Make recoverable — ${formatBnb(fee)} BNB + gas`}
-          </button>
+            </button>
+          )}
 
           {state.kind === "error" && (
             <p className="wallet-error-banner mt-3">{state.message}</p>
@@ -323,11 +362,16 @@ function IdentityWalletCard() {
         </div>
         <p className="wcard__hero-balance wcard__hero-balance--muted">—</p>
         <p className="wcard__hero-sub">Not connected</p>
-        <div className="wcard__actions wcard__actions--disabled">
-          <WalletAction disabled icon="↑" label="Send" />
-          <WalletAction disabled icon="↓" label="Receive" />
-          <WalletAction disabled icon="⇄" label="Swap" />
-        </div>
+        {/*
+         * No action row in the disconnected state, deliberately.
+         *
+         * It previously rendered disabled Send / Receive / Swap buttons. Two of
+         * those three were features this app does not have at all (Send was
+         * wired to an empty handler; Swap was never implemented anywhere), so
+         * the row advertised capabilities that do not exist and would not exist
+         * after connecting either. A disabled control still makes a promise.
+         * The hint below is the only honest thing to show here.
+         */}
         <div className="wcard__asset-row wcard__asset-row--empty">
           <span className="wcard__asset-row-hint">Connect identity wallet above ↑</span>
         </div>
@@ -335,10 +379,21 @@ function IdentityWalletCard() {
     );
   }
 
-  const bnbFmt = balData
-    ? Number(balData.value / BigInt(10 ** 14)) / 10000
-    : null;
-  const bnbStr = balLoading ? "…" : bnbFmt !== null ? bnbFmt.toFixed(4) : "—";
+  /*
+   * Formatted with the SAME helper the agent card uses, deliberately.
+   *
+   * This previously did its own `Number(value / 10n**14n) / 10000` then
+   * `.toFixed(4)`, which truncated to 4 decimals while the agent card's
+   * formatBnb keeps 6. Two cards on one screen, both denominated in BNB on the
+   * same chain, disagreed about the same quantity: a balance that rendered as
+   * "0.00001" on one showed as "0.0000" on the other, which reads as "empty"
+   * when it is not. Sharing formatBnb makes that class of mismatch impossible
+   * rather than merely fixed once.
+   *
+   * It also drops a float conversion from a wei value — formatBnb stays in
+   * bigint arithmetic, so a large balance cannot lose precision.
+   */
+  const bnbStr = balLoading ? "…" : balData ? formatBnb(balData.value) : "—";
 
   return (
     <div className="wcard wcard--identity surface-raised" aria-label="Identity wallet">
@@ -357,9 +412,17 @@ function IdentityWalletCard() {
       </p>
       <p className="wcard__hero-sub">Identity · hire records</p>
 
-      {/* Quick actions */}
+      {/*
+       * Quick actions. Every control here does something real.
+       *
+       * "Send" was removed rather than disabled: it was wired to an empty
+       * handler (`onClick={() => { /* future *\/ }}`), so it rendered as a live
+       * button that silently did nothing. Dolphin never moves funds out of the
+       * identity wallet — that wallet is the user's own MetaMask/WalletConnect
+       * account and they already have a full wallet UI for sending. Offering a
+       * worse copy of it here would be a dead end at best.
+       */}
       <div className="wcard__actions">
-        <WalletAction icon="↑" label="Send" onClick={() => { /* future */ }} />
         <WalletAction icon="↓" label="Receive" onClick={() => {
           void navigator.clipboard?.writeText(identity.address!);
         }} />
@@ -401,9 +464,20 @@ function ConnectedWallet() {
         {/* Agent card (Dolphin / Altana passkey) */}
         <div className="wcard wcard--agent surface-raised">
           <div className="wcard__top-row">
+            {/*
+             * "Agent Payments", not "For agents" / "Agent spending".
+             *
+             * The old wording was ambiguous in a money-shaped way: it read as
+             * though this account holds what an agent EARNS. It does not, and
+             * there is no code path that would put earnings here — a paid hire
+             * sends $U to the agent's own registered ERC-8004 wallet
+             * (convex/agentPayments.ts verifies the payee against it). This
+             * balance is outbound only: funds the USER deposits in order to pay
+             * agents. The subcopy below says so in as many words.
+             */}
             <div className="wcard__eyebrow">
               <span className="wcard__eyebrow-icon">⚡</span>
-              For agents
+              Agent Payments
             </div>
             <code className="wcard__addr-pill">{truncateAddress(address)}</code>
           </div>
@@ -420,7 +494,7 @@ function ConnectedWallet() {
               <span className="wcard__hero-unit">BNB</span>
             )}
           </p>
-          <p className="wcard__hero-sub">Dolphin Wallet · passkey-secured</p>
+          <p className="wcard__hero-sub">Funds you send to pay agents you hire</p>
 
           {/* Quick actions */}
           <div className="wcard__actions">
@@ -429,10 +503,12 @@ function ConnectedWallet() {
               label="Deposit"
               onClick={() => void navigator.clipboard?.writeText(address)}
             />
+            {/* Labelled "BscScan" to match the identity card and the session
+                rows below — one name for one destination, not two. */}
             <WalletAction
               href={`https://bscscan.com/address/${address}`}
               icon="↗"
-              label="Explorer"
+              label="BscScan"
             />
             <WalletAction
               disabled={wallet.isReadingBalance}
@@ -447,7 +523,7 @@ function ConnectedWallet() {
             <div className="wcard__asset-row">
               <span className="wcard__asset-icon"><BnbLogo size={18} /></span>
               <span className="wcard__asset-name">BNB</span>
-              <span className="wcard__asset-sub">Agent spending</span>
+              <span className="wcard__asset-sub">Dolphin Wallet · passkey-secured</span>
               <span className="wcard__asset-amount">
                 {wallet.balanceWei !== null ? `${formatBnb(wallet.balanceWei)} BNB` : "—"}
               </span>

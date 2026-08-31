@@ -86,7 +86,7 @@ function SearchContent() {
   const hasActiveSearch = normalizedQuery.length > 0 || selectedCategory !== "all";
 
   return (
-    <div className="site-frame page-shell">
+    <div className="site-frame page-shell" style={{ paddingBlockStart: 0 }}>
       <section aria-label="Agent search" className="border-y border-line py-6 sm:py-8">
         <form
           onSubmit={(event) => {

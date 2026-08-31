@@ -192,7 +192,7 @@ export default function MyAgentsPage() {
   const wallet = useWallet();
 
   return (
-    <div className="site-frame page-shell">
+    <div className="site-frame page-shell" style={{ paddingBlockStart: "clamp(1.5rem, 4vw, 3rem)" }}>
       <div>
         {!wallet.isConnected || !wallet.address ? (
           <div className="grid gap-7 border-y border-line py-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">

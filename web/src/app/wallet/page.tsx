@@ -11,7 +11,7 @@ export default function WalletPage() {
   const wallet = useWallet();
 
   return (
-    <div className="site-frame page-shell">
+    <div className="site-frame page-shell" style={{ paddingBlockStart: "clamp(1.5rem, 4vw, 3rem)" }}>
       <div className="pb-12 sm:pb-16">
         <AltanaWalletPanel />
       </div>

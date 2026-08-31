@@ -21,6 +21,13 @@ export default defineSchema({
     status: v.union(v.literal("active"), v.literal("cancelled")),
     hiredAt: v.string(),
     cancelledAt: v.union(v.string(), v.null()),
+    /**
+     * The agentJobs.jobId that paid for this hire, or null when the hire was
+     * free - which every hire in this table was before 2026-08-31. Optional so
+     * existing rows stay valid without a migration, the same convention the
+     * agentDirectory icon columns already use.
+     */
+    paymentJobId: v.optional(v.union(v.string(), v.null())),
   })
     .index("by_agent_wallet", ["chainId", "tokenId", "walletAddress"])
     .index("by_wallet", ["walletAddress", "status"]),

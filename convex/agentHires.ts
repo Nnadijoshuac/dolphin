@@ -131,11 +131,19 @@ export const hireReadOnlyAgent = mutation({
 
     const hiredAt = new Date().toISOString();
 
+    // Null for a free hire, which is the honest value: nothing paid for it.
+    const paidBy = isFreePriceModel(priceModel) ? null : (paymentJobId ?? null);
+
     if (existing) {
       if (existing.status === "active") {
         return existing._id;
       }
-      await ctx.db.patch(existing._id, { status: "active", hiredAt, cancelledAt: null });
+      await ctx.db.patch(existing._id, {
+        status: "active",
+        hiredAt,
+        cancelledAt: null,
+        paymentJobId: paidBy,
+      });
       return existing._id;
     }
 
@@ -147,6 +155,7 @@ export const hireReadOnlyAgent = mutation({
       status: "active",
       hiredAt,
       cancelledAt: null,
+      paymentJobId: paidBy,
     });
   },
 });

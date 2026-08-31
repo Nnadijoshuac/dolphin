@@ -9,7 +9,7 @@ Last updated: 2026-08-31
 - Baseline `npm run typecheck`: passing before redesign work
 - Product source of truth: `../project-scope.md`
 - Data source of truth: existing Convex queries, hooks, wallet provider, and session-grant logic
-- Resume from: My Agents and Wallet redesign
+- Resume from: final responsive, accessibility, and production verification
 
 ## Visual direction
 
@@ -45,8 +45,8 @@ Non-negotiable guardrails:
 | Navigation and application shell | Complete | `75e7fea` | `npx tsc --noEmit` passed |
 | Discover and Search | Complete | `3e5ae3a` | Desktop/mobile browser check, lint, and TypeScript passed |
 | Agent detail and Hire | Complete | `cdbcdc2` | Desktop/mobile browser check, lint, and TypeScript passed |
-| My Agents | Not started | — | — |
-| Wallet | Not started | — | — |
+| My Agents | Complete | `dcd5a8d` | Desktop/mobile browser check, lint, and TypeScript passed |
+| Wallet | Complete | `e03417a` | Desktop/mobile browser check, lint, and TypeScript passed |
 | Responsive, accessibility, and final audit | Not started | — | — |
 
 ## Resume commands

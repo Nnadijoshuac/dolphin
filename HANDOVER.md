@@ -6,6 +6,280 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 ---
 
+# Session addendum — 2026-08-30/31 (session 6: Dolphin gets a wallet)
+
+Everything below was verified this session with live commands, a real Chromium
+driving both products' real builds, real WebAuthn ceremonies, and live Convex
+queries against the deployment. Where an earlier section disagrees, this
+addendum wins. Full command output is in `SESSION-LOG-2026-08-30-altana.md`.
+
+## THE HEADLINE
+
+**Dolphin now has its own wallet, and an agent can be given real, bounded,
+on-chain-enforced spending authority instead of a database row.**
+
+A user creates a passkey-backed Altana smart account, sees its real balance,
+grants a specific agent a session with a visible spend cap and a call
+allowlist, and revokes it from either the wallet screen or the hire record.
+Both products do all of it. The four graded categories no longer get the same
+treatment — three of them can receive real authority and one deliberately
+cannot, for a reason that is stated on screen.
+
+This closes the gap that has been open since 2026-08-28 and is recorded in
+`project-scope.md` §6 as the Altana blocker.
+
+## The architectural fact everything else follows from
+
+**An Altana wallet can never be the user's MetaMask account.**
+`@altananetwork/sdk` 0.8.0 ships exactly two usable signer families —
+private key and browser WebAuthn passkey. `signerFromInjected` appears **only
+in the package's own doc comments**; it is never implemented and never
+exported. Verified by grepping `dist/`, not taken from a changelog. 0.8.0 is
+also the newest published version, so this is current state, not a stale note.
+
+So this session built a **second, parallel wallet** rather than upgrading the
+existing wagmi/Reown flow. Both wallet screens say so in as many words, because
+letting those two blur is a money-shaped misunderstanding rather than a
+cosmetic one. The existing connect flow is untouched and still does its real
+job: identifying a user on a hire record.
+
+## Every decision made, and why
+
+**Passkey, not private key.** Altana never persists key material and cannot
+hand a generated private key back. A private-key wallet would make *Dolphin*
+solely responsible for custody with no recovery path — a duty a marketplace has
+no business taking on, and one it could not honestly call non-custodial. A
+passkey lives in the device's secure element with a biometric gate and the
+platform's own recovery story. Reversible at `ALTANA_SIGNER_STRATEGY`.
+
+**BSC mainnet (56) — the owner's call, asked explicitly.** Both options were
+put with their trade-offs. Mainnet was chosen so the wallet sits on the same
+chain as everything else Dolphin reads. The cost is recorded rather than
+hidden: a grant costs real BNB, so **the on-chain enforcement lifecycle was not
+run this session** (see "What is not proven" below).
+
+**Which agents get a session — three of four, and the fourth is the
+interesting one.** A category earns spend authority only when *both* hold:
+acting rather than reporting is the job, **and** Dolphin can name a concrete,
+already-verified contract to allow.
+
+| Category | Session? | Allowlist | Why |
+|---|---|---|---|
+| health-factor | yes | Venus Core Pool Comptroller | acting before a liquidation is the entire value |
+| rebalancing | yes | PancakeSwap V3 Position Manager | rebalancing a position means moving it |
+| yield | yes | Aave V3 Pool | moving capital to the best venue is the job |
+| grid-trading | **no** | — | would need it in principle, but Dolphin has no wired data source for this category and no verified venue address. Authority into a blind spot is worse than none. |
+| monitoring | **no** | — | information delivery by definition |
+
+**No new contract address was written this session.** Every allowlisted address
+was already independently verified in this repo, for its live-stats reads,
+against the protocol's own deployments file and cross-checked on BscScan. That
+was deliberate: an allowlist is the one place a wrong address turns into real
+authority over real money.
+
+A consequence worth knowing before a demo, because it looks like a bug and is
+not: **these allowlists are narrower than a full strategy would need.** A
+rebalance that also had to touch a router or an ERC-20 approval would be
+rejected at validation time. Widening means verifying each new address to the
+same standard first.
+
+**`calls` is never omitted.** Altana treats an omitted or empty `calls` as "any
+contract". `buildSessionPermissions` throws rather than emit permissions
+without it, and `recordSessionGrant` refuses to record an empty allowlist —
+verified live, the empty call is rejected and the bounded one succeeds.
+
+**Sessions live in Convex, not in the browser.** `agentSessions` is the single
+source of truth, so the wallet screen and the hire record cannot tell two
+different stories about the same authority. Public reference detail only — the
+session's public key, its bounds, the agent — never a signer or any key
+material, so nothing in that table can act on a wallet. `recordSessionGrant`
+records a grant that **already happened**; it cannot create one, because Convex
+cannot sign.
+
+**The client refuses to grant at all when Convex is unconfigured**, rather than
+hand out spend authority nothing would have a durable record of. A permission a
+user cannot later find is one they cannot knowingly revoke.
+
+## Mobile: the finding that made this worth doing
+
+Native React Native cannot host an Altana wallet, and not for a fixable reason.
+RN's global `navigator` is literally `{product: 'ReactNative'}` — quoted from
+`node_modules/react-native/Libraries/Core/setUpNavigator.js`, not assumed — so
+there is no `credentials` property for WebAuthn. A RN passkey library does not
+close it: platform passkeys need a verified domain serving
+`apple-app-site-association`/`assetlinks.json`, which this project has none for
+native builds, and Altana needs a flat P256 `x || y` encoding no such library
+documents.
+
+**But the Expo app's publicly reachable build is its *web export*** —
+`nnadijoshuac.github.io/dolphin` — which runs in a real browser on a real HTTPS
+origin. So the surface a judge actually opens holds a real Dolphin Wallet, and
+only a native dev build does not. Shipping a stub on both targets would have
+given up a working feature on the one that is reachable.
+
+Native renders an honest unavailable state naming the cause and pointing at the
+browser, where the same passkey opens the same wallet.
+
+## Three things found by running it, not by reading it
+
+**1. Recovery needs one prior transaction.** `recoverFromPasskey` reads the
+wallet's admin key from Altana's on-chain KeyStore, and a key only lands there
+on the wallet's **first transaction** — `createWallet`'s own doc comment says
+so. A wallet created and never used therefore cannot be recovered. The passkey
+half works perfectly (the credential picker resolved to the correct wallet
+address); only the chain read fails. Both wallet screens now say this up front
+instead of letting someone meet the raw error.
+
+**2. The Altana SDK was reaching the Android bundle through two separate
+paths.** Both found with a real `expo export`, both closed:
+
+- The platform-router pattern `src/wallet/wallet-provider.ts` uses — `import *
+  as Native`, `import * as Web`, branch on `Platform.OS` — is a *runtime*
+  branch over *static* imports, so Metro ships both modules to both platforms.
+  Replaced with Metro's own platform resolution plus a `.d.ts`, which needs **no
+  `tsconfig` change**. Worth knowing: this addendum's predecessor records an
+  earlier attempt at platform resolution being reverted for needing
+  `moduleSuffixes`, which broke expo-video's types. A `.d.ts` sidesteps that.
+- That alone was not enough. `altana-policy.ts` imported the SDK's `BNB`
+  constant, and the package root is a barrel, so one chain id dragged the whole
+  SDK in anyway. The policy is now plain data and each provider resolves `BNB`
+  itself, asserting the two agree.
+
+Measured after both: `android createPasskeyWallet 0, relay.altana.network 0` /
+`web createPasskeyWallet 5, relay.altana.network 1`.
+
+**This also applies to the existing Reown wallet**, which ships its whole
+native stack inside the web bundle for exactly the first reason. The fix
+demonstrated here would work there too — a ready-made, measured improvement for
+the next session.
+
+**3. `web/` lint was not clean when this session started.** A pre-existing
+`prefer-const` error in `wallet-provider.tsx`, in a file this session had not
+touched. Fixed in its own commit so the gate could be honestly reported clean.
+
+## Live evidence, in brief
+
+Real WebAuthn ceremonies via Chrome's virtual authenticator — `navigator.
+credentials.create()` really runs and the SDK is not stubbed anywhere.
+
+```
+WEBSITE   wallet 0xfE16aBCc199bB3F9935aa7B6b6466341833130C3
+          credential.kind webauthn | P256 pubkey 130 hex | stores a private key: false
+          balance "Read live from chain 56", cross-checked eth_getBalance = 0x0
+          survives a reload | 0 console errors | 0 page errors
+
+MOBILE    wallet 0xfb0b95a5C1c4Af1Aa7883AFAB543502028ad22ef
+(web      balance "Read live from chain 56" | funding path shown
+ export)  "No agent can spend from this wallet" | 0 console, 0 page errors
+
+POLICY    health-factor 45381  -> 0xfD36E2c2a6789Db23113685031d7F16329158384
+SPLIT     rebalancing   265375 -> 0x46A15B0b27311cedF172AB29E4f4766fbE7F4364
+(both     yield         12046  -> 0x6807dc923806fE8Fd134338EABCA509979a7e0cB
+ products)grid-trading  292939 -> refuses, with its reason, even WITH a wallet
+```
+
+Backend, live against the deployment: empty allowlist rejected with its reason;
+a bounded grant recorded and read back; `expired` correctly derived from the
+clock rather than stored; `markSessionRevoked` setting `revoked` without the
+expiry derivation overwriting it. The probe row was deleted; `agentSessions` is
+empty.
+
+## WHAT IS NOT PROVEN — read this before claiming the feature works
+
+**On-chain session enforcement was not observed in this build.** Because the
+network decision was mainnet, a grant costs real BNB, and the owner chose not
+to fund an address. So grant → in-bounds call → out-of-bounds call rejected →
+revoke was **not run**, and nothing in this repo claims it was. The
+revert-at-validation-time behaviour is Altana's documented guarantee and is
+what the code is built against; it is not something anyone here has watched
+happen.
+
+`scripts/spike-b-auth.mjs` produces exactly that proof against chain 97 the
+moment a disposable address is funded. **Both Altana relays answer HTTP 200
+from this network**, unlike WalletConnect's, so this is purely a funding
+question and not an environment one. It is the single most convincing piece of
+evidence this feature could gain, and it is cheap.
+
+## State of the two products
+
+| | Mobile (root) | Website (`web/`) |
+|---|---|---|
+| `tsc --noEmit` | clean | clean |
+| lint | 0 errors, 2 pre-existing warnings | 0 errors |
+| build | `expo export` OK, web **and** android | `next build` OK |
+| Convex | pushes; `agentSessions` + 2 indexes added | same backend |
+| Dolphin Wallet | web export yes, native no (stated) | yes |
+
+`/wallet` still prerenders as static content under `next build` — the check
+that matters for the SSR class of bug this project has hit before.
+
+## Known issues, new this session
+
+1. **A session cannot execute after a page reload.** Its signing key is held in
+   memory for the life of the tab only, deliberately — persisting a
+   spend-capable key in localStorage is not a trade to make on a user's behalf.
+   It stays visible and revocable (revocation needs only the public key plus
+   the admin passkey), and the UI says so. Fixing it properly means a
+   server-side agent runner holding the session, which is a real design
+   decision and not a patch. *(new)*
+2. **Recovery is unavailable for an unfunded wallet** — see finding 1. On
+   mainnet with no funding, that is every wallet a demo will create. *(new)*
+3. **The allowlists are narrower than a real strategy needs.** Documented above
+   and on screen. *(new)*
+4. **The Altana SDK adds ~0.8 MB to the Expo web bundle** (6.4 → 7.2 MB). Real
+   and worth knowing; not addressed. *(new)*
+5. Chrome warns `pubKeyCredParams is missing ES256 and RS256` during passkey
+   creation. The ceremony succeeds; it is the SDK's request shape, not
+   Dolphin's, and nothing here can change it. *(new, cosmetic)*
+
+Everything carried forward from the 2026-08-30 addendum still stands, notably:
+the website still has no public URL, both lockfiles still need regenerating on
+Linux, and the backfill is still walking the registry.
+
+## IS THIS SUBMITTABLE RIGHT NOW?
+
+**Yes, and this is the session that makes the Altana bounty a real entry rather
+than a documented blocker.** Dolphin went from "action-agent activation is
+intentionally unavailable in this build" to a working, bounded, revocable
+authorization flow on both products, with the guardrails visible on screen —
+a user can look at the wallet screen and see exactly which contract an agent
+may call, how much it may spend, and when it expires, and pull it back in one
+tap. The per-category honesty (three yes, one explicitly no, with the reason
+shown) is the sort of thing that reads as real judgement rather than a feature
+checklist.
+
+**The one thing between here and *best-case* submittable is unchanged from the
+last two sessions: the website still has no public URL.** It is the strongest
+surface, everything on it works, and it runs only on localhost. One deploy and
+one credential the owner must add; Vercel is the shortest path.
+
+**Second, and new — and cheaper than it sounds:** fund a disposable chain-97
+address and run `npm run spike:altana`. That converts the one claim this
+session deliberately does *not* make ("the boundary is enforced on-chain") into
+observed transaction receipts. The relays are reachable; only the funding is
+missing.
+
+### Was the scope realistic? Mostly — the honest split
+
+**Done in full:** Task 0 (investigated, including the RN question answered from
+RN's own source), Task 1 (decision documented in code, reversibly), Task 2
+(website provider, live-verified), Task 3 (mobile provider, live-verified on
+the target that can run it), Task 4 (both wallet screens revamped), Task 5
+(session grants wired into both hire flows, with the per-category judgement
+made and documented), Task 6 (parity confirmed, one gap logged with its cause),
+Task 7 (README diagrams, written last and checked against the code).
+
+**Deliberately not done:**
+- **The live on-chain enforcement proof.** Not a choice about effort — the
+  owner chose mainnet and chose not to fund an address. Everything up to that
+  step is built and verified.
+- **Native passkey support.** Blocked on a verified domain and an undocumented
+  encoding, neither of which is closable from here.
+- **Persisting session signers across reloads.** Would mean putting a
+  spend-capable key in localStorage. Declined on purpose.
+
+---
+
 # Session addendum — 2026-08-30 (session 5: discovery stops being manual)
 
 Everything below was verified with live commands against the real Convex

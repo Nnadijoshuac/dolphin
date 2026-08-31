@@ -17,7 +17,7 @@ export default function DiscoverPage() {
   const { data: agents, isError, isLoading } = useAgents();
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory | null>(null);
 
-  const catalog = agents ?? [];
+  const catalog = useMemo(() => agents ?? [], [agents]);
   const featuredAgent =
     catalog.find((agent) => agent.category === "health-factor") ?? catalog[0];
   const visibleAgents = useMemo(

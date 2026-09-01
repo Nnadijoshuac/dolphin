@@ -228,17 +228,22 @@ export function useWallet(): WalletState {
         const kind = classifyConnectError(cause);
 
         /*
-         * One retry on WalletConnect when an unprompted injected attempt fails
-         * - typically a locked or absent extension. Only when the caller
-         * expressed no preference: someone who explicitly asked for injected
-         * should see why it failed, not be silently handed a QR code.
+         * One retry on WalletConnect, but only when the injected connector
+         * looks genuinely unusable - `no-wallet` or an unrecognised failure.
+         * Only when the caller expressed no preference, too: someone who
+         * explicitly asked for injected should see why it failed rather than
+         * be silently handed a QR code.
          *
-         * NOT retried after a cancellation. Someone who just dismissed their
-         * wallet popup does not want a QR code thrown at them a half-second
-         * later; that reads as the app ignoring them. Cancelling is a decision,
-         * and the only correct response is to stop.
+         * NOT retried for `cancelled` or `busy`, and that exclusion was found
+         * by running it. Both mean the extension is present and talking to the
+         * user: one just had its popup dismissed, the other has a request
+         * still open in it. Raising a WalletConnect QR modal over either is
+         * the app talking past someone who is already mid-decision - the exact
+         * complaint that started this fix. Caught live when a -32002 test
+         * opened a QR code instead of saying "your wallet is already asking".
          */
-        if (kind !== "cancelled" && target.id === "injected" && wcConn && !preferredType) {
+        const injectedUnusable = kind === "no-wallet" || kind === "unknown";
+        if (injectedUnusable && target.id === "injected" && wcConn && !preferredType) {
           try {
             await connectAsync({ connector: wcConn });
             return;

@@ -355,13 +355,23 @@ after    saw 8,347 records;  872 new;  120,582 ms
 | [convex/lib/registrationFile.ts:17](convex/lib/registrationFile.ts#L17) | "289,938-record" |
 | [convex/discoveredAgents.ts:61,81](convex/discoveredAgents.ts#L61) | "600/min" |
 | [convex/agents.ts:237](convex/agents.ts#L237) | "raises 8004scan's limit from 30/min to 600/min" |
-| HANDOVER.md:1306, 1319, 1500, 2342 | "291,543", "600/min·100000/day" |
+| HANDOVER.md — 4 hits in the older addenda, **found by search, not line number** (see note) | "291,543", "600/min·100000/day" |
 | SESSION-LOG-2026-08-29-discovery.md — **12 hits**: 20, 43, 47, 54, 77, 112, 141, 283, 297, 491, 494, 500 | "289,938", "291,543", "600/min · 100,000/day", "0.180 pages/s" |
 
-> Line numbers in the HANDOVER.md row are **post-addendum**. An earlier draft of
-> this table cited 881/894/1075/1917, captured before this addendum was inserted
-> — adding it shifted every later line by ~425. Corrected here. The session-log
-> row previously listed 3 of its 12 occurrences.
+> **Why the HANDOVER.md row cites no line numbers.** It is self-referential, so
+> every edit to this file moves its own targets. An earlier draft cited
+> 881/894/1075/1917 (captured before this addendum existed); inserting the
+> addendum shifted them ~425 lines, and the correction to *that* shifted them
+> again. Locate them instead with:
+>
+> ```
+> grep -n "291,543\|289,938\|600/min\|100000/day" HANDOVER.md | awk -F: '$1>400'
+> ```
+>
+> The `$1>400` filter skips this addendum, which quotes those figures
+> deliberately. At the time of writing that returns four hits, all in the
+> session-5 and session-1 material. The session-log row above is safe to cite by
+> line because that file is not being edited.
 
 **These are comments and prose, not logic** — nothing behaves incorrectly
 because of them, and I did not edit them, because doing so would have touched

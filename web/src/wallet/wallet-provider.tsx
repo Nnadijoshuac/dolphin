@@ -14,6 +14,11 @@ import { bsc } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
 
 import { BSC_RPC_URL } from "@/constants/agents";
+import {
+  classifyConnectError,
+  connectFailureCopy,
+  type ConnectFailureKind,
+} from "@/wallet/wallet-errors";
 
 /**
  * The IDENTITY wallet: the user's own MetaMask / OKX / WalletConnect account.
@@ -143,7 +148,16 @@ export interface WalletState {
   isAvailable: boolean;
   unavailableReason: string | null;
   isConnecting: boolean;
-  error: string | null;
+  /**
+   * What went wrong last, as a KIND rather than a message.
+   *
+   * Deliberately not a string: a `string | null` is what let viem's raw
+   * `message` reach the screen in the first place. A caller cannot render this
+   * verbatim - it has to go through connectFailureCopy, which only ever
+   * produces text written for a person. See wallet-errors.ts.
+   */
+  failure: ConnectFailureKind | null;
+  clearFailure: () => void;
   connect: (preferredType?: "injected" | "walletConnect") => Promise<void>;
   disconnect: () => Promise<void>;
 }
@@ -166,7 +180,7 @@ export function useWallet(): WalletState {
   const { address, isConnected, isConnecting: accountConnecting, isReconnecting } = useAccount();
   const { connectAsync, connectors: available, isPending } = useConnect();
   const { disconnectAsync } = useDisconnect();
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ConnectFailureKind | null>(null);
 
   const isMounted = useSyncExternalStore(
     subscribe,
@@ -176,7 +190,7 @@ export function useWallet(): WalletState {
 
   const connect = useCallback(
     async (preferredType?: "injected" | "walletConnect") => {
-      setError(null);
+      setFailure(null);
 
       const injectedConn = available.find((c) => c.id === "injected");
       const wcConn = available.find((c) => c.id === "walletConnect");
@@ -204,50 +218,57 @@ export function useWallet(): WalletState {
               : wcConn ?? available[0];
 
       if (!target) {
-        // Distinguishes "you have no wallet" from "this deploy is
-        // misconfigured", because those need different things from the reader.
-        setError(
-          projectId
-            ? "No wallet connector found. Install MetaMask or OKX Wallet, or use WalletConnect."
-            : MISSING_PROJECT_ID_MESSAGE,
-        );
+        setFailure("no-wallet");
         return;
       }
 
       try {
         await connectAsync({ connector: target });
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : String(cause);
+        const kind = classifyConnectError(cause);
 
         /*
          * One retry on WalletConnect when an unprompted injected attempt fails
          * - typically a locked or absent extension. Only when the caller
          * expressed no preference: someone who explicitly asked for injected
          * should see why it failed, not be silently handed a QR code.
+         *
+         * NOT retried after a cancellation. Someone who just dismissed their
+         * wallet popup does not want a QR code thrown at them a half-second
+         * later; that reads as the app ignoring them. Cancelling is a decision,
+         * and the only correct response is to stop.
          */
-        if (target.id === "injected" && wcConn && !preferredType) {
+        if (kind !== "cancelled" && target.id === "injected" && wcConn && !preferredType) {
           try {
             await connectAsync({ connector: wcConn });
             return;
           } catch (wcCause) {
-            setError(wcCause instanceof Error ? wcCause.message : String(wcCause));
+            setFailure(classifyConnectError(wcCause));
             return;
           }
         }
 
-        setError(message);
+        setFailure(kind);
       }
     },
     [connectAsync, available],
   );
 
-  /** Clears the wagmi session. Nothing on-chain changes; no funds move. */
+  /**
+   * Clears the wagmi session. Nothing on-chain changes; no funds move.
+   *
+   * A failure here is logged rather than surfaced, and that is a considered
+   * choice rather than a swallow: wagmi drops its local connection state
+   * regardless, so the UI already reflects the disconnection, and there is no
+   * action a person could take in response. Rendering "couldn't disconnect"
+   * over an already-disconnected wallet would be the more confusing outcome.
+   */
   const disconnect = useCallback(async () => {
-    setError(null);
+    setFailure(null);
     try {
       await disconnectAsync();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      console.error("[wallet] disconnect failed", cause);
     }
   }, [disconnectAsync]);
 
@@ -261,7 +282,8 @@ export function useWallet(): WalletState {
     isAvailable: true,
     unavailableReason: projectId ? null : MISSING_PROJECT_ID_MESSAGE,
     isConnecting: isBusy,
-    error,
+    failure,
+    clearFailure: () => setFailure(null),
     connect,
     disconnect,
   };
@@ -346,11 +368,57 @@ export function WalletConnectButton({
       >
         {label}
       </button>
-      {wallet.error && (
-        <p className="mt-3 border-l-2 border-danger bg-danger-soft p-3 text-xs font-medium leading-5 text-danger">
-          {wallet.error}
-        </p>
-      )}
+      {/*
+       * The failure state, written for a person.
+       *
+       * An inline block under the button rather than a modal: it matches the
+       * disconnect confirm directly above and the wallet screen's other inline
+       * states, and a cancelled connection is not worth interrupting anyone
+       * over. Nothing here can render a library message - `failure` is a union
+       * of four kinds and the copy comes from connectFailureCopy.
+       *
+       * Cancelling gets NEUTRAL styling. Red on "you closed a popup" tells
+       * someone they broke something when they simply chose not to continue.
+       */}
+      {wallet.failure && (() => {
+        const copy = connectFailureCopy(wallet.failure);
+        const warn = copy.tone === "warn";
+        return (
+          <div
+            className={`mt-3 rounded-lg border p-3 ${
+              warn ? "border-danger bg-danger-soft" : "border-line bg-canvas"
+            }`}
+            role="status"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className={`text-xs font-semibold ${warn ? "text-danger" : "text-ink"}`}>
+                {copy.title}
+              </p>
+              <button
+                aria-label="Dismiss"
+                className="interactive text-xs font-medium text-muted hover:text-ink"
+                onClick={wallet.clearFailure}
+                type="button"
+              >
+                ✕
+              </button>
+            </div>
+            <p className={`mt-1 text-xs leading-5 ${warn ? "text-danger" : "text-muted"}`}>
+              {copy.body}
+            </p>
+            {copy.retryable && (
+              <button
+                className="interactive mt-2.5 text-xs font-semibold text-ink underline underline-offset-4"
+                disabled={wallet.isConnecting}
+                onClick={() => void wallet.connect()}
+                type="button"
+              >
+                Try again
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

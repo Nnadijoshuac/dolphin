@@ -24,6 +24,7 @@ import { useState } from "react";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { agentSessionsApi } from "@/convex/api";
 import type { Agent } from "@/types/agent";
+import { toUserMessage } from "@/wallet/wallet-errors";
 import {
   DEFAULT_SESSION_DURATION_DAYS,
   DEFAULT_SPEND_CAP_WEI,
@@ -229,7 +230,7 @@ export function SessionGrantAction({ agent }: { agent: Agent }) {
               (cause: unknown) =>
                 setState({
                   kind: "error",
-                  message: cause instanceof Error ? cause.message : String(cause),
+                  message: toUserMessage(cause, "That permission could not be granted. Try again."),
                 }),
             );
         }}

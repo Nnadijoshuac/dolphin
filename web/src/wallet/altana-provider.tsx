@@ -52,6 +52,7 @@ import {
   saveWallet,
   subscribeToAltanaStorage,
 } from "./altana-storage";
+import { toUserMessage } from "./wallet-errors";
 
 /**
  * Dolphin's Altana wallet - a passkey-backed smart account, separate from the
@@ -401,7 +402,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       signerRef.current = result.signer;
       saveWallet({ address: result.address, credential: result.signer.credential });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
     } finally {
       setIsBusy(false);
     }
@@ -427,7 +428,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       signerRef.current = result.signer;
       saveWallet({ address: result.address, credential: result.signer.credential });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
     } finally {
       setIsBusy(false);
     }
@@ -525,7 +526,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         // rather than let the screen go on showing a now-stale "not yet".
         refreshRecoverability();
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
         throw cause;
       } finally {
         setIsBusy(false);
@@ -560,7 +561,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           return next;
         });
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
         throw cause;
       } finally {
         setIsBusy(false);
@@ -596,7 +597,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       refreshRecoverability();
       refreshBalance();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
       throw cause;
     } finally {
       setIsBusy(false);
@@ -735,7 +736,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           sellerAccepted = notified.accepted;
           sellerReply = notified.detail;
         } catch (cause) {
-          sellerReply = cause instanceof Error ? cause.message : String(cause);
+          sellerReply = toUserMessage(cause, "Your wallet could not complete that action. Try again.");
         }
 
         refreshBalance();
@@ -751,7 +752,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           sellerReply,
         };
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
         throw cause;
       } finally {
         setIsBusy(false);

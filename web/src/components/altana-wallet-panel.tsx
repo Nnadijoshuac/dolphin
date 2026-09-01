@@ -16,6 +16,7 @@ import {
 } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
+import { toUserMessage } from "@/wallet/wallet-errors";
 
 /* ─────────────── tiny helpers ─────────────── */
 
@@ -210,7 +211,7 @@ function RecoverabilityPanel() {
                   (cause: unknown) =>
                     setState({
                       kind: "error",
-                      message: cause instanceof Error ? cause.message : String(cause),
+                      message: toUserMessage(cause, "That action could not be completed. Try again."),
                     }),
                 );
               }}

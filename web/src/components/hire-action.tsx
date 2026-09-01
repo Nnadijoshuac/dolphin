@@ -11,6 +11,7 @@ import { agentHiresApi } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent } from "@/types/agent";
+import { toUserMessage } from "@/wallet/wallet-errors";
 import { canNegotiate } from "@/wallet/erc8183-policy";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
@@ -70,7 +71,7 @@ export function HireAction({ agent }: { agent: Agent }) {
     } catch (cause) {
       setState({
         kind: "error",
-        message: cause instanceof Error ? cause.message : String(cause),
+        message: toUserMessage(cause, "The hire could not be recorded. Try again."),
       });
     }
   }

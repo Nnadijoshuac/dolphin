@@ -7,6 +7,7 @@ import { useState } from "react";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { agentPaymentsApi, type AgentQuote } from "@/convex/api";
 import type { Agent } from "@/types/agent";
+import { toUserMessage } from "@/wallet/wallet-errors";
 import {
   defaultTaskDescription,
   formatTokenAmount,
@@ -146,13 +147,13 @@ export function PaymentAction({
       try {
         balanceRaw = (await altana.readTokenBalance(quote.paymentToken)).raw;
       } catch (cause) {
-        balanceError = cause instanceof Error ? cause.message : String(cause);
+        balanceError = toUserMessage(cause, "The payment step could not be completed. Try again.");
       }
       setPhase({ kind: "quoted", quote, balanceRaw, balanceError });
     } catch (cause) {
       setPhase({
         kind: "error",
-        message: cause instanceof Error ? cause.message : String(cause),
+        message: toUserMessage(cause, "The payment step could not be completed. Try again."),
       });
     }
   }
@@ -171,7 +172,7 @@ export function PaymentAction({
     } catch (cause) {
       setPhase({
         kind: "error",
-        message: cause instanceof Error ? cause.message : String(cause),
+        message: toUserMessage(cause, "The payment step could not be completed. Try again."),
       });
     }
   }

@@ -22,6 +22,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { agentSessionsApi } from "@/convex/api";
 import { FEATURE_SESSION_EXECUTION, formatBnb } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
+import { toUserMessage } from "@/wallet/wallet-errors";
 
 /**
  * The spending permission attached to one hire, shown next to that hire.
@@ -80,7 +81,7 @@ export function HireSessionRow({ tokenId }: { tokenId: string }) {
             void altana
               .revokeSession(session.sessionPublicKey)
               .catch((cause: unknown) =>
-                setError(cause instanceof Error ? cause.message : String(cause)),
+                setError(toUserMessage(cause, "That permission could not be revoked. Try again.")),
               );
           }}
           type="button"

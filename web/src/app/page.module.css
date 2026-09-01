@@ -101,24 +101,6 @@
   transform: translateX(2px);
 }
 
-.browseLink {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
-  width: fit-content;
-  color: var(--muted);
-  font-size: 0.875rem;
-  font-weight: 650;
-  text-decoration-color: var(--line-strong);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.3rem;
-  transition: color 160ms ease;
-}
-
-.browseLink:hover {
-  color: var(--accent-ink);
-}
-
 .trustList {
   display: flex;
   flex-wrap: wrap;

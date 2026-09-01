@@ -325,9 +325,6 @@ export default function DiscoverPage() {
                   />
                 </span>
               </Link>
-              <a className={styles.browseLink} href="#browse-by-role">
-                Browse by role
-              </a>
             </div>
 
             <ul

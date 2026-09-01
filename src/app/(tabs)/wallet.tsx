@@ -17,6 +17,7 @@ import { AltanaWalletCard } from "@/components/altana-wallet-card";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
+import { WalletAvatar } from "@/components/wallet-avatar";
 import { colors, shadows } from "@/constants/theme";
 import { useAppStore } from "@/store/use-app-store";
 import { useWallet } from "@/wallet/wallet-provider";
@@ -237,7 +238,13 @@ export default function WalletScreen() {
               ...shadows.goldGlow,
             }}
           >
-            <CategoryGlyph color={colors.ink} name="wallet" size={20} />
+            {/* The connected address gets its own face; the disconnected state
+                has no address to seed one from, so it keeps the generic glyph. */}
+            {wallet.isConnected && wallet.address ? (
+              <WalletAvatar address={wallet.address} kind="human" size={22} />
+            ) : (
+              <CategoryGlyph color={colors.ink} name="wallet" size={20} />
+            )}
             <Text
               className="text-[16px] font-bold"
               style={{ color: colors.ink }}

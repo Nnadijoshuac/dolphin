@@ -7,6 +7,7 @@ import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors, shadows } from "@/constants/theme";
+import { WalletAvatar } from "@/components/wallet-avatar";
 import {
   ALTANA_FUNDING_HINT,
   FEATURE_SESSION_EXECUTION,
@@ -486,9 +487,12 @@ export function AltanaWalletCard() {
   return (
     <View className="mb-6">
       <View className="mb-2.5 flex-row items-center justify-between">
-        <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-          Dolphin Wallet
-        </Text>
+        <View className="flex-row items-center gap-2">
+          <WalletAvatar address={address} kind="bot" />
+          <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+            Dolphin Wallet
+          </Text>
+        </View>
         <View
           className="rounded-full px-2.5 py-1"
           style={{ backgroundColor: "#DCEFE4" }}

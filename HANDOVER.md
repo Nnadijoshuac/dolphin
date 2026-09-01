@@ -16,15 +16,30 @@ section disagrees, this addendum wins. Full working is in
 
 **No classifier, prefilter, liveness-probe or publish-gate code was changed.**
 The only state mutations this session were **five `setManualOverride` calls** and
-the **one `deepEvaluate` run** they triggered. Everything else was read-only.
+the **two `deepEvaluate` runs** they and the probe re-test triggered. Everything
+else was read-only.
+
+> **⚠️ This addendum was amended at 20:40Z.** The AiKi section originally
+> concluded that `useaiki.xyz` did not exist and that our probe was correct.
+> **That was wrong** — the DNS failure was transient, the domain resolves, and
+> the agents are live. The AiKi section below carries the retraction and the
+> corrected finding; `docs/PROBE_DIAGNOSIS.md` keeps both observations with
+> timestamps. Nothing was deleted.
 
 ## THE HEADLINE
 
-The catalog went from **11 to 16 published agents**, and the two things everyone
-assumed were bottlenecks turned out not to be. Coverage was never the
+The catalog went from **11 to 16 published agents**, and coverage was never the
 constraint — 73% of the registry was already evaluated and every high-value
-agent had already been fetched and probed. And the "probe bug" behind the
-delisted AiKi agents is not a bug: their domain does not exist.
+agent had already been fetched and probed.
+
+**The AiKi delistings ARE our bug** (corrected at 20:40Z after a first pass got
+this wrong). Those four agents are live, priced, and carry valid ERC-8004
+manifests; our probe fails them because it routes any non-MCP protocol to the
+A2A path and then judges a perfectly good JSON response by A2A AgentCard rules.
+Four `confirmed` agents are recoverable by fixing the dispatch. The TermiX
+agents are a separate, real defect — an un-substituted `{agentId}` template —
+but every one of their reachable records reports itself `UNBOUND` and
+`offline`, so fixing it recovers nothing and would manufacture false positives.
 
 ## 1. THE 8004scan KEY WAS ROTATED
 
@@ -159,22 +174,57 @@ there is no risk of a double-applied override.
 
 Both premises going in turned out to be wrong, in opposite directions.
 
-### AiKi — NOT our bug. The domain does not exist.
+### AiKi — ⚠️ RETRACTED AND CORRECTED at 20:40Z. It IS our bug.
 
-`www.useaiki.xyz` returns **NXDOMAIN** from the local resolver, Google
-`8.8.8.8`, Cloudflare `1.1.1.1`, and Cloudflare's DoH JSON API — the last
-returning `Status: 3` with an SOA from `ns0.centralnic.net`, i.e. **the `.xyz`
-registry's own nameserver saying the domain is not registered.** Not a local
-filter, not a transient outage.
+**What was written first (~19:5xZ), and is now withdrawn:** that
+`www.useaiki.xyz` returns NXDOMAIN from the local resolver, Google `8.8.8.8`,
+Cloudflare `1.1.1.1` and Cloudflare DoH (`Status: 3`, SOA from
+`ns0.centralnic.net`), that the domain therefore did not exist, and that
+`315943`'s delisting was correct. **That conclusion was wrong.**
 
-`useaiki.ai` and `useaiki.com` do resolve, but `useaiki.ai` is a Squarespace
-**"Coming Soon"** placeholder returning HTTP 200 `text/html` for every path
-including a nonsense one, and `useaiki.com` 404s on both the agent path and the
-well-known path. No agent card exists at any of them.
+**Re-tested 2026-09-01T20:40Z: the domain resolves from all five vantage
+points** (local, 8.8.8.8, 1.1.1.1, Cloudflare DoH `Status: 0`, Google DoH
+`Status: 0` → `64.29.17.1`, `216.198.79.1`). `agentcensus.xyz` flipped the same
+way. **Both `.xyz` domains went from NXDOMAIN to resolving within ~45 minutes
+with no action by anyone here — the earlier failure was transient, at the `.xyz`
+registry.**
 
-**`315943`'s delisting after 4 consecutive failures was correct.** Our probe
-behaved properly. If AiKi is live somewhere, it is at a domain these four
-on-chain registrations do not name — and only the publisher can fix that.
+The methodological error: three resolvers agreeing is *not* independent
+corroboration, because they all consult the same registry nameservers. A
+registry-level fault produces identical NXDOMAIN everywhere at once. The
+`useaiki.ai` "Coming Soon" page cited as corroboration was a red herring — an
+unrelated domain sharing a stem.
+
+**What is actually true.** All four AiKi endpoints return **HTTP 200 with valid
+JSON**, and their ERC-8004 registration manifests are live, well-formed
+`registration-v1` documents that declare a service endpoint, a version, and a
+price of 0.10 $U:
+
+```
+315943 -> HTTP 200 {"capability":"venus-health-factor-assessment",
+                    "category":"health_factor","input":{…},"readOnly":true}
+```
+
+**The real defect is our protocol dispatch.** `readEndpoints`
+([registrationFile.ts:170](convex/lib/registrationFile.ts#L170)) takes the
+manifest service's own `name` as the protocol —
+`venus-health-factor-assessment` — and `probeLiveness`
+([liveness.ts:235](convex/lib/liveness.ts#L235)) routes anything not containing
+`mcp` to `probeA2A`, which then judges a 200 JSON body by A2A AgentCard rules
+and rejects it. **We fail a live agent for not speaking a protocol it never
+advertised.** `looksLikeAgentCard` is *correct* to reject that body — it is not
+an A2A card — so the fix is the dispatch, not the validator.
+
+**`315943`'s delisting was therefore NOT correct.** It is `confirmed` at score
+25, live, priced, with a valid manifest, and it was delisted by a probe asking
+the wrong question. All four AiKi agents are `confirmed` (scores 25, 13, 24, 30),
+so a dispatch fix would **auto-publish all four with no manual include**.
+
+Full evidence, both observations with timestamps, in
+`docs/PROBE_DIAGNOSIS.md` — the correction is at the top and the original is
+preserved unedited beneath it.
+
+### TermiX — our bug, but the obvious fix would make things worse
 
 ### TermiX — our bug, but the obvious fix would make things worse
 
@@ -217,22 +267,59 @@ suggested before this investigation is already in the code.
 |---|---|
 | 38 | templated URLs (35 `platform-backend.prod.termix.live`, 3 `…-bnb8183…`) |
 | 26 | `api.example-agent.ai` — a literal documentation placeholder domain |
-| 4 | `www.useaiki.xyz` (NXDOMAIN) |
-| 6 | bedrock (401 auth-gated), agensea (404), misquote (404), agentcensus (NXDOMAIN), deltapartner, other |
+| 4 | `www.useaiki.xyz` — **live; 200 JSON, wrong protocol dispatch (see correction)** |
+| 6 | bedrock (401 auth-gated), agensea (404), misquote (404), agentcensus (Convex egress `tunnel error`), deltapartner, other |
 | **10** | **distinct real agents on their own infrastructure** |
 
-### Proposed fix — **NOT YET APPLIED**
+### TermiX's real marketplace is `agent.family` — and it serves no agent-card API
 
-Mirror the payment path's existing behaviour: make `a2aCandidates` return `[]`
-for a URL containing `{`, so a templated endpoint is treated as
-**`no-endpoint-advertised`** rather than `unreachable`. Candidate order is
-otherwise unchanged; `looksLikeAgentCard`, `MAX_ATTEMPTS_PER_AGENT` and
-`PROBE_TIMEOUT_MS` are untouched.
+Checked 20:43Z. It is definitely theirs: `/explorer-agents` mentions TermiX 38
+times and links `app.termix.ai` (12×), `termix.ai` (4×), `docs.termix.ai` (3×).
+But `https://www.agent.family/.well-known/agent-card.json` → 404, and every
+per-token shape tried for 292058 / 190411 / 171927 (`/api/v1/a2a/agents/<id>/card`,
+`/api/agents/<id>`, `/api/v1/agents/<id>`, `/agent/<id>`, `/explorer-agents/<id>`)
+→ **404**. `app.termix.ai` with the advertised path shape → 404;
+`api.termix.ai` does not resolve. The SSR HTML embeds no `/api/` paths at all.
+**The only host answering for these agents is still
+`platform-backend.prod.termix.live`, and it still returns `endpoint: null`,
+`status: "UNBOUND"`, `presence: "offline"` (re-checked 20:45Z).**
 
-**It recovers zero agents, deliberately.** Its value is that the ledger stops
-recording a wrong reason, and 38 candidates stop accruing
-`consecutiveProbeFailures` for failing a probe that was never callable — which
-today puts them under unfair delisting pressure.
+### Re-run of `deepEvaluate` over all 11 affected tokens — 20:45Z
+
+Gate left fully enforced. **Zero reached `verified-live`; nothing published.**
+
+```
+considered 11, evaluated 11, published 0, delisted 0, stillPending 11
+liveness: verified-live 0, unreachable 11, no-endpoint-advertised 0
+crossCheck: fetched 11        <-- all 11 registration files now load
+```
+
+`crossCheck.fetched` being 11/11 is itself evidence the earlier failures were
+network-transient rather than structural.
+
+### Proposed fixes — **NOT YET APPLIED.** There are now TWO, and the order matters
+
+**Fix 1 — TermiX, templated URLs.** Mirror the payment path: make
+`a2aCandidates` return `[]` for a URL containing `{`, so a templated endpoint is
+treated as **`no-endpoint-advertised`** rather than `unreachable`. Candidate
+order otherwise unchanged; `looksLikeAgentCard`, `MAX_ATTEMPTS_PER_AGENT` and
+`PROBE_TIMEOUT_MS` untouched. **Recovers zero agents, deliberately** — its value
+is that the ledger stops recording a wrong reason and 38 candidates stop
+accruing `consecutiveProbeFailures` for a probe that was never callable.
+
+**Fix 2 — AiKi, protocol dispatch.** Add a third branch to `probeLiveness` so a
+declared protocol that is neither A2A-like nor MCP-like is not judged by A2A
+AgentCard rules. The minimal shape for discussion: require HTTP 2xx plus a
+parseable JSON body, and record the declared protocol name in the detail string.
+**This IS a change to what counts as alive**, so it is a decision for the owner,
+not something to apply unilaterally. It would recover **4 agents, all
+`confirmed`** (315943/25, 315944/13, 315945/24, 315946/30) which would
+**auto-publish with no manual include**.
+
+**Order matters: Fix 1 must land with or before Fix 2.** On today's data a
+"200 + valid JSON" bar would also pass the 32 unbound TermiX records, so
+shipping Fix 2 alone would let the TermiX false positives in through the new
+door.
 
 **Worth raising with TermiX directly, since they are a hackathon partner with a
 $10,000 track:** their agents publish an un-substituted `{agentId}` template in
@@ -294,8 +381,13 @@ full BSC walk ~7 min / 2,966 requests         PROJECTED from 134 ms/page measure
 five agents published, all re-probed live     OBSERVED in the deepEvaluate report
 18 verified-live in rejected-classifier       FULL SCAN of all 5,684 rows
 17 of them null-category, unpromotable        READ from resolveStatus control flow
-useaiki.xyz NXDOMAIN                          3 resolvers + .xyz registry SOA
+useaiki.xyz RESOLVES and serves 200 JSON      RE-TESTED 20:40Z, 5 vantage points
+  (the earlier NXDOMAIN claim is RETRACTED — it was transient, ~45 min)
+AiKi manifests are valid ERC-8004 reg-v1      FETCHED, all four, HTTP 200
+AiKi fails on our A2A/MCP dispatch, not DNS   CONFIRMED by Convex's own probe
 32 TermiX records reachable but UNBOUND       MEASURED across all 38 templated
+agent.family is TermiX, serves no card API    38 TermiX mentions; all token paths 404
+0 of 11 reached verified-live on re-probe     deepEvaluate run 20:45Z
 ```
 
 **NOT PROVEN**
@@ -304,7 +396,9 @@ the 3M/day entitlement                        CONTRADICTS the brief's 500/min·1
 cause of the 79,779-record coverage gap       MAX_RECORDS_PER_SWEEP truncation SUSPECTED
 whether termix serves a real card for a
   BOUND agent                                 no bound TermiX agent found to test
-whether AiKi operates at another domain       .com/.ai/app./api. all checked, none serve a card
+whether Fix 2 would hold up in review         it changes what counts as alive
+why agentcensus.xyz fails from Convex         resolves for us; Convex egress says
+                                              "tunnel error: unsuccessful"
 whether the 26 api.example-agent.ai entries
   were ever live                              placeholder domain; not probed historically
 the proposed probe fix                        NOT APPLIED, NOT RUN

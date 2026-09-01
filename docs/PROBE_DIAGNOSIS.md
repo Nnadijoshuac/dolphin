@@ -1,4 +1,274 @@
-# Probe Diagnosis — AiKi and TermiX
+# ⚠️ CORRECTION — 2026-09-01T20:40Z
+
+**The AiKi verdict in the original diagnosis below is WRONG and is retracted.**
+
+The original section is preserved unedited underneath this one. Nothing has been
+deleted; both observations are recorded with their timestamps so the change is
+inspectable.
+
+## What I got wrong
+
+I concluded that `useaiki.xyz` **does not exist** and that our probe was
+therefore correct to mark those four agents `unreachable`. That conclusion was
+based on a DNS failure that was **transient**. The domain resolves now, all four
+agent endpoints return **HTTP 200 with valid JSON**, and the agents are live.
+
+### The two observations, side by side
+
+| | **2026-09-01 ~19:5xZ (original)** | **2026-09-01T20:40Z (re-test)** |
+|---|---|---|
+| local resolver 10.2.0.1 | `Non-existent domain` | **`64.29.17.1`, `216.198.79.1`** |
+| Google `8.8.8.8` | `Non-existent domain` | **`216.198.79.1`, `64.29.17.65`** |
+| Cloudflare `1.1.1.1` | `Non-existent domain` | **`216.198.79.1`, `216.198.79.65`** |
+| Cloudflare DoH | `{"Status":3, Authority: SOA ns0.centralnic.net}` | **`{"Status":0, Answer:[64.29.17.65, 64.29.17.1]}`** |
+| Google DoH | *(not run)* | **`{"Status":0, Answer:[64.29.17.1, 216.198.79.65]}`** |
+| `agentcensus.xyz` | `Non-existent domain` | **`{"Status":0, Answer:[204.168.140.2]}`** |
+
+**Both `.xyz` domains flipped from NXDOMAIN to resolving within roughly 45
+minutes, with no action by anyone here.** The earlier failure was transient and
+almost certainly at the `.xyz` registry itself — which is exactly what the SOA
+from `ns0.centralnic.net` in the original DoH response indicates.
+
+### The methodological error, stated plainly
+
+I treated "three resolvers plus the authoritative TLD SOA all agree" as
+conclusive. **It is not.** Every public recursive resolver ultimately consults
+the same `.xyz` registry nameservers, so they are not independent witnesses — a
+registry-level fault produces an identical NXDOMAIN at all of them
+simultaneously. Agreement across resolvers measures *consistency*, not
+*correctness*. A negative DNS result should have been re-tested over time before
+being written up as a property of the domain rather than of the moment.
+
+The `useaiki.ai` "Coming Soon" page I reported was a **red herring** — an
+unrelated domain that happens to share a stem. It says nothing about
+`useaiki.xyz` and should not have been offered as corroboration.
+
+## What is true now — measured 2026-09-01T20:41Z
+
+### All four AiKi endpoints are LIVE and return HTTP 200 JSON
+
+```
+315943  https://www.useaiki.xyz/v1/reference/venus/agent/315943
+        HTTP 200  application/json  252 bytes
+        {"capability":"venus-health-factor-assessment","category":"health_factor",
+         "input":{"account":"0x-prefixed EVM address",
+                  "minimumHealthFactor":"optional decimal; default 1.25"},
+         "output":"Evidence-backed Venus position health assessment.","readOnly":true}
+
+315944  .../pancake/rebalancer/agent/315944
+        HTTP 200  {"capability":"pancakeswap-v3-lp-rebalance-assessment",
+                   "category":"rebalancing","input":{"tokenId":"PancakeSwap v3 position NFT integer"},
+                   "output":"Verified range state and read-only rebalance recommendation.","readOnly":true}
+
+315945  .../pancake/grid/agent/315945
+        HTTP 200  {"capability":"pancakeswap-v3-grid-assessment","category":"grid_trading",
+                   "input":{"pool":"v3 pool address","tickLower":"integer",
+                            "tickUpper":"integer","spacing":"integer"},"readOnly":true}
+
+315946  .../yield/agent/315946
+        HTTP 200  {"capability":"venus-yield-route-assessment","category":"yield_optimisation",
+                   "input":{"markets":"comma-separated Venus market addresses",
+                            "rateOnly":"optional true; remains explicitly non-optimising"},"readOnly":true}
+```
+
+Suffix shapes, re-tested: `…/.well-known/agent-card.json` → **404 JSON**
+(`{"message":"Route GET:… not found","error":"Not Found","statusCode":404}` — a
+Fastify router, i.e. a real API answering); origin-root
+`/.well-known/agent-card.json` and `/.well-known/agent.json` → **404 HTML**
+(a Next.js app shell, 13,032 bytes); `…/a2a` → **404 JSON**.
+
+### Their ERC-8004 registration files are live and valid
+
+`raw_metadata.offchain_uri` for 315943 is
+`https://www.useaiki.xyz/v1/reference/venus/manifest.json` — an HTTP URL, not a
+`data:` URI. All four fetch **HTTP 200**:
+
+```json
+{"type":"https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+ "name":"AiKi Venus Health Factor Guardian",
+ "description":"First-party reference agent that reads Venus lending positions, derives a
+   health factor, and reports evidence-backed liquidation risk…",
+ "image":"https://www.useaiki.xyz/v1/reference/venus/icon.svg",
+ "active":true,
+ "services":[{"name":"venus-health-factor-assessment",
+              "endpoint":"https://www.useaiki.xyz/v1/reference/venus/agent/315943",
+              "version":"1.0.0"}],
+ "registrations":[{"agentId":"315943",
+                   "agentRegistry":"eip155:56:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"}],
+ "supportedTrust":[],
+ "pricing":{"amount":"100000000000000000","asset":"U"}}
+```
+
+These are **well-formed ERC-8004 registration-v1 documents** that self-identify,
+declare a service with an endpoint and version, and even publish a price
+(0.10 $U — the same rail as the rest of the paid catalog).
+
+Note 8004scan itself has **none** of this: `services: null`,
+`supported_protocols: []`, `a2a_endpoint: null`, `is_endpoint_verified: false`
+for all four. Our probe only sees these endpoints because it reads the agent's
+own registration file — which is the design working as intended.
+
+## The corrected diagnosis for AiKi: **(2), and the rejection is technically right**
+
+Re-running `deepEvaluate` at 20:45Z, Convex's own probe — from its network, not
+mine — reports:
+
+```
+[venus-health-factor-assessment] No A2A card resolved. Tried:
+  https://www.useaiki.xyz/v1/reference/venus/agent/315943
+    -> HTTP 200 but the body is not an A2A agent card;
+  …/315943/.well-known/agent-card.json -> HTTP 404;
+  https://www.useaiki.xyz/.well-known/agent-card.json -> HTTP 404;
+  https://www.useaiki.xyz/.well-known/agent.json -> HTTP 404.
+```
+
+So the trace is:
+
+1. `readEndpoints` ([registrationFile.ts:166-172](../convex/lib/registrationFile.ts#L166))
+   reads the manifest's `services[]` and pushes
+   `{protocol: "venus-health-factor-assessment", url: …}` — the service's own
+   `name` becomes the protocol.
+2. `probeLiveness` ([liveness.ts:235](../convex/lib/liveness.ts#L235)) dispatches
+   on `protocol.toLowerCase().includes("mcp")` → false → **`probeA2A`**.
+3. `probeA2A` gets **HTTP 200**, then `looksLikeAgentCard` rejects: the body has
+   no `name`, no `skills`, no `protocolVersion`, no `version`, no `url`, no
+   `capabilities`. `hasName` is false, so the predicate returns false.
+4. Three suffix candidates 404. → `unreachable`.
+
+**`looksLikeAgentCard` is not wrong to reject this body.** It is genuinely not an
+A2A AgentCard — it has none of the A2A fields. Per the constraint in the
+original brief, I am **not** proposing to weaken it: there is no spec basis for
+accepting a `{capability, category, input, output, readOnly}` object as an A2A
+card, because it is not one.
+
+**The actual defect is upstream of that check.** Our probe has exactly two
+branches — MCP or A2A — and treats *any* non-MCP protocol string as A2A. These
+agents never claimed to speak A2A. Their manifest declares the service name
+`venus-health-factor-assessment`, and our probe silently reinterprets that as
+"A2A" and then judges it by A2A rules. **We are failing a live agent for not
+speaking a protocol it never advertised.**
+
+So the honest verdict is **(2) we request it, get a 2xx, and our validation
+rejects it** — with the sharpening that the validation is correct for A2A and
+the *dispatch* is what is wrong.
+
+### Was the delisting of 315943 correct?
+
+**No — and this is the part that cost us a listing.** It is `confirmed` at score
+25 with a live, well-formed registration file and a live endpoint. It was
+delisted after 4 consecutive failures of a probe that was asking the wrong
+question. The original diagnosis called that delisting "the right outcome". That
+was wrong.
+
+## What still stands, unchanged
+
+**The TermiX verdict is unaffected.** Re-checked at 20:45Z:
+
+```
+platform-backend.prod.termix.live .../agents/190411/card   HTTP 200
+platform-backend.prod.termix.live .../agents/171927/card   HTTP 200
+platform-backend.prod.termix.live .../agents/292058/card   HTTP 200
+190411 right now: endpoint: null   status: "UNBOUND"   presence: "offline"   skills: []
+```
+
+Still an un-substituted `{agentId}` template, still `UNBOUND`/`offline`.
+The proposed fix in §F below — treat a templated URL as
+`no-endpoint-advertised` rather than `unreachable` — is unchanged and still
+**NOT APPLIED**.
+
+### TermiX's real marketplace is `agent.family`, and it serves no agent-card API
+
+Confirmed it is theirs — the `/explorer-agents` page mentions TermiX 38 times
+and links `app.termix.ai` (12×), `termix.ai` (4×), `docs.termix.ai` (3×). But:
+
+```
+https://www.agent.family/                             HTTP 200  text/html
+https://www.agent.family/.well-known/agent-card.json  HTTP 404
+https://www.agent.family/explorer-agents              HTTP 200  62,332 bytes
+https://www.agent.family/onboarding                   HTTP 200  78,522 bytes
+
+per-token, all HTTP 404 for 292058 / 190411 / 171927:
+  /api/v1/a2a/agents/<id>/card   /api/agents/<id>   /api/v1/agents/<id>
+  /agent/<id>                    /explorer-agents/<id>
+
+https://app.termix.ai/api/v1/a2a/agents/<id>/card     HTTP 404
+https://api.termix.ai/...                             HTTP 000 (does not resolve)
+```
+
+The SSR HTML embeds **no `/api/` paths at all** — it is a client-rendered app.
+**No agent-card endpoint was found on agent.family or app.termix.ai for any of
+the three tokens.** The only host that answers for these agents remains
+`platform-backend.prod.termix.live`, and it answers with an unbound record.
+
+## Re-run of `deepEvaluate` — 2026-09-01T20:45Z
+
+Run over all 11 affected tokens (4 AiKi, agentcensus, agensea, misquote,
+bedrock, and 3 TermiX). **The liveness gate was left fully enforced.**
+
+```
+considered 11, evaluated 11, published 0, delisted 0, stillPending 11, rejected 0
+liveness: verified-live 0, unreachable 11, no-endpoint-advertised 0
+crossCheck: fetched 11        <-- all 11 registration files now load
+```
+
+**Zero reached `verified-live`.** Nothing was published. Per-agent reasons:
+
+| token | now | why |
+|---|---|---|
+| `315943` `315944` `315945` `315946` | unreachable | HTTP 200, body is not an A2A card — **our dispatch bug** |
+| `270183` agentcensus | unreachable | `tunnel error: unsuccessful` from Convex's egress, even though the domain resolves for me now — Convex cannot reach it |
+| `322885` agensea | unreachable | genuine 404 on all four candidates |
+| `325413` bedrock | unreachable | 401 on the bedrock URL; its second endpoint is `https://github.com/agntcy/oasf`, a **spec page**, not a service |
+| `292058` `190411` `171927` | unreachable | templated `{agentId}`, unchanged |
+
+One thing worth noting: `crossCheck.fetched` is now **11 of 11**. The
+registration files all load, which they did not reliably do earlier — further
+evidence the earlier failures were network-transient rather than structural.
+
+## Revised recommendation — still NOT APPLIED
+
+Two separate defects, and they need different fixes:
+
+**1. TermiX — templated URLs.** Unchanged from §F below: return `[]` from
+`a2aCandidates` for a URL containing `{`, so it reports
+`no-endpoint-advertised` and stops accruing `consecutiveProbeFailures`.
+Recovers no agents; stops a wrong reason and unfair delisting pressure.
+
+**2. AiKi — protocol dispatch.** `probeLiveness` should not treat an arbitrary
+service name as A2A. The minimal shape, for discussion rather than immediate
+application, is a third branch: when the declared protocol is neither `a2a`-like
+nor `mcp`-like, require **HTTP 2xx plus a parseable JSON body** rather than an
+A2A AgentCard — and record the protocol name in the detail string so the ledger
+says what was actually verified.
+
+That **is** a change to what counts as alive, which the original brief ruled out,
+so it is a decision for you rather than something I will apply. Two things worth
+weighing:
+
+- In favour: it would recover **4 agents that are all `confirmed`** — 315943
+  (score 25), 315944 (13), 315945 (24), 315946 (30) — every one live, priced at
+  0.10 $U, with a valid ERC-8004 manifest. Because all four are `confirmed`,
+  they would **auto-publish with no manual include needed**.
+- Against: "200 + valid JSON" is a weaker liveness bar than "answers a
+  protocol-appropriate handshake". It would also, on today's data, pass the 32
+  TermiX records — so **fix 1 must land with or before fix 2**, or the TermiX
+  false positives arrive through this door instead.
+
+**Estimated recovery if both ship: 4 agents, of which 3 auto-publish**
+(315943, 315945, 315946 are `confirmed`; 315944 is `confirmed` at score 13 —
+all four are `confirmed`, so all four would auto-publish). That is a materially
+different answer from the "zero — deliberately" in §F below, and it supersedes it
+for AiKi. The §F figure remains correct for TermiX.
+
+---
+
+*Everything below this line is the original diagnosis as written at ~19:5xZ,
+preserved unedited. Its AiKi conclusions are superseded by this section; its
+TermiX conclusions still stand.*
+
+---
+
+# Probe Diagnosis — AiKi and TermiX (ORIGINAL, ~19:5xZ — AiKi section superseded above)
 
 Diagnosis only. **No probe code was changed.** No candidate status was altered
 by this investigation.

@@ -67,11 +67,6 @@ export default function WalletScreen() {
     }
   };
 
-  const handleFeaturePress = (title: string, desc: string) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(title, desc);
-  };
-
   const handleReplayOnboarding = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowInfoModal(false);
@@ -255,155 +250,19 @@ export default function WalletScreen() {
             </Text>
           </PressableScale>
 
-          {/* "You stay in control" Section */}
-          <View className="mb-6">
-            <Text
-              className="mb-2.5 text-[14px] font-bold"
-              style={{ color: colors.ink }}
-            >
-              You stay in control
-            </Text>
-
-            <View
-              className="overflow-hidden rounded-2xl border bg-white"
-              style={{ borderColor: colors.line, ...shadows.subtle }}
-            >
-              {/* Row 1: Review every permission */}
-              <PressableScale
-                accessibilityRole="button"
-                onPress={() =>
-                  handleFeaturePress(
-                    "Review every permission",
-                    "Granular authorizations ensure agents only execute what you explicitly approve onchain.",
-                  )
-                }
-                containerStyle={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
-                }}
-              >
-                <View className="flex-row items-center gap-3.5">
-                  <View
-                    className="h-9 w-9 items-center justify-center rounded-full border"
-                    style={{
-                      backgroundColor: "#FFFBEB",
-                      borderColor: "#FDE68A",
-                    }}
-                  >
-                    <CategoryGlyph color="#D97706" name="shield" size={18} />
-                  </View>
-                  <Text
-                    className="text-[14px] font-semibold"
-                    style={{ color: colors.ink }}
-                  >
-                    Review every permission
-                  </Text>
-                </View>
-                <CategoryGlyph
-                  color={colors.muted}
-                  name="chevron-right"
-                  size={16}
-                />
-              </PressableScale>
-
-              <View
-                className="mx-4 border-t"
-                style={{ borderColor: colors.line }}
-              />
-
-              {/* Row 2: Set caps and expiry */}
-              <PressableScale
-                accessibilityRole="button"
-                onPress={() =>
-                  handleFeaturePress(
-                    "Set caps and expiry",
-                    "Set hard budget ceilings and automatic expiration windows for all active agent delegations.",
-                  )
-                }
-                containerStyle={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
-                }}
-              >
-                <View className="flex-row items-center gap-3.5">
-                  <View
-                    className="h-9 w-9 items-center justify-center rounded-full border"
-                    style={{
-                      backgroundColor: "#FFFBEB",
-                      borderColor: "#FDE68A",
-                    }}
-                  >
-                    <CategoryGlyph color="#D97706" name="clock" size={18} />
-                  </View>
-                  <Text
-                    className="text-[14px] font-semibold"
-                    style={{ color: colors.ink }}
-                  >
-                    Set caps and expiry
-                  </Text>
-                </View>
-                <CategoryGlyph
-                  color={colors.muted}
-                  name="chevron-right"
-                  size={16}
-                />
-              </PressableScale>
-
-              <View
-                className="mx-4 border-t"
-                style={{ borderColor: colors.line }}
-              />
-
-              {/* Row 3: Revoke from one place */}
-              <PressableScale
-                accessibilityRole="button"
-                onPress={() =>
-                  handleFeaturePress(
-                    "Revoke from one place",
-                    "Instantly terminate any agent session or smart account authority with one tap.",
-                  )
-                }
-                containerStyle={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
-                }}
-              >
-                <View className="flex-row items-center gap-3.5">
-                  <View
-                    className="h-9 w-9 items-center justify-center rounded-full border"
-                    style={{
-                      backgroundColor: "#FFFBEB",
-                      borderColor: "#FDE68A",
-                    }}
-                  >
-                    <CategoryGlyph color="#D97706" name="revoke" size={18} />
-                  </View>
-                  <Text
-                    className="text-[14px] font-semibold"
-                    style={{ color: colors.ink }}
-                  >
-                    Revoke from one place
-                  </Text>
-                </View>
-                <CategoryGlyph
-                  color={colors.muted}
-                  name="chevron-right"
-                  size={16}
-                />
-              </PressableScale>
-            </View>
-          </View>
-
-
+          {/*
+           * The "You stay in control" section was removed here.
+           *
+           * It listed "Review every permission", "Set caps and expiry" and
+           * "Revoke from one place" - all three describing the spending-session
+           * model, which FEATURE_SESSION_EXECUTION gates off in this build
+           * (see wallet/altana-policy.ts). With sessions hidden, this section
+           * advertised three capabilities a user cannot reach from anywhere in
+           * the app. Same correction already applied to the website's
+           * agent-detail copy.
+           *
+           * Restore it in the same change that flips that flag, not before.
+           */}
         </View>
       </ScrollView>
 

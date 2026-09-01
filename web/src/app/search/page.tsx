@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 
 import { AgentCard } from "@/components/agent-card";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -40,12 +40,40 @@ function SearchContent() {
   const removeRecentSearch = useAppStore((state) => state.removeRecentSearch);
   const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
 
-  useEffect(() => {
+  /*
+   * Re-sync from the URL when the URL itself changes — during render, not in an
+   * effect.
+   *
+   * This screen keeps a two-way sync: local state drives the input (typing has
+   * to feel immediate), and syncSearchUrl writes it back with router.replace.
+   * The old version did the URL -> state half in `useEffect(..., [searchParams])`,
+   * which meant every one of our OWN url writes came back as a second render
+   * pass that re-set the same two values. `react-hooks/set-state-in-effect`
+   * flags exactly that, and it has been failing build-web-site.yml's lint step
+   * since e591a04.
+   *
+   * This is React's documented "adjusting state when a prop changes" pattern:
+   * a conditional setState during render. React restarts the render before
+   * committing or touching the DOM, so there is no cascade and no extra paint -
+   * strictly less work than the effect it replaces. Termination is guaranteed
+   * because `syncedParams` is updated in the same branch that tests it, so the
+   * condition is false on the immediate re-render.
+   *
+   * Comparing the serialised params rather than the object matters:
+   * `useSearchParams()` can hand back a new instance for identical values,
+   * which is what made the effect's dependency fire more often than the URL
+   * actually changed.
+   */
+  const paramsKey = searchParams.toString();
+  const [syncedParams, setSyncedParams] = useState(paramsKey);
+
+  if (paramsKey !== syncedParams) {
     const urlCategory = searchParams.get("category");
 
+    setSyncedParams(paramsKey);
     setQuery(searchParams.get("q") ?? "");
     setSelectedCategory(isAgentCategory(urlCategory) ? urlCategory : "all");
-  }, [searchParams]);
+  }
 
   const normalizedQuery = query.trim();
   const searchResults = useMemo(() => {

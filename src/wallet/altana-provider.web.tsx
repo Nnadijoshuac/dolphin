@@ -35,6 +35,7 @@ import {
   type RecoverabilityState,
 } from "./altana-policy";
 import { ERC8183_CHAIN_ID, JOB_DEADLINE_SECONDS } from "./erc8183-policy";
+import { toUserMessage } from "./wallet-errors";
 import type {
   AltanaSession,
   AltanaWalletStatus,
@@ -250,7 +251,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         (keys) => setRecoverability(keys.length > 0 ? "registered" : "unregistered"),
         (cause: unknown) => {
           setRecoverability("unknown");
-          setRecoverabilityError(cause instanceof Error ? cause.message : String(cause));
+          setRecoverabilityError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
         },
       )
       .finally(() => setIsCheckingRecoverability(false));
@@ -285,7 +286,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           // An unreadable balance reads as unreadable. It is never shown as
           // zero: "could not read" and "is empty" are different claims.
           setBalanceWei(null);
-          setBalanceError(cause instanceof Error ? cause.message : String(cause));
+          setBalanceError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
         },
       )
       .finally(() => setIsReadingBalance(false));
@@ -303,7 +304,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       refreshBalance();
       refreshRecoverability();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
     } finally {
       setIsBusy(false);
     }
@@ -321,7 +322,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       refreshBalance();
       refreshRecoverability();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
     } finally {
       setIsBusy(false);
     }
@@ -398,7 +399,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         // registerWallet), so this may have just become recoverable.
         refreshRecoverability();
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
         throw cause;
       } finally {
         setIsBusy(false);
@@ -430,7 +431,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           return next;
         });
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
         throw cause;
       } finally {
         setIsBusy(false);
@@ -462,7 +463,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       refreshRecoverability();
       refreshBalance();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
       throw cause;
     } finally {
       setIsBusy(false);
@@ -595,7 +596,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           sellerAccepted = notified.accepted;
           sellerReply = notified.detail;
         } catch (cause) {
-          sellerReply = cause instanceof Error ? cause.message : String(cause);
+          sellerReply = toUserMessage(cause, "Your wallet could not complete that action. Try again.");
         }
 
         refreshBalance();
@@ -610,7 +611,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           sellerReply,
         };
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
         throw cause;
       } finally {
         setIsBusy(false);

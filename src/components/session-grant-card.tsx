@@ -35,6 +35,7 @@ import {
 } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { useWallet } from "@/wallet/wallet-provider";
+import { toUserMessage } from "@/wallet/wallet-errors";
 
 /**
  * The session-grant step of the mobile hire flow - the counterpart to the
@@ -125,7 +126,7 @@ export function SessionGrantCard({ agent }: { agent: Agent }) {
                       .catch((cause: unknown) =>
                         Alert.alert(
                           "Could not revoke",
-                          cause instanceof Error ? cause.message : String(cause),
+                          toUserMessage(cause, "That permission could not be revoked. Try again."),
                         ),
                       );
                   },
@@ -343,7 +344,7 @@ export function SessionGrantCard({ agent }: { agent: Agent }) {
                 setIsGranting(false);
                 Alert.alert(
                   "Could not grant permission",
-                  cause instanceof Error ? cause.message : String(cause),
+                  toUserMessage(cause, "That permission could not be granted. Try again."),
                 );
               },
             );

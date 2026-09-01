@@ -15,6 +15,7 @@ import {
   recoverabilityCopy,
 } from "@/wallet/altana-policy";
 import { useAltanaWallet, type AltanaSession } from "@/wallet/altana-provider";
+import { toUserMessage } from "@/wallet/wallet-errors";
 
 /**
  * The Dolphin Wallet card on the mobile wallet screen.
@@ -220,7 +221,7 @@ function RecoverabilityBlock() {
       await altana.registerWallet();
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (cause) {
-      setErrorMessage(cause instanceof Error ? cause.message : String(cause));
+      setErrorMessage(toUserMessage(cause, "That action could not be completed. Try again."));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsRegistering(false);
@@ -690,7 +691,7 @@ export function AltanaWalletCard() {
                           .catch((cause: unknown) =>
                             Alert.alert(
                               "Could not revoke",
-                              cause instanceof Error ? cause.message : String(cause),
+                              toUserMessage(cause, "That action could not be completed. Try again."),
                             ),
                           );
                       },

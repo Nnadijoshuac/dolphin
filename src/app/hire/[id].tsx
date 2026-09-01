@@ -19,6 +19,7 @@ import { assessAuthorizationCapability } from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
 import { canNegotiate } from "@/wallet/erc8183-policy";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
+import { toUserMessage } from "@/wallet/wallet-errors";
 
 type AgentDetail = NonNullable<ReturnType<typeof useAgentDetail>["data"]>;
 
@@ -393,7 +394,7 @@ function ReadOnlyHireAction({
     } catch (error) {
       setStatus("error");
       setErrorMessage(
-        error instanceof Error ? error.message : "Could not complete the hire.",
+        toUserMessage(error, "Could not complete the hire."),
       );
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }

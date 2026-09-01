@@ -16,6 +16,7 @@ import {
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { useWallet } from "@/wallet/wallet-provider";
 import type { AgentJobRow, AgentQuote, PaidJob } from "@/wallet/altana-types";
+import { toUserMessage } from "@/wallet/wallet-errors";
 
 /**
  * The payment step of the mobile hire flow - the counterpart to the website's
@@ -172,7 +173,7 @@ export function PaymentCard({
       }
       setQuote(result);
     } catch (cause) {
-      setErrorMessage(cause instanceof Error ? cause.message : String(cause));
+      setErrorMessage(toUserMessage(cause, "The payment step could not be completed. Try again."));
     } finally {
       setBusy("idle");
     }
@@ -193,7 +194,7 @@ export function PaymentCard({
       setPaid(job);
       onPaid(job);
     } catch (cause) {
-      setErrorMessage(cause instanceof Error ? cause.message : String(cause));
+      setErrorMessage(toUserMessage(cause, "The payment step could not be completed. Try again."));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setBusy("idle");

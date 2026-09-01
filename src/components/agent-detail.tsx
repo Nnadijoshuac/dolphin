@@ -30,9 +30,9 @@ function shortAddress(value: string | null) {
 
 /**
  * A live read that returned an empty list is a real answer - "we checked the
- * chain and this wallet uses none" - but value.join(", ") renders it as a
+ * chain and this wallet uss none" - but value.join(", ") renders it as a
  * blank cell that reads as a broken UI. "None" keeps it honest while staying
- * visibly distinct from MetricCell's "Not reported", which means no feed was
+ * visibly distinct from MetricCell "Not reported", which means no feed was
  * available to check in the first place.
  */
 function formatList(value: string[]) {

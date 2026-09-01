@@ -33,9 +33,19 @@ export const metadata: Metadata = {
     "Venus Protocol",
     "PancakeSwap",
   ],
-  icons: {
-    icon: "/dolphin-logo.png",
-  },
+  /*
+   * No `icons` override, deliberately.
+   *
+   * This used to point at /dolphin-logo.png while `app/favicon.ico` also
+   * existed, so the site declared two different icons and browsers picked
+   * whichever they preferred — usually /favicon.ico, meaning the override
+   * never actually took effect.
+   *
+   * `app/icon.png` is Next's file convention: it is detected automatically,
+   * emitted with the right <link rel="icon"> and dimensions, and hashed for
+   * cache-busting. One file, one source of truth. Adding a metadata entry back
+   * would reintroduce exactly the conflict this removes.
+   */
 };
 
 export const viewport: Viewport = {

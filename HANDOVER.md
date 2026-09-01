@@ -6,6 +6,337 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 ---
 
+# Session addendum — 2026-09-01 (session 9: the key, the pool, and the probe)
+
+Everything below was measured live this session against the real 8004scan API,
+the live Convex deployment, and the real third-party hosts. Where an earlier
+section disagrees, this addendum wins. Full working is in
+`docs/INGESTION_AUDIT_2.md`, `docs/PENDING_REVIEW.md` and
+`docs/PROBE_DIAGNOSIS.md`.
+
+**No classifier, prefilter, liveness-probe or publish-gate code was changed.**
+The only state mutations this session were **five `setManualOverride` calls** and
+the **one `deepEvaluate` run** they triggered. Everything else was read-only.
+
+## THE HEADLINE
+
+The catalog went from **11 to 16 published agents**, and the two things everyone
+assumed were bottlenecks turned out not to be. Coverage was never the
+constraint — 73% of the registry was already evaluated and every high-value
+agent had already been fetched and probed. And the "probe bug" behind the
+delisted AiKi agents is not a bug: their domain does not exist.
+
+## 1. THE 8004scan KEY WAS ROTATED
+
+The old key was revoked mid-session. The new key (prefix `8004_74INd87`) is now
+in Convex — verified byte-wise without printing it: 46 bytes, first 12 chars
+match, `cmp` against the pasted value reports identical.
+
+**This was urgent and is now closed.** Before rotation, Convex held a *different*
+key from the one issued. Had the revoked key stayed in place, the discovery
+crons would have failed **silently**: `fetchPage`
+([convex/discoveryPipeline.ts:152](convex/discoveryPipeline.ts#L152)) throws on
+`!response.ok` and `withConcurrency`
+([:163-183](convex/discoveryPipeline.ts#L163)) swallows individual task
+failures, so a dead key is indistinguishable from an empty registry.
+
+### Measured limits, from the response headers
+
+```
+x-ratelimit-limit-minute:      3000
+x-ratelimit-limit-day:      3000000
+x-ratelimit-remaining-minute:  2999
+x-ratelimit-remaining-day:  2996800
+```
+
+**`X-RateLimit-Tier` is documented but never actually sent.** The docs list it
+alongside the quota headers; the server does not emit it. There is no tier
+string to report — only the two quota pairs above. (The response also leaks
+`http://localhost:3000` into its `content-security-policy` header, which is
+8004scan's bug, not ours.)
+
+### ⚠️ UNRESOLVED DISCREPANCY — worth confirming with 8004scan
+
+The hackathon brief documents the Pro tier as **500 req/min and 100,000/day**.
+This key measures **3,000/min and 3,000,000/day** — 6× and 30× the documented
+figures. Both numbers were read directly off live response headers, repeatedly,
+on two different keys. I cannot explain the gap and did not assume it away.
+
+**Do not build a schedule that depends on 3,000,000/day until this is
+confirmed.** If the real entitlement is 100,000/day, the full-registry walk
+described below still fits comfortably (2,966 requests, ~3% of that budget), so
+nothing in the recommendations changes — but a design that assumed 3M would.
+
+## 2. TWO AUDITS PRODUCED THIS SESSION
+
+**`docs/INGESTION_AUDIT_2.md`** — the API's real capacity vs. our real
+bottleneck. Probed the new key from a standalone script (deliberately not
+through our own client, which encodes the old tier's assumptions).
+
+> **Headline: coverage was never the bottleneck.** 73.1% of the registry
+> (216,679 of 296,458) was already in the ledger, `offset` pagination works and
+> is undocumented, `chain_id` is a real undocumented filter, concurrency 32 is
+> served without a single rejection, and a **full BSC registry walk now takes
+> ~7 minutes for 0.1% of daily quota** — down from an effective 33 days. But the
+> stages that decide publication (registration cross-check, liveness probe) make
+> **zero** 8004scan requests and are gated entirely on third-party servers, so
+> the tier upgrade does nothing for them.
+
+**`docs/PENDING_REVIEW.md`** — the 108-candidate pending pool, dumped by hand
+with full classifier evidence, and the true count of live-but-rejected agents.
+
+> **Headline: the manual-include mechanism cannot promote a null-category
+> agent.** `resolveStatus` returns `rejected-classifier` on `category === null`
+> ([convex/lib/pipelineStatus.ts:132](convex/lib/pipelineStatus.ts#L132))
+> **before** it ever consults `manuallyIncluded` at
+> [:170](convex/lib/pipelineStatus.ts#L170). A scan of all 5,684
+> `rejected-classifier` rows found **18 that are `verified-live`** — real,
+> already-probed agents rejected on wording alone — but **17 carry
+> `category: null` and are therefore unreachable by any manual vouch.** The
+> previous audit's 300-row sample found zero of these because `listCandidates`
+> orders by `lastDeepEvaluatedAt` descending and all 18 are older.
+>
+> Also: **zero pending candidates are held for the BRC8004 registry
+> collision** — all 108 were on the primary registry, held on merit.
+
+## 3. FIVE MANUAL INCLUDES — 11 → 16 PUBLISHED
+
+Run via `discoveryPipeline:setManualOverride` with `override: "include"`, then
+`runDeepEvaluationNow` over the five. Reasons recorded verbatim in each row's
+`statusReason`, which is the public audit trail.
+
+| tokenId | name | category | reason given |
+|---|---|---|---|
+| `269233` | BNB Grid Trader (test) | grid-trading | "Real PancakeSwap V3 grid trader with a live A2A endpoint, scored 21 on grid-trading evidence before a -6 penalty for the word 'test' in its name. The penalty is a naming artifact, not weak evidence. Human reviewed and vouched for grid-trading." |
+| `303779` | marketplace-operated-grid-planner | grid-trading | "Deterministic grid planning seller, live A2A endpoint, healthy per 8004scan. Description is terse but unambiguous. Human reviewed and vouched for grid-trading." |
+| `45422` | Beefy powered by HeyAnon | yield | "Beefy vault execution layer, live MCP endpoint, healthy per 8004scan. Vault deposits, CLM staking and rewards are yield work. Human reviewed and vouched for yield." |
+| `310460` | Brain on BNB — PancakeSwap Fee Tier Placement | rebalancing | "PancakeSwap fee-tier placement analysis with a live A2A endpoint. Fee-tier selection for LP positions is rebalancing work. Human reviewed and vouched for rebalancing." |
+| `266933` | BNB Lending Guardian | health-factor | "Monitors Venus lending positions and acts against liquidation, live A2A endpoint. Health-factor work by definition. Human reviewed and vouched for health-factor." |
+
+**All five re-probed live on a fresh probe — none were published on a stale
+reading.** `deepEvaluate` report:
+
+```
+considered 5, evaluated 5, published 5, delisted 0, stillPending 0, rejected 0
+liveness: verified-live 5, unreachable 0, no-endpoint-advertised 0
+crossCheck: fetched 5      drifted 1 (310460 em-dash encoding, already known)
+```
+
+Per-agent probe results: `269233` A2A 200 in 902 ms (skills=2); `303779` A2A 200
+in 427 ms (skills=3); `45422` MCP 201 in 374 ms (`heyanon-erc8004-beefy`);
+`310460` A2A 200 in 7 ms (skills=7); `266933` A2A 200.
+
+**The liveness gate was enforced throughout.** A manual include relaxes only the
+confidence branch; had any of the five failed its probe it would have stayed
+`pending`, which is the correct outcome and is what
+[pipelineStatus.ts:147-168](convex/lib/pipelineStatus.ts#L147) does.
+
+### Counts
+
+```
+published    11  ->  16
+pending     108  -> 103
+```
+
+| category | before | after |
+|---|---|---|
+| rebalancing | 4 | **5** |
+| grid-trading | 2 | **4** |
+| health-factor | 3 | **4** |
+| yield | 2 | **3** |
+
+The spread is now more even across the four graded categories than it was, which
+is what the Agent Diversity rubric grades.
+
+**Operational note:** `266933` needed four attempts — three consecutive
+`TypeError: fetch failed` / `ECONNRESET` from the Convex CLI before it landed.
+Connectivity was fine throughout (a `getPipelineStats` call in between
+succeeded), so this was local network flakiness. I verified via
+`getSubmissionStatus` that the failed attempts wrote nothing before retrying, so
+there is no risk of a double-applied override.
+
+## 4. THE PROBE DIAGNOSIS — `docs/PROBE_DIAGNOSIS.md`
+
+Both premises going in turned out to be wrong, in opposite directions.
+
+### AiKi — NOT our bug. The domain does not exist.
+
+`www.useaiki.xyz` returns **NXDOMAIN** from the local resolver, Google
+`8.8.8.8`, Cloudflare `1.1.1.1`, and Cloudflare's DoH JSON API — the last
+returning `Status: 3` with an SOA from `ns0.centralnic.net`, i.e. **the `.xyz`
+registry's own nameserver saying the domain is not registered.** Not a local
+filter, not a transient outage.
+
+`useaiki.ai` and `useaiki.com` do resolve, but `useaiki.ai` is a Squarespace
+**"Coming Soon"** placeholder returning HTTP 200 `text/html` for every path
+including a nonsense one, and `useaiki.com` 404s on both the agent path and the
+well-known path. No agent card exists at any of them.
+
+**`315943`'s delisting after 4 consecutive failures was correct.** Our probe
+behaved properly. If AiKi is live somewhere, it is at a domain these four
+on-chain registrations do not name — and only the publisher can fix that.
+
+### TermiX — our bug, but the obvious fix would make things worse
+
+All the TermiX agents advertise a **templated** endpoint:
+`https://platform-backend.prod.termix.live/api/v1/a2a/agents/{agentId}/card`.
+We request it literally, `{agentId}` and all, and get
+`{"error":{"code":"NOT_FOUND","message":"Agent not found"}}`.
+
+**The repo already knows templated endpoints are uncallable — elsewhere.**
+`selectNegotiationEndpoint`
+([convex/lib/erc8183.ts:317](convex/lib/erc8183.ts#L317)) skips any endpoint
+containing `{`. The liveness probe has no equivalent guard. **That
+inconsistency is the actual defect.**
+
+But substituting the template is *not* the fix. Measured across **all 38**
+templated candidates:
+
+```
+HTTP 200 after substitution      32
+would PASS looksLikeAgentCard    32
+of those, bound and online        0     <-- every one is UNBOUND or OFFLINE
+```
+
+Every reachable TermiX record carries `endpoint: null` and
+`presence: "offline"`, with `status` `UNBOUND` or `OFFLINE`. The body is a
+TermiX platform *listing record*, not an A2A AgentCard — it merely happens to
+have a `name` and a `skills` array, which is all `looksLikeAgentCard`
+([liveness.ts:88](convex/lib/liveness.ts#L88)) requires. Substituting would flip
+32 agents to `verified-live`, **auto-publish one of them** (`190411`, confirmed,
+score 17) with no human in the loop, and list agents that cannot be hired.
+
+Also corrected: `a2aCandidates` **already** tries the bare advertised URL first
+([liveness.ts:72](convex/lib/liveness.ts#L72)) and **already** adds the
+origin-root well-known path ([:77](convex/lib/liveness.ts#L77)). The fix
+suggested before this investigation is already in the code.
+
+### Blast radius across the 74 unreachable
+
+| count | group |
+|---|---|
+| 38 | templated URLs (35 `platform-backend.prod.termix.live`, 3 `…-bnb8183…`) |
+| 26 | `api.example-agent.ai` — a literal documentation placeholder domain |
+| 4 | `www.useaiki.xyz` (NXDOMAIN) |
+| 6 | bedrock (401 auth-gated), agensea (404), misquote (404), agentcensus (NXDOMAIN), deltapartner, other |
+| **10** | **distinct real agents on their own infrastructure** |
+
+### Proposed fix — **NOT YET APPLIED**
+
+Mirror the payment path's existing behaviour: make `a2aCandidates` return `[]`
+for a URL containing `{`, so a templated endpoint is treated as
+**`no-endpoint-advertised`** rather than `unreachable`. Candidate order is
+otherwise unchanged; `looksLikeAgentCard`, `MAX_ATTEMPTS_PER_AGENT` and
+`PROBE_TIMEOUT_MS` are untouched.
+
+**It recovers zero agents, deliberately.** Its value is that the ledger stops
+recording a wrong reason, and 38 candidates stop accruing
+`consecutiveProbeFailures` for failing a probe that was never callable — which
+today puts them under unfair delisting pressure.
+
+**Worth raising with TermiX directly, since they are a hackathon partner with a
+$10,000 track:** their agents publish an un-substituted `{agentId}` template in
+their on-chain ERC-8004 registrations. No consumer can resolve that correctly,
+and all 32 of their reachable records report themselves unbound and offline.
+
+## 5. STALE NUMBERS THIS SESSION DISPROVED
+
+**The registry is ~297,000 on chain 56, not ~290,000.** Measured repeatedly and
+observed growing during the session: 296,458 → 296,514 → **297,070**. Across all
+chains it is **796,619**; the BSC figure comes from the undocumented `chain_id`
+filter.
+
+**Sweep throughput has changed by an order of magnitude** since the key upgrade:
+
+```
+before   saw 8,098 records;  101 new;  308,513 ms
+after    saw 8,347 records;  872 new;  120,582 ms
+```
+
+### Files carrying figures that are now WRONG — do not trust these
+
+| file:line | stale claim |
+|---|---|
+| [convex/crons.ts:10-11](convex/crons.ts#L10) | "291,508 identities", "600/min, 100,000/day" |
+| [convex/crons.ts:16](convex/crons.ts#L16) | "289,938 -> 289,971" |
+| [convex/crons.ts:36](convex/crons.ts#L36) | "100,000/day allowance" |
+| [convex/discoveryPipeline.ts:20-30](convex/discoveryPipeline.ts#L20) | "289,938 identities", "0.180 pages/s", "~4.5 HOURS", "100,000/day" |
+| [convex/discoveryPipeline.ts:809](convex/discoveryPipeline.ts#L809) | "the registry is 291,543" |
+| [convex/schema.ts:195](convex/schema.ts#L195) | "289,938 identities" |
+| [convex/schema.ts:314](convex/schema.ts#L314) | "the registry is 291,543" |
+| [convex/lib/prefilter.ts:4-6](convex/lib/prefilter.ts#L4) | "289,938 identities", "0.180 pages/s" |
+| [convex/lib/registrationFile.ts:17](convex/lib/registrationFile.ts#L17) | "289,938-record" |
+| [convex/discoveredAgents.ts:61,81](convex/discoveredAgents.ts#L61) | "600/min" |
+| [convex/agents.ts:237](convex/agents.ts#L237) | "raises 8004scan's limit from 30/min to 600/min" |
+| HANDOVER.md:881, 894, 1075, 1917 | "291,543", "600/min·100000/day" |
+| SESSION-LOG-2026-08-29-discovery.md:20, 43, 47 | "289,938", "600/min · 100,000/day" |
+
+**These are comments and prose, not logic** — nothing behaves incorrectly
+because of them, and I did not edit them, because doing so would have touched
+pipeline files this session was scoped to leave alone. They should be corrected
+in a dedicated pass.
+
+There is **no `AGENT_INGESTION_AUDIT` file** in this repo; `docs/` contains only
+the three documents produced this session.
+
+## WHAT IS PROVEN, AND WHAT IS NOT
+
+**PROVEN**
+```
+new key in Convex, prefix 8004_74INd87        VERIFIED byte-wise, not printed
+3,000/min · 3,000,000/day                     READ off live response headers
+X-RateLimit-Tier absent                       OBSERVED across every response
+offset pagination works, undocumented         OBSERVED (page/cursor/skip/... all ignored)
+chain_id is a real filter                     OBSERVED (796,619 -> 296,507)
+is_testnet is silently ignored                OBSERVED (identical totals both ways)
+concurrency 32 served, zero rejections        MEASURED, 537 rec/s
+full BSC walk ~7 min / 2,966 requests         PROJECTED from 134 ms/page measured
+five agents published, all re-probed live     OBSERVED in the deepEvaluate report
+18 verified-live in rejected-classifier       FULL SCAN of all 5,684 rows
+17 of them null-category, unpromotable        READ from resolveStatus control flow
+useaiki.xyz NXDOMAIN                          3 resolvers + .xyz registry SOA
+32 TermiX records reachable but UNBOUND       MEASURED across all 38 templated
+```
+
+**NOT PROVEN**
+```
+the 3M/day entitlement                        CONTRADICTS the brief's 500/min·100k/day
+cause of the 79,779-record coverage gap       MAX_RECORDS_PER_SWEEP truncation SUSPECTED
+whether termix serves a real card for a
+  BOUND agent                                 no bound TermiX agent found to test
+whether AiKi operates at another domain       .com/.ai/app./api. all checked, none serve a card
+whether the 26 api.example-agent.ai entries
+  were ever live                              placeholder domain; not probed historically
+the proposed probe fix                        NOT APPLIED, NOT RUN
+```
+
+## ⚠️ WORKING TREE — uncommitted work from EARLIER sessions
+
+This session's commit contains **only** the three new `docs/` files and this
+addendum. It deliberately does not sweep up pre-existing changes. Still
+uncommitted, from before this session, in breach of AGENTS.md §10:
+
+```
+M  .claude/settings.json
+M  src/wallet/wallet-errors.ts          MetaMask 4001 copy (cancel vs wedged request)
+M  web/src/wallet/wallet-errors.ts      same, mirrored
+M  web/src/wallet/wallet-provider.tsx   canUseQr + two explicit connect routes
+M  web/src/app/page.tsx / page.module.css
+M  web/src/components/site-footer.tsx
+M  .playwright-cli/console-*.log
+?? HANDOFF_BRIEF.md
+?? assets/images/favicon.png            <-- SEE BELOW
+?? .playwright-cli/*.png|.yaml|.yml
+```
+
+**`assets/images/favicon.png` is untracked but is referenced by `app.json`**
+(`expo.web.favicon`, added in commit `137bd41`). **The next CI deploy will fail
+on a missing asset** — `deploy-web.yml` runs `npx expo export --platform web`
+against a clean checkout that will not have this file. Commit it before the next
+push to `main`.
+
+---
+
 # Session addendum — 2026-08-31 (session 8: your wallet now tells you the truth)
 
 Everything below was verified this session with live reads against BSC mainnet

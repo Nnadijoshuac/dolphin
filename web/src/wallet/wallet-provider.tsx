@@ -297,14 +297,14 @@ export function WalletConnectButton({
         </p>
         <div className="mt-3 flex gap-2">
           <button
-            className="interactive min-h-11 flex-1 rounded-xl border border-line bg-paper px-4 text-sm font-semibold text-ink hover:bg-canvas"
+            className="interactive min-h-11 flex-1 rounded-lg border border-line bg-paper px-4 text-sm font-semibold text-ink hover:bg-canvas"
             onClick={() => setConfirmDisconnect(false)}
             type="button"
           >
             Stay connected
           </button>
           <button
-            className="interactive min-h-11 flex-1 rounded-xl border border-danger bg-danger-soft px-4 text-sm font-semibold text-danger"
+            className="interactive min-h-11 flex-1 rounded-lg border border-danger bg-danger-soft px-4 text-sm font-semibold text-danger"
             onClick={() => {
               setConfirmDisconnect(false);
               void wallet.disconnect();
@@ -329,7 +329,7 @@ export function WalletConnectButton({
     <div className="w-full">
       <button
         aria-busy={wallet.isConnecting}
-        className={`interactive min-h-12 w-full rounded-xl px-5 text-sm font-semibold disabled:cursor-wait disabled:opacity-60 ${
+        className={`interactive min-h-12 w-full rounded-lg px-5 text-sm font-semibold disabled:cursor-wait disabled:opacity-60 ${
           wallet.isConnected
             ? "border border-line bg-paper text-ink hover:border-danger hover:bg-danger-soft hover:text-danger"
             : "bg-accent text-ink hover:bg-accent-hover"

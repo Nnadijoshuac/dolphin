@@ -231,141 +231,15 @@ function RecoverabilityPanel() {
   );
 }
 
-/* ─────────────── nothing connected at all ─────────────── */
-
-/**
- * The only thing shown when neither wallet exists yet.
- *
- * Deliberately one decision on the screen. The Dolphin Wallet creation panel
- * used to live here too, which meant a first-time visitor's opening choice was
- * between two different wallets whose distinction they had not been told yet.
- * Connecting an address is the cheaper, more familiar, and completely
- * reversible one, so it goes first and alone.
- */
-function ConnectFirstPanel() {
-  return (
-    <section className="wallet-setup" aria-labelledby="wallet-connect-heading">
-      <div className="wallet-setup__copy">
-        <p className="eyebrow">Wallet</p>
-        <h1 className="wallet-setup__headline" id="wallet-connect-heading">
-          Connect a wallet<br />to get started.
-        </h1>
-        <p className="wallet-setup__sub">
-          Dolphin reads only your public address, to remember which agents you
-          have hired. No agent is ever given permission to spend from it.
-        </p>
-      </div>
-
-      <div className="wallet-setup__card surface-raised">
-        <div className="wallet-setup__card-header">
-          <p className="wallet-setup__card-title">Your wallet</p>
-          <span className="wallet-status-badge wallet-status-badge--idle">Not connected</span>
-        </div>
-        <WalletConnectButton connectLabel="Connect wallet" />
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────── setup (no agent wallet yet) ─────────────── */
-
-function WalletSetup() {
-  const wallet = useAltanaWallet();
-
-  return (
-    <section className="wallet-setup" aria-labelledby="wallet-setup-heading">
-      {/* Left: explanation */}
-      <div className="wallet-setup__copy">
-        <p className="eyebrow">Dolphin Wallet</p>
-        <h1
-          className="wallet-setup__headline"
-          id="wallet-setup-heading"
-        >
-          A spending account<br />you control.
-        </h1>
-        <p className="wallet-setup__sub">
-          Secured by your device passkey. No seed phrase. Funds only go where you allow.
-        </p>
-        {/*
-         * Stated outright, because this panel now sits under a connected
-         * identity card and could otherwise read as a required second step.
-         * It is not: browsing, hiring and managing agents all work without a
-         * Dolphin Wallet. It is only needed to PAY an agent.
-         */}
-        <p className="wallet-setup__sub">
-          <strong>Optional.</strong> You can browse, hire and manage agents
-          without one — you only need it to pay an agent.
-        </p>
-
-        <ul className="wallet-setup__pillars">
-          {[
-            { icon: "shield", label: "Passkey secured", note: "Biometric or PIN — no seed phrase" },
-            { icon: "wallet", label: "Separate balance", note: "Only funds you send can be spent" },
-            { icon: "info",   label: "Explicit limits",  note: "Cap, contracts, expiry — visible and revocable" },
-          ].map((p) => (
-            <li className="wallet-setup__pillar" key={p.label}>
-              <span className="wallet-setup__pillar-icon">
-                <CategoryGlyph color="currentColor" name={p.icon as "shield"} size={15} strokeWidth={2} />
-              </span>
-              <div>
-                <p className="wallet-setup__pillar-label">{p.label}</p>
-                <p className="wallet-setup__pillar-note">{p.note}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Right: action card */}
-      <div className="wallet-setup__card surface-raised">
-        <div className="wallet-setup__card-header">
-          <p className="wallet-setup__card-title">Create Dolphin Wallet</p>
-          <span className="wallet-status-badge wallet-status-badge--idle">Not created</span>
-        </div>
-
-        <button
-          className="wallet-action-btn wallet-action-btn--accent interactive"
-          disabled={wallet.isBusy}
-          onClick={() => void wallet.createWallet()}
-          type="button"
-        >
-          <CategoryGlyph color="currentColor" name="wallet" size={15} strokeWidth={2} />
-          {wallet.isBusy ? "Waiting for passkey…" : "Create with passkey"}
-        </button>
-
-        <div className="wallet-divider">
-          <span className="wallet-divider__line" />
-          <span className="wallet-divider__text">or</span>
-          <span className="wallet-divider__line" />
-        </div>
-
-        <button
-          className="wallet-action-btn wallet-action-btn--ghost interactive"
-          disabled={wallet.isBusy}
-          onClick={() => void wallet.recoverWallet()}
-          type="button"
-        >
-          Recover existing wallet
-        </button>
-
-        <details className="wallet-setup__recovery-note">
-          <summary>What recovery requires</summary>
-          <p>
-            Recovery needs a Dolphin passkey on this device and works only for
-            a wallet whose admin key is already in Altana&apos;s on-chain KeyStore.
-            A wallet that was created and never used cannot yet be recovered.
-          </p>
-        </details>
-
-        {wallet.error && (
-          <p className="wallet-error-banner">{wallet.error}</p>
-        )}
-      </div>
-    </section>
-  );
-}
-
 /* ─────────────── quick action button ─────────────── */
+
+/*
+ * ConnectFirstPanel and WalletSetup used to live here. Both are gone: their
+ * jobs moved INTO the two cards, so the connect prompt and the create/recover
+ * prompt now occupy the same grid slots as the wallets they stand in for,
+ * instead of being full-width panels that changed the shape of the screen.
+ */
+
 
 function WalletAction({ icon, label, href, onClick, disabled }: {
   icon: string;
@@ -391,6 +265,35 @@ function WalletAction({ icon, label, href, onClick, disabled }: {
   );
 }
 
+/* ─────────────── wallet avatar ─────────────── */
+
+/**
+ * A deterministic avatar for one address, from DiceBear's hosted API.
+ *
+ * Two styles, so the cards are distinguishable at a glance rather than only by
+ * reading their labels: a drawn human face for the address the person owns, a
+ * robot for the account that acts on their behalf. The seed is the address, so
+ * a given wallet always renders the same face on every device.
+ *
+ * A plain `<img>`, not `next/image`, on purpose: these are remote SVGs, which
+ * Next's optimizer passes through untouched anyway, so `<Image>` would buy
+ * nothing and cost a `remotePatterns` entry in next.config.ts for a decorative
+ * 32px graphic. No npm dependency is added either — it is a URL.
+ *
+ * Decorative: the address itself is displayed beside it in text, so the avatar
+ * carries no information a screen reader needs, and it is hidden from them.
+ */
+function WalletAvatar({ address, kind }: { address: string; kind: "human" | "bot" }) {
+  const style = kind === "bot" ? "bottts-neutral" : "notionists";
+  const src = `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(
+    address.toLowerCase(),
+  )}`;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- remote SVG, see note above
+    <img alt="" aria-hidden="true" className="wcard__avatar" height={32} src={src} width={32} />
+  );
+}
+
 /* ─────────────── identity wallet card (wagmi) ─────────────── */
 
 function IdentityWalletCard() {
@@ -400,27 +303,27 @@ function IdentityWalletCard() {
     query: { enabled: Boolean(identity.isConnected && identity.address) },
   });
 
+  /*
+   * The empty state is a CARD, not an absence.
+   *
+   * It occupies the same grid slot at the same size as the connected card, so
+   * the two-column shape of this screen never changes with connection state -
+   * cards do not grow into the row or drop below one another as wallets come
+   * and go. What changes is only what is inside the slot.
+   */
   if (!identity.isConnected || !identity.address) {
     return (
-      <div className="wcard wcard--identity wcard--dim" aria-label="Identity wallet">
-        <div className="wcard__eyebrow">
-          <span className="wcard__eyebrow-icon">👤</span>
-          Your wallet
+      <div className="wcard wcard--identity wcard--empty" aria-label="Identity wallet">
+        <div className="wcard__top-row">
+          <div className="wcard__eyebrow">Your wallet</div>
         </div>
-        <p className="wcard__hero-balance wcard__hero-balance--muted">—</p>
-        <p className="wcard__hero-sub">Not connected</p>
-        {/*
-         * No action row in the disconnected state, deliberately.
-         *
-         * It previously rendered disabled Send / Receive / Swap buttons. Two of
-         * those three were features this app does not have at all (Send was
-         * wired to an empty handler; Swap was never implemented anywhere), so
-         * the row advertised capabilities that do not exist and would not exist
-         * after connecting either. A disabled control still makes a promise.
-         * The hint below is the only honest thing to show here.
-         */}
-        <div className="wcard__asset-row wcard__asset-row--empty">
-          <span className="wcard__asset-row-hint">Connect identity wallet above ↑</span>
+        <p className="wcard__empty-title">Not connected</p>
+        <p className="wcard__empty-body">
+          Connect an address so Dolphin can remember which agents you have
+          hired. It reads the public address only.
+        </p>
+        <div className="wcard__empty-action">
+          <WalletConnectButton connectLabel="Connect wallet" />
         </div>
       </div>
     );
@@ -443,13 +346,15 @@ function IdentityWalletCard() {
   const bnbStr = balLoading ? "…" : balData ? formatBnb(balData.value) : "—";
 
   return (
-    <div className="wcard wcard--identity surface-raised" aria-label="Identity wallet">
+    <div className="wcard wcard--identity" aria-label="Identity wallet">
       <div className="wcard__top-row">
-        <div className="wcard__eyebrow">
-          <span className="wcard__eyebrow-icon">👤</span>
-          Your wallet
+        <div className="wcard__ident">
+          <WalletAvatar address={identity.address} kind="human" />
+          <div>
+            <p className="wcard__eyebrow">Your wallet</p>
+            <code className="wcard__addr-inline">{truncateAddress(identity.address)}</code>
+          </div>
         </div>
-        <code className="wcard__addr-pill">{truncateAddress(identity.address)}</code>
       </div>
 
       {/* Hero balance */}
@@ -493,6 +398,141 @@ function IdentityWalletCard() {
   );
 }
 
+/* ─────────────── agent wallet card (Altana passkey) ─────────────── */
+
+/**
+ * The agent slot, in whichever of its three states applies.
+ *
+ * Like IdentityWalletCard it always renders a card of the same shape, so the
+ * grid keeps its two columns whether a Dolphin Wallet exists, cannot exist in
+ * this browser, or has simply not been created yet.
+ */
+function AgentWalletCard() {
+  const wallet = useAltanaWallet();
+
+  // No wallet on this device: an invitation, not an empty box. Creation stays
+  // an explicit user action - nothing here creates one as a side effect.
+  if (wallet.status !== "connected" || !wallet.address) {
+    const blocked = wallet.status === "unsupported";
+    return (
+      <div className="wcard wcard--agent wcard--empty" aria-label="Agent payments wallet">
+        <div className="wcard__top-row">
+          <div className="wcard__eyebrow">Agent payments</div>
+        </div>
+        <p className="wcard__empty-title">
+          {blocked ? "Not available here" : "No wallet yet"}
+        </p>
+        <p className="wcard__empty-body">
+          {blocked
+            ? wallet.unsupportedReason ?? "This browser cannot hold a passkey wallet."
+            : "A passkey-secured account that pays agents on your behalf. Optional — you only need it to pay an agent."}
+        </p>
+        {/*
+         * Ghost, not accent — and that is the hierarchy, not a downgrade.
+         *
+         * Both empty cards sit side by side, and only one of them is the path a
+         * new visitor needs: connecting an address is what makes hiring work.
+         * This wallet is genuinely optional and says so. Two solid accent
+         * buttons competing across the row would flatten that distinction into
+         * "pick one", which is the opposite of true.
+         */}
+        {!blocked && (
+          <div className="wcard__empty-action">
+            <button
+              className="wallet-action-btn wallet-action-btn--ghost interactive"
+              disabled={wallet.isBusy}
+              onClick={() => void wallet.createWallet()}
+              type="button"
+            >
+              {wallet.isBusy ? "Waiting for passkey…" : "Create with passkey"}
+            </button>
+            <button
+              className="wcard__empty-link interactive"
+              disabled={wallet.isBusy}
+              onClick={() => void wallet.recoverWallet()}
+              type="button"
+            >
+              I already have one — recover it
+            </button>
+          </div>
+        )}
+        {wallet.error && <p className="wallet-inline-error">{wallet.error}</p>}
+      </div>
+    );
+  }
+
+  const address = wallet.address;
+  return (
+    <div className="wcard wcard--agent" aria-label="Agent payments wallet">
+      <div className="wcard__top-row">
+        {/*
+         * "Agent Payments", not "For agents" / "Agent spending".
+         *
+         * The old wording was ambiguous in a money-shaped way: it read as
+         * though this account holds what an agent EARNS. It does not, and
+         * there is no code path that would put earnings here — a paid hire
+         * sends $U to the agent's own registered ERC-8004 wallet
+         * (convex/agentPayments.ts verifies the payee against it). This
+         * balance is outbound only: funds the USER deposits in order to pay
+         * agents. The subcopy below says so in as many words.
+         */}
+        <div className="wcard__ident">
+          <WalletAvatar address={address} kind="bot" />
+          <div>
+            <p className="wcard__eyebrow">Agent payments</p>
+            <code className="wcard__addr-inline">{truncateAddress(address)}</code>
+          </div>
+        </div>
+      </div>
+
+      <p className={`wcard__hero-balance${
+        wallet.balanceError ? " wcard__hero-balance--error" :
+        wallet.balanceWei === null ? " wcard__hero-balance--muted" : ""
+      }`}>
+        {wallet.balanceError ? "Unavailable" :
+         wallet.balanceWei === null ? (wallet.isReadingBalance ? "…" : "—") :
+         formatBnb(wallet.balanceWei)}
+        {!wallet.balanceError && wallet.balanceWei !== null && (
+          <span className="wcard__hero-unit">BNB</span>
+        )}
+      </p>
+      <p className="wcard__hero-sub">Funds you send to pay agents you hire</p>
+
+      <div className="wcard__actions">
+        <WalletAction
+          icon="↓"
+          label="Deposit"
+          onClick={() => void navigator.clipboard?.writeText(address)}
+        />
+        {/* Labelled "BscScan" to match the identity card and the session
+            rows below — one name for one destination, not two. */}
+        <WalletAction
+          href={`https://bscscan.com/address/${address}`}
+          icon="↗"
+          label="BscScan"
+        />
+        <WalletAction
+          disabled={wallet.isReadingBalance}
+          icon="↻"
+          label="Refresh"
+          onClick={() => void wallet.refreshBalance()}
+        />
+      </div>
+
+      <div className="wcard__asset-list">
+        <div className="wcard__asset-row">
+          <span className="wcard__asset-icon"><BnbLogo size={18} /></span>
+          <span className="wcard__asset-name">BNB</span>
+          <span className="wcard__asset-sub">Dolphin Wallet · passkey-secured</span>
+          <span className="wcard__asset-amount">
+            {wallet.balanceWei !== null ? `${formatBnb(wallet.balanceWei)} BNB` : "—"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────── connected state ─────────────── */
 
 function ConnectedWallet() {
@@ -508,78 +548,7 @@ function ConnectedWallet() {
       {/* ── Dual wallet cards ── */}
       <section aria-label="Wallets overview" className="wallet-dual-section">
 
-        {/* Agent card (Dolphin / Altana passkey) */}
-        <div className="wcard wcard--agent surface-raised">
-          <div className="wcard__top-row">
-            {/*
-             * "Agent Payments", not "For agents" / "Agent spending".
-             *
-             * The old wording was ambiguous in a money-shaped way: it read as
-             * though this account holds what an agent EARNS. It does not, and
-             * there is no code path that would put earnings here — a paid hire
-             * sends $U to the agent's own registered ERC-8004 wallet
-             * (convex/agentPayments.ts verifies the payee against it). This
-             * balance is outbound only: funds the USER deposits in order to pay
-             * agents. The subcopy below says so in as many words.
-             */}
-            <div className="wcard__eyebrow">
-              <span className="wcard__eyebrow-icon">⚡</span>
-              Agent Payments
-            </div>
-            <code className="wcard__addr-pill">{truncateAddress(address)}</code>
-          </div>
-
-          {/* Hero balance */}
-          <p className={`wcard__hero-balance${
-            wallet.balanceError ? " wcard__hero-balance--error" :
-            wallet.balanceWei === null ? " wcard__hero-balance--muted" : ""
-          }`}>
-            {wallet.balanceError ? "Unavailable" :
-             wallet.balanceWei === null ? (wallet.isReadingBalance ? "…" : "—") :
-             formatBnb(wallet.balanceWei)}
-            {!wallet.balanceError && wallet.balanceWei !== null && (
-              <span className="wcard__hero-unit">BNB</span>
-            )}
-          </p>
-          <p className="wcard__hero-sub">Funds you send to pay agents you hire</p>
-
-          {/* Quick actions */}
-          <div className="wcard__actions">
-            <WalletAction
-              icon="↓"
-              label="Deposit"
-              onClick={() => void navigator.clipboard?.writeText(address)}
-            />
-            {/* Labelled "BscScan" to match the identity card and the session
-                rows below — one name for one destination, not two. */}
-            <WalletAction
-              href={`https://bscscan.com/address/${address}`}
-              icon="↗"
-              label="BscScan"
-            />
-            <WalletAction
-              disabled={wallet.isReadingBalance}
-              icon="↻"
-              label="Refresh"
-              onClick={() => void wallet.refreshBalance()}
-            />
-          </div>
-
-          {/* Asset row */}
-          <div className="wcard__asset-list">
-            <div className="wcard__asset-row">
-              <span className="wcard__asset-icon"><BnbLogo size={18} /></span>
-              <span className="wcard__asset-name">BNB</span>
-              <span className="wcard__asset-sub">Dolphin Wallet · passkey-secured</span>
-              <span className="wcard__asset-amount">
-                {wallet.balanceWei !== null ? `${formatBnb(wallet.balanceWei)} BNB` : "—"}
-              </span>
-            </div>
-          </div>
-
-          {/* Agent-flavour watermark glyph */}
-          <span aria-hidden="true" className="wcard__watermark">⚡</span>
-        </div>
+        <AgentWalletCard />
 
         {/* Identity card (wagmi MetaMask / WalletConnect) */}
         <IdentityWalletCard />
@@ -781,7 +750,6 @@ function ConnectedWallet() {
  */
 export function AltanaWalletPanel() {
   const wallet = useAltanaWallet();
-  const identity = useWallet();
 
   if (wallet.status === "loading") {
     return (
@@ -791,38 +759,26 @@ export function AltanaWalletPanel() {
     );
   }
 
-  // An agent wallet exists: show everything, exactly as before.
+  // An agent wallet exists: the full dashboard, which carries both cards plus
+  // the funding, recoverability and device sections that only apply once there
+  // is a wallet to apply them to.
   if (wallet.status === "connected") {
     return <ConnectedWallet />;
   }
 
-  // No agent wallet and no connected address: a single decision.
-  if (!identity.isConnected) {
-    return <ConnectFirstPanel />;
-  }
-
-  // Connected, no agent wallet yet. The identity card appears immediately; the
-  // Dolphin Wallet is offered beside it as an optional next step.
+  /*
+   * No agent wallet yet — but the grid is identical. Both cards render in the
+   * same two columns at the same size, each showing whichever of its own states
+   * applies. Nothing below the cards belongs here: a fund banner, a
+   * recoverability check and a "remove from this device" control are all about
+   * a wallet that does not exist.
+   */
   return (
     <div className="wallet-dashboard">
-      <section aria-label="Wallets overview" className="wallet-dual-section wallet-dual-section--single">
+      <section aria-label="Wallets overview" className="wallet-dual-section">
+        <AgentWalletCard />
         <IdentityWalletCard />
       </section>
-
-      {/*
-       * WebAuthn unavailable is now a note beside a working identity card,
-       * rather than a full-screen state that hid the connected address too.
-       * The browser cannot hold a Dolphin Wallet; it can still hire agents.
-       */}
-      {wallet.status === "unsupported" ? (
-        <StatePanel
-          body={wallet.unsupportedReason ?? "This browser cannot create a passkey wallet."}
-          state="unavailable"
-          title="Dolphin Wallet not supported in this browser"
-        />
-      ) : (
-        <WalletSetup />
-      )}
     </div>
   );
 }

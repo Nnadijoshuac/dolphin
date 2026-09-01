@@ -286,7 +286,9 @@ video {
   width: 100%;
   min-height: 3rem;
   padding-inline: 1.25rem;
-  border-radius: 0.875rem;
+  /* 8px: a control sits inside a 12px card, so its radius has to be smaller
+     than its container's or the nesting reads as sloppy rather than concentric. */
+  border-radius: 0.5rem;
   font-size: 0.875rem;
   font-weight: 650;
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 160ms ease;
@@ -499,16 +501,36 @@ video {
 .wallet-balance-card__refresh:hover:not(:disabled) { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .wallet-balance-card__refresh:disabled { opacity: 0.5; }
 
-.wallet-fund-banner { border-top: 1px solid var(--accent-soft); background: var(--accent-soft); padding: 1rem 1.5rem; }
-@media (min-width: 640px) { .wallet-fund-banner { padding-inline: 2rem; } }
+.wallet-fund-banner {
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 0.75rem;
+  background: var(--accent-soft);
+  padding: 1rem 1.125rem;
+}
+/* Flat inside the recoverability card: a bordered box within a bordered box
+   is a nested card, and two stacked frames make the inner one look like an
+   error rather than a next step. Inside, the tint alone carries it. */
+.wallet-recoverability .wallet-fund-banner {
+  border: 0;
+  border-radius: 0.5rem;
+  margin-top: 0.75rem;
+}
 .wallet-fund-banner__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .wallet-fund-banner__title { font-size: 0.82rem; font-weight: 700; color: var(--accent-ink); }
 .wallet-fund-banner__address { display: block; margin-top: 0.5rem; font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.72rem; word-break: break-all; color: var(--ink); }
 .wallet-fund-banner__hint { margin-top: 0.375rem; font-size: 0.75rem; line-height: 1.55; color: var(--accent-ink); opacity: 0.8; }
 
-.wallet-recoverability { border-left: 2px solid var(--line); padding-left: 1rem; }
-.wallet-recoverability--ok { border-color: var(--success); }
-.wallet-recoverability--warn { border-color: var(--danger); }
+/* A full 1px border and a radius, not a 2px colored bar down the left edge.
+   The bar was the only element on the screen using that device, and a thick
+   colored rule reads as a callout sticker rather than as part of the card
+   system. State is carried by the border tint and the title colour instead. */
+.wallet-recoverability {
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 1rem 1.125rem;
+}
+.wallet-recoverability--ok { border-color: color-mix(in srgb, var(--success) 35%, var(--line)); }
+.wallet-recoverability--warn { border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
 .wallet-recoverability__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .wallet-recoverability__title { font-size: 0.78rem; font-weight: 700; color: var(--ink); }
 .wallet-recoverability--ok .wallet-recoverability__title { color: var(--success); }
@@ -610,10 +632,10 @@ video {
 @media (max-width: 640px) {
   .wallet-dual-section { grid-template-columns: 1fr; }
 }
-/* One card, full width: the connected-identity state before a Dolphin Wallet
-   exists. Without this the lone card would sit at half width with dead space
-   beside it, reading as a missing card rather than a deliberate single one. */
-.wallet-dual-section--single { grid-template-columns: 1fr; }
+/* No single-column modifier, deliberately. Both slots are always rendered -
+   each card owns its own empty/prompt state - so the grid keeps two equal
+   columns regardless of what is connected. The shape of this screen is a
+   constant, not a function of wallet state. */
 
 /* Network / refresh row between cards and permissions */
 .wallet-meta-row {
@@ -629,16 +651,48 @@ video {
   letter-spacing: 0.03em;
 }
 
-/* ── Shared card anatomy ── */
+/* ── Shared card anatomy ──
+   Elevation is declared ONCE, as a 1px border. No box-shadow: a hairline
+   border sitting under a wide soft shadow is the "ghost card" — two competing
+   depth cues that read as sloppy rather than layered. Radius is 12px, the
+   same value every card on this screen uses; pill radii are reserved for
+   genuinely pill-shaped small controls. */
 .wcard {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 1.375rem;
-  border-radius: 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--paper-strong);
   overflow: hidden;
-  transition: border-color 200ms ease;
+  transition: border-color 160ms ease;
+}
+
+/* identity block: avatar + label/address stack */
+.wcard__ident {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+.wcard__avatar {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 0.5rem;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+}
+.wcard__addr-inline {
+  display: block;
+  margin-top: 0.1rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--faint);
+  letter-spacing: 0.01em;
 }
 
 /* eyebrow label row */
@@ -647,14 +701,56 @@ video {
   align-items: center;
   gap: 0.4rem;
   font-size: 0.6rem;
-  font-weight: 800;
-  letter-spacing: 0.13em;
+  font-weight: 700;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 .wcard__eyebrow-icon {
   font-size: 0.75rem;
   line-height: 1;
 }
+
+/* ── Empty / prompt state — same slot, same size, different content ── */
+.wcard--empty {
+  justify-content: flex-start;
+  background: var(--paper);
+  border-style: dashed;
+}
+.wcard__empty-title {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.wcard__empty-body {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.wcard__empty-action {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 1rem;
+}
+/* Tertiary: a text action under the bordered one, so the card offers a clear
+   first choice and a quieter second rather than two buttons of equal weight. */
+.wcard__empty-link {
+  align-self: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  transition: color 160ms ease;
+}
+.wcard__empty-link:hover:not(:disabled) {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.wcard__empty-link:disabled { opacity: 0.5; cursor: wait; }
 
 /* title */
 .wcard__title {
@@ -740,33 +836,13 @@ video {
 .wcard--agent .wcard__balance { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .wcard--agent .wcard__footer { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 
-/* subtle lightning watermark */
-.wcard__watermark {
-  position: absolute;
-  bottom: -0.5rem;
-  right: 0.75rem;
-  font-size: 5rem;
-  line-height: 1;
-  opacity: 0.045;
-  pointer-events: none;
-  user-select: none;
-  filter: grayscale(1);
-}
+/* The 5rem lightning watermark that sat here is gone. A giant glyph at 4.5%
+   opacity behind real content is decoration standing in for design; the amber
+   tint and the bot avatar already distinguish this card. */
 
 /* ── Identity card — neutral ── */
-.wcard--identity {
-  /* inherits surface-raised when connected */
-}
 .wcard--identity .wcard__eyebrow {
   color: var(--muted);
-}
-
-/* dim state — identity wallet not connected */
-.wcard--dim {
-  border: 1px solid var(--line);
-  background: var(--paper);
-  box-shadow: none;
-  opacity: 0.72;
 }
 
 /* ─────── New card anatomy (OpenSea-style) ─────── */

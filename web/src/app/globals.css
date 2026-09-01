@@ -610,6 +610,10 @@ video {
 @media (max-width: 640px) {
   .wallet-dual-section { grid-template-columns: 1fr; }
 }
+/* One card, full width: the connected-identity state before a Dolphin Wallet
+   exists. Without this the lone card would sit at half width with dead space
+   beside it, reading as a missing card rather than a deliberate single one. */
+.wallet-dual-section--single { grid-template-columns: 1fr; }
 
 /* Network / refresh row between cards and permissions */
 .wallet-meta-row {

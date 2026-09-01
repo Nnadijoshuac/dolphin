@@ -1,6 +1,6 @@
 "use client";
 
-import { WalletConnectButton } from "@/wallet/wallet-provider";
+import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
 /**
  * Secondary section: the identity wallet (wagmi / MetaMask / WalletConnect).
@@ -14,6 +14,18 @@ import { WalletConnectButton } from "@/wallet/wallet-provider";
  * WalletConnectButton, so this component has nothing to keep in sync.
  */
 export function IdentityWalletSection() {
+  const wallet = useWallet();
+
+  /*
+   * Only rendered once an address is connected.
+   *
+   * This is the "manage the connected identity" row - its real job is the
+   * disconnect control. While nothing is connected, AltanaWalletPanel already
+   * shows the single Connect prompt, and rendering this too put two identical
+   * Connect buttons on one screen.
+   */
+  if (!wallet.isConnected) return null;
+
   return (
     <div className="wallet-identity-section">
       <div className="wallet-identity-section__content">

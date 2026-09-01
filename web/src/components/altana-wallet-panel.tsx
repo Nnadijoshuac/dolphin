@@ -15,7 +15,7 @@ import {
   recoverabilityCopy,
 } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
-import { useWallet } from "@/wallet/wallet-provider";
+import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
 /* ─────────────── tiny helpers ─────────────── */
 
@@ -231,7 +231,43 @@ function RecoverabilityPanel() {
   );
 }
 
-/* ─────────────── setup (no wallet yet) ─────────────── */
+/* ─────────────── nothing connected at all ─────────────── */
+
+/**
+ * The only thing shown when neither wallet exists yet.
+ *
+ * Deliberately one decision on the screen. The Dolphin Wallet creation panel
+ * used to live here too, which meant a first-time visitor's opening choice was
+ * between two different wallets whose distinction they had not been told yet.
+ * Connecting an address is the cheaper, more familiar, and completely
+ * reversible one, so it goes first and alone.
+ */
+function ConnectFirstPanel() {
+  return (
+    <section className="wallet-setup" aria-labelledby="wallet-connect-heading">
+      <div className="wallet-setup__copy">
+        <p className="eyebrow">Wallet</p>
+        <h1 className="wallet-setup__headline" id="wallet-connect-heading">
+          Connect a wallet<br />to get started.
+        </h1>
+        <p className="wallet-setup__sub">
+          Dolphin reads only your public address, to remember which agents you
+          have hired. No agent is ever given permission to spend from it.
+        </p>
+      </div>
+
+      <div className="wallet-setup__card surface-raised">
+        <div className="wallet-setup__card-header">
+          <p className="wallet-setup__card-title">Your wallet</p>
+          <span className="wallet-status-badge wallet-status-badge--idle">Not connected</span>
+        </div>
+        <WalletConnectButton connectLabel="Connect wallet" />
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────── setup (no agent wallet yet) ─────────────── */
 
 function WalletSetup() {
   const wallet = useAltanaWallet();
@@ -249,6 +285,16 @@ function WalletSetup() {
         </h1>
         <p className="wallet-setup__sub">
           Secured by your device passkey. No seed phrase. Funds only go where you allow.
+        </p>
+        {/*
+         * Stated outright, because this panel now sits under a connected
+         * identity card and could otherwise read as a required second step.
+         * It is not: browsing, hiring and managing agents all work without a
+         * Dolphin Wallet. It is only needed to PAY an agent.
+         */}
+        <p className="wallet-setup__sub">
+          <strong>Optional.</strong> You can browse, hire and manage agents
+          without one — you only need it to pay an agent.
         </p>
 
         <ul className="wallet-setup__pillars">
@@ -700,8 +746,42 @@ function ConnectedWallet() {
 
 /* ─────────────── public export ─────────────── */
 
+/**
+ * Decides which wallet layout the screen shows.
+ *
+ * ---------------------------------------------------------------------------
+ * FIXED (2026-09-01): the identity card no longer depends on the agent wallet.
+ * ---------------------------------------------------------------------------
+ * This used to branch on `wallet.status` ALONE, and that status describes only
+ * the Altana/Dolphin wallet - altana-provider.tsx derives it as
+ * `stored ? "connected" : "no-wallet"`, where `stored` is the passkey
+ * credential in localStorage. IdentityWalletCard is rendered inside
+ * ConnectedWallet, so it was reachable only once a Dolphin Wallet existed.
+ *
+ * The effect: someone could connect MetaMask and see no trace of it, because
+ * the screen was still showing "create a Dolphin Wallet". Two independent
+ * accounts, one of them gating the other's visibility for no reason.
+ *
+ * The two are now read independently, which is what they always were:
+ *
+ *   agent wallet exists            -> full dual dashboard (unchanged)
+ *   no agent wallet, not connected -> one Connect prompt, nothing else
+ *   no agent wallet, connected     -> identity card NOW, plus an explicitly
+ *                                     optional Dolphin Wallet panel
+ *
+ * Note the agent-wallet branch comes FIRST and ignores `identity.isConnected`.
+ * A Dolphin Wallet can hold real funds, so once one exists it is shown
+ * regardless - hiding it because no MetaMask happens to be connected would be
+ * hiding someone's money. IdentityWalletCard already renders its own
+ * "Not connected" state in that case.
+ *
+ * This changes VISIBILITY only. createPasskeyWallet is untouched and remains a
+ * separate, explicit, user-initiated action - nothing here auto-creates a
+ * wallet or makes one a precondition for anything else.
+ */
 export function AltanaWalletPanel() {
   const wallet = useAltanaWallet();
+  const identity = useWallet();
 
   if (wallet.status === "loading") {
     return (
@@ -710,15 +790,39 @@ export function AltanaWalletPanel() {
       </div>
     );
   }
-  if (wallet.status === "unsupported") {
-    return (
-      <div className="wallet-loading">
-        <StatePanel body={wallet.unsupportedReason ?? "This browser cannot create a passkey wallet."} state="unavailable" title="Wallet not supported" />
-      </div>
-    );
+
+  // An agent wallet exists: show everything, exactly as before.
+  if (wallet.status === "connected") {
+    return <ConnectedWallet />;
   }
-  if (wallet.status === "no-wallet") {
-    return <WalletSetup />;
+
+  // No agent wallet and no connected address: a single decision.
+  if (!identity.isConnected) {
+    return <ConnectFirstPanel />;
   }
-  return <ConnectedWallet />;
+
+  // Connected, no agent wallet yet. The identity card appears immediately; the
+  // Dolphin Wallet is offered beside it as an optional next step.
+  return (
+    <div className="wallet-dashboard">
+      <section aria-label="Wallets overview" className="wallet-dual-section wallet-dual-section--single">
+        <IdentityWalletCard />
+      </section>
+
+      {/*
+       * WebAuthn unavailable is now a note beside a working identity card,
+       * rather than a full-screen state that hid the connected address too.
+       * The browser cannot hold a Dolphin Wallet; it can still hire agents.
+       */}
+      {wallet.status === "unsupported" ? (
+        <StatePanel
+          body={wallet.unsupportedReason ?? "This browser cannot create a passkey wallet."}
+          state="unavailable"
+          title="Dolphin Wallet not supported in this browser"
+        />
+      ) : (
+        <WalletSetup />
+      )}
+    </div>
+  );
 }

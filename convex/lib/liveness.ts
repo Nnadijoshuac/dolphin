@@ -63,12 +63,41 @@ function trimSlash(url: string): string {
 }
 
 /**
+ * An endpoint still carrying an un-substituted `{…}` template is not a URL
+ * anyone can call.
+ *
+ * MIRRORS the guard the payment path has always had at
+ * convex/lib/erc8183.ts:319, which skips a templated endpoint rather than
+ * fetching it literally. This module lacked the equivalent, and that gap is the
+ * whole defect: 38 candidates - every TermiX-hosted agent in the ledger, whose
+ * 8004scan record advertises `.../api/v1/a2a/agents/{agentId}/card` - were
+ * being fetched with the literal braces, getting a 404, and accruing
+ * `consecutiveProbeFailures` toward delisting for a request that could never
+ * have succeeded.
+ *
+ * DELIBERATELY NOT SUBSTITUTED. Filling in the token id makes those URLs return
+ * HTTP 200, and measured across all 38 the bodies pass `looksLikeAgentCard`
+ * while reporting `endpoint: null`, `status: "UNBOUND"`, `presence: "offline"`.
+ * Substituting would manufacture 32 false "verified-live" claims about agents
+ * their own platform says are not bound. Guessing at a publisher's intended URL
+ * is not this probe's job; reporting honestly that the advertised one is
+ * uncallable is.
+ */
+function isUncallableTemplate(url: string): boolean {
+  return url.includes("{");
+}
+
+/**
  * The A2A spec's well-known card location, plus the two placements publishers
  * actually use in the wild (card served directly at the advertised URL, and
  * card served under the advertised base rather than the origin).
  */
 function a2aCandidates(url: string): string[] {
   const base = trimSlash(url);
+  // Defence in depth. probeLiveness filters these out before we are called, so
+  // this should be unreachable - but a templated URL must never become a
+  // request, whichever path reaches here.
+  if (isUncallableTemplate(base)) return [];
   const candidates = [base];
   if (!/\.json($|\?)/i.test(base)) {
     candidates.push(`${base}/.well-known/agent-card.json`);
@@ -213,9 +242,17 @@ async function probeMCP(url: string): Promise<{ ok: boolean; detail: string; pro
 export async function probeLiveness(endpoints: readonly ProbeEndpoint[]): Promise<LivenessResult> {
   const checkedAt = new Date().toISOString();
 
-  const unique = endpoints.filter(
+  const deduped = endpoints.filter(
     (endpoint, index, all) => all.findIndex((e) => e.url === endpoint.url) === index,
   );
+
+  // Templated endpoints are removed BEFORE the emptiness check below, not
+  // failed inside the probe loop. That placement is the whole point: an agent
+  // whose only advertised endpoint is an un-substituted template has, in every
+  // sense that matters, advertised no callable endpoint - so it lands in
+  // `no-endpoint-advertised` and never accrues a probe failure it cannot avoid.
+  const templated = deduped.filter((endpoint) => isUncallableTemplate(endpoint.url));
+  const unique = deduped.filter((endpoint) => !isUncallableTemplate(endpoint.url));
 
   if (unique.length === 0) {
     return {
@@ -223,8 +260,14 @@ export async function probeLiveness(endpoints: readonly ProbeEndpoint[]): Promis
       protocol: null,
       probedUrl: null,
       latencyMs: null,
+      // Two genuinely different situations, and the copy says which one it is
+      // rather than rounding both to "advertises nothing" (AGENTS.md §5).
       detail:
-        "The agent advertises no A2A, MCP, or service endpoint in 8004scan's record or in its own registration file, so there is nothing to probe. This is not the same as being unreachable.",
+        templated.length > 0
+          ? `The agent advertises ${templated.length} endpoint(s), but every one still carries an un-substituted template and so cannot be called: ${templated
+              .map((e) => `[${e.protocol}] ${e.url}`)
+              .join("; ")}. Dolphin does not guess at the intended URL. This is a defect in the agent's own registration, not a failed probe - nothing was requested.`
+          : "The agent advertises no A2A, MCP, or service endpoint in 8004scan's record or in its own registration file, so there is nothing to probe. This is not the same as being unreachable.",
       checkedAt,
     };
   }

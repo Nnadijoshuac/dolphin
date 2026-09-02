@@ -158,6 +158,15 @@ export interface WalletState {
    */
   failure: ConnectFailureKind | null;
   clearFailure: () => void;
+  /**
+   * Whether a QR path exists as an alternative to the browser extension.
+   *
+   * Exposed so the UI can OFFER the choice instead of `connect()` silently
+   * guessing. When an extension is wedged — a stale request it keeps resetting
+   * — guessing "injected" again just reproduces the failure, and the user has
+   * no way out of the loop.
+   */
+  canUseQr: boolean;
   connect: (preferredType?: "injected" | "walletConnect") => Promise<void>;
   disconnect: () => Promise<void>;
 }
@@ -289,6 +298,7 @@ export function useWallet(): WalletState {
     isConnecting: isBusy,
     failure,
     clearFailure: () => setFailure(null),
+    canUseQr: available.some((c) => c.id === "walletConnect"),
     connect,
     disconnect,
   };
@@ -411,16 +421,38 @@ export function WalletConnectButton({
             <p className={`mt-1 text-xs leading-5 ${warn ? "text-danger" : "text-muted"}`}>
               {copy.body}
             </p>
-            {copy.retryable && (
-              <button
-                className="interactive mt-2.5 text-xs font-semibold text-ink underline underline-offset-4"
-                disabled={wallet.isConnecting}
-                onClick={() => void wallet.connect()}
-                type="button"
-              >
-                Try again
-              </button>
-            )}
+            {/*
+             * Two explicit routes, not one blind retry.
+             *
+             * `connect()` with no argument guesses, and it guesses "injected"
+             * whenever window.ethereum exists. If that extension is the thing
+             * that is stuck, retrying it reproduces the same failure forever —
+             * which is exactly how someone ends up unable to connect at all.
+             * Naming the second path gives them a way around a wedged
+             * extension without touching it.
+             */}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              {copy.retryable && (
+                <button
+                  className="interactive text-xs font-semibold text-ink underline underline-offset-4"
+                  disabled={wallet.isConnecting}
+                  onClick={() => void wallet.connect("injected")}
+                  type="button"
+                >
+                  Try browser extension again
+                </button>
+              )}
+              {wallet.canUseQr && (
+                <button
+                  className="interactive text-xs font-semibold text-ink underline underline-offset-4"
+                  disabled={wallet.isConnecting}
+                  onClick={() => void wallet.connect("walletConnect")}
+                  type="button"
+                >
+                  Scan a QR code instead
+                </button>
+              )}
+            </div>
           </div>
         );
       })()}

@@ -113,10 +113,25 @@ export function connectFailureCopy(kind: ConnectFailureKind): {
   retryable: boolean;
 } {
   switch (kind) {
+    /*
+     * Deliberately covers TWO situations that arrive identically.
+     *
+     * wagmi's injected connector runs with `shimDisconnect` (its default), so
+     * every connect calls `wallet_requestPermissions` before
+     * `eth_requestAccounts` — confirmed by tracing the provider calls on the
+     * live build. MetaMask answers that with code 4001 both when the user
+     * dismisses the prompt AND when a stale request is already sitting in the
+     * extension, in which case its `details` read "Connection request reset."
+     *
+     * Both are the same class and the same code, so no classifier can tell
+     * them apart without matching prose. Rather than guess, the copy names
+     * both: someone who did cancel reads the first line and stops, someone
+     * stuck in a reset loop gets the one instruction that actually clears it.
+     */
     case "cancelled":
       return {
         title: "Connection cancelled",
-        body: "Nothing happened — try again when you're ready.",
+        body: "If you didn't cancel, your wallet may still have a request open from a previous attempt. Open the extension, dismiss anything pending there, then try again.",
         tone: "calm",
         retryable: true,
       };

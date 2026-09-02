@@ -5,6 +5,8 @@ const expoConfig = require("eslint-config-expo/flat");
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ["dist/*"],
+    // Agent/ is git-ignored agent working context (handovers, session logs,
+    // browser and Convex diagnostic scratch) — not source, not linted.
+    ignores: ["dist/*", "Agent/*"],
   }
 ]);

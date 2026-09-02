@@ -18,7 +18,9 @@ This stack is decided. Do not swap in an alternative library because it's more f
 
 If a task seems to require stepping outside this list (a gap only a different library fills), stop and flag it rather than adding a new dependency unilaterally — say what's missing and why the locked stack can't cover it.
 
-The full product/screen spec, tech stack decisions, and build strategy live in **project-scope.md** — read it before starting any task, and re-read it if scope or architecture questions come up mid-task. This file governs behavior and stack discipline, not feature scope. Don't copy screen-by-screen detail into this file; if it drifts out of sync with project-scope.md, fix project-scope.md, not this one.
+The full product/screen spec, tech stack decisions, and build strategy live in **`Agent/project-scope.md`** — read it before starting any task, and re-read it if scope or architecture questions come up mid-task. This file governs behavior and stack discipline, not feature scope. Don't copy screen-by-screen detail into this file; if it drifts out of sync with project-scope.md, fix project-scope.md, not this one.
+
+`Agent/` is this repo's agent working context — the product scope, handovers, session logs, audits, and browser/diagnostic scratch. It is **git-ignored**, so it exists only on a machine that has been working on this project; a fresh clone won't have it. Source comments throughout the codebase cite these docs by their old bare filenames (`project-scope.md §3`, `HANDOVER.md`, `SESSION-LOG-2026-08-29-discovery.md`) — all of them now resolve under `Agent/`. See `Agent/AGENT_INDEX.md` for the map.
 
 ## 2. Hard Rule: Version Truth Before Code
 

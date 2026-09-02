@@ -39,6 +39,12 @@ yarn-error.*
 
 example
 
+# Agent working context: handovers, session logs, audits and browser/diagnostic
+# scratch. Kept on disk for coding agents to read, out of the repo because it is
+# session history rather than source. AGENTS.md and CLAUDE.md deliberately stay
+# at the root so they still auto-load.
+Agent/
+
 # generated native folders
 /ios
 /android

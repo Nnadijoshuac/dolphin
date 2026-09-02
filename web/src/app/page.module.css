@@ -2,18 +2,79 @@
   overflow: clip;
 }
 
+/* The hero is now the video, full-bleed — no card around it.
+   The border, radius, shadow and paper background that used to box it in
+   (.heroBanner) are gone: a framed video reads as an illustration ON the page,
+   an unframed one reads as the page itself. The section spans the viewport;
+   only the copy inside it is held to the site measure. */
 .heroSection {
-  padding-block: clamp(2.5rem, 7vw, 6rem);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-block: clamp(3.5rem, 9vw, 7rem);
+  animation: reveal-up 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.heroGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(340px, 0.72fr);
-  gap: clamp(2.5rem, 6vw, 5.5rem);
-  align-items: center;
+.heroBgVideo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: -2;
+  pointer-events: none;
+}
+
+/* Horizontal, not radial — and that direction is the whole point.
+   The old gradient was brightest at 75% across, so it washed out hardest on
+   the RIGHT, where there is no text, and left the video faintest behind the
+   headline. This runs the other way: near-opaque under the copy so dark text
+   keeps its contrast, thinning toward the right where the video is free to be
+   seen. Same asset, legible text, and it actually reads as footage. */
+.heroOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 254, 248, 0.97) 0%,
+    rgba(255, 254, 248, 0.94) 58%,
+    rgba(255, 254, 248, 0.45) 78%,
+    rgba(255, 254, 248, 0.28) 100%
+  );
+  pointer-events: none;
+}
+
+/* The 58% hold is measured, not eyeballed. The copy column is max-width 660px
+   inside a 1280px frame, so on a wide viewport its longest line reaches ~55%
+   across. An earlier falloff put the tail of the muted body line over ~0.72
+   opacity — thin enough that a bright frame of moving footage could drop it
+   under the 4.5:1 floor. Holding ~0.94 to 58% keeps every character of text on
+   an effectively solid ground, and the sharp drop after it still gives the
+   right-hand 40% — where the dolphins actually are — to the video. */
+
+/* Below the copy the gradient has nothing to protect, so the video is left
+   alone — this keeps the section from ending on an abrupt hard edge. */
+.heroSection::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 6rem;
+  z-index: -1;
+  background: linear-gradient(
+    to bottom,
+    rgba(244, 243, 237, 0) 0%,
+    var(--canvas) 100%
+  );
+  pointer-events: none;
 }
 
 .heroCopy {
+  position: relative;
+  z-index: 1;
+  max-width: 660px;
   animation: reveal-up 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -115,107 +176,6 @@
   display: flex;
   align-items: center;
   gap: 0.45rem;
-}
-
-.heroVisual {
-  display: grid;
-  grid-template-rows: minmax(320px, 1fr) auto;
-  overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: 1.5rem;
-  background: color-mix(in srgb, var(--paper-strong) 88%, transparent);
-  box-shadow: 0 5px 0 #d4d2c6, var(--shadow-float);
-  animation: reveal-up 640ms 100ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  transition:
-    box-shadow 220ms ease,
-    transform 220ms ease;
-}
-
-.heroVisual:hover {
-  box-shadow: 0 7px 0 #d4d2c6, var(--shadow-float);
-  transform: translateY(-2px);
-}
-
-.heroMedia {
-  position: relative;
-  min-height: 320px;
-  overflow: hidden;
-  border-bottom: 1px solid var(--line);
-  background:
-    radial-gradient(circle at 50% 25%, rgb(240 185 11 / 14%), transparent 45%),
-    var(--paper-muted);
-}
-
-.heroMedia::after {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(115deg, transparent 42%, rgb(255 255 255 / 34%), transparent 62%);
-  content: "";
-  pointer-events: none;
-  transform: translateX(-110%);
-  transition: transform 800ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.heroVisual:hover .heroMedia::after {
-  transform: translateX(110%);
-}
-
-.heroImage {
-  object-fit: cover;
-  object-position: center;
-  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.heroVisual:hover .heroImage {
-  transform: scale(1.025);
-}
-
-.featuredBody {
-  min-width: 0;
-  padding: 1.35rem;
-  background:
-    linear-gradient(135deg, rgb(255 255 255 / 90%), rgb(255 254 250 / 74%)),
-    var(--paper);
-}
-
-.featuredLink {
-  display: block;
-  margin-top: 0.9rem;
-  text-decoration: none;
-}
-
-.featuredLink h2,
-.featuredLink .featuredFooter {
-  transition: color 160ms ease;
-}
-
-.featuredLink:hover h2,
-.featuredLink:focus-visible h2,
-.featuredLink:hover .featuredFooter,
-.featuredLink:focus-visible .featuredFooter {
-  color: var(--accent-ink);
-}
-
-.featuredTagline {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.45rem;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.featuredFooter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 1rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.72rem;
 }
 
 .categorySection {

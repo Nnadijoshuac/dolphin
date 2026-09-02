@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import {
   useMemo,
@@ -220,8 +219,6 @@ export default function DiscoverPage() {
 
   const hasCatalog = agents !== undefined;
   const catalog = useMemo(() => agents ?? [], [agents]);
-  const featuredAgent =
-    catalog.find((agent) => agent.category === "health-factor") ?? catalog[0];
   const visibleAgents = useMemo(
     () =>
       selectedCategory
@@ -293,11 +290,24 @@ export default function DiscoverPage() {
 
   return (
     <div className={styles.page}>
-      <section
-        aria-labelledby="discover-heading"
-        className={`${styles.heroSection} site-frame`}
-      >
-        <div className={styles.heroGrid}>
+      {/*
+       * Full-bleed hero: the video IS the background, not a picture inside a
+       * card. `site-frame` moved off the section and onto the copy — the
+       * section now spans the viewport so the video can, while the text stays
+       * on the same 1280px measure as every other section on the page.
+       */}
+      <section aria-labelledby="discover-heading" className={styles.heroSection}>
+        <video
+          autoPlay
+          className={styles.heroBgVideo}
+          loop
+          muted
+          playsInline
+          src="https://res.cloudinary.com/ejr7iufx/video/upload/v1788251928/0901.mp4"
+        />
+        <div className={styles.heroOverlay} />
+
+        <div className="site-frame">
           <div className={styles.heroCopy}>
             <p className="eyebrow">ERC-8004 discovery on BNB Chain</p>
             <h1 className={styles.heroTitle} id="discover-heading">
@@ -349,80 +359,6 @@ export default function DiscoverPage() {
                 </li>
               ))}
             </ul>
-          </div>
-
-          <div className={styles.heroVisual}>
-            <div className={styles.heroMedia}>
-              <Image
-                alt="Dolphin mascot carrying a gold BNB cube through an orbital ring"
-                className={styles.heroImage}
-                fill
-                priority
-                sizes="(max-width: 640px) 112px, (max-width: 1023px) 38vw, 440px"
-                src="/onboarding-dolphin.png"
-              />
-            </div>
-
-            <div className={styles.featuredBody}>
-              <p className="text-xs font-semibold text-muted">Catalog preview</p>
-              {showInitialLoading ? (
-                <div
-                  aria-busy="true"
-                  aria-label="Loading catalog preview"
-                  className="mt-4 space-y-3"
-                >
-                  <div aria-hidden="true" className="skeleton h-5 w-2/3 rounded-md" />
-                  <div aria-hidden="true" className="skeleton h-4 w-full rounded-md" />
-                  <div aria-hidden="true" className="skeleton h-4 w-4/5 rounded-md" />
-                </div>
-              ) : featuredAgent ? (
-                <Link
-                  className={styles.featuredLink}
-                  href={`/agent/${featuredAgent.tokenId}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <AgentIcon
-                      category={featuredAgent.category}
-                      size={48}
-                      uri={featuredAgent.iconUrl}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-muted">
-                        {getCategoryLabel(featuredAgent.category)}
-                      </p>
-                      <h2 className="mt-0.5 line-clamp-2 text-lg font-semibold leading-tight tracking-[-0.03em] text-ink">
-                        {featuredAgent.name}
-                      </h2>
-                    </div>
-                  </div>
-                  <p className={`${styles.featuredTagline} mt-4`}>
-                    {featuredAgent.tagline}
-                  </p>
-                  <div className={styles.featuredFooter}>
-                    <span>ERC-8004 #{featuredAgent.tokenId}</span>
-                    <span className="inline-flex items-center gap-2 font-semibold text-ink">
-                      Inspect
-                      <span aria-hidden="true">
-                        <CategoryGlyph
-                          color="currentColor"
-                          name="arrow-right"
-                          size={16}
-                          strokeWidth={2}
-                        />
-                      </span>
-                    </span>
-                  </div>
-                </Link>
-              ) : showUnavailable ? (
-                <p className="mt-3 text-sm leading-6 text-muted">
-                  The catalog preview is unavailable while the shared catalog is offline.
-                </p>
-              ) : (
-                <p className="mt-3 text-sm leading-6 text-muted">
-                  There are no agent records to preview yet.
-                </p>
-              )}
-            </div>
           </div>
         </div>
       </section>

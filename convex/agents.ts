@@ -164,6 +164,30 @@ function applyDirectory(agent: CatalogAgent, row: DirectoryRow): CatalogAgent {
   };
 }
 
+/**
+ * MERGE FIRST, THEN FETCH ONLY WHAT THE CATALOG NEEDS.
+ *
+ * This function used to `.collect()` the whole `agentDirectory` table and then
+ * resolve a storage URL for every row, before discarding all but the couple of
+ * dozen whose tokenId is actually in the merged catalog. That worked while the
+ * directory was small and then took the entire site down on 2026-09-02:
+ * `agentDirectory` had reached ~5,400 rows, and one `ctx.storage.getUrl` per
+ * row blew Convex's 4,096-read-per-execution limit, so `listAgents` threw
+ * "Too many reads in a single function execution" for every caller and both
+ * frontends rendered an empty catalog against a perfectly healthy deployment.
+ *
+ * The directory only ever contributes an OVERLAY onto agents the catalog
+ * already contains (see applyDirectory), so nothing is lost by looking rows up
+ * per agent instead: it is a point lookup on the by_agent index, and it costs
+ * one read per listed agent rather than one per indexed agent.
+ *
+ * WHY THIS SHAPE MATTERS MORE THAN THE READ COUNT ITSELF. `agentDirectory`
+ * grows with the REGISTRY (deep evaluation caches an icon for every agent it
+ * touches, including rejected ones), whereas the catalog grows with what
+ * Dolphin actually lists. Binding the cost to the second of those makes this
+ * query safe as the registry keeps growing; going back to a full collect would
+ * re-arm the same failure a few thousand rows later.
+ */
 async function buildCatalog(ctx: QueryCtx): Promise<CatalogAgent[]> {
   const asOf = new Date().toISOString();
 
@@ -172,32 +196,31 @@ async function buildCatalog(ctx: QueryCtx): Promise<CatalogAgent[]> {
     .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
     .collect()) as unknown as Parameters<typeof buildDiscoveredAgent>[0][];
 
-  const directoryRows = (await ctx.db
-    .query("agentDirectory")
-    .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
-    .collect()) as unknown as DirectoryRow[];
-
-  // Resolve every cached icon to a Convex storage URL in one pass. getUrl is a
-  // cheap lookup, and doing it here rather than in the client keeps both
-  // frontends rendering `iconUrl` exactly as they already do.
-  const directoryWithIcons = await Promise.all(
-    directoryRows.map(async (row) => ({
-      ...row,
-      cachedIconUrl: row.iconStorageId ? await ctx.storage.getUrl(row.iconStorageId) : null,
-    })),
-  );
-
-  const directory = new Map(directoryWithIcons.map((row) => [row.tokenId, row]));
-
   const merged = mergeCatalog(
     EDITORIAL_AGENT_INPUTS.map((input) => buildEditorialAgent(input, asOf)),
     discoveredRows.map((row) => buildDiscoveredAgent(row, asOf)),
   );
 
-  return merged.map((agent) => {
-    const row = directory.get(agent.tokenId);
-    return row ? applyDirectory(agent, row) : agent;
-  });
+  return Promise.all(
+    merged.map(async (agent) => {
+      const row = (await ctx.db
+        .query("agentDirectory")
+        .withIndex("by_agent", (q) =>
+          q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", agent.tokenId),
+        )
+        .unique()) as unknown as DirectoryRow | null;
+
+      if (!row) return agent;
+
+      // Resolved here rather than in the client so both frontends keep
+      // rendering `iconUrl` exactly as they already do.
+      const cachedIconUrl = row.iconStorageId
+        ? await ctx.storage.getUrl(row.iconStorageId)
+        : null;
+
+      return applyDirectory(agent, { ...row, cachedIconUrl });
+    }),
+  );
 }
 
 /**

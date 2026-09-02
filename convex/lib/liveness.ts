@@ -231,6 +231,213 @@ async function probeMCP(url: string): Promise<{ ok: boolean; detail: string; pro
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * THE DECLARED-SERVICE PROBE.
+ *
+ * WHY IT EXISTS. ERC-8004 does NOT define a service's `name` as a protocol
+ * identifier. Checked against the spec text itself rather than inferred: the
+ * example lists `web`, `A2A`, `MCP`, `OASF`, `ENS`, `DID` and `email` side by
+ * side, the only normative sentence is "The number and type of endpoints are
+ * fully customizable, allowing developers to add as many as they wish",
+ * `version` is "a SHOULD, not a MUST", and the spec gives NO guidance at all on
+ * how a consumer should work out which protocol an endpoint speaks.
+ *
+ * So `name` is a free-text label. This module used to treat every label that
+ * did not contain "mcp" as A2A and then judge the response by A2A AgentCard
+ * rules. That is how four live agents were marked unreachable and one of them
+ * (token 315943, `confirmed`, score 25) was delisted: their manifests name
+ * services `venus-health-factor-assessment`,
+ * `pancakeswap-v3-lp-rebalance-assessment` and so on, which is entirely
+ * spec-compliant, and their endpoints answer HTTP 200 with a JSON capability
+ * descriptor that was never claiming to be an AgentCard.
+ *
+ * WHAT THIS IS NOT. It is not a lower bar for A2A or MCP - those paths are
+ * untouched and still require their own protocol handshake. This branch only
+ * decides what counts as a live response for a service that declared neither.
+ * An agent must still prove it answers; we are fixing which probe we run.
+ *
+ * THE BAR, and every rule is a requirement. Validated by running it against
+ * every group it has to separate before it was written:
+ *
+ *   R2  HTTP 2xx
+ *   R3  Content-Type is JSON            <- rejects every HTML catch-all,
+ *                                          including the useaiki.ai "Coming
+ *                                          Soon" page that briefly fooled this
+ *                                          investigation
+ *   R4  body parses as a JSON OBJECT
+ *   R5  not an error envelope
+ *   R6  at least two top-level keys     <- a bare {"ok":true} is not evidence
+ *                                          of a service
+ *   R8  reject an explicit self-report of unavailability
+ *
+ * R8 is the one that carries its own caveat. Its key names (`status`,
+ * `presence`, `endpoint`) come from observed responses, not from a spec, so it
+ * is deliberately a DENY-list of stated unavailability rather than an
+ * allow-list of stated health - it can only ever reject, never admit. It exists
+ * because the 38 templated TermiX endpoints, if their `{agentId}` were ever
+ * substituted upstream, return HTTP 200 JSON objects that satisfy R2-R6 while
+ * reporting `status: "UNBOUND"`, `presence: "offline"` and `endpoint: null`.
+ * Believing an agent that says it is not available is strictly stronger than
+ * ignoring it. Measured: 11 of 12 sampled TermiX records are rejected by R8
+ * alone, independently of the template guard above.
+ * ------------------------------------------------------------------------ */
+
+/** Stated unavailability. Lowercased before comparison. */
+const UNAVAILABLE_STATUS = new Set([
+  "unbound",
+  "offline",
+  "inactive",
+  "disabled",
+  "suspended",
+]);
+
+/**
+ * Labels that name a REFERENCE, not a callable service.
+ *
+ * Every one of these appears in ERC-8004's own example services array beside
+ * A2A and MCP, and none of them is something an agent answers on: a homepage, a
+ * schema framework, a name-resolution system, a mailbox.
+ *
+ * FOUND BY RUNNING IT, not by reading it. Token 325413 advertises `oasf` ->
+ * https://github.com/agntcy/oasf, which is the Open Agentic Schema Framework's
+ * README. GitHub CONTENT-NEGOTIATES: sent `Accept: application/json` it returns
+ * HTTP 200 `application/json` with `{meta:{...},payload:{...}}` - which
+ * satisfies every rule of the declared-service bar and marked a spec page as a
+ * live agent endpoint. Caught by the control set on the first run.
+ *
+ * These are failed without a request rather than filtered out of the endpoint
+ * list: the agent DID advertise something, it just is not an endpoint, and the
+ * distinction between "advertised nothing" and "advertised a link" is worth
+ * keeping (AGENTS.md §5).
+ */
+const REFERENCE_ONLY_LABELS = new Set([
+  "web",
+  "website",
+  "homepage",
+  "oasf",
+  "ens",
+  "did",
+  "email",
+  "marketplace",
+  "docs",
+  "image",
+  "icon",
+]);
+
+async function probeDeclaredService(
+  url: string,
+  protocol: string,
+): Promise<{ ok: boolean; detail: string; probedUrl: string; latencyMs: number }> {
+  // R1 - a label naming a reference is failed without a request. Probing it
+  // would ask a homepage or a spec page to behave like an agent, and some of
+  // them answer convincingly enough to pass (see REFERENCE_ONLY_LABELS).
+  if (REFERENCE_ONLY_LABELS.has(protocol.toLowerCase())) {
+    return {
+      ok: false,
+      detail: `${url} -> "${protocol}" names a reference, not a callable service endpoint; not probed.`,
+      probedUrl: url,
+      latencyMs: 0,
+    };
+  }
+
+  const started = Date.now();
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      detail: `${url} -> ${error instanceof Error ? error.message : String(error)}.`,
+      probedUrl: url,
+      latencyMs: Date.now() - started,
+    };
+  }
+
+  const latencyMs = Date.now() - started;
+  // probeLiveness already prefixes `[protocol]` when it records a failure, so
+  // this must not repeat it.
+  const fail = (why: string) => ({
+    ok: false,
+    detail: `${url} -> ${why}.`,
+    probedUrl: url,
+    latencyMs,
+  });
+
+  // R2
+  if (!response.ok) return fail(`HTTP ${response.status}`);
+
+  // R3 - the single most load-bearing rule. A site that serves its app shell
+  // for every path returns 200 for anything; requiring JSON is what tells a
+  // service apart from a catch-all.
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!/application\/(\w+\+)?json/i.test(contentType)) {
+    return fail(`HTTP ${response.status} with Content-Type "${contentType || "none"}", not JSON`);
+  }
+
+  // R4
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return fail(`HTTP ${response.status} with a body that did not parse as JSON`);
+  }
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return fail(`HTTP ${response.status} but the body is not a JSON object`);
+  }
+  const record = payload as Record<string, unknown>;
+
+  // R5
+  if ("error" in record) {
+    return fail(`HTTP ${response.status} but the body is an error envelope`);
+  }
+  const statusCode = record.statusCode ?? record.status_code;
+  if (typeof statusCode === "number" && statusCode >= 400) {
+    return fail(`HTTP ${response.status} but the body reports statusCode ${statusCode}`);
+  }
+
+  // R6
+  const keys = Object.keys(record);
+  if (keys.length < 2) {
+    return fail(`HTTP ${response.status} but the body carries only ${keys.length} field(s)`);
+  }
+
+  // R8
+  const status = typeof record.status === "string" ? record.status.toLowerCase() : null;
+  if (status !== null && UNAVAILABLE_STATUS.has(status)) {
+    return fail(`HTTP ${response.status} but the service reports status "${String(record.status)}"`);
+  }
+  if (typeof record.presence === "string" && record.presence.toLowerCase() === "offline") {
+    return fail(`HTTP ${response.status} but the service reports presence "offline"`);
+  }
+  if ("endpoint" in record && record.endpoint === null && ("status" in record || "presence" in record)) {
+    return fail(
+      `HTTP ${response.status} but the body is a registry record with a null endpoint, not a live service`,
+    );
+  }
+
+  return {
+    ok: true,
+    detail:
+      `Declared service "${protocol}" returned HTTP ${response.status} in ${latencyMs}ms ` +
+      `(JSON object, fields: ${keys.slice(0, 6).join(", ")}${keys.length > 6 ? ", …" : ""}). ` +
+      `Verified as a declared ERC-8004 service endpoint, NOT as an A2A card or an MCP server.`,
+    probedUrl: url,
+    latencyMs,
+  };
+}
+
+/** Protocol labels this module knows how to speak, matched loosely. */
+function isMcpProtocol(protocol: string): boolean {
+  return protocol.toLowerCase().includes("mcp");
+}
+function isA2aProtocol(protocol: string): boolean {
+  const p = protocol.toLowerCase();
+  return p.includes("a2a") || p.includes("agentcard") || p.includes("agent-card");
+}
+
 /**
  * Probes every endpoint an agent advertises until one answers.
  *
@@ -275,8 +482,15 @@ export async function probeLiveness(endpoints: readonly ProbeEndpoint[]): Promis
   const failures: string[] = [];
 
   for (const endpoint of unique.slice(0, MAX_ATTEMPTS_PER_AGENT)) {
-    const isMcp = endpoint.protocol.toLowerCase().includes("mcp");
-    const outcome = isMcp ? await probeMCP(endpoint.url) : await probeA2A(endpoint.url);
+    // Three branches, not two. A label that names neither A2A nor MCP is not
+    // assumed to be A2A - ERC-8004 lets a publisher name a service anything,
+    // so guessing A2A and then failing the response by A2A rules marks live
+    // agents dead. See probeDeclaredService.
+    const outcome = isMcpProtocol(endpoint.protocol)
+      ? await probeMCP(endpoint.url)
+      : isA2aProtocol(endpoint.protocol)
+        ? await probeA2A(endpoint.url)
+        : await probeDeclaredService(endpoint.url, endpoint.protocol);
     if (outcome.ok) {
       return {
         state: "verified-live",

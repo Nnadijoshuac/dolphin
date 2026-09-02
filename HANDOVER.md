@@ -8,11 +8,46 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 # Session addendum — 2026-09-01 (session 9: the key, the pool, and the probe)
 
+> ## ▶ START HERE: [`docs/HANDOFF_2026-09-01.md`](docs/HANDOFF_2026-09-01.md)
+>
+> If you are picking this project up cold, read that file and `AGENTS.md` and
+> nothing else. It carries the catalog's current state, every finding from this
+> session **including the one that was wrong**, the three things that are *not*
+> the bottleneck, every open lever with a size estimate, the hackathon and
+> partner-track context, the known landmines, and a ranked list of what to do
+> next. The rest of this addendum is the working detail behind it.
+
 Everything below was measured live this session against the real 8004scan API,
 the live Convex deployment, and the real third-party hosts. Where an earlier
 section disagrees, this addendum wins. Full working is in
 `docs/INGESTION_AUDIT_2.md`, `docs/PENDING_REVIEW.md` and
 `docs/PROBE_DIAGNOSIS.md`.
+
+## FINAL STATE — two probe fixes landed after the sections below were written
+
+The addendum's body was written mid-session and describes both fixes as **NOT
+YET APPLIED**. Both were subsequently approved and applied. Final numbers:
+
+```
+published        11 -> 16 (five manual vouches) -> 20 (Fix 2, auto)
+pending         108 -> 103 -> 100
+verified-live    16 -> 20
+unreachable      74 -> 36 (Fix 1) -> 32 (Fix 2)
+no-endpoint      29 -> 67 (Fix 1) -> 68
+by category      rebalancing 6, grid-trading 5, health-factor 5, yield 4
+```
+
+**Fix 1** (`c0194fb`) — templated URLs are treated as no endpoint, mirroring
+[erc8183.ts:319](convex/lib/erc8183.ts#L319). 38 candidates, 117 accumulated
+`consecutiveProbeFailures` reset to 0. Recovered zero agents by design.
+
+**Fix 2** (`09eedf4`) — `probeLiveness` gained a third dispatch branch, because
+ERC-8004 does not define a service `name` as a protocol identifier. Published
+the four AiKi agents automatically, on confidence alone, with `manualOverride:
+null` on all four. A control set caught a false positive on the first run —
+GitHub content-negotiates to `application/json`, so an `oasf` endpoint pointing
+at a README passed every rule — closed by failing reference-only labels without
+a request.
 
 **No classifier, prefilter, liveness-probe or publish-gate code was changed.**
 The only state mutations this session were **five `setManualOverride` calls** and

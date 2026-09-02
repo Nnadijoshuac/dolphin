@@ -6,6 +6,43 @@ Hackathon: BNB Chain "Build the Era," **deadline 2026-09-09**. Judged on Functio
 
 ---
 
+# Session addendum — 2026-09-02 (storage emergency)
+
+> ## ▶ START HERE: [`docs/HANDOFF_2026-09-02.md`](docs/HANDOFF_2026-09-02.md)
+>
+> Read that file and `AGENTS.md` before touching discovery, candidate indexes,
+> or the deployed diagnostic. It separates measured JSON sizes from inferred
+> Convex storage, records every mutation made during the incident, corrects the
+> original report's overclaims, and gives the safe next checks.
+
+`agentCandidates` reached 259,914 rows before remediation, of which 253,849
+(97.67%) were `rejected-prefilter`. Sampled prefilter rows averaged 1,335.01
+UTF-8 bytes under `JSON.stringify`; exact counts multiplied by sampled means
+produce ~349.4 MB of logical JSON documents. The deployment was reported around
+1.0–1.05 GB, so the gap is consistent with the table's three custom indexes,
+but physical document bytes and exact index bytes were **not measured**.
+
+The hourly discovery sweep is disabled, deployed, and committed as `098e167`.
+A sweep already running during that deploy inserted 3,077 more rows. A separate,
+explicitly authorized instrument deleted 5,000 prefilter-rejected documents,
+leaving a ledger-reported total of 257,991 at `2026-09-02T10:27:16Z`. Storage
+reclamation timing and billed deletion I/O remain **NOT PROVEN**.
+
+Most important operational warning: untracked `convex/zz_diagRowSize.ts` was
+deployed and is no longer read-only. It exposes a public, unauthenticated
+`deleteByTokenIds` mutation with no explicit lifetime row cap, plus an expensive
+public `countAll` action. The earlier owner instruction was to keep the
+diagnostic for reruns, so this addendum does not remove it; securing or removing
+and redeploying it is now an explicit owner decision. Do not call it casually,
+do not run another full-table count, and do not delete more rows without new
+authorization.
+
+Where the session-9 handoff says the discovery pipeline runs hourly, this
+addendum wins: coverage is intentionally paused until storage has real headroom
+and the pipeline no longer persists a full-width receipt for every cheap reject.
+
+---
+
 # Session addendum — 2026-09-01 (session 9: the key, the pool, and the probe)
 
 > ## ▶ START HERE: [`docs/HANDOFF_2026-09-01.md`](docs/HANDOFF_2026-09-01.md)

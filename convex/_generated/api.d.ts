@@ -36,6 +36,8 @@ import type * as protocols_pancakeswap from "../protocols/pancakeswap.js";
 import type * as protocols_types from "../protocols/types.js";
 import type * as protocols_unavailable from "../protocols/unavailable.js";
 import type * as protocols_venus from "../protocols/venus.js";
+import type * as zz_diagDryRun from "../zz_diagDryRun.js";
+import type * as zz_diagRowSize from "../zz_diagRowSize.js";
 
 import type {
   ApiFromModules,
@@ -72,6 +74,8 @@ declare const fullApi: ApiFromModules<{
   "protocols/types": typeof protocols_types;
   "protocols/unavailable": typeof protocols_unavailable;
   "protocols/venus": typeof protocols_venus;
+  zz_diagDryRun: typeof zz_diagDryRun;
+  zz_diagRowSize: typeof zz_diagRowSize;
 }>;
 
 /**

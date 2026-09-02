@@ -71,12 +71,35 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-crons.interval(
-  "discovery sweep (search + new-registration tail + resumable backfill)",
-  { hours: 1 },
-  internal.discoveryPipeline.sweep,
-  {},
-);
+// ---------------------------------------------------------------------------
+// DISABLED 2026-09-02 - STORAGE EMERGENCY, NOT A DESIGN CHANGE.
+// ---------------------------------------------------------------------------
+// agentCandidates reached 259,914 rows / 349 MB of documents, reported as
+// ~1.05 GB once index overhead is counted (Convex prices each index as another
+// copy of the table). That is over the free-plan storage limit, and `npx convex
+// dev` now prints a service-interruption warning. The table grew ~26,000 rows
+// in roughly one day, essentially all of them `rejected-prefilter` - rows the
+// pipeline writes purely to record that an agent was spam.
+//
+// The sweep is the only scheduled writer that INSERTS into agentCandidates
+// (convex/discoveryPipeline.ts:869), so it is the only one that grows the row
+// count. It is off until the table is back under the limit.
+//
+// WHAT RE-ENABLES IT: uncomment this block once agentCandidates is materially
+// below the free-plan storage ceiling AND the pipeline no longer writes a
+// full-width row for a pre-filter rejection. Re-enabling it as-is just walks
+// the deployment back over the limit at ~26k rows/day.
+//
+// Nothing else is disabled: deep evaluation, the icon pass and the directory
+// refresh all still run. Discovery coverage stops advancing while this is off -
+// that is the accepted cost, not an oversight.
+//
+// crons.interval(
+//   "discovery sweep (search + new-registration tail + resumable backfill)",
+//   { hours: 1 },
+//   internal.discoveryPipeline.sweep,
+//   {},
+// );
 
 crons.interval(
   "deep-evaluate candidates (cross-check, liveness probe, icon, publish gate)",

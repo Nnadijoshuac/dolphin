@@ -12,12 +12,16 @@ import { searchAgentsLocally } from "@/services/agents-api";
 import { useAppStore } from "@/store/use-app-store";
 import type { AgentCategory } from "@/types/agent";
 
+// Hand-picked search terms, deliberately a mix of protocols and category
+// language rather than the category list itself - the category chips below
+// already cover that, and these exist to show the search box takes either.
 const suggestedSearches = [
   "Venus",
   "PancakeSwap",
   "Liquidation",
   "Rebalancing",
   "Yield",
+  "Trading",
   "Grid trading",
 ] as const;
 

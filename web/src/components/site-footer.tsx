@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BnbLogo, BrandMark } from "@/components/brand-mark";
+import { AGENT_CATEGORIES } from "@/constants/agents";
 
 function XLogo({ size = 20 }: { size?: number }) {
   return (
@@ -30,12 +31,15 @@ function InstagramLogo({ size = 20 }: { size?: number }) {
   );
 }
 
-const browseLinks = [
-  { href: "/search?category=rebalancing", label: "Rebalancing" },
-  { href: "/search?category=grid-trading", label: "Grid trading" },
-  { href: "/search?category=health-factor", label: "Health factor" },
-  { href: "/search?category=yield", label: "Yield" },
-] as const;
+// Derived from AGENT_CATEGORIES, not hand-listed. This was four hardcoded
+// entries and silently went stale the moment a category was added - the /search
+// chips it links into were already showing one the footer didn't. Deriving it
+// also settles the casing, which had drifted ("Grid trading" here vs the
+// canonical "Grid Trading" everywhere the label comes from the constant).
+const browseLinks = AGENT_CATEGORIES.map((category) => ({
+  href: `/search?category=${category.slug}`,
+  label: category.label,
+}));
 
 const accountLinks = [
   { href: "/my-agents", label: "My agents" },

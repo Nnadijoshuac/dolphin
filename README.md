@@ -43,10 +43,12 @@ separate concepts.
 - Reown AppKit/Wagmi integration on native builds, gated by a project ID.
 - A working browser-wallet connection on the website (wagmi `injected()`), and a
   hire flow that completes there.
-- An Altana passkey smart account ("Dolphin Wallet") on both products' browser
-  targets: create, recover, live balance, scoped session grants with a visible
-  spend cap and call allowlist, and one-tap revocation from either the wallet
-  screen or the hire record. See "Wallets and authorization" below.
+- An Altana passkey smart account ("Dolphin Wallet") on every target — both
+  products' browser builds and, since `@altananetwork/sdk` 0.9.0, native iOS and
+  Android with the platform's own Face ID / fingerprint passkeys: create,
+  recover, live balance, scoped session grants with a visible spend cap and call
+  allowlist, and one-tap revocation from either the wallet screen or the hire
+  record. See "Wallets and authorization" below.
 - Device-only setup previews that are always labeled as not onchain.
 - A Convex backend (`convex/`) that reads real per-agent-wallet on-chain state
   for category live stats - see "Backend (Convex)" below.
@@ -116,13 +118,13 @@ rather than cosmetic.
 | | Connected wallet | Dolphin Wallet |
 |---|---|---|
 | What | MetaMask / WalletConnect | Altana passkey smart account |
-| Built with | wagmi `injected()` | `@altananetwork/sdk` 0.8.0 |
+| Built with | wagmi `injected()` | `@altananetwork/sdk` (0.9.0 in the Expo app, 0.8.0 on the website) |
 | Used for | identifying you on a hire record | holding a scoped session |
 | Can an agent spend from it? | **never** | only within a granted session |
-| Where | both products | browser targets only |
+| Where | both products | browser targets, plus native iOS/Android |
 
-They cannot be the same account. `@altananetwork/sdk` 0.8.0 ships exactly two
-usable signer families — private key and browser WebAuthn passkey.
+They cannot be the same account. The SDK ships exactly two usable signer
+families — private key and WebAuthn passkey.
 `signerFromInjected` appears only in the package's own doc comments and is never
 implemented or exported (verified by grepping `dist/`). So an Altana session
 cannot be granted against a wallet connected through MetaMask, and a Dolphin
@@ -212,6 +214,16 @@ without it, and the Convex mutation refuses to record an empty allowlist.
 session-granting UI were verified live in a real browser against a real
 WebAuthn ceremony on both products.
 
+**The native passkey path has not been run on a physical device.** It
+typechecks, lints, and bundles for Android, and it is built against the
+installed 0.9.0 / porto / ox sources read directly rather than against the
+prose in the changelog — but no Face ID or fingerprint prompt has been raised
+from this code, and it cannot be until the two association files described
+under "Native passkeys" are actually served. Altana say the same of their own
+side: their CI proves the `webAuthn` forwarding with mock functions and is "not
+yet exercised on physical devices", and they invite first device runs as
+verification. Treat the first device run as the verification step it is.
+
 **The on-chain enforcement itself was not observed in this build.** Dolphin's
 Altana wallets are on BSC **mainnet** (chain 56), matching every other read in
 the product, which means a session grant costs real BNB. The
@@ -231,13 +243,18 @@ ERC-8004 identity, Altana authorization, and ERC-8183 payment escrow are
 distinct. No payment or escrow is simulated. Saving a device preview does not
 start an agent.
 
-**Session granting is available on browser targets** (the website, and the
-mobile app's web export) and unavailable on a native Expo build. That split is
-not a missing feature — it is a platform fact, verified rather than assumed:
-React Native's global `navigator` is literally `{product: 'ReactNative'}` (see
-`node_modules/react-native/Libraries/Core/setUpNavigator.js`), so there is no
-`navigator.credentials` for WebAuthn to use. The native wallet screen says so
-and points at the browser, where the same passkey opens the same wallet.
+**Session granting is available on every target.** It used to be browser-only
+(the website and the mobile app's web export), and that was a platform fact
+rather than a missing feature: React Native's global `navigator` is literally
+`{product: 'ReactNative'}` (see
+`node_modules/react-native/Libraries/Core/setUpNavigator.js`), so there was no
+`navigator.credentials` for WebAuthn to use.
+
+`@altananetwork/sdk` 0.9.0 closed that gap with a `webAuthn: { createFn, getFn }`
+option, and the Expo app now implements it — see "Native passkeys" below. A
+native device that still cannot run a ceremony (Expo Go, an old OS, no
+credential provider) is detected rather than assumed, and gets the same honest
+unavailable state pointing at the browser.
 
 ERC-8004 identity, Altana authorization, and ERC-8183 payment escrow are distinct.
 No payment, escrow, session grant, or autonomous execution is simulated. Saving a
@@ -249,33 +266,61 @@ separate funded wallet - confirmed by `scripts/spike-b-auth.mjs`'s preflight
 (`Wallet equals signer EOA: true`). The actual blocker is signer availability, not
 custody - see `project-scope.md` §6 for the full writeup.
 
-**React Native passkey path (evaluated, not pursued):** the only non-custodial
-signer path this SDK version supports is browser-only WebAuthn
-(`createPasskey` throws outside a browser). A React Native passkey library could
-in principle drive the platform Credential Manager APIs and be reshaped into
-Altana's `PasskeyCredential` format, but none of the available RN passkey
-libraries publicly document their public-key encoding (needed to confirm
-compatibility with Altana's flat P256 `x || y` format), and passkeys separately
-require a verified domain hosting `apple-app-site-association`/`assetlinks.json`,
-which this project doesn't have.
+### Native passkeys
 
-That conclusion still stands for a **native** build. What changed is that it
-turned out not to matter for the surface people actually reach: the mobile
-app's public build is its **web export**, which runs in a browser where
-WebAuthn is available, so the Dolphin Wallet works there in full. The native
-target renders an honest unavailable state pointing at the browser. See
-"Wallets and authorization" above.
+**Previously evaluated and not pursued; now implemented.** The earlier writeup
+here concluded that a native Dolphin Wallet was out of reach, on three grounds:
+the SDK's only non-custodial signer was browser-only WebAuthn (`createPasskey`
+threw outside a browser), no React Native passkey library documented its
+public-key encoding well enough to confirm compatibility with Altana's flat
+P256 `x || y` format, and platform passkeys separately require a verified
+domain. The first ground is gone, the second turned out to be tractable, and
+the third still stands and is now a deployment task rather than a blocker.
 
-**Bundling note, measured rather than assumed.** The Altana SDK is kept out of
-the native bundle entirely. Two things were needed, and each was verified with
-a real `expo export`: the platform-router pattern used by
-`src/wallet/wallet-provider.ts` makes Metro ship *both* platform modules to
-*both* targets, so the Altana wallet uses Metro's own platform resolution plus
-a `.d.ts` instead (no `tsconfig` change needed); and `altana-policy.ts` must
-import nothing from the SDK, because the package root is a barrel and importing
-one chain id from it dragged the whole tree in. After both, the Android bundle
-contains zero references to `createPasskeyWallet` or the Altana relay, and the
-web bundle contains them.
+`@altananetwork/sdk` **0.9.0** added a `webAuthn: { createFn, getFn }` option to
+`createPasskey`, `createPasskeyWallet`, `recoverFromPasskey` and
+`signerFromPasskey`, and forwards it into porto everywhere WebAuthn is touched —
+creation, recovery, and every signature. Dolphin implements it in:
+
+| File | Role |
+|---|---|
+| `src/wallet/altana-passkey-native.ts` | The bridge. Translates between ox/porto's ArrayBuffer WebAuthn objects and `react-native-passkeys`' base64url JSON, in both directions. |
+| `src/wallet/altana-rp-id.ts` | The relying-party id, and what has to be hosted for the OS to honour it. |
+| `src/wallet/altana-provider.native.tsx` | Was a stub that threw on every method; now a real provider mirroring the web one. |
+
+Two things in the bridge are worth knowing before touching it:
+
+- **There is no `crypto.subtle` in this runtime.** `expo-crypto` ships only
+  `getRandomValues` and digest, `react-native-get-random-values` polyfills only
+  `getRandomValues`, and `@walletconnect/react-native-compat` installs no
+  SubtleCrypto — all three checked in `node_modules`, not assumed. ox's primary
+  public-key path needs it, so the bridge routes credential creation to ox's
+  pure-JS `attestationObject` fallback instead, and **cross-checks the key that
+  fallback produces against the DER SubjectPublicKeyInfo** the library returns.
+  A byte-scan that matched the wrong offset would otherwise create a wallet
+  around a key nobody holds, silently.
+- **`userHandle` is mandatory.** `recoverFromPasskey` reads the 20-byte wallet
+  address straight out of the assertion's `userHandle`, so the bridge must
+  return it.
+
+**Still required, and not satisfiable from this repo:** iOS and Android only run
+a ceremony for a domain the app has proved it owns. That needs
+`/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`
+served over HTTPS from the relying-party host, matching the
+`ios.associatedDomains` entry in `app.json`. `src/wallet/altana-rp-id.ts` has
+the exact file contents. Until they are served, the OS declines and the app
+surfaces that refusal rather than pretending otherwise.
+
+**Bundling note, now superseded.** The Altana SDK used to be kept out of the
+native bundle entirely, and two measured findings made that work: the
+platform-router pattern used by `src/wallet/wallet-provider.ts` makes Metro ship
+*both* platform modules to *both* targets, so the Altana wallet uses Metro's own
+platform resolution plus a `.d.ts` instead (no `tsconfig` change needed); and
+`altana-policy.ts` imports nothing from the SDK, because the package root is a
+barrel and importing one chain id from it dragged the whole tree in. Both
+patterns are still in place and still worth keeping — but the *goal* has
+changed. Native now uses the SDK for real, so finding `createPasskeyWallet` in
+the Android bundle is expected, not a regression.
 
 ### Spike B testnet probe
 

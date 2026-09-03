@@ -137,17 +137,26 @@ export const ALTANA_WALLET_LABEL = "Dolphin";
 /**
  * Deliberately plain data, NOT the SDK's `BNB` NetworkConfig object.
  *
- * This module is imported by the native Expo target, which cannot use the
- * Altana SDK at all. Importing `BNB` here would be a runtime import from the
- * package root, and because that root is a barrel it drags the whole SDK -
- * porto, ox and all - into the native bundle to reach one chain id. Measured:
- * with `BNB` imported here, `expo export --platform android` shipped
- * createPasskeyWallet and the Altana relay URL into the Android bundle even
- * though no native code path can call them. Keeping this file free of SDK
- * imports is what actually keeps the SDK out of that bundle.
+ * ORIGINALLY this was about bundle size: the native Expo target could not use
+ * the Altana SDK at all, and importing `BNB` here — a runtime import from a
+ * barrel root — dragged the whole SDK, porto and ox included, into the Android
+ * bundle to reach one chain id. That was measured, not assumed: with `BNB`
+ * imported here, `expo export --platform android` shipped createPasskeyWallet
+ * and the Altana relay URL to a platform that could never call them.
  *
- * The providers that CAN use the SDK import its `BNB` config themselves and
- * assert it agrees with the id below, so the two cannot silently diverge.
+ * THAT REASON EXPIRED at @altananetwork/sdk 0.9.0, which added the `webAuthn`
+ * option that lets a native build hold a real passkey wallet. The SDK is now a
+ * genuine native dependency, so keeping it out of that bundle is no longer a
+ * goal and finding it there is no longer a regression.
+ *
+ * The rule survives on a better reason. This file is the one place that says
+ * what Dolphin is willing to authorize, it is hand-mirrored across two products
+ * that share no node_modules, and one of those products may sit on a different
+ * SDK version than the other at any moment. A plain integer means the same
+ * thing in both regardless; an imported config object silently would not.
+ *
+ * The providers that use the SDK import its `BNB` config themselves and assert
+ * it agrees with the id below, so the two cannot silently diverge.
  */
 export const ALTANA_CHAIN_ID = 56;
 

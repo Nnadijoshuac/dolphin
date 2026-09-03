@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
-import { Redirect, Tabs } from "expo-router";
+import { Redirect } from "expo-router";
+// SDK 57: expo-router forked the React Navigation packages it wraps, so
+// @react-navigation/bottom-tabs is no longer installed. Both the Tabs
+// navigator and its tab-bar prop types now come from expo-router/js-tabs -
+// the root `Tabs` export is deprecated in favour of this subpath.
+import { Tabs, type BottomTabBarProps } from "expo-router/js-tabs";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import * as Haptics from "expo-haptics";
 
 import { CategoryGlyph } from "@/components/category-glyph";

@@ -1,4 +1,3 @@
-import { create, get, isSupported } from "react-native-passkeys";
 import type { PasskeyWebAuthnFns } from "@altananetwork/sdk";
 
 /**
@@ -215,6 +214,60 @@ function hasSubtleCrypto(): boolean {
   return typeof globalThis.crypto?.subtle?.importKey === "function";
 }
 
+/* --- loading the passkey library -----------------------------------------
+ *
+ * DO NOT TURN THIS BACK INTO A STATIC `import ... from "react-native-passkeys"`.
+ * It was one, and it took the whole app down on Expo Go.
+ *
+ * react-native-passkeys calls `requireNativeModule("ReactNativePasskeys")` at
+ * MODULE SCOPE (build/ReactNativePasskeysModule.js line 5), so merely importing
+ * it throws `Cannot find native module 'ReactNativePasskeys'` wherever the
+ * native side is not linked - Expo Go being the obvious case. A static import
+ * makes that throw before any code here runs, which meant
+ * `nativePasskeysSupported()` never got the chance to answer "no": the module
+ * failed to evaluate, so altana-provider.native.tsx failed, so
+ * app-providers.tsx failed, so _layout.tsx had no default export and expo-router
+ * crashed on `Cannot read property 'ErrorBoundary' of undefined`. A missing
+ * optional native module took out every route in the app.
+ *
+ * Requiring it lazily behind a try/catch turns that into what it should always
+ * have been: one honest "this device cannot create a passkey" card on the
+ * wallet screen, and an app that runs. Metro still bundles the module (the
+ * specifier is a literal), so a real dev build picks it up normally.
+ * ------------------------------------------------------------------------ */
+
+type PasskeyLib = {
+  isSupported: () => boolean;
+  create: typeof import("react-native-passkeys").create;
+  get: typeof import("react-native-passkeys").get;
+};
+
+/** `undefined` = not tried yet, `null` = tried and unavailable. */
+let libCache: PasskeyLib | null | undefined;
+
+function passkeyLib(): PasskeyLib | null {
+  if (libCache !== undefined) return libCache;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    libCache = require("react-native-passkeys") as PasskeyLib;
+  } catch {
+    libCache = null;
+  }
+  return libCache;
+}
+
+const PASSKEY_MODULE_MISSING =
+  "This build has no passkey module linked, so Dolphin cannot reach this " +
+  "device's Face ID or fingerprint. A development build is required - Expo Go " +
+  "cannot load it.";
+
+/** For the two call sites that genuinely need the library rather than a probe. */
+function requirePasskeyLib(): PasskeyLib {
+  const lib = passkeyLib();
+  if (!lib) throw new Error(PASSKEY_MODULE_MISSING);
+  return lib;
+}
+
 /* --- the adapter ---------------------------------------------------------- */
 
 type CredentialDescriptorJSON = {
@@ -252,7 +305,7 @@ const createFn: NonNullable<PasskeyWebAuthnFns["createFn"]> = async (options) =>
     throw new Error("Passkey bridge: credential creation was asked for with no options.");
   }
 
-  const created = await create({
+  const created = await requirePasskeyLib().create({
     rp: request.rp,
     user: {
       id: toBase64Url(asBytes(request.user.id)),
@@ -275,7 +328,7 @@ const createFn: NonNullable<PasskeyWebAuthnFns["createFn"]> = async (options) =>
     ...(request.extensions?.credProps === undefined
       ? {}
       : { extensions: { credProps: request.extensions.credProps } }),
-  } as Parameters<typeof create>[0]);
+  } as Parameters<PasskeyLib["create"]>[0]);
 
   // Null is the user cancelling the Face ID / fingerprint sheet. ox turns this
   // into its own CredentialCreationFailedError; do not dress it up as worse.
@@ -332,7 +385,7 @@ const getFn: NonNullable<PasskeyWebAuthnFns["getFn"]> = async (options) => {
     );
   }
 
-  const assertion = await get({
+  const assertion = await requirePasskeyLib().get({
     challenge: toBase64Url(asBytes(request.challenge)),
     rpId: request.rpId,
     ...(descriptorsToJson(request.allowCredentials) === undefined
@@ -342,7 +395,7 @@ const getFn: NonNullable<PasskeyWebAuthnFns["getFn"]> = async (options) => {
       ? {}
       : { userVerification: request.userVerification }),
     ...(request.timeout === undefined ? {} : { timeout: request.timeout }),
-  } as Parameters<typeof get>[0]);
+  } as Parameters<PasskeyLib["get"]>[0]);
 
   if (!assertion) return null;
 
@@ -370,14 +423,18 @@ export const nativeWebAuthn: PasskeyWebAuthnFns = { createFn, getFn };
 /**
  * Whether this device can run a passkey ceremony at all.
  *
- * Read from the library rather than inferred from the platform: it returns
- * false on Expo Go (no native module linked), on iOS below 15.0 and on Android
- * without a credential provider - all cases where Dolphin must say so rather
- * than offer a button that throws.
+ * Two distinct "no"s, both of which must be answers rather than crashes:
+ * the module is not linked into this build (Expo Go), or it is linked and the
+ * device itself cannot oblige (iOS below 15, no Android credential provider).
+ * The first is why `passkeyLib()` exists; the second is what `isSupported()`
+ * reports. Either way Dolphin says so on the wallet screen instead of offering
+ * a button that throws.
  */
 export function nativePasskeysSupported(): boolean {
+  const lib = passkeyLib();
+  if (!lib) return false;
   try {
-    return isSupported();
+    return lib.isSupported();
   } catch {
     return false;
   }

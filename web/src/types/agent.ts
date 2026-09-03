@@ -13,7 +13,8 @@ export type AgentCategory =
   | "rebalancing"
   | "grid-trading"
   | "health-factor"
-  | "yield";
+  | "yield"
+  | "trading";
 
 export type LiveMetricStatus =
   | "syncing"
@@ -126,12 +127,32 @@ export interface YieldLiveStats {
   rebalanceFrequency: LiveMetric<string>;
 }
 
+/**
+ * Discretionary or systematic trading: an agent that plans or executes trades
+ * on crypto markets for a user - signal generation, entry/exit, execution.
+ *
+ * Deliberately distinct from the three trade-adjacent categories that already
+ * exist. GridTradingLiveStats is one specific strategy (a fixed price ladder),
+ * RebalancingLiveStats is LP-range management, and YieldLiveStats is farming.
+ * A trading agent is not committed to any of those shapes, so its metrics are
+ * about the trades themselves rather than about a range or a venue.
+ */
+export interface TradingLiveStats {
+  category: "trading";
+  winRate: LiveMetric<number>;
+  tradesExecuted: LiveMetric<number>;
+  realizedPnl: LiveMetric<string>;
+  marketsTraded: LiveMetric<string[]>;
+  trackRecordPeriod: LiveMetric<string>;
+}
+
 export type AgentLiveStats =
   | MonitoringLiveStats
   | RebalancingLiveStats
   | GridTradingLiveStats
   | HealthFactorLiveStats
-  | YieldLiveStats;
+  | YieldLiveStats
+  | TradingLiveStats;
 
 export interface AgentPerformancePoint {
   timestamp: string;

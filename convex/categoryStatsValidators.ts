@@ -49,12 +49,22 @@ export const yieldStatsValidator = v.object({
   rebalanceFrequency: liveMetric(v.string()),
 });
 
+export const tradingStatsValidator = v.object({
+  category: v.literal("trading"),
+  winRate: liveMetric(v.number()),
+  tradesExecuted: liveMetric(v.number()),
+  realizedPnl: liveMetric(v.string()),
+  marketsTraded: liveMetric(v.array(v.string())),
+  trackRecordPeriod: liveMetric(v.string()),
+});
+
 export const agentLiveStatsValidator = v.union(
   monitoringStatsValidator,
   rebalancingStatsValidator,
   gridTradingStatsValidator,
   healthFactorStatsValidator,
   yieldStatsValidator,
+  tradingStatsValidator,
 );
 
 export const agentCategoryValidator = v.union(
@@ -63,4 +73,5 @@ export const agentCategoryValidator = v.union(
   v.literal("grid-trading"),
   v.literal("health-factor"),
   v.literal("yield"),
+  v.literal("trading"),
 );

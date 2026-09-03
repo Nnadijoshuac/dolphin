@@ -32,12 +32,12 @@ function RootNavigator() {
   // onFinishHydration before we subscribed, and the state stayed false.
   // useSyncExternalStore re-reads the snapshot after subscribing, so it cannot
   // miss that transition.
+
   const hasHydrated = useSyncExternalStore(
     (onStoreChange) => useAppStore.persist.onFinishHydration(onStoreChange),
     () => useAppStore.persist.hasHydrated(),
     () => useAppStore.persist.hasHydrated(),
   );
-
 
   useEffect(() => {
     if (hasHydrated) {

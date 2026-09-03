@@ -19,18 +19,25 @@ export const ERC8004_REGISTRY_ADDRESSES = {
   reputation: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63" as Address,
 } as const;
 
-// The four categories graded by the hackathon's Agent Diversity rubric.
+// The categories the marketplace browses. The first four are the ones graded
+// by the hackathon's Agent Diversity rubric; "trading" is an additional
+// Dolphin category, not a fifth graded one - the registry has a real
+// population of general trading agents that none of the other four describe,
+// and force-fitting them into grid-trading would have been the same
+// substance-wrong mistake the 2026-08-28 taxonomy audit corrected.
+//
 // "monitoring" stays a valid AgentCategory (Wallet Watch's data and hire
 // record are real and unbroken) but is deliberately excluded from this
 // enumerated list - see project-scope.md's category taxonomy notes. It is
-// never presented as one of the four graded categories, so it does not
-// appear in Discover/Search/onboarding's category browsing surfaces, which
-// all iterate over this list.
+// never presented as one of the graded categories, so it does not appear in
+// Discover/Search/onboarding's category browsing surfaces, which all iterate
+// over this list.
 export const AGENT_CATEGORY_SLUGS = [
   "rebalancing",
   "grid-trading",
   "health-factor",
   "yield",
+  "trading",
 ] as const satisfies readonly AgentCategory[];
 
 export const AGENT_CATEGORIES: readonly {
@@ -57,6 +64,11 @@ export const AGENT_CATEGORIES: readonly {
     slug: "yield",
     label: "Yield",
     description: "Yield agents and their available protocol and performance sources.",
+  },
+  {
+    slug: "trading",
+    label: "Trading",
+    description: "Agents that plan or execute trades, and the track-record evidence they publish.",
   },
 ];
 

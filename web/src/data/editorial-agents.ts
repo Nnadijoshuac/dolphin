@@ -85,6 +85,15 @@ export function unavailableLiveStats(category: AgentCategory): AgentLiveStats {
         protocolsUsed: unavailableMetric<string[]>(METRICS_NOT_PUBLISHED),
         rebalanceFrequency: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
       };
+    case "trading":
+      return {
+        category,
+        winRate: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
+        tradesExecuted: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
+        realizedPnl: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
+        marketsTraded: unavailableMetric<string[]>(METRICS_NOT_PUBLISHED),
+        trackRecordPeriod: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
+      };
   }
 }
 

@@ -32,7 +32,8 @@ export type AgentCategory =
   | "rebalancing"
   | "grid-trading"
   | "health-factor"
-  | "yield";
+  | "yield"
+  | "trading";
 
 export interface DataSourceLabel {
   id: string;
@@ -43,7 +44,13 @@ export interface DataSourceLabel {
 export const ERC8004_IDENTITY_REGISTRY =
   "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
 
-// The four categories graded by the hackathon's Agent Diversity rubric.
+// The categories the marketplace browses. The first four are the ones graded
+// by the hackathon's Agent Diversity rubric; "trading" is an additional
+// Dolphin category, not a fifth graded one - the registry has a real
+// population of general trading agents that none of the other four describe,
+// and force-fitting them into grid-trading would have been the same
+// substance-wrong mistake the 2026-08-28 taxonomy audit corrected.
+//
 // "monitoring" stays a valid AgentCategory (Wallet Watch's data and hire
 // record are real and unbroken) but is deliberately excluded from this
 // enumerated list - see project-scope.md's category taxonomy notes. Mirrors
@@ -53,6 +60,7 @@ export const AGENT_CATEGORY_SLUGS: readonly AgentCategory[] = [
   "grid-trading",
   "health-factor",
   "yield",
+  "trading",
 ];
 
 export const AGENT_CATEGORIES: readonly {
@@ -82,6 +90,12 @@ export const AGENT_CATEGORIES: readonly {
     label: "Yield",
     description:
       "Yield agents and their available protocol and performance sources.",
+  },
+  {
+    slug: "trading",
+    label: "Trading",
+    description:
+      "Agents that plan or execute trades, and the track-record evidence they publish.",
   },
 ];
 
@@ -245,6 +259,15 @@ export function unavailableLiveStats(category: AgentCategory) {
         tvlManagedUsd: m(),
         protocolsUsed: m(),
         rebalanceFrequency: m(),
+      };
+    case "trading":
+      return {
+        category,
+        winRate: m(),
+        tradesExecuted: m(),
+        realizedPnl: m(),
+        marketsTraded: m(),
+        trackRecordPeriod: m(),
       };
   }
 }

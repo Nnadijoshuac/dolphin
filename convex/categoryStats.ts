@@ -6,7 +6,11 @@ import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { agentCategoryValidator, agentLiveStatsValidator } from "./categoryStatsValidators";
 import { readYieldStats } from "./protocols/aave";
 import { readRebalancingStats } from "./protocols/pancakeswap";
-import { unavailableGridTradingStats, unavailableMonitoringStats } from "./protocols/unavailable";
+import {
+  unavailableGridTradingStats,
+  unavailableMonitoringStats,
+  unavailableTradingStats,
+} from "./protocols/unavailable";
 import { readHealthFactorStats } from "./protocols/venus";
 
 export const getAgentCategoryStats = query({
@@ -75,6 +79,8 @@ export const refreshAgentCategoryStats = action({
           return readRebalancingStats(agentWallet, checkedAt);
         case "grid-trading":
           return unavailableGridTradingStats(checkedAt);
+        case "trading":
+          return unavailableTradingStats(checkedAt);
         case "monitoring":
           return unavailableMonitoringStats(checkedAt);
         case "yield":

@@ -13,11 +13,15 @@ export const ERC8004_REGISTRY_ADDRESSES = {
   reputation: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63" as Address,
 } as const;
 
+// Mirrors AGENT_CATEGORY_SLUGS in src/constants/agents.ts, where the reasoning
+// for each entry lives. "trading" is an additional Dolphin category, not a
+// fifth hackathon-graded one.
 export const AGENT_CATEGORY_SLUGS = [
   "rebalancing",
   "grid-trading",
   "health-factor",
   "yield",
+  "trading",
 ] as const satisfies readonly AgentCategory[];
 
 export const AGENT_CATEGORIES: readonly {
@@ -47,6 +51,12 @@ export const AGENT_CATEGORIES: readonly {
     label: "Yield",
     description:
       "Yield agents and their available protocol and performance sources.",
+  },
+  {
+    slug: "trading",
+    label: "Trading",
+    description:
+      "Agents that plan or execute trades, and the track-record evidence they publish.",
   },
 ];
 

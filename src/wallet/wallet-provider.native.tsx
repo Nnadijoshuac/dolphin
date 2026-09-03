@@ -1,16 +1,25 @@
 // Must be the very first import: WalletConnect's crypto (key generation,
 // relay-payload encryption) calls crypto.getRandomValues(), which RN has
-// no native implementation of. Neither @walletconnect/react-native-compat
-// (installs EventEmitter/TextEncoder/URL polyfills only - checked its
-// package.json, it doesn't depend on this) nor wagmi/viem/@reown's
-// packages polyfill this themselves - confirmed empty grep for
-// "react-native-get-random-values" across their source. Without it,
-// WalletConnect silently fails to publish relay messages ("Failed to
-// publish custom payload, please try again") rather than throwing a
-// clear error about the missing polyfill.
+// no native implementation of.
 import "react-native-get-random-values";
-// This compatibility layer installs required React Native globals before Reown loads.
-import "@walletconnect/react-native-compat";
+
+// We purposefully do NOT use @walletconnect/react-native-compat here because
+// it imports react-native-url-polyfill, which BREAKS WebSockets in React Native 0.74+ (Expo 51+).
+// Instead, we manually polyfill only what WalletConnect strictly needs.
+import { Buffer } from "buffer";
+if (typeof global.Buffer === "undefined") {
+  global.Buffer = Buffer;
+}
+if (typeof global.btoa === "undefined") {
+  global.btoa = (str: string) => Buffer.alloc(str.length, str, "binary").toString("base64");
+}
+if (typeof global.atob === "undefined") {
+  global.atob = (b64: string) => Buffer.from(b64, "base64").toString("binary");
+}
+
+// WalletConnect registers many listeners; increase the limit to prevent the MaxListenersExceededWarning
+import { EventEmitter } from "events";
+EventEmitter.defaultMaxListeners = 1000;
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {

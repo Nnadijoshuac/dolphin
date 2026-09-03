@@ -40,7 +40,13 @@
       "expo-video",
       "expo-font",
       "expo-image",
-      "expo-status-bar",
+      [
+        "expo-status-bar",
+        {
+          "hidden": false,
+          "style": "dark"
+        }
+      ],
       "expo-web-browser"
     ],
     "experiments": {

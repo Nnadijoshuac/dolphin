@@ -35,7 +35,7 @@ function RootNavigator() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar hidden={false} style="dark" />
       <Stack
         screenOptions={{
           animation: "slide_from_right",

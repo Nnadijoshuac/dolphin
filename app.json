@@ -11,7 +11,10 @@
     "ios": {
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.nnadijoshuac.dolphin",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "associatedDomains": [
+        "webcredentials:nnadijoshuac.github.io"
+      ]
     },
     "android": {
       "package": "com.nnadijoshuac.dolphin",

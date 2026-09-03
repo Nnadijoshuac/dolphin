@@ -1,6 +1,7 @@
 import "../../global.css";
 
 import { useEffect, useSyncExternalStore } from "react";
+import { View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -36,7 +37,17 @@ function RootNavigator() {
   }, [hasHydrated]);
 
   return (
-    <>
+    // Edge-to-edge is mandatory from SDK 55, so the status bar is transparent
+    // and the app draws underneath it. Anything the app does not paint there
+    // falls through to the host window's decor background, which is black in
+    // Expo Go - that is what showed above the header.
+    //
+    // SystemUI.setBackgroundColorAsync above targets the activity's root view,
+    // which Expo Go owns, so it cannot be relied on there. This view is the
+    // app's own full-window surface: it spans the whole window including the
+    // status bar strip, and every screen's SafeAreaView still insets its
+    // content below the bar as before.
+    <View style={{ backgroundColor: colors.canvas, flex: 1 }}>
       <StatusBar hidden={false} style="dark" />
       <Stack
         screenOptions={{
@@ -56,7 +67,7 @@ function RootNavigator() {
         <Stack.Screen name="manage/[id]" />
       </Stack>
       <SplashScreenView />
-    </>
+    </View>
   );
 }
 

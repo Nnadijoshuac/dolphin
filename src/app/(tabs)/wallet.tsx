@@ -154,10 +154,27 @@ export default function WalletScreen() {
 
       <ScrollView
         className="flex-1"
+        /*
+         * flexGrow + centred, rather than the top-aligned stack this was.
+         *
+         * Removing the Dolphin Wallet card took roughly half the screen's
+         * content with it, and what remained stayed pinned under the header
+         * with a large void beneath - the content read as "too high" because
+         * it was, relative to the space it now had.
+         *
+         * flexGrow: 1 lets the container fill the viewport so justifyContent
+         * has something to centre within, and it still scrolls normally if the
+         * content ever outgrows the screen (a small device, or large system
+         * font). paddingBottom clears the floating tab bar, which is
+         * position: absolute at ~90px from the bottom (see (tabs)/_layout.tsx),
+         * so the block centres in the visible area rather than behind it.
+         */
         contentContainerStyle={{
           alignItems: "center",
+          flexGrow: 1,
+          justifyContent: "center",
           paddingBottom: 110,
-          paddingTop: 4,
+          paddingTop: 8,
         }}
         showsVerticalScrollIndicator={false}
       >
@@ -165,9 +182,13 @@ export default function WalletScreen() {
           className="w-full px-6"
           style={{ maxWidth: contentWidth }}
         >
-          {/* Hero 3D Wallet graphic */}
+          {/* Hero 3D Wallet graphic.
+              Was "py-4 my-2": 32px of vertical padding inside a fixed 190px box
+              already holding a 170px image, so the padding could not apply and
+              the 8px margin left an uneven gap. One explicit mb-6 instead, so
+              hero -> heading and heading -> button are the same 24px. */}
           <View
-            className="items-center justify-center py-4 my-2"
+            className="items-center justify-center mb-6"
             style={{
               height: 190,
               width: "100%",
@@ -232,7 +253,9 @@ export default function WalletScreen() {
               justifyContent: "center",
               gap: 8,
               height: 52,
-              marginBottom: 24,
+              // No marginBottom: this is the last element now, so a trailing
+              // margin would only shift the centred block up off-centre. It
+              // existed to separate the button from the section below it.
               paddingHorizontal: 20,
               width: "100%",
               ...shadows.goldGlow,

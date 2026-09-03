@@ -2,9 +2,9 @@
  * STAGE 2 of the discovery pipeline: the classifier.
  *
  * Decides two things about a candidate that survived convex/lib/prefilter.ts:
- * is this a real, single-purpose service agent, and if so which ONE of the four
- * graded categories is it actually about. Returning `null` is a first-class
- * answer - an agent that does not clearly belong in one of the four is excluded,
+ * is this a real, single-purpose service agent, and if so which ONE of the
+ * browsable categories is it actually about. Returning `null` is a first-class
+ * answer - an agent that does not clearly belong in one of them is excluded,
  * never force-fitted, the same principle the Grid Trading taxonomy split already
  * established.
  *
@@ -152,6 +152,29 @@ const CATEGORY_TERMS: Record<AgentCategory, TermTiers> = {
     supporting: ["farming strateg", "staking reward", "compounding reward", "deposit limit", "erc-4626", "erc4626", "vault compatib", "harvest"],
     weak: ["yield", "vault", "apy", "apr", "farming", "staking", "earn"],
   },
+  // Trading, as defined for this marketplace: an agent that plans or executes
+  // discretionary or systematic trades - signal generation, entry/exit,
+  // execution. Explicitly NOT the three trade-adjacent categories above
+  // (grid-trading = ladder strategies, rebalancing = LP-range management,
+  // yield = farming), and NOT prediction/sports/geopolitical forecasting.
+  //
+  // These tiers were scored against real registry rows before being committed,
+  // the same bar every other list here was held to - the read-only dry run is
+  // Agent/scratch/convex/zz_diagDryRun.ts, which re-implemented this scorer so
+  // the proposal could be measured without touching the pipeline.
+  trading: {
+    defining: [
+      "trading strategy", "trading strateg", "algorithmic trading", "systematic trading",
+      "trade execution", "executes trades", "entry and exit", "stop loss", "stop-loss",
+      "take profit", "limit order", "dollar-cost aver", "dca strategy", "position sizing",
+      "trading signal", "momentum trading", "trend following",
+    ],
+    supporting: [
+      "backtest", "order book", "twap", "vwap", "slippage control", "risk cap",
+      "win rate", "market data", "buy and sell",
+    ],
+    weak: ["trading", "trade", "momentum", "signal"],
+  },
 };
 
 const WEIGHT = {
@@ -170,11 +193,18 @@ const MAX_WEAK_HITS_COUNTED = 3;
  * ------------------------------------------------------------------------ */
 
 /**
- * Capabilities that belong to neither of the four categories. An agent naming
- * several of these is a general-purpose "does everything" agent that happens to
+ * Capabilities that belong to none of the categories. An agent naming several
+ * of these is a general-purpose "does everything" agent that happens to
  * mention one category in passing - which is exactly what both entries in the
  * manual exclusion denylist turned out to be, and exactly the false positive
  * this classifier has to catch on its own rather than by being told the answer.
+ *
+ * Left unchanged when `trading` was added, deliberately. "arbitrage",
+ * "copy trading" and "perp" read as trade-adjacent and it is tempting to drop
+ * them now, but the trading term tiers above were measured against real rows
+ * with this list exactly as it stands, and the penalty only fires at two or
+ * more hits. Removing an entry would invalidate that measurement, so it is a
+ * separate change with its own dry run.
  */
 const OFF_DOMAIN_CAPABILITIES: readonly string[] = [
   "bridge", "perp", "prediction market", "launch token", "token launch",
@@ -305,7 +335,7 @@ export function scoreAgent(
   if (offDomain.length >= 2) {
     penalties.push({
       amount: -4 * offDomain.length,
-      detail: `names ${offDomain.length} capabilities outside all four categories (${offDomain.slice(0, 6).join(", ")})`,
+      detail: `names ${offDomain.length} capabilities outside every category (${offDomain.slice(0, 6).join(", ")})`,
     });
   }
 
@@ -330,7 +360,7 @@ export function scoreAgent(
   if (ranked.length === 0) {
     return {
       category: null, confidence: null, score: 0, runnerUp: null, signals, penalties,
-      rejectionReason: "No term from any of the four graded categories appeared in the name, description, or the agent's own registration file.",
+      rejectionReason: "No term from any browsable category appeared in the name, description, or the agent's own registration file.",
     };
   }
 
@@ -341,12 +371,13 @@ export function scoreAgent(
 
   const base = { score: adjusted, runnerUp: runnerUpResult, signals, penalties };
 
-  // Recognised, but not one of the four the marketplace grades. Excluding it is
-  // the honest outcome and is exactly why `monitoring` stays classifiable.
+  // Recognised, but not one of the categories the marketplace browses.
+  // Excluding it is the honest outcome and is exactly why `monitoring` stays
+  // classifiable.
   if (winner[0] === "monitoring") {
     return {
       ...base, category: null, confidence: null,
-      rejectionReason: "Reads as a wallet/position monitoring agent, which is deliberately not one of the four graded categories.",
+      rejectionReason: "Reads as a wallet/position monitoring agent, which is deliberately not one of the browsable categories.",
     };
   }
 

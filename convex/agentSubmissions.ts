@@ -183,7 +183,7 @@ export const submitAgent = mutation({
       registryAddress,
       state: "under-review" as SubmissionState,
       reason:
-        "Under review. Dolphin is now reading this agent's own registration file, classifying it, and calling its advertised endpoint to confirm it responds. It appears in the catalog only if it lands in one of the four graded categories with a confirmed classification and a live endpoint.",
+        "Under review. Dolphin is now reading this agent's own registration file, classifying it, and calling its advertised endpoint to confirm it responds. It appears in the catalog only if it lands in one of the browsable categories with a confirmed classification and a live endpoint.",
       checkStatusWith: "agentSubmissions.getSubmissionStatus",
     };
   },

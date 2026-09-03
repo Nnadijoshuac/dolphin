@@ -42,7 +42,7 @@ import type { LivenessState } from "./liveness";
 export type CandidateStatus =
   /** Dropped by the cheap pre-filter. Never deep-evaluated. */
   | "rejected-prefilter"
-  /** Deep-evaluated and found not to be a single-purpose agent in the four. */
+  /** Deep-evaluated and found not to be a single-purpose agent in any category. */
   | "rejected-classifier"
   /** Plausible, recorded in full, deliberately NOT public yet. */
   | "pending"
@@ -132,7 +132,7 @@ export function resolveStatus(input: StatusInput): StatusDecision {
   if (input.category === null) {
     return {
       status: "rejected-classifier",
-      reason: "The classifier did not place this agent in any of the four graded categories.",
+      reason: "The classifier did not place this agent in any browsable category.",
     };
   }
 
@@ -185,7 +185,7 @@ export function resolveStatus(input: StatusInput): StatusDecision {
   return {
     status: "published",
     reason:
-      "Classified `confirmed` into one of the four graded categories, and its own advertised endpoint answered a protocol-appropriate probe.",
+      "Classified `confirmed` into a browsable category, and its own advertised endpoint answered a protocol-appropriate probe.",
   };
 }
 

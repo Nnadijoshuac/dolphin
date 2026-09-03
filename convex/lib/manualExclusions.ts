@@ -13,7 +13,7 @@
  *
  * WHY THIS SURVIVES THE AUTOMATED CLASSIFIER. The new scorer is specifically
  * designed to catch this failure mode on its own - it penalises agents that
- * name capabilities outside all four categories and agents that read as a
+ * name capabilities outside every category and agents that read as a
  * general-purpose capability catalogue - and it does catch both entries below
  * unaided (verified this session, without being told the answer). The list is
  * kept anyway because no classifier is right every time, and a marketplace that

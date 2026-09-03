@@ -120,7 +120,7 @@ const DEFAULT_NAME = /^agent\s*#?\s*\d+$/i;
 /**
  * The topical gate. Deliberately far wider than the scoring vocabulary: this
  * asks only "could this text possibly be about on-chain finance", and every one
- * of Dolphin's four categories is unimaginable without at least one of these
+ * of Dolphin's categories is unimaginable without at least one of these
  * appearing somewhere in the name or description.
  *
  * Substrings, not words, so "rebalanc" catches rebalance/rebalancer/rebalancing
@@ -134,13 +134,19 @@ const DEFI_VOCABULARY: readonly string[] = [
   "rebalanc", "range", "reposition", "position manager",
   // grid
   "grid", "ladder", "price wall", "buy and sell",
+  // trading
+  "trade", "trading", "stop loss", "stop-loss", "take profit", "limit order",
+  "entry and exit", "backtest", "twap", "vwap", "order book", "position sizing",
+  // "dollar-cost", not a bare "dca": these are substrings, and "broadcast"
+  // contains "dca".
+  "dollar-cost", "dca strategy",
   // lending / risk
   "lend", "borrow", "collateral", "liquidat", "health factor", "ltv",
   "loan-to-value", "loan to value", "debt", "leverage", "margin",
   // yield
   "yield", "apy", "apr", "farm", "vault", "compound", "stak", "reward",
   "earn", "interest rate",
-  // protocols named in the four categories' data sources
+  // protocols named in the categories' data sources
   "venus", "pancakeswap", "pancake", "aave", "beefy", "alpaca", "radiant",
   "thena", "biswap", "uniswap", "morpho", "curve", "lista", "kinza", "wombat",
   // general on-chain finance
@@ -220,7 +226,7 @@ export function prefilterAgent(name: string, description: string): PrefilterResu
   if (!DEFI_VOCABULARY.some((term) => combined.includes(term))) {
     return reject(
       "off-topic",
-      "Nothing in the name or description refers to on-chain finance, so it cannot belong to any of the four graded categories.",
+      "Nothing in the name or description refers to on-chain finance, so it cannot belong to any browsable category.",
     );
   }
 

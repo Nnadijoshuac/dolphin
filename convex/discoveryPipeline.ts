@@ -188,7 +188,7 @@ async function withConcurrency<T>(
  * Far narrower than convex/lib/prefilter.ts's topical gate, on purpose: this
  * list decides what 8004scan is ASKED for, so every term has to be worth a
  * round trip. The gate decides what is KEPT once seen, so it can afford to be
- * generous. Terms are the four categories' own language plus the protocol names
+ * generous. Terms are the categories' own language plus the protocol names
  * their live-stats readers actually integrate against (Venus, PancakeSwap,
  * Aave, Lista, Beefy).
  *
@@ -279,7 +279,7 @@ function evaluateCheaply(item: {
   if (scored.category === null) {
     return {
       status: "rejected-classifier",
-      statusReason: scored.rejectionReason ?? "Not classifiable into one of the four graded categories.",
+      statusReason: scored.rejectionReason ?? "Not classifiable into any browsable category.",
       prefilterRule: null,
       category: null,
       confidence: null,

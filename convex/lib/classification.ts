@@ -16,7 +16,8 @@ export type ClassificationCategory =
   | "rebalancing"
   | "grid-trading"
   | "health-factor"
-  | "yield";
+  | "yield"
+  | "trading";
 
 export interface ClassificationResult {
   category: ClassificationCategory;
@@ -127,6 +128,23 @@ const CATEGORY_TERMS: Record<ClassificationCategory, TermSet> = {
       "apy optimization",
     ],
     weak: ["yield", "vault", "staking rewards", "farming"],
+  },
+  // Narrower than agentScoring.ts's `trading` tiers on purpose. This
+  // classifier returns null the moment two categories match at all, so a term
+  // that a grid, rebalancing or yield agent could also say would not
+  // misclassify anything here - it would silently drop BOTH agents. Only
+  // phrases that no other category's list contains are admitted.
+  trading: {
+    strong: [
+      "trading strategy",
+      "algorithmic trading",
+      "systematic trading",
+      "trade execution",
+      "executes trades",
+      "momentum trading",
+      "trend following",
+    ],
+    weak: ["stop loss", "take profit", "trading signal"],
   },
 };
 

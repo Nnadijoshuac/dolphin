@@ -4,12 +4,14 @@ import { useEffect, useSyncExternalStore } from "react";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 
 import { colors } from "@/constants/theme";
 import { AppProviders } from "@/providers/app-providers";
 import { SplashScreenView } from "@/components/splash-screen-view";
 import { useAppStore } from "@/store/use-app-store";
 
+void SystemUI.setBackgroundColorAsync(colors.canvas).catch(() => {});
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function RootNavigator() {

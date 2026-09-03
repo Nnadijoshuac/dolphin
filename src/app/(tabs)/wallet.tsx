@@ -13,7 +13,6 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 
-import { AltanaWalletCard } from "@/components/altana-wallet-card";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
@@ -114,18 +113,17 @@ export default function WalletScreen() {
       >
         <View className="flex-row items-start justify-between">
           <View>
+            {/* No subtitle here on purpose. It used to read "Two accounts: one
+                identifies you, one can be given bounded spending permission.",
+                which described the Dolphin Wallet card that used to sit below.
+                With that card gone this screen shows exactly one account, so
+                the line was both wrong and a third layer of explanation above
+                a section that already explains itself. */}
             <Text
               className="text-[32px] font-bold tracking-[-0.6px]"
               style={{ color: colors.ink }}
             >
               Wallet
-            </Text>
-            <Text
-              className="mt-1 text-[14px]"
-              style={{ color: colors.muted }}
-            >
-              Two accounts: one identifies you, one can be given bounded
-              spending permission.
             </Text>
           </View>
 
@@ -188,11 +186,16 @@ export default function WalletScreen() {
             />
           </View>
 
-          {/* The Altana wallet: balance, granted permissions, funding. This
-              leads because it is the only account on this screen that can hold
-              a scoped session - the connected wallet below merely identifies
-              the user on a hire record. */}
-          <AltanaWalletCard />
+          {/*
+           * <AltanaWalletCard /> was removed from this screen.
+           *
+           * ONLY THE UI IS GONE. The Dolphin Wallet itself is untouched and
+           * still reachable: AltanaWalletProvider is still mounted in
+           * app-providers.tsx, and payment-card.tsx, session-grant-card.tsx and
+           * job-delivery-card.tsx all still consume it inside the hire flow -
+           * which is where a person actually needs it. The component file is
+           * kept, not deleted, so restoring it here is one line.
+           */}
 
           {/* Heading & Subtitle */}
           <View className="items-center px-4 mb-6">
@@ -202,13 +205,15 @@ export default function WalletScreen() {
             >
               Your own wallet
             </Text>
+            {/* Hard-wrapped with \n before, which broke at any width but this
+                one. Let it wrap. */}
             <Text
               className="mt-2 text-center text-[14px] leading-5"
               style={{ color: colors.muted }}
             >
-              MetaMask or any WalletConnect wallet.{"\n"}Dolphin reads only its
-              public address, to remember{"\n"}which agents you have hired. No
-              agent is ever{"\n"}given permission to spend from it.
+              MetaMask or any WalletConnect wallet. Dolphin reads only your
+              public address, to remember which agents you have hired — no agent
+              can ever spend from it.
             </Text>
           </View>
 

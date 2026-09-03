@@ -366,56 +366,52 @@ export default function DiscoverPage() {
 
       <section
         aria-labelledby="categories-heading"
-        className={styles.categorySection}
         id="browse-by-role"
+        className="site-frame py-14 sm:py-20"
       >
-        <div className="site-frame py-10 sm:py-12">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <h2 className="section-title max-w-[17ch]" id="categories-heading">
-              Choose the job, not a generic score.
-            </h2>
-            <p className="max-w-md text-sm leading-6 text-muted">
-              Each role is compared using evidence that fits the work.
-            </p>
-          </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <h2 className="section-title max-w-[17ch]" id="categories-heading">
+            Choose the job, not a generic score.
+          </h2>
+          <p className="max-w-md text-sm leading-6 text-muted">
+            Each role is compared using evidence that fits the work.
+          </p>
+        </div>
 
-          <div className={`${styles.filterScroller} no-scrollbar`}>
-            <div
-              aria-label="Filter agents by role"
-              className={styles.cirTabs}
-              role="tablist"
-            >
-              {catalogFilters.map((option, index) => {
-                const isSelected = selectedCategory === option.value;
-                const id = `filter-${option.value || "all"}`;
+        <div className={`${styles.filterScroller} no-scrollbar`}>
+          <div
+            aria-label="Filter agents by role"
+            className={styles.cirTabs}
+            role="tablist"
+          >
+            {catalogFilters.map((option, index) => {
+              const isSelected = selectedCategory === option.value;
+              const id = `filter-${option.value || "all"}`;
 
-                return (
-                  <Fragment key={option.label}>
-                    <input
-                      className={styles.cirTabsR}
-                      type="radio"
-                      name="catalog-filter"
-                      id={id}
-                      checked={isSelected}
-                      onChange={() => updateSelectedCategory(option.value)}
-                    />
-                    <label
-                      className={styles.cirTabsT}
-                      htmlFor={id}
-                      role="tab"
-                    >
-                      {option.label}
-                    </label>
-                  </Fragment>
-                );
-              })}
-            </div>
+              return (
+                <Fragment key={option.label}>
+                  <input
+                    className={styles.cirTabsR}
+                    type="radio"
+                    name="catalog-filter"
+                    id={id}
+                    checked={isSelected}
+                    onChange={() => updateSelectedCategory(option.value)}
+                  />
+                  <label
+                    className={styles.cirTabsT}
+                    htmlFor={id}
+                    role="tab"
+                  >
+                    {option.label}
+                  </label>
+                </Fragment>
+              );
+            })}
           </div>
         </div>
-      </section>
 
-      <section className="site-frame py-14 sm:py-20" aria-labelledby="catalog-heading">
-        <div className={styles.catalogLayout}>
+        <div className={`${styles.catalogLayout} mt-12 sm:mt-16`}>
           <aside className={styles.catalogAside}>
             <p className="text-sm font-semibold text-accent-ink">Catalog</p>
             <h2 className="section-title mt-3" id="catalog-heading">

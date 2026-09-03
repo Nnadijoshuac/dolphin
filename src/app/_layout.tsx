@@ -1,19 +1,28 @@
 import "../../global.css";
 
-import { useEffect, useSyncExternalStore } from "react";
-import { View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
+import { useEffect, useSyncExternalStore } from "react";
+import { Platform, StatusBar as RNStatusBar, View } from "react-native";
 
+import { SplashScreenView } from "@/components/splash-screen-view";
 import { colors } from "@/constants/theme";
 import { AppProviders } from "@/providers/app-providers";
-import { SplashScreenView } from "@/components/splash-screen-view";
 import { useAppStore } from "@/store/use-app-store";
 
-void SystemUI.setBackgroundColorAsync(colors.canvas).catch(() => {});
-void SplashScreen.preventAutoHideAsync().catch(() => {});
+// StatusBar.currentHeight is a static Android system value: always the correct
+// status-bar pixel height, available without any provider or hook. Used by the
+// scrim to paint colors.canvas behind the transparent status bar in Expo Go
+// (where SystemUI.setBackgroundColorAsync has no effect).
+const STATUS_BAR_HEIGHT: number = Platform.select({
+  android: RNStatusBar.currentHeight ?? 24,
+  default: 0,
+});
+
+void SystemUI.setBackgroundColorAsync(colors.canvas).catch(() => { });
+void SplashScreen.preventAutoHideAsync().catch(() => { });
 
 function RootNavigator() {
   // Zustand's persist rehydration is an external store, so read it with the
@@ -30,24 +39,21 @@ function RootNavigator() {
     () => useAppStore.persist.hasHydrated(),
   );
 
+
   useEffect(() => {
     if (hasHydrated) {
-      void SplashScreen.hideAsync().catch(() => {});
+      void SplashScreen.hideAsync().catch(() => { });
     }
   }, [hasHydrated]);
 
   return (
-    // Edge-to-edge is mandatory from SDK 55, so the status bar is transparent
-    // and the app draws underneath it. Anything the app does not paint there
-    // falls through to the host window's decor background, which is black in
-    // Expo Go - that is what showed above the header.
-    //
-    // SystemUI.setBackgroundColorAsync above targets the activity's root view,
-    // which Expo Go owns, so it cannot be relied on there. This view is the
-    // app's own full-window surface: it spans the whole window including the
-    // status bar strip, and every screen's SafeAreaView still insets its
-    // content below the bar as before.
-    <View style={{ backgroundColor: colors.canvas, flex: 1 }}>
+    // SDK 54→57 regression: edge-to-edge is now mandatory on Android, making
+    // the status bar transparent. The Stack navigator's native container covers
+    // the root View in the status bar region, and SystemUI has no effect in
+    // Expo Go (host app owns the native window). The only reliable fix is a
+    // React Native View rendered AFTER the Stack (so it's above it in paint
+    // order) with pointerEvents="none" so it doesn't block touches.
+    <View style={{ flex: 1 }}>
       <StatusBar hidden={false} style="dark" />
       <Stack
         screenOptions={{
@@ -66,6 +72,24 @@ function RootNavigator() {
         />
         <Stack.Screen name="manage/[id]" />
       </Stack>
+      {/* Status bar scrim — rendered AFTER Stack (later sibling = on top in RN
+          paint order). zIndex 99998 is just below SplashScreenView (99999).
+          HEIGHT uses RNStatusBar.currentHeight, a static Android system value
+          that is always correct — unlike useSafeAreaInsets().top which can be
+          0 if the provider hasn't initialised yet. pointerEvents="none" passes
+          all touches through. */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: STATUS_BAR_HEIGHT,
+          backgroundColor: colors.canvas,
+          zIndex: 99998,
+        }}
+      />
       <SplashScreenView />
     </View>
   );
@@ -78,3 +102,4 @@ export default function RootLayout() {
     </AppProviders>
   );
 }
+

@@ -11,6 +11,15 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    /* Needed since the SDK 57 upgrade brought TypeScript 6, which no longer
+     * pulls in every @types/* package automatically the way TS 5 did. Without
+     * this, `npx convex dev` fails its pre-push typecheck with ten
+     * "Cannot find name 'process'" errors across five modules whose
+     * process.env reads date from August and were fine under TS 5, so nothing
+     * could be deployed at all. @types/node is present (26.3.0), it just has
+     * to be named now. Verified: `tsc -p convex/tsconfig.json --types node`
+     * exits 0 where the same command without it reports the ten errors. */
+    "types": ["node"],
 
     /* These compiler options are required by Convex */
     "target": "ESNext",

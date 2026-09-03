@@ -10,7 +10,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BnbLogo } from "@/components/brand-mark";
+import { AgentRow } from "@/components/agent-row";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
@@ -45,15 +45,6 @@ const categoryLabels: Record<AgentCategory, string> = {
   yield: "Yield",
 };
 
-const POPULAR_SEARCHES = [
-  "PancakeSwap",
-  "Venus",
-  "Wallet Watch",
-  "Yield",
-  "Liquidation",
-  "Grid Trading",
-];
-
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -69,6 +60,63 @@ export default function SearchScreen() {
     if (!allAgents || !query.trim()) return [];
     return searchAgentsLocally(allAgents, query);
   }, [allAgents, query]);
+
+  /**
+   * "Suggested for you" is derived from real signals, never a hand-picked list.
+   * It used to be `allAgents.slice(0, 4)` - the first four rows the backend
+   * happened to return, presented as a recommendation.
+   *
+   * With search history it is genuinely personal: agents matching what was
+   * actually searched, most recent term first.
+   *
+   * With no history there is nothing personal to go on, so it falls back to the
+   * most-reviewed agent in each category. feedbackCount is the only honest
+   * ranking signal this catalog currently carries - it is live for all 25
+   * agents - whereas reputationScore is unavailable for 9 of them and exactly
+   * 0 for every one of the rest, so ordering by it would be ordering by noise.
+   * The heading says which of the two bases produced the list, so the screen
+   * never implies a personalisation it did not do.
+   */
+  const suggested = useMemo(() => {
+    if (!allAgents || allAgents.length === 0) {
+      return { agents: [] as Agent[], basis: "category" as const };
+    }
+
+    if (recentSearches.length > 0) {
+      const seen = new Set<string>();
+      const matches: Agent[] = [];
+
+      for (const term of recentSearches) {
+        for (const agent of searchAgentsLocally(allAgents, term)) {
+          if (!seen.has(agent.id)) {
+            seen.add(agent.id);
+            matches.push(agent);
+          }
+        }
+      }
+
+      if (matches.length > 0) {
+        return { agents: matches.slice(0, 6), basis: "history" as const };
+      }
+    }
+
+    // Only "live" and "stale" carry a value; the other statuses are null.
+    const feedbackOf = (agent: Agent) =>
+      agent.feedbackCount.status === "live" ||
+      agent.feedbackCount.status === "stale"
+        ? agent.feedbackCount.value
+        : 0;
+
+    const topPerCategory = AGENT_CATEGORIES.flatMap((cat) => {
+      const inCategory = allAgents
+        .filter((agent) => agent.category === cat.slug)
+        .sort((a, b) => feedbackOf(b) - feedbackOf(a));
+
+      return inCategory.length > 0 ? [inCategory[0]] : [];
+    });
+
+    return { agents: topPerCategory, basis: "category" as const };
+  }, [allAgents, recentSearches]);
 
   const handleAgentPress = (agent: Agent) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -173,76 +221,12 @@ export default function SearchScreen() {
             {searchResults.length > 0 ? (
               <View className="gap-2">
                 {searchResults.map((agent) => (
-                  <PressableScale
+                  <AgentRow
                     key={agent.id}
-                    accessibilityLabel={agent.name}
-                    accessibilityRole="button"
+                    agent={agent}
                     onPress={() => handleAgentPress(agent)}
-                    containerStyle={{
-                      backgroundColor: "#FFFFFF",
-                      borderColor: "rgba(17,18,20,0.05)",
-                      borderRadius: 16,
-                      borderWidth: 1,
-                      padding: 12,
-                      ...shadows.subtle,
-                    }}
-                  >
-                    <View className="flex-row items-center gap-3">
-                      {/* Compact App Icon */}
-                      <View
-                        className="h-12 w-12 items-center justify-center rounded-xl overflow-hidden"
-                        style={{
-                          backgroundColor: categoryBgColors[agent.category] ?? "#F5F3EC",
-                          borderColor: "rgba(17,18,20,0.04)",
-                          borderWidth: 1,
-                        }}
-                      >
-                        <CategoryGlyph
-                          color={colors.ink}
-                          name={agent.category}
-                          size={22}
-                          strokeWidth={1.8}
-                        />
-                      </View>
-
-                      {/* App Info */}
-                      <View className="flex-1 pr-2">
-                        <Text
-                          className="text-[15px] font-bold tracking-tight"
-                          numberOfLines={1}
-                          style={{ color: colors.ink }}
-                        >
-                          {agent.name}
-                        </Text>
-                        <Text
-                          className="mt-0.5 text-[11.5px] text-zinc-500"
-                          numberOfLines={1}
-                        >
-                          {categoryLabels[agent.category]} · {agent.tagline}
-                        </Text>
-                        <View className="mt-1 flex-row items-center gap-1">
-                          <BnbLogo size={12} />
-                          <Text className="text-[10.5px] font-semibold text-amber-800">
-                            BNB Chain
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* View Button */}
-                      <View
-                        className="items-center justify-center rounded-lg px-3 py-1.5"
-                        style={{
-                          backgroundColor: colors.gold,
-                          minWidth: 54,
-                          ...shadows.subtle,
-                        }}
-                      >
-                        <Text className="text-[12px] font-bold text-black">
-                          View
-                        </Text>
-                      </View>
-                    </View>
-                  </PressableScale>
+                    subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
+                  />
                 ))}
               </View>
             ) : (
@@ -310,115 +294,24 @@ export default function SearchScreen() {
               </View>
             ) : null}
 
-            {/* Trending on BNB Chain */}
-            <View>
-              <Text className="text-[14px] font-bold pb-2" style={{ color: colors.ink }}>
-                Trending on BNB Chain
-              </Text>
-              <View className="flex-row flex-wrap gap-1.5">
-                {POPULAR_SEARCHES.map((term, index) => (
-                  <PressableScale
-                    key={term}
-                    accessibilityLabel={`Search ${term}`}
-                    accessibilityRole="button"
-                    onPress={() => handleTagPress(term)}
-                    containerStyle={{
-                      alignItems: "center",
-                      backgroundColor: "#FFFFFF",
-                      borderColor: "rgba(17,18,20,0.06)",
-                      borderRadius: 9999,
-                      borderWidth: 1,
-                      flexDirection: "row",
-                      gap: 5,
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      ...shadows.subtle,
-                    }}
-                  >
-                    <Text className="text-[11px] font-bold text-amber-700">
-                      #{index + 1}
-                    </Text>
-                    <Text className="text-[12.5px] font-medium text-zinc-800">
-                      {term}
-                    </Text>
-                  </PressableScale>
-                ))}
-              </View>
-            </View>
-
-            {/* Explore Categories */}
+            {/* Explore Categories - every category, not a hardcoded four */}
             <View>
               <Text className="text-[14px] font-bold pb-2.5" style={{ color: colors.ink }}>
                 Explore Categories
               </Text>
-              <View className="gap-2.5">
-                {/* Row 1 */}
-                <View className="flex-row gap-2.5">
-                  {[AGENT_CATEGORIES[0], AGENT_CATEGORIES[1]].map((cat) => (
-                    <PressableScale
-                      key={cat.slug}
-                      accessibilityLabel={cat.label}
-                      accessibilityRole="button"
-                      className="flex-1"
-                      onPress={() => handleTagPress(cat.label)}
-                      style={{ flex: 1 }}
-                      containerStyle={{
-                        alignItems: "center",
-                        backgroundColor: "#FFFFFF",
-                        borderColor: "rgba(17,18,20,0.06)",
-                        borderRadius: 18,
-                        borderWidth: 1,
-                        flexDirection: "row",
-                        gap: 10,
-                        paddingHorizontal: 12,
-                        paddingVertical: 12,
-                        ...shadows.subtle,
-                      }}
-                    >
-                      <View
-                        className="h-10 w-10 items-center justify-center rounded-xl overflow-hidden"
-                        style={{
-                          backgroundColor: categoryBgColors[cat.slug] ?? "#F5F3EC",
-                          borderColor: "rgba(17,18,20,0.04)",
-                          borderWidth: 1,
-                        }}
-                      >
-                        <CategoryGlyph
-                          color={colors.ink}
-                          name={cat.slug}
-                          size={20}
-                          strokeWidth={2}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Text
-                          className="text-[13.5px] font-bold"
-                          numberOfLines={1}
-                          style={{ color: colors.ink }}
-                        >
-                          {cat.label}
-                        </Text>
-                        <Text
-                          className="text-[11px] text-zinc-500 mt-0.5 font-medium"
-                          numberOfLines={1}
-                        >
-                          {categorySubtitles[cat.slug]}
-                        </Text>
-                      </View>
-                    </PressableScale>
-                  ))}
-                </View>
+              <View className="flex-row flex-wrap gap-2.5">
+                {AGENT_CATEGORIES.map((cat) => {
+                  const count =
+                    allAgents?.filter((agent) => agent.category === cat.slug)
+                      .length ?? 0;
 
-                {/* Row 2 */}
-                <View className="flex-row gap-2.5">
-                  {[AGENT_CATEGORIES[2], AGENT_CATEGORIES[3]].map((cat) => (
+                  return (
                     <PressableScale
                       key={cat.slug}
                       accessibilityLabel={cat.label}
                       accessibilityRole="button"
-                      className="flex-1"
                       onPress={() => handleTagPress(cat.label)}
-                      style={{ flex: 1 }}
+                      style={{ flexBasis: "47%", flexGrow: 1 }}
                       containerStyle={{
                         alignItems: "center",
                         backgroundColor: "#FFFFFF",
@@ -459,87 +352,66 @@ export default function SearchScreen() {
                           className="text-[11px] text-zinc-500 mt-0.5 font-medium"
                           numberOfLines={1}
                         >
-                          {categorySubtitles[cat.slug]}
+                          {allAgents
+                            ? `${count} ${count === 1 ? "agent" : "agents"}`
+                            : categorySubtitles[cat.slug]}
                         </Text>
                       </View>
                     </PressableScale>
-                  ))}
-                </View>
+                  );
+                })}
               </View>
             </View>
 
-            {/* Suggested for you */}
-            {allAgents && allAgents.length > 0 ? (
-              <View className="pb-4">
-                <Text className="text-[14px] font-bold pb-2.5" style={{ color: colors.ink }}>
+            {/* Suggested for you - derived, and it says which signal it used */}
+            {suggested.agents.length > 0 ? (
+              <View>
+                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
                   Suggested for you
                 </Text>
+                <Text className="text-[11.5px] font-medium text-zinc-500 pt-0.5 pb-2.5">
+                  {suggested.basis === "history"
+                    ? "Based on what you have searched for"
+                    : "Most-reviewed agent in each category"}
+                </Text>
                 <View className="gap-2.5">
-                  {allAgents.slice(0, 4).map((agent) => (
-                    <PressableScale
+                  {suggested.agents.map((agent) => (
+                    <AgentRow
                       key={agent.id}
-                      accessibilityLabel={agent.name}
-                      accessibilityRole="button"
+                      agent={agent}
                       onPress={() => handleAgentPress(agent)}
-                      containerStyle={{
-                        backgroundColor: "#FFFFFF",
-                        borderColor: "rgba(17,18,20,0.06)",
-                        borderRadius: 18,
-                        borderWidth: 1,
-                        padding: 13,
-                        ...shadows.subtle,
-                      }}
-                    >
-                      <View className="flex-row items-center gap-3">
-                        {/* Compact App Icon */}
-                        <View
-                          className="h-12 w-12 items-center justify-center rounded-2xl overflow-hidden"
-                          style={{
-                            backgroundColor: categoryBgColors[agent.category] ?? "#F5F3EC",
-                            borderColor: "rgba(17,18,20,0.04)",
-                            borderWidth: 1,
-                          }}
-                        >
-                          <CategoryGlyph
-                            color={colors.ink}
-                            name={agent.category}
-                            size={22}
-                            strokeWidth={2}
-                          />
-                        </View>
+                      subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
 
-                        {/* Title & info */}
-                        <View className="flex-1 pr-2">
-                          <Text
-                            className="text-[14.5px] font-bold tracking-tight"
-                            numberOfLines={1}
-                            style={{ color: colors.ink }}
-                          >
-                            {agent.name}
-                          </Text>
-                          <Text
-                            className="mt-0.5 text-[12px] text-zinc-500"
-                            numberOfLines={1}
-                          >
-                            {categoryLabels[agent.category]} · {agent.tagline}
-                          </Text>
-                        </View>
-
-                        {/* View CTA */}
-                        <View
-                          className="items-center justify-center rounded-xl px-3.5 py-1.5"
-                          style={{
-                            backgroundColor: colors.gold,
-                            minWidth: 54,
-                            ...shadows.subtle,
-                          }}
-                        >
-                          <Text className="text-[12.5px] font-bold text-black">
-                            View
-                          </Text>
-                        </View>
-                      </View>
-                    </PressableScale>
+            {/* The whole catalog, not a slice of it */}
+            {allAgents === undefined ? (
+              <View className="pb-4">
+                <StatePanel
+                  body="Fetching 8004scan-indexed BSC agent records..."
+                  state="syncing"
+                  title="Loading agents"
+                />
+              </View>
+            ) : allAgents.length > 0 ? (
+              <View className="pb-4">
+                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+                  All agents
+                </Text>
+                <Text className="text-[11.5px] font-medium text-zinc-500 pt-0.5 pb-2.5">
+                  {allAgents.length} on BNB Chain
+                </Text>
+                <View className="gap-2.5">
+                  {allAgents.map((agent) => (
+                    <AgentRow
+                      key={agent.id}
+                      agent={agent}
+                      onPress={() => handleAgentPress(agent)}
+                      subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
+                    />
                   ))}
                 </View>
               </View>

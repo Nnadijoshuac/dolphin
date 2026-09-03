@@ -36,11 +36,14 @@ export function PressableScale({
       className={className}
       style={style}
       onPressIn={(event) => {
-        scale.value = withSpring(pressedScale, { damping: 18, stiffness: 260 });
+        // .set() rather than assigning .value: React Compiler's immutability
+        // rule (react-hooks/immutability, new in SDK 57) rejects the
+        // assignment. Reanimated 4 exposes .get()/.set() for exactly this.
+        scale.set(withSpring(pressedScale, { damping: 18, stiffness: 260 }));
         onPressIn?.(event);
       }}
       onPressOut={(event) => {
-        scale.value = withSpring(1, { damping: 18, stiffness: 260 });
+        scale.set(withSpring(1, { damping: 18, stiffness: 260 }));
         onPressOut?.(event);
       }}
     >

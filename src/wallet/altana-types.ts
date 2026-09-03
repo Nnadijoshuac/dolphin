@@ -186,28 +186,43 @@ export type AltanaWalletValue = Readonly<{
 }>;
 
 /**
- * The native story, stated once so both the provider and the wallet screen
- * quote the same words.
+ * What a native build says when THIS DEVICE cannot run a passkey ceremony.
  *
- * VERIFIED, not assumed (session 6, Task 0): React Native's global navigator is
- * literally `{product: 'ReactNative'}` - see
- * node_modules/react-native/Libraries/Core/setUpNavigator.js - so there is no
- * `credentials` property for WebAuthn to hang off. Altana's SDK offers exactly
- * two signer families, raw private key and browser WebAuthn passkey, and
- * `createPasskey` throws outside a browser by design. `signerFromInjected`
- * appears only in the SDK's doc comments and is not implemented.
+ * ---------------------------------------------------------------------------
+ * WHAT THIS USED TO SAY, AND WHY IT NO LONGER DOES
+ * ---------------------------------------------------------------------------
+ * Until @altananetwork/sdk 0.9.0 this constant carried a much broader claim:
+ * that React Native could not host a Dolphin Wallet at all. That was true and
+ * verified at the time - RN's global navigator is literally
+ * `{product: 'ReactNative'}`, so there was no `navigator.credentials` for the
+ * SDK to reach, and its only other signer was a raw private key this app
+ * declines to take custody of (ALTANA_SIGNER_STRATEGY in altana-policy.ts).
  *
- * A React Native passkey library (react-native-passkeys, expo-passkey) does not
- * close this: platform passkeys need a verified domain serving
- * apple-app-site-association / assetlinks.json, which this project has none for
- * its native builds, and Altana needs a flat P256 x||y encoding neither library
- * documents. That is a domain-and-encoding problem, not a missing package.
+ * 0.9.0 closed exactly that gap: `createPasskey`, `createPasskeyWallet`,
+ * `recoverFromPasskey` and `signerFromPasskey` now take a
+ * `webAuthn: { createFn, getFn }` option and forward it into porto everywhere
+ * WebAuthn is touched. Dolphin implements it in altana-passkey-native.ts
+ * against react-native-passkeys, so native gets the platform's real Face ID /
+ * fingerprint passkeys. The old note also predicted that a passkey library
+ * would not be enough because Altana needs a flat P256 x||y encoding - that
+ * half was right, and the encoding bridge is what that file is.
  *
- * A private-key signer WOULD run here - and is deliberately not used, because
- * it would make this app solely responsible for generating and storing a key
- * with no recovery path. See ALTANA_SIGNER_STRATEGY in altana-policy.ts.
+ * ---------------------------------------------------------------------------
+ * WHAT REMAINS TRUE
+ * ---------------------------------------------------------------------------
+ * A device can still be unable to do this, for reasons that are the device's
+ * and not the framework's: Expo Go links no native passkey module, iOS below
+ * 15 has no passkey support, and an Android device with no credential provider
+ * configured has nowhere to put one. `nativePasskeysSupported()` reads that
+ * from the library rather than guessing, and this is what it says when the
+ * answer is no.
+ *
+ * The escape hatch is unchanged and is genuinely the same wallet: the web
+ * build authenticates against the same relying-party id (see altana-rp-id.ts),
+ * so the same passkey opens the same Dolphin Wallet in a browser.
  */
 export const NATIVE_PASSKEY_UNAVAILABLE_MESSAGE =
-  "A Dolphin Wallet needs a passkey, and React Native has no WebAuthn API to " +
-  "create one with. Open Dolphin in a browser to create or use your Dolphin " +
-  "Wallet - it is the same wallet, reachable from the same passkey.";
+  "This device cannot create a passkey - a development client without the " +
+  "passkey module, an older OS, or no saved-passwords provider set up. Open " +
+  "Dolphin in a browser to create or use your Dolphin Wallet - it is the same " +
+  "wallet, reachable from the same passkey.";

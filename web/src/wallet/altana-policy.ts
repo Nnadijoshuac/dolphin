@@ -412,6 +412,20 @@ export const CATEGORY_SESSION_POLICY: Readonly<
       "Monitoring is information delivery by definition. A spend-capable session " +
       "would imply a capability the agent does not have and does not want.",
   },
+
+  trading: {
+    kind: "read-only",
+    reason:
+      "Trading passes the first test and fails the second, which is exactly the " +
+      "case this policy was written to catch. Acting IS the point — a trader that " +
+      "cannot place the trade is publishing an opinion. But Dolphin has verified " +
+      "no DEX router address for it and has no wired data source for the category " +
+      "(convex/protocols/unavailable.ts), so it could neither name the contract a " +
+      "user would be authorizing nor observe a single trade afterwards. Of every " +
+      "category here this is the one where an unrestricted session would do the " +
+      "most damage fastest, so it stays read-only until a verified venue address " +
+      "and a real record source exist.",
+  },
 };
 
 export function sessionPolicyFor(category: AgentCategory): CategorySessionPolicy {

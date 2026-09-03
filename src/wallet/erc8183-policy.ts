@@ -84,6 +84,8 @@ const TASK_TEMPLATES: Readonly<Record<AgentCategory, string>> = {
     "Size a grid for the position held by {address} on BNB Chain and cost it against the pool itself, including the break-even spacing.",
   monitoring:
     "Report the current on-chain activity and notable changes for {address} on BNB Chain.",
+  trading:
+    "State the trades you would place for {address} on BNB Chain right now, with the entry, the exit, the invalidation level and the size, and cost each one against the venue that would actually fill it.",
 };
 
 export function defaultTaskDescription(

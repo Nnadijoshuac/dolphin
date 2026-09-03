@@ -1,3 +1,5 @@
+import { TurboModuleRegistry } from "react-native";
+
 import type { PasskeyWebAuthnFns } from "@altananetwork/sdk";
 
 /**
@@ -234,6 +236,26 @@ function hasSubtleCrypto(): boolean {
  * have been: one honest "this device cannot create a passkey" card on the
  * wallet screen, and an app that runs. Metro still bundles the module (the
  * specifier is a literal), so a real dev build picks it up normally.
+ *
+ * ASKING BEFORE REQUIRING, so the throw never happens at all. The try/catch
+ * alone left a red error in the dev console on every Expo Go launch: Metro's
+ * dev overlay surfaces a throw during module initialisation whether or not the
+ * caller catches it, so the app behaved correctly while looking broken.
+ *
+ * `requireNativeModule` is a thin wrapper over `requireOptionalNativeModule`,
+ * which does not throw - it looks the module up in three places and returns
+ * null (expo-modules-core src/requireNativeModule.ts, read directly). The
+ * obvious move would be to call that instead, but expo-modules-core is not
+ * hoisted here - it sits in expo/node_modules - so neither Metro nor tsc can
+ * resolve a bare import of it, and adding a dependency to silence a log is a
+ * bad trade (AGENTS.md §3).
+ *
+ * So `nativeModuleLinked()` performs the same lookup using only globals and
+ * `react-native`, which IS a declared dependency. It checks the two paths that
+ * can be live on this stack (Expo 57 / RN 0.86, new architecture): the JSI host
+ * object, then the TurboModule registry. TurboModuleRegistry.get returns null
+ * when absent - unlike getEnforcing, which throws, and which is exactly what
+ * must be avoided here.
  * ------------------------------------------------------------------------ */
 
 type PasskeyLib = {
@@ -242,11 +264,40 @@ type PasskeyLib = {
   get: typeof import("react-native-passkeys").get;
 };
 
+const NATIVE_MODULE_NAME = "ReactNativePasskeys";
+
+/**
+ * Whether the native side is present, answered WITHOUT provoking a throw.
+ *
+ * Safe against a false negative in practice: expo-modules-core installs the
+ * JSI host object during app startup, and nothing calls this until a React
+ * component mounts, which is far later. If both lookups still miss, the module
+ * genuinely is not linked.
+ */
+function nativeModuleLinked(): boolean {
+  try {
+    const globals = globalThis as {
+      expo?: { modules?: Record<string, unknown> };
+    };
+    if (globals.expo?.modules?.[NATIVE_MODULE_NAME]) return true;
+    return TurboModuleRegistry.get(NATIVE_MODULE_NAME) != null;
+  } catch {
+    return false;
+  }
+}
+
 /** `undefined` = not tried yet, `null` = tried and unavailable. */
 let libCache: PasskeyLib | null | undefined;
 
 function passkeyLib(): PasskeyLib | null {
   if (libCache !== undefined) return libCache;
+  if (!nativeModuleLinked()) {
+    libCache = null;
+    return libCache;
+  }
+  // Kept as a second net even though the probe just said yes: the library's
+  // module body does more than look the native module up, and a failure here
+  // must still degrade to "unsupported" rather than escape.
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     libCache = require("react-native-passkeys") as PasskeyLib;

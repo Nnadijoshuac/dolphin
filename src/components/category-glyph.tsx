@@ -18,6 +18,8 @@ export type GlyphName =
   | "layers"
   | "info"
   | "chevron-right"
+  | "chevron-left"
+  | "close"
   | "arrow-right";
 
 type CategoryGlyphProps = {
@@ -216,6 +218,17 @@ export function CategoryGlyph({
 
       {name === "chevron-right" ? (
         <Path d="m9 18 6-6-6-6" {...common} />
+      ) : null}
+
+      {name === "chevron-left" ? (
+        <Path d="m15 18-6-6 6-6" {...common} />
+      ) : null}
+
+      {name === "close" ? (
+        <>
+          <Line x1="6" x2="18" y1="6" y2="18" {...common} />
+          <Line x1="18" x2="6" y1="6" y2="18" {...common} />
+        </>
       ) : null}
 
       {name === "arrow-right" ? (

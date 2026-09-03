@@ -67,9 +67,12 @@ export default function CategoryDetailRoute() {
             ...shadows.card,
           }}
         >
-          <Text className="text-[17px] font-bold" style={{ color: colors.ink }}>
-            ‹
-          </Text>
+          <CategoryGlyph
+            color={colors.ink}
+            name="chevron-left"
+            size={18}
+            strokeWidth={2.2}
+          />
         </PressableScale>
 
         <Text

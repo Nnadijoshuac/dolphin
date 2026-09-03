@@ -14,14 +14,13 @@ import { useAppStore } from "@/store/use-app-store";
 
 // StatusBar.currentHeight is a static Android system value: always the correct
 // status-bar pixel height, available without any provider or hook. Used by the
-// scrim to paint colors.canvas behind the transparent status bar in Expo Go
-// (where SystemUI.setBackgroundColorAsync has no effect).
+// scrim below to paint white behind the transparent status bar.
 const STATUS_BAR_HEIGHT: number = Platform.select({
   android: RNStatusBar.currentHeight ?? 24,
   default: 0,
 });
 
-void SystemUI.setBackgroundColorAsync(colors.canvas).catch(() => { });
+void SystemUI.setBackgroundColorAsync("#FFFFFF").catch(() => { });
 void SplashScreen.preventAutoHideAsync().catch(() => { });
 
 function RootNavigator() {
@@ -54,7 +53,7 @@ function RootNavigator() {
     // React Native View rendered AFTER the Stack (so it's above it in paint
     // order) with pointerEvents="none" so it doesn't block touches.
     <View style={{ flex: 1 }}>
-      <StatusBar hidden={false} style="dark" />
+      <StatusBar hidden={false} style="light" />
       <Stack
         screenOptions={{
           animation: "slide_from_right",
@@ -72,24 +71,6 @@ function RootNavigator() {
         />
         <Stack.Screen name="manage/[id]" />
       </Stack>
-      {/* Status bar scrim — rendered AFTER Stack (later sibling = on top in RN
-          paint order). zIndex 99998 is just below SplashScreenView (99999).
-          HEIGHT uses RNStatusBar.currentHeight, a static Android system value
-          that is always correct — unlike useSafeAreaInsets().top which can be
-          0 if the provider hasn't initialised yet. pointerEvents="none" passes
-          all touches through. */}
-      <View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: STATUS_BAR_HEIGHT,
-          backgroundColor: colors.canvas,
-          zIndex: 99998,
-        }}
-      />
       <SplashScreenView />
     </View>
   );

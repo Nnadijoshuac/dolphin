@@ -94,7 +94,12 @@
       "Bash(curl -s -L --max-time 12 \"https://www.useaiki.ai/v1/reference/venus/agent/315943\")",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}  ct=%{content_type}\\\\n\" -L --max-time 12 \"https://www.useaiki.ai/this-path-does-not-exist-12345\")",
       "Bash(curl -s -L --max-time 15 \"https://platform-backend.prod.termix.live/api/v1/a2a/agents/190411/card\")",
-      "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{try{const j=JSON.parse\\(d\\);console.log\\(JSON.stringify\\(j,null,2\\)\\);console.log\\(\"\\\\nTOP-LEVEL KEYS:\",Object.keys\\(j\\).join\\(\", \"\\)\\);}catch\\(e\\){console.log\\(d.slice\\(0,600\\)\\)}}\\)')"
+      "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{try{const j=JSON.parse\\(d\\);console.log\\(JSON.stringify\\(j,null,2\\)\\);console.log\\(\"\\\\nTOP-LEVEL KEYS:\",Object.keys\\(j\\).join\\(\", \"\\)\\);}catch\\(e\\){console.log\\(d.slice\\(0,600\\)\\)}}\\)')",
+      "Bash(git --no-pager show fdb2ccf -- src/app/_layout.tsx app.json)",
+      "Bash(git --no-pager show f0ebbd7 -- src/app/_layout.tsx)",
+      "Bash(git --no-pager show 3303514 -- src/app/_layout.tsx)",
+      "Bash(NODE_OPTIONS=\"--network-family-autoselection-attempt-timeout=1000\" npx expo lint)",
+      "Bash(git --no-pager diff -- .claude/settings.json)"
     ]
   },
   "enabledPlugins": {

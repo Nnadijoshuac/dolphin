@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AgentCard } from "@/components/agent-card";
+import { AgentRow } from "@/components/agent-row";
 import { AppHeader } from "@/components/app-header";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
@@ -23,6 +23,14 @@ import { useAgents } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
 
 const coinVideoSource = require("../../../assets/videos/Coin.mp4");
+
+const categoryLabels: Record<AgentCategory, string> = {
+  monitoring: "Monitoring",
+  rebalancing: "Rebalancing",
+  "grid-trading": "Grid trading",
+  "health-factor": "Health factor",
+  yield: "Yield",
+};
 
 export default function DiscoverScreen() {
   const router = useRouter();
@@ -244,19 +252,6 @@ export default function DiscoverScreen() {
 
             {/* Foreground Content */}
             <View style={{ zIndex: 10 }}>
-              {/* Category Tag */}
-              <View
-                className="self-start rounded-full px-2.5 py-1 mb-2.5 border"
-                style={{
-                  backgroundColor: "#2A2415",
-                  borderColor: "rgba(245, 179, 0, 0.35)",
-                }}
-              >
-                <Text className="text-[9.5px] font-bold uppercase tracking-[1.5px] text-[#F5B300]">
-                  REBALANCING
-                </Text>
-              </View>
-
               {/* Text Column */}
               <View style={{ maxWidth: "68%" }}>
                 <Text className="text-[22px] font-black text-white leading-[26px] tracking-tight">
@@ -339,10 +334,11 @@ export default function DiscoverScreen() {
                 ) : (
                   <View className="gap-3.5">
                     {categoryAgents.map((agent) => (
-                      <AgentCard
+                      <AgentRow
                         key={agent.id}
                         agent={agent}
                         onPress={() => handleAgentPress(agent)}
+                        subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
                       />
                     ))}
                   </View>

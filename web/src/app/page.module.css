@@ -244,10 +244,7 @@
 }
 
 .catalogLayout {
-  display: grid;
-  grid-template-columns: minmax(190px, 0.3fr) minmax(0, 1fr);
-  gap: clamp(2.5rem, 6vw, 5rem);
-  align-items: start;
+  display: block;
 }
 
 .catalogAside {
@@ -627,6 +624,10 @@
 
   .cirTabs {
     padding-inline: 4px;
+  }
+
+  .catalogLayout {
+    display: block;
   }
 
   .catalogAside {

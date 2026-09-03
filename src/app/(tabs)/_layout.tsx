@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { Redirect } from "expo-router";
 // SDK 57: expo-router forked the React Navigation packages it wraps, so
@@ -130,19 +130,13 @@ export default function TabsLayout() {
   const hasCompletedOnboarding = useAppStore(
     (state) => state.hasCompletedOnboarding,
   );
-  const [hasHydrated, setHasHydrated] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = useAppStore.persist.onFinishHydration(() => {
-      setHasHydrated(true);
-    });
-
-    if (useAppStore.persist.hasHydrated()) {
-      setHasHydrated(true);
-    }
-
-    return unsubscribe;
-  }, []);
+  // Same rehydration read as the root layout - see src/app/_layout.tsx for why
+  // this is useSyncExternalStore rather than useState + useEffect.
+  const hasHydrated = useSyncExternalStore(
+    (onStoreChange) => useAppStore.persist.onFinishHydration(onStoreChange),
+    () => useAppStore.persist.hasHydrated(),
+    () => useAppStore.persist.hasHydrated(),
+  );
 
   if (!hasHydrated) {
     return null;

@@ -1,6 +1,6 @@
 import "../../global.css";
 
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -13,19 +13,19 @@ import { useAppStore } from "@/store/use-app-store";
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function RootNavigator() {
-  const [hasHydrated, setHasHydrated] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = useAppStore.persist.onFinishHydration(() => {
-      setHasHydrated(true);
-    });
-
-    if (useAppStore.persist.hasHydrated()) {
-      setHasHydrated(true);
-    }
-
-    return unsubscribe;
-  }, []);
+  // Zustand's persist rehydration is an external store, so read it with the
+  // primitive built for that. The previous useState + useEffect version called
+  // setState synchronously in the effect body, which eslint-plugin-react-hooks
+  // 7 (SDK 57) reports as react-hooks/set-state-in-effect. It also had a real
+  // gap: hydration finishing between first render and the effect running fired
+  // onFinishHydration before we subscribed, and the state stayed false.
+  // useSyncExternalStore re-reads the snapshot after subscribing, so it cannot
+  // miss that transition.
+  const hasHydrated = useSyncExternalStore(
+    (onStoreChange) => useAppStore.persist.onFinishHydration(onStoreChange),
+    () => useAppStore.persist.hasHydrated(),
+    () => useAppStore.persist.hasHydrated(),
+  );
 
   useEffect(() => {
     if (hasHydrated) {

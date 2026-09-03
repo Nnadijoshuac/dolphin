@@ -1,4 +1,5 @@
 import { Text, View } from "react-native";
+import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors, radii, shadows } from "@/constants/theme";
@@ -10,14 +11,6 @@ const categoryLabels: Record<AgentCategory, string> = {
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
-};
-
-const categoryBgColors: Record<AgentCategory, string> = {
-  monitoring: "#F5F3EC",
-  rebalancing: "#F5F3EC",
-  "grid-trading": "#F5F3EC",
-  "health-factor": "#F5F3EC",
-  yield: "#F5F3EC",
 };
 
 type AgentCardProps = {
@@ -42,22 +35,14 @@ export function AgentCard({ agent, onPress }: AgentCardProps) {
       }}
     >
       <View className="flex-row items-start gap-4">
-        {/* Large Rounded Icon Box */}
-        <View
-          className="h-20 w-20 items-center justify-center rounded-2xl"
-          style={{
-            backgroundColor: categoryBgColors[agent.category] ?? "#F5F3EC",
-            borderColor: "rgba(17,18,20,0.04)",
-            borderWidth: 1,
-          }}
-        >
-          <CategoryGlyph
-            color={colors.ink}
-            name={agent.category}
-            size={38}
-            strokeWidth={2.2}
-          />
-        </View>
+        {/*
+          The agent's own icon, not its category glyph. AgentIcon renders
+          agent.iconUrl when there is one and falls back to the category glyph
+          only when there is not, which is what the detail, hire and manage
+          screens already do - so a card and its detail page now show the same
+          image instead of every agent in a category sharing one drawing.
+        */}
+        <AgentIcon category={agent.category} size={80} uri={agent.iconUrl} />
 
         {/* Middle Info Column */}
         <View className="flex-1">

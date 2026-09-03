@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Animated,
   StyleSheet,
@@ -26,7 +26,11 @@ export function SplashScreenView({
 }: SplashScreenViewProps) {
   const { width: windowWidth } = useWindowDimensions();
   const contentWidth = Math.min(windowWidth || 390, 480);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  // Lazy useState rather than useRef(...).current: reading a ref during render
+  // is react-hooks/refs under eslint-plugin-react-hooks 7 (SDK 57). The lazy
+  // initialiser is also strictly less wasteful - useRef(new Animated.Value(1))
+  // constructed a fresh Animated.Value on every render and discarded it.
+  const [fadeAnim] = useState(() => new Animated.Value(1));
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {

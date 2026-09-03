@@ -231,7 +231,9 @@ export default function DiscoverScreen() {
               }}
             >
               <VideoView
-                allowsFullscreen={false}
+                // SDK 55 removed the `allowsFullscreen` prop in favour of
+                // `fullscreenOptions.enable`.
+                fullscreenOptions={{ enable: false }}
                 allowsPictureInPicture={false}
                 contentFit="contain"
                 nativeControls={false}

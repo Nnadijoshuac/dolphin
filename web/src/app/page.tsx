@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useSyncExternalStore,
+  Fragment,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
@@ -381,53 +382,31 @@ export default function DiscoverPage() {
           <div className={`${styles.filterScroller} no-scrollbar`}>
             <div
               aria-label="Filter agents by role"
-              className={styles.filterGrid}
-              role="radiogroup"
+              className={styles.cirTabs}
+              role="tablist"
             >
               {catalogFilters.map((option, index) => {
                 const isSelected = selectedCategory === option.value;
-                const count = option.value
-                  ? catalog.filter((agent) => agent.category === option.value).length
-                  : catalog.length;
-                const countLabel = hasCatalog
-                  ? `${count} ${count === 1 ? "record" : "records"}`
-                  : isLoading
-                    ? "Syncing"
-                    : "Unavailable";
+                const id = `filter-${option.value || "all"}`;
 
                 return (
-                  <button
-                    aria-checked={isSelected}
-                    aria-controls="agent-catalog"
-                    aria-label={`${option.label}, ${countLabel}`}
-                    className={styles.filterCard}
-                    data-selected={isSelected}
-                    key={option.label}
-                    onClick={() => updateSelectedCategory(option.value)}
-                    onKeyDown={(event) => handleFilterKeyDown(event, index)}
-                    ref={(node) => {
-                      filterRefs.current[index] = node;
-                    }}
-                    role="radio"
-                    tabIndex={isSelected ? 0 : -1}
-                    type="button"
-                  >
-                    <span className="flex items-start justify-between gap-4">
-                      <span aria-hidden="true" className={styles.filterIcon}>
-                        <CategoryGlyph
-                          color="currentColor"
-                          name={option.glyph}
-                          size={19}
-                          strokeWidth={2}
-                        />
-                      </span>
-                      <span className={styles.filterCount}>{countLabel}</span>
-                    </span>
-                    <span className="mt-5 block text-base font-semibold tracking-[-0.025em] text-ink">
+                  <Fragment key={option.label}>
+                    <input
+                      className={styles.cirTabsR}
+                      type="radio"
+                      name="catalog-filter"
+                      id={id}
+                      checked={isSelected}
+                      onChange={() => updateSelectedCategory(option.value)}
+                    />
+                    <label
+                      className={styles.cirTabsT}
+                      htmlFor={id}
+                      role="tab"
+                    >
                       {option.label}
-                    </span>
-                    <span className={styles.filterDescription}>{option.description}</span>
-                  </button>
+                    </label>
+                  </Fragment>
                 );
               })}
             </div>

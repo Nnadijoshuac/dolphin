@@ -52,7 +52,7 @@ export function SplashScreenView({
     <Animated.View
       pointerEvents={fadeAnim ? "auto" : "none"}
       style={[
-        StyleSheet.absoluteFillObject,
+        StyleSheet.absoluteFill,
         {
           backgroundColor: colors.canvas,
           zIndex: 99999,

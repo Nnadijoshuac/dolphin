@@ -282,6 +282,6 @@ export function WalletConnectButton({
 
 const styles = StyleSheet.create({
   modalLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 });

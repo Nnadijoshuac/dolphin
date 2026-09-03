@@ -25,6 +25,7 @@ const categoryLabels: Record<AgentCategory, string> = {
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
+  trading: "Trading",
 };
 
 function shortAddress(value: string | null) {
@@ -235,6 +236,31 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
             format={(value) => value}
             label="Rebalance cadence"
             metric={stats.rebalanceFrequency}
+          />
+        </>
+      ) : null}
+
+      {stats.category === "trading" ? (
+        <>
+          <MetricCell
+            format={(value) => `${value.toFixed(1)}%`}
+            label="Historical win rate"
+            metric={stats.winRate}
+          />
+          <MetricCell
+            format={(value) => String(value)}
+            label="Trades executed"
+            metric={stats.tradesExecuted}
+          />
+          <MetricCell
+            format={(value) => value}
+            label="Realized P&L"
+            metric={stats.realizedPnl}
+          />
+          <MetricCell
+            format={formatList}
+            label="Markets traded"
+            metric={stats.marketsTraded}
           />
         </>
       ) : null}

@@ -10,6 +10,7 @@ const categoryBackgrounds: Record<AgentCategory, string> = {
   "grid-trading": "#FAF5E6",
   "health-factor": "#F9F3F0",
   yield: "#F0F7F2",
+  trading: "#F4F0FA",
 };
 
 const categoryIconColors: Record<AgentCategory, string> = {
@@ -18,6 +19,7 @@ const categoryIconColors: Record<AgentCategory, string> = {
   "grid-trading": colors.ink,
   "health-factor": colors.ink,
   yield: colors.ink,
+  trading: colors.ink,
 };
 
 type AgentIconProps = {

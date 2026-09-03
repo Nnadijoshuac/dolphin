@@ -108,6 +108,20 @@ export function CategoryGlyph({
         </>
       ) : null}
 
+      {name === "trading" ? (
+        <>
+          {/* Candlesticks - wick plus body. Filled/hollow/filled, the
+              conventional down/up/down reading, so it stays legible at 18px
+              and cannot be confused with grid-trading's ladder. */}
+          <Line x1="6.5" x2="6.5" y1="5" y2="19" {...stroked(1.6)} />
+          <Rect fill={color} height="6" rx="1" width="4" x="4.5" y="9" />
+          <Line x1="12" x2="12" y1="3.5" y2="17" {...stroked(1.6)} />
+          <Rect height="7" rx="1" width="4" x="10" y="6.5" {...stroked(1.8)} />
+          <Line x1="17.5" x2="17.5" y1="7" y2="21" {...stroked(1.6)} />
+          <Rect fill={color} height="6" rx="1" width="4" x="15.5" y="11" />
+        </>
+      ) : null}
+
       {name === "discover" ? (
         <>
           <Circle cx="12" cy="12" r="9" {...common} />

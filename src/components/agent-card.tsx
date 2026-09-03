@@ -11,6 +11,7 @@ const categoryLabels: Record<AgentCategory, string> = {
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
+  trading: "Trading",
 };
 
 type AgentCardProps = {

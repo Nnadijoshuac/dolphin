@@ -17,6 +17,7 @@ import { useAgentDetail } from "@/hooks/use-agents";
 import { useHireReadOnlyAgent, useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
+import type { AgentCategory } from "@/types/agent";
 import { canNegotiate } from "@/wallet/erc8183-policy";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -197,7 +198,7 @@ function AccessReview({
   category,
   walletAddress,
 }: {
-  category: "monitoring" | "rebalancing" | "grid-trading" | "health-factor" | "yield";
+  category: AgentCategory;
   walletAddress: string | null;
 }) {
   // Every category's real capability today is a read-only backend hire - no

@@ -11,6 +11,7 @@ const backgrounds: Record<AgentCategory, string> = {
   "grid-trading": colors.goldSoft,
   "health-factor": colors.coral,
   yield: colors.mint,
+  trading: colors.lilac,
 };
 
 type CategoryCardProps = {

@@ -63,6 +63,12 @@ function getMetricPreview(agent: Agent): MetricPreview {
         agent.liveStats.alertFrequency,
         (value) => value,
       );
+    case "trading":
+      return metricPreview(
+        "Realized P&L",
+        agent.liveStats.realizedPnl,
+        (value) => value,
+      );
   }
 }
 

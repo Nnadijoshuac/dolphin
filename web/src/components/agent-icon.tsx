@@ -8,6 +8,7 @@ const categoryBgColors: Record<AgentCategory, { bg: string; border: string; glyp
   "health-factor": { bg: "#DCEFE4", border: "#BFE0CC", glyphColor: "#1C6A44" },
   yield: { bg: "#E9E1F4", border: "#D8CAE8", glyphColor: "#65478A" },
   monitoring: { bg: "#F5F3EB", border: "#ECE8DE", glyphColor: "#303236" },
+  trading: { bg: "#F7DFD8", border: "#EFCDC2", glyphColor: "#964C3C" },
 };
 
 type AgentIconProps = {

@@ -21,6 +21,7 @@ const categoryLabels: Record<AgentCategory, string> = {
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
+  trading: "Trading",
 };
 
 function shortAddress(value: string | null) {
@@ -169,6 +170,22 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
             </View>
             <View className="w-1/2 pl-3">
               <MetricCell format={(value) => value} label="Vault rebalance cadence" metric={stats.rebalanceFrequency} />
+            </View>
+          </>
+        ) : null}
+        {stats.category === "trading" ? (
+          <>
+            <View className="w-1/2 pr-3">
+              <MetricCell format={(value) => `${value.toFixed(1)}%`} label="Win rate" metric={stats.winRate} />
+            </View>
+            <View className="w-1/2 pl-3">
+              <MetricCell format={(value) => value.toLocaleString()} label="Trades executed" metric={stats.tradesExecuted} />
+            </View>
+            <View className="w-1/2 pr-3">
+              <MetricCell format={(value) => value} label="Realized P&L" metric={stats.realizedPnl} />
+            </View>
+            <View className="w-1/2 pl-3">
+              <MetricCell format={formatList} label="Markets traded" metric={stats.marketsTraded} />
             </View>
           </>
         ) : null}

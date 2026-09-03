@@ -369,52 +369,62 @@ export default function DiscoverPage() {
         id="browse-by-role"
         className="site-frame py-14 sm:py-20"
       >
-        <div className="mb-8">
-          <p className="text-sm font-semibold text-accent-ink">Catalog</p>
-          <h2 className="section-title mt-3" id="catalog-heading">
-            {selectedLabel}
-          </h2>
-          <p className="max-w-md mt-4 text-sm leading-6 text-muted">{selectedDescription}</p>
-          <p aria-live="polite" className={styles.resultCount}>
-            {resultStatus}
-            {isFetching && hasCatalog ? " · Refreshing" : ""}
-          </p>
-        </div>
-
-        <div className={`${styles.filterScroller} no-scrollbar mb-12`}>
-          <div
-            aria-label="Filter agents by role"
-            className={styles.cirTabs}
-            role="tablist"
-          >
-            {catalogFilters.map((option, index) => {
-              const isSelected = selectedCategory === option.value;
-              const id = `filter-${option.value || "all"}`;
-
-              return (
-                <Fragment key={option.label}>
-                  <input
-                    className={styles.cirTabsR}
-                    type="radio"
-                    name="catalog-filter"
-                    id={id}
-                    checked={isSelected}
-                    onChange={() => updateSelectedCategory(option.value)}
-                  />
-                  <label
-                    className={styles.cirTabsT}
-                    htmlFor={id}
-                    role="tab"
-                  >
-                    {option.label}
-                  </label>
-                </Fragment>
-              );
-            })}
-          </div>
-        </div>
-
         <div className={styles.catalogLayout}>
+          <aside className={styles.catalogAside}>
+            <p className="text-sm font-semibold text-accent-ink">Catalog</p>
+            <h2 className="section-title mt-3 max-w-[17ch]" id="catalog-heading">
+              {selectedLabel}
+            </h2>
+            <p className="max-w-md mt-4 text-sm leading-6 text-muted">{selectedDescription}</p>
+
+            <div className="mt-8 mb-8">
+              <div
+                aria-label="Filter agents by role"
+                className={styles.cirTabs}
+                role="tablist"
+              >
+                {catalogFilters.map((option, index) => {
+                  const isSelected = selectedCategory === option.value;
+                  const id = `filter-${option.value || "all"}`;
+
+                  return (
+                    <Fragment key={option.label}>
+                      <input
+                        className={styles.cirTabsR}
+                        type="radio"
+                        name="catalog-filter"
+                        id={id}
+                        checked={isSelected}
+                        onChange={() => updateSelectedCategory(option.value)}
+                      />
+                      <label
+                        className={styles.cirTabsT}
+                        htmlFor={id}
+                        role="tab"
+                      >
+                        {option.label}
+                      </label>
+                    </Fragment>
+                  );
+                })}
+              </div>
+            </div>
+
+            <p aria-live="polite" className={styles.resultCount}>
+              {resultStatus}
+              {isFetching && hasCatalog ? " · Refreshing" : ""}
+            </p>
+
+            <div className={styles.readingGuide}>
+              <p className="font-semibold text-ink">Read the record first</p>
+              <ul className="mt-3 space-y-2.5 text-sm leading-5 text-muted">
+                <li>Confirm the agent identity and publisher.</li>
+                <li>Check the source behind every available metric.</li>
+                <li>Review requested access before you hire.</li>
+              </ul>
+            </div>
+          </aside>
+
           <div
             aria-busy={showInitialLoading || isFetching}
             className={styles.catalogPanel}
@@ -486,17 +496,6 @@ export default function DiscoverPage() {
             )}
           </div>
         </div>
-
-        {hasCatalog && (
-          <div className={`${styles.readingGuide} mt-16 pt-8 border-t border-[var(--line)] max-w-2xl mx-auto text-center`}>
-            <p className="font-semibold text-ink">Read the record first</p>
-            <ul className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 text-sm leading-5 text-muted">
-              <li>Confirm the agent identity and publisher.</li>
-              <li>Check the source behind every available metric.</li>
-              <li>Review requested access before you hire.</li>
-            </ul>
-          </div>
-        )}
       </section>
     </div>
   );

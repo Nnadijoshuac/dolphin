@@ -244,12 +244,18 @@
 }
 
 .catalogLayout {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.3fr) minmax(0, 1fr);
+  gap: clamp(2.5rem, 6vw, 5rem);
+  align-items: start;
 }
 
 .catalogAside {
   position: sticky;
-  top: 6.5rem;
+  top: 6rem;
+  align-self: start;
+  width: 100%;
+  min-width: 190px;
 }
 
 .resultCount {
@@ -555,8 +561,8 @@
   }
 
   .cirTabs {
-    flex-wrap: nowrap;
-    width: max-content;
+    flex-wrap: wrap;
+    width: 100%;
   }
 
   .catalogAside {
@@ -626,12 +632,11 @@
     padding-inline: 4px;
   }
 
-  .catalogLayout {
-    display: block;
-  }
-
   .catalogAside {
-    display: block;
+    position: static;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 13rem;
+    gap: 2rem;
   }
 
   .readingGuide {

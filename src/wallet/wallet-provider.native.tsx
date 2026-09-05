@@ -17,6 +17,81 @@ if (typeof global.atob === "undefined") {
   global.atob = (b64: string) => Buffer.from(b64, "base64").toString("binary");
 }
 
+/* --- the globals WalletConnect reads off `global` -------------------------
+ *
+ * The hand-rolled block above replaced @walletconnect/react-native-compat,
+ * but it only ever reproduced compat's Buffer/btoa/atob third. Compat also
+ * assigns four GLOBALS that WalletConnect looks up by name at runtime, and
+ * those were simply absent - so the lookups silently took their fallback path
+ * instead of erroring, which is why nothing pointed at this:
+ *
+ *   global.NetInfo     `subscribeToNetworkChange` is wrapped in
+ *                      `global?.NetInfo && ...`, so with it missing the
+ *                      relayer NEVER learns the connection dropped or came
+ *                      back, and so never reconnects on a network change.
+ *                      `isOnline()` separately does `if (global.NetInfo)
+ *                      {...} return true` - i.e. it fails OPEN, reporting
+ *                      "online" without ever checking.
+ *   global.Linking     how the SDK hands off into the wallet app.
+ *   global.Platform    platform branching inside the relayer/pairing code.
+ *   global.Application bundle id + `isAppInstalled`, which is what actually
+ *                      backs wallet detection - the other half of the
+ *                      LSApplicationQueriesSchemes / <queries> config in
+ *                      app.json + queries.js. Without it that config cannot
+ *                      be consulted at all.
+ *
+ * Verified by reading node_modules this session, not assumed: compat 2.23.10
+ * index.js for what it assigns, and @walletconnect/core's minified bundle for
+ * the `global?.NetInfo && global?.NetInfo.addEventListener(...)` and
+ * `if (global.NetInfo) { const e = await global.NetInfo.fetch(); return
+ * e?.isConnected } return true` call sites.
+ *
+ * STILL NOT IMPORTING COMPAT ITSELF, deliberately - the note above about
+ * react-native-url-polyfill stands, and compat pulls it in unconditionally.
+ * Every module required below is already a declared dependency of this app
+ * (AGENTS.md §3); nothing new was added to package.json for this.
+ *
+ * expo-application is the same source compat falls back to when its own
+ * native module is absent (compat module/index.ts getApplicationModule ->
+ * getExpoModule), so this matches compat's behaviour on an Expo build rather
+ * than inventing a shape.
+ */
+type WalletConnectGlobals = {
+  Linking?: unknown;
+  Platform?: unknown;
+  NetInfo?: unknown;
+  Application?: unknown;
+};
+
+const wcGlobal = global as unknown as WalletConnectGlobals;
+
+if (typeof wcGlobal.Linking === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  wcGlobal.Linking = require("react-native").Linking;
+}
+
+if (typeof wcGlobal.Platform === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  wcGlobal.Platform = require("react-native").Platform;
+}
+
+if (typeof wcGlobal.NetInfo === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  wcGlobal.NetInfo = require("@react-native-community/netinfo");
+}
+
+if (typeof wcGlobal.Application === "undefined") {
+  // Non-fatal: only wallet detection degrades if this is unavailable, and it
+  // must not take the whole provider down the way a missing native module
+  // once took down every route (see altana-passkey-native.ts).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    wcGlobal.Application = require("expo-application");
+  } catch {
+    // Leave it unset; AppKit treats every wallet as not-installed.
+  }
+}
+
 // WalletConnect registers many listeners; increase the limit to prevent the MaxListenersExceededWarning
 import { EventEmitter } from "events";
 EventEmitter.defaultMaxListeners = 1000;

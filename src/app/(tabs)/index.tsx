@@ -20,6 +20,7 @@ import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
+
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
   rebalancing: "Rebalancing",
@@ -33,8 +34,23 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
   const [activeCategory, setActiveCategory] = useState<AgentCategory>("rebalancing");
+  const mainScrollRef = useRef<ScrollView>(null);
+  const tabsScrollRef = useRef<ScrollView>(null);
   const horizontalScrollRef = useRef<ScrollView>(null);
+  const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
+  const [heroBottom, setHeroBottom] = useState(320);
+
+  const scrollTabIntoView = (slug: AgentCategory) => {
+    const layout = tabLayouts.current[slug];
+    if (layout && tabsScrollRef.current) {
+      const targetX = Math.max(0, layout.x - screenWidth / 2 + layout.width / 2);
+      tabsScrollRef.current.scrollTo({
+        x: targetX,
+        animated: true,
+      });
+    }
+  };
 
   const handleAgentPress = (agent: Agent) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -47,6 +63,7 @@ export default function DiscoverScreen() {
   const handleSelectCategory = (slug: AgentCategory) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setActiveCategory(slug);
+
     const index = AGENT_CATEGORIES.findIndex((c) => c.slug === slug);
     if (index !== -1) {
       horizontalScrollRef.current?.scrollTo({
@@ -54,58 +71,17 @@ export default function DiscoverScreen() {
         animated: true,
       });
     }
+
+    scrollTabIntoView(slug);
+
+    // Ensure the agent list section is in view
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTo({
+        y: Math.max(0, heroBottom),
+        animated: true,
+      });
+    }
   };
-
-  const [isTabsSticky, setIsTabsSticky] = useState(false);
-  const [heroBottom, setHeroBottom] = useState(320);
-
-  const categoryTabsElement = (
-    <View
-      className="pt-3 pb-3"
-      style={{
-        backgroundColor: colors.canvas,
-      }}
-    >
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
-      >
-        {AGENT_CATEGORIES.map((cat) => {
-          const isActive = activeCategory === cat.slug;
-          return (
-            <PressableScale
-              key={cat.slug}
-              accessibilityLabel={cat.label}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              onPress={() => handleSelectCategory(cat.slug)}
-              containerStyle={{
-                paddingVertical: 6,
-                paddingHorizontal: 16,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 9999,
-                backgroundColor: isActive ? "rgba(1, 135, 95, 0.1)" : "#FFFFFF",
-                borderWidth: 1,
-                borderColor: isActive ? "transparent" : "rgba(17,18,20,0.1)",
-              }}
-            >
-              <Text
-                className="text-[13px]"
-                style={{
-                  color: isActive ? "#01875F" : colors.ink,
-                  fontWeight: isActive ? "600" : "500",
-                }}
-              >
-                {cat.label}
-              </Text>
-            </PressableScale>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
 
   return (
     <SafeAreaView
@@ -113,18 +89,10 @@ export default function DiscoverScreen() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-
       <ScrollView
+        ref={mainScrollRef}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 120 }}
-        onScroll={(e) => {
-          const scrollY = e.nativeEvent.contentOffset.y;
-          const shouldStick = scrollY >= heroBottom - 50;
-          if (shouldStick !== isTabsSticky) {
-            setIsTabsSticky(shouldStick);
-          }
-        }}
-        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
@@ -132,63 +100,53 @@ export default function DiscoverScreen() {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               void refetch();
             }}
-            tintColor={colors.ink}
+            tintColor={colors.goldDark}
           />
         }
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
+        stickyHeaderIndices={[3]}
       >
-        {/* Child 0: Top Dolphin Writeup Header (Scrolls up out of view) */}
+        {/* Child 0: Top Dolphin Header */}
         <View>
           <AppHeader />
         </View>
 
-        {/* Child 1: Sticky Header Container (Discover title + docked Category Tabs) */}
+        {/* Child 1: Discover Title Bar */}
         <View
+          className="flex-row items-center justify-between px-4 pb-2.5 pt-1"
           style={{
             backgroundColor: colors.canvas,
-            zIndex: 20,
           }}
         >
-          {/* Discover Title Bar */}
-          <View
-            className="flex-row items-center justify-between px-4 pb-2.5 pt-1"
-            style={{
-              backgroundColor: colors.canvas,
+          <Text
+            className="text-[30px] font-black tracking-[-1px]"
+            style={{ color: colors.ink }}
+          >
+            Discover
+          </Text>
+
+          <PressableScale
+            accessibilityLabel="View categories"
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/search")}
+            containerStyle={{
+              alignItems: "center",
+              backgroundColor: colors.surface,
+              borderColor: colors.line,
+              borderRadius: 9999,
+              borderWidth: 1,
+              height: 38,
+              justifyContent: "center",
+              width: 38,
+              ...shadows.subtle,
             }}
           >
-            <Text
-              className="text-[30px] font-black tracking-[-1px]"
-              style={{ color: colors.ink }}
-            >
-              Discover
-            </Text>
-
-            <PressableScale
-              accessibilityLabel="View categories"
-              accessibilityRole="button"
-              onPress={() => router.push("/(tabs)/search")}
-              containerStyle={{
-                alignItems: "center",
-                backgroundColor: "#FFFFFF",
-                borderColor: colors.line,
-                borderRadius: 9999,
-                borderWidth: 1,
-                height: 38,
-                justifyContent: "center",
-                width: 38,
-                ...shadows.subtle,
-              }}
-            >
-              <CategoryGlyph color={colors.ink} name="layers" size={18} />
-            </PressableScale>
-          </View>
-
-          {/* Docked Category Tabs when scrolled past Hero */}
-          {isTabsSticky ? categoryTabsElement : null}
+            <CategoryGlyph color={colors.goldDark} name="layers" size={18} />
+          </PressableScale>
         </View>
 
-        {/* Child 2: Advert Carousel */}
+        {/* Child 2: Advert Carousel Hero */}
         <View
           onLayout={(e) => {
             setHeroBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
@@ -197,12 +155,70 @@ export default function DiscoverScreen() {
           <AdvertCarousel agents={agents ?? []} onAgentPress={handleAgentPress} />
         </View>
 
-        {/* Child 3: Category Filter Tabs Bar (In-flow position) */}
-        {isTabsSticky ? (
-          <View style={{ height: 48 }} />
-        ) : (
-          categoryTabsElement
-        )}
+        {/* Child 3: Sticky Luxury Gold Category Navigation Tabs */}
+        <View
+          className="py-2.5 border-b"
+          style={{
+            backgroundColor: colors.canvas,
+            borderColor: colors.lineLight,
+            zIndex: 30,
+          }}
+        >
+          <ScrollView
+            ref={tabsScrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+          >
+            {AGENT_CATEGORIES.map((cat) => {
+              const isActive = activeCategory === cat.slug;
+              return (
+                <View
+                  key={cat.slug}
+                  onLayout={(e) => {
+                    tabLayouts.current[cat.slug] = {
+                      x: e.nativeEvent.layout.x,
+                      width: e.nativeEvent.layout.width,
+                    };
+                  }}
+                >
+                  <PressableScale
+                    accessibilityLabel={cat.label}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isActive }}
+                    onPress={() => handleSelectCategory(cat.slug)}
+                    containerStyle={{
+                      paddingVertical: 7,
+                      paddingHorizontal: 16,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 9999,
+                      backgroundColor: isActive ? colors.gold : colors.surface,
+                      borderWidth: 1,
+                      borderColor: isActive ? colors.goldBorder : colors.line,
+                      ...(isActive ? shadows.goldGlow : shadows.subtle),
+                    }}
+                  >
+                    <View className="flex-row items-center gap-1.5">
+                      {isActive ? (
+                        <CategoryGlyph color={colors.ink} name={cat.slug} size={13} />
+                      ) : null}
+                      <Text
+                        className="text-[13px]"
+                        style={{
+                          color: isActive ? colors.ink : colors.muted,
+                          fontWeight: isActive ? "700" : "500",
+                        }}
+                      >
+                        {cat.label}
+                      </Text>
+                    </View>
+                  </PressableScale>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {/* Child 4: Horizontal Swipeable Category Lists Carousel */}
         <ScrollView
@@ -217,6 +233,7 @@ export default function DiscoverScreen() {
               if (nextCategory !== activeCategory) {
                 setActiveCategory(nextCategory);
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                scrollTabIntoView(nextCategory);
               }
             }
           }}
@@ -225,7 +242,7 @@ export default function DiscoverScreen() {
           {AGENT_CATEGORIES.map((cat) => {
             const categoryAgents = agents?.filter((agent) => agent.category === cat.slug) ?? [];
             return (
-              <View key={cat.slug} style={{ width: screenWidth }} className="px-4 pt-2">
+              <View key={cat.slug} style={{ width: screenWidth }} className="px-4 pt-3">
                 {isLoading ? (
                   <View className="py-8">
                     <StatePanel
@@ -251,7 +268,7 @@ export default function DiscoverScreen() {
                     />
                   </View>
                 ) : (
-                  <View className="gap-3.5">
+                  <View className="gap-3">
                     {categoryAgents.map((agent) => (
                       <AgentRow
                         key={agent.id}

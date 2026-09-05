@@ -305,10 +305,15 @@ function Overview({
         <ConstellationBg opacity={0.3} />
 
         {/*
-         * The stacked-avatar chip. The reference stacks currency flags; here the
-         * faces are the accounts themselves, which is the same idea carrying
-         * real information - a person can see at a glance whether one or two
-         * accounts feed the figure below.
+         * The chip carries the label alone.
+         *
+         * It used to stack the two account avatars inside it, mirroring the
+         * reference's stacked currency flags. That put a second face on a
+         * screen whose top bar already shows the connected address's avatar, so
+         * the same account was drawn twice within one viewport and read as two
+         * different identities. The count it encoded is already stated in words
+         * directly underneath ("Across 2 accounts…"), and each account still
+         * carries its own face on its card below.
          *
          * No chevron, unlike the reference. A chevron promises a picker, and
          * there is nothing to pick between: the total is every account or it is
@@ -318,16 +323,6 @@ function Overview({
           className="mt-2 flex-row items-center gap-2 rounded-full border px-3.5 py-2"
           style={{ backgroundColor: colors.surface, borderColor: colors.line }}
         >
-          <View className="flex-row">
-            {identityAddress ? (
-              <WalletAvatar address={identityAddress} kind="human" size={18} />
-            ) : null}
-            {dolphinAddress ? (
-              <View style={{ marginLeft: identityAddress ? -6 : 0 }}>
-                <WalletAvatar address={dolphinAddress} kind="bot" size={18} />
-              </View>
-            ) : null}
-          </View>
           <Text
             className="text-[11px] font-bold uppercase tracking-[1px]"
             style={{ color: colors.muted }}

@@ -157,10 +157,9 @@ export default function DiscoverScreen() {
 
         {/* Child 3: Sticky Luxury Gold Category Navigation Tabs */}
         <View
-          className="py-2.5 border-b"
+          className="py-2.5"
           style={{
             backgroundColor: colors.canvas,
-            borderColor: colors.lineLight,
             zIndex: 30,
           }}
         >

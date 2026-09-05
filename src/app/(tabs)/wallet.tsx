@@ -1,10 +1,10 @@
-import { useState } from "react";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
-  ScrollView,
-  View,
-  useWindowDimensions,
+    ScrollView,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 

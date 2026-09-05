@@ -1,14 +1,14 @@
+import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
-  Modal,
-  ScrollView,
-  Text,
-  View,
-  useWindowDimensions,
+    Alert,
+    Modal,
+    ScrollView,
+    Text,
+    View,
+    useWindowDimensions,
 } from "react-native";
-import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AltanaWalletCard } from "@/components/altana-wallet-card";

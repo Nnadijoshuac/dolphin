@@ -1,6 +1,6 @@
-import { Linking, Text, View, useWindowDimensions } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import { Linking, Text, View, useWindowDimensions } from "react-native";
 import { useBalance } from "wagmi";
 
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";

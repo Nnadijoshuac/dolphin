@@ -7,8 +7,35 @@
  * where those two answers are turned into "is a judge allowed to see it".
  *
  * ---------------------------------------------------------------------------
- * DECISION (2026-08-30): auto-publish requires BOTH a confirmed classification
- * AND a live endpoint. Anything else lands `pending`.
+ * LOWERING THE CLASSIFICATION BAR (2026-09-05) - and deliberately not the
+ * other one.
+ * ---------------------------------------------------------------------------
+ * The gate was `confirmed` AND `verified-live`. It is now `verified-live` and
+ * ANY category the classifier will commit to, `confirmed` or `likely`.
+ *
+ * WHY THE OTHER HALF DID NOT MOVE, which is the whole point. Of the 102
+ * candidates held pending when this changed, 69 advertised no endpoint anywhere
+ * and 32 did not answer one - only ONE was live-but-merely-likely. So relaxing
+ * confidence is nearly free in listings and relaxing liveness is where all the
+ * volume sits. That is exactly backwards from what should be traded away:
+ *
+ *   - a `likely` classification that is wrong puts a REAL, WORKING agent in the
+ *     wrong drawer. A user who hires it gets a service that runs. The record
+ *     still carries `confidence: "likely"` and its `shortfall`, so the claim is
+ *     labelled rather than overstated, and a wrong drawer is recoverable.
+ *   - an unreachable listing sends a user to a dead end. Nothing about it works,
+ *     no label repairs that, and it is the Functionality failure
+ *     project-scope.md §11 rules out.
+ *
+ * And the volume was never supposed to come from here. There are ~299,000
+ * identities on this registry and the backfill has walked 47% of them; the
+ * sweep that walks the rest has been off since 2026-09-02. The answer to a thin
+ * catalog is to LOOK AT MORE AGENTS, not to list ones Dolphin cannot confirm
+ * work. Intake is the lever; this gate is not.
+ *
+ * ---------------------------------------------------------------------------
+ * DECISION (2026-08-30): auto-publish requires a classification AND a live
+ * endpoint. Anything else lands `pending`.
  * ---------------------------------------------------------------------------
  * Documented here in the same style as DEFAULT_READ_ONLY_PRICE_MODEL, so it is
  * reversible by whoever disagrees, in one place.
@@ -168,18 +195,27 @@ export function resolveStatus(input: StatusInput): StatusDecision {
     };
   }
 
+  /*
+   * Everything reaching here has already cleared the liveness half: the two
+   * branches above return for `unreachable` and `no-endpoint-advertised`, so
+   * `liveness` is `verified-live` and this agent answered in the protocol it
+   * advertises.
+   *
+   * CHANGED 2026-09-05: `likely` now publishes too. See LOWERING THE
+   * CLASSIFICATION BAR in this file's header for why, and for what it costs.
+   */
   if (input.confidence !== "confirmed") {
     if (input.manuallyIncluded) {
       return {
         status: "published",
         reason:
-          "Classified `likely` rather than `confirmed`, but a human reviewed the agent and vouched for the category, and its endpoint answered a protocol-appropriate probe. The liveness half of the gate was still enforced.",
+          "A human reviewed the agent and vouched for the category, and its endpoint answered a protocol-appropriate probe. The liveness half of the gate was still enforced.",
       };
     }
     return {
-      status: "pending",
+      status: "published",
       reason:
-        "Endpoint is confirmed live, but the classification is only `likely` - below the confidence needed to auto-publish a category claim.",
+        "Its own advertised endpoint answered a protocol-appropriate probe, so the agent demonstrably works. The category is Dolphin's best reading of the agent's own description rather than a certainty - `confidence` on this record says `likely`, and that is the honest word for it.",
     };
   }
 
@@ -205,14 +241,15 @@ export function needsDeepEvaluation(
   if (!Number.isFinite(age)) return true;
 
   /*
-   * A verdict produced by superseded rules is stale however recently it was
-   * produced, so it jumps the age checks below rather than waiting them out.
+   * A verdict produced by superseded rules is stale no matter how recently it
+   * was produced, so it jumps the age checks below rather than waiting them out.
    *
-   * This is what makes a category added after the fact reach agents already in
-   * the ledger. Without it, `rejected-classifier` rows judged before `trading`
-   * existed would have waited the full 14-day reconsideration window to be
-   * asked a question the scorer could not have asked them at the time - and
-   * rows the sweep re-sees with unchanged text would never be asked at all.
+   * This is what makes a category added after the fact reach agents that were
+   * already in the ledger. Without it, `rejected-classifier` rows judged before
+   * `trading` existed would have waited the full 14-day reconsideration window
+   * to be asked a question the scorer could not have asked them at the time -
+   * and rows the sweep re-sees with unchanged text would never have been asked
+   * at all.
    *
    * Excludes rejected-prefilter on purpose: those rows never reached the
    * scorer, so a scorer version can say nothing about them.

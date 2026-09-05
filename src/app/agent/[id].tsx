@@ -59,12 +59,12 @@ export default function AgentDetailRoute() {
     <SafeAreaView
       className="flex-1"
       edges={["top", "left", "right"]}
-      style={{ backgroundColor: "#FFFFFF" }}
+      style={{ backgroundColor: colors.canvas }}
     >
-      {/* Google Play Store App Bar */}
+      {/* Premium Google Play Style Top Bar */}
       <View
-        className="flex-row items-center justify-between px-4 py-2 border-b"
-        style={{ borderColor: "rgba(17, 18, 20, 0.06)", backgroundColor: "#FFFFFF" }}
+        className="flex-row items-center justify-between px-4 py-2.5 border-b"
+        style={{ borderColor: colors.line, backgroundColor: colors.canvas }}
       >
         <PressableScale
           accessibilityLabel="Go back"
@@ -74,30 +74,34 @@ export default function AgentDetailRoute() {
             router.back();
           }}
           containerStyle={{
-            height: 40,
-            width: 40,
-            borderRadius: 20,
+            height: 38,
+            width: 38,
+            borderRadius: 19,
             alignItems: "center",
             justifyContent: "center",
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: colors.line,
           }}
         >
           <CategoryGlyph
             color={colors.ink}
             name="chevron-left"
-            size={20}
+            size={18}
             strokeWidth={2}
           />
         </PressableScale>
 
         <Text
-          className="text-[15px] font-semibold flex-1 mx-3"
+          className="text-[15px] font-bold flex-1 mx-3"
+          ellipsizeMode="tail"
           numberOfLines={1}
           style={{ color: colors.ink }}
         >
           {agent?.name ?? "Agent Details"}
         </Text>
 
-        <View className="flex-row items-center gap-1">
+        <View className="flex-row items-center gap-1.5">
           <PressableScale
             accessibilityLabel="Search agents"
             accessibilityRole="button"
@@ -106,17 +110,20 @@ export default function AgentDetailRoute() {
               router.push("/(tabs)/search");
             }}
             containerStyle={{
-              height: 40,
-              width: 40,
-              borderRadius: 20,
+              height: 38,
+              width: 38,
+              borderRadius: 19,
               alignItems: "center",
               justifyContent: "center",
+              backgroundColor: colors.surface,
+              borderWidth: 1,
+              borderColor: colors.line,
             }}
           >
             <CategoryGlyph
               color={colors.ink}
               name="search"
-              size={20}
+              size={18}
             />
           </PressableScale>
 
@@ -125,17 +132,20 @@ export default function AgentDetailRoute() {
             accessibilityRole="button"
             onPress={handleShare}
             containerStyle={{
-              height: 40,
-              width: 40,
-              borderRadius: 20,
+              height: 38,
+              width: 38,
+              borderRadius: 19,
               alignItems: "center",
               justifyContent: "center",
+              backgroundColor: colors.surface,
+              borderWidth: 1,
+              borderColor: colors.line,
             }}
           >
             <CategoryGlyph
               color={colors.ink}
               name="share"
-              size={19}
+              size={17}
             />
           </PressableScale>
 
@@ -152,17 +162,20 @@ export default function AgentDetailRoute() {
               }
             }}
             containerStyle={{
-              height: 40,
-              width: 40,
-              borderRadius: 20,
+              height: 38,
+              width: 38,
+              borderRadius: 19,
               alignItems: "center",
               justifyContent: "center",
+              backgroundColor: colors.surface,
+              borderWidth: 1,
+              borderColor: colors.line,
             }}
           >
             <CategoryGlyph
-              color={colors.ink}
+              color={colors.goldDark}
               name={agent ? agent.category : "more"}
-              size={19}
+              size={18}
             />
           </PressableScale>
         </View>

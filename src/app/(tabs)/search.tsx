@@ -155,8 +155,8 @@ export default function SearchScreen() {
         <View
           className="flex-row items-center rounded-full bg-white px-3.5 h-[42px]"
           style={{
-            borderColor: isFocused ? "#01875F" : "rgba(17,18,20,0.08)",
-            borderWidth: 1.2,
+            borderColor: isFocused ? colors.gold : colors.line,
+            borderWidth: 1.5,
             ...shadows.subtle,
           }}
         >

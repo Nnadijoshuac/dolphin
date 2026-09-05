@@ -2,7 +2,9 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+    Modal,
     ScrollView,
+    Text,
     View,
     useWindowDimensions,
 } from "react-native";
@@ -13,7 +15,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { WalletOverview } from "@/components/wallet-overview";
-import { colors } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import { useWallet } from "@/wallet/wallet-provider";
 
 /**
@@ -62,58 +64,23 @@ export default function WalletScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const contentWidth = Math.min(windowWidth || 390, 480);
   const [balancesHidden, setBalancesHidden] = useState(false);
-
-
-
-  return (
+  const [showInfoModal, setShowInfoModal] = useState(false);  return (
     <SafeAreaView
       className="flex-1"
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      {/* ── top bar: identity left, profile/account access right ── */}
+      {/* ── top bar: profile/account access left, info right ── */}
       <View
         className="w-full self-center flex-row items-center justify-between px-6 pb-2 pt-1"
         style={{ backgroundColor: colors.canvas, maxWidth: contentWidth, zIndex: 10 }}
       >
         {/*
-         * The avatar is the connected address's own face, the same seed used on
-         * its card below, so the two are recognisably one account. With nothing
-         * connected there is no address to seed from, so it falls back to a
-         * neutral mark rather than a face that would imply an account exists.
-         *
-         * Circular, at the same 40pt as the profile button opposite it, so the two
-         * ends of the bar are the same shape. As a bare squircle it read as a
-         * stray image dropped into the bar rather than as the row's left-hand
-         * control. The connected and disconnected states now occupy an
-         * identical 40pt circle, so the bar does not change shape when a wallet
-         * connects.
-         */}
-        {wallet.isConnected && wallet.address ? (
-          <WalletAvatar
-            address={wallet.address}
-            kind="human"
-            radius={20}
-            size={40}
-          />
-        ) : (
-          <View
-            className="items-center justify-center rounded-full border"
-            style={{
-              backgroundColor: colors.surfaceSubtle,
-              borderColor: colors.line,
-              height: 40,
-              width: 40,
-            }}
-          >
-            <CategoryGlyph color={colors.muted} name="wallet" size={18} />
-          </View>
-        )}
-
-        {/*
-         * Profile/Account access button. Shows the identity wallet's avatar when
-         * connected, tapping navigates to the account details page. When
-         * disconnected, shows a neutral wallet glyph.
+         * Profile/Account access button. Shows the connected address's own face,
+         * the same seed used on its card below, so the two are recognisably one
+         * account. With nothing connected there is no address to seed from, so it
+         * falls back to a neutral mark rather than a face that would imply an
+         * account exists. Tapping navigates to the account details page.
          */}
         <PressableScale
           accessibilityLabel="Account details"
@@ -149,6 +116,31 @@ export default function WalletScreen() {
               <CategoryGlyph color={colors.muted} name="wallet" size={18} />
             </View>
           )}
+        </PressableScale>
+
+        {/*
+         * Info/security button. Opens a modal with network details and settings.
+         */}
+        <PressableScale
+          accessibilityLabel="About Dolphin & security"
+          accessibilityRole="button"
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowInfoModal(true);
+          }}
+          containerStyle={{
+            alignItems: "center",
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            borderRadius: 9999,
+            borderWidth: 1,
+            height: 40,
+            justifyContent: "center",
+            width: 40,
+            ...shadows.subtle,
+          }}
+        >
+          <CategoryGlyph color={colors.ink} name="info" size={18} />
         </PressableScale>
       </View>
 
@@ -200,6 +192,54 @@ export default function WalletScreen() {
            */}
         </View>
       </ScrollView>
+
+      {/* Info / security modal */}
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setShowInfoModal(false)}
+        transparent
+        visible={showInfoModal}
+      >
+        <View className="flex-1 justify-end bg-black/40">
+          <View
+            className="rounded-t-3xl border-t bg-[#F6F4EE] px-6 pt-5 pb-9"
+            style={{ borderColor: colors.line, ...shadows.card }}
+          >
+            <View className="flex-row items-center justify-between pb-3">
+              <Text className="text-[18px] font-bold" style={{ color: colors.ink }}>
+                Wallet & Security Details
+              </Text>
+              <PressableScale
+                accessibilityRole="button"
+                onPress={() => setShowInfoModal(false)}
+                containerStyle={{ padding: 4 }}
+              >
+                <Text className="text-[14px] font-bold text-slate-500">Done</Text>
+              </PressableScale>
+            </View>
+
+            <View
+              className="my-3 rounded-2xl border bg-white p-4"
+              style={{ borderColor: colors.line }}
+            >
+              <View className="flex-row justify-between py-1 border-b border-slate-100">
+                <Text className="text-[13px] text-slate-500">Network</Text>
+                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
+                  BNB Smart Chain (ID: 56)
+                </Text>
+              </View>
+              <View className="flex-row justify-between py-1">
+                <Text className="text-[13px] text-slate-500">
+                  Private Key Handling
+                </Text>
+                <Text className="text-[13px] font-semibold text-emerald-700">
+                  Never requested
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

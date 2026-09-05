@@ -1,9 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useState } from "react";
 import {
-    Alert,
-    Modal,
     ScrollView,
     Text,
     View,
@@ -16,7 +13,6 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { colors, shadows } from "@/constants/theme";
-import { useAppStore } from "@/store/use-app-store";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
 /**
@@ -30,44 +26,6 @@ export default function AccountScreen() {
   const wallet = useWallet();
   const { width: windowWidth } = useWindowDimensions();
   const contentWidth = Math.min(windowWidth || 390, 480);
-  const [showInfoModal, setShowInfoModal] = useState(false);
-
-  const previewHires = useAppStore((state) => state.previewHires);
-  const setHasCompletedOnboarding = useAppStore(
-    (state) => state.setHasCompletedOnboarding,
-  );
-  const clearPreviewHires = useAppStore((state) => state.clearPreviewHires);
-  const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
-
-  const handleReplayOnboarding = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowInfoModal(false);
-    setHasCompletedOnboarding(false);
-    router.replace("/onboarding");
-  };
-
-  const handleClearCache = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
-      "Reset local app data",
-      "This clears device previews and search history. It does not send a transaction or change registry data.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset",
-          style: "destructive",
-          onPress: () => {
-            clearPreviewHires();
-            clearRecentSearches();
-            setShowInfoModal(false);
-            void Haptics.notificationAsync(
-              Haptics.NotificationFeedbackType.Success,
-            );
-          },
-        },
-      ],
-    );
-  };
 
   return (
     <SafeAreaView
@@ -109,27 +67,7 @@ export default function AccountScreen() {
           Account
         </Text>
 
-        <PressableScale
-          accessibilityLabel="About Dolphin & security"
-          accessibilityRole="button"
-          onPress={() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setShowInfoModal(true);
-          }}
-          containerStyle={{
-            alignItems: "center",
-            backgroundColor: colors.surface,
-            borderColor: colors.line,
-            borderRadius: 9999,
-            borderWidth: 1,
-            height: 40,
-            justifyContent: "center",
-            width: 40,
-            ...shadows.subtle,
-          }}
-        >
-          <CategoryGlyph color={colors.ink} name="info" size={18} />
-        </PressableScale>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -217,96 +155,6 @@ export default function AccountScreen() {
           ) : null}
         </View>
       </ScrollView>
-
-      {/* Info / settings modal */}
-      <Modal
-        animationType="slide"
-        onRequestClose={() => setShowInfoModal(false)}
-        transparent
-        visible={showInfoModal}
-      >
-        <View className="flex-1 justify-end bg-black/40">
-          <View
-            className="rounded-t-3xl border-t bg-[#F6F4EE] px-6 pt-5 pb-9"
-            style={{ borderColor: colors.line, ...shadows.card }}
-          >
-            <View className="flex-row items-center justify-between pb-3">
-              <Text className="text-[18px] font-bold" style={{ color: colors.ink }}>
-                Wallet & Security Details
-              </Text>
-              <PressableScale
-                accessibilityRole="button"
-                onPress={() => setShowInfoModal(false)}
-                containerStyle={{ padding: 4 }}
-              >
-                <Text className="text-[14px] font-bold text-slate-500">Done</Text>
-              </PressableScale>
-            </View>
-
-            <View
-              className="my-3 rounded-2xl border bg-white p-4"
-              style={{ borderColor: colors.line }}
-            >
-              <View className="flex-row justify-between py-1 border-b border-slate-100">
-                <Text className="text-[13px] text-slate-500">Network</Text>
-                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
-                  BNB Smart Chain (ID: 56)
-                </Text>
-              </View>
-              <View className="flex-row justify-between py-2 border-b border-slate-100">
-                <Text className="text-[13px] text-slate-500">
-                  Saved Local Previews
-                </Text>
-                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
-                  {previewHires.length}
-                </Text>
-              </View>
-              <View className="flex-row justify-between py-1">
-                <Text className="text-[13px] text-slate-500">
-                  Private Key Handling
-                </Text>
-                <Text className="text-[13px] font-semibold text-emerald-700">
-                  Never requested
-                </Text>
-              </View>
-            </View>
-
-            <View className="gap-2.5 pt-2">
-              <PressableScale
-                accessibilityRole="button"
-                onPress={handleReplayOnboarding}
-                containerStyle={{
-                  alignItems: "center",
-                  backgroundColor: "#FFFFFF",
-                  borderColor: colors.line,
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  paddingVertical: 12,
-                }}
-              >
-                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                  Replay Onboarding Tour
-                </Text>
-              </PressableScale>
-
-              <PressableScale
-                accessibilityRole="button"
-                onPress={handleClearCache}
-                containerStyle={{
-                  alignItems: "center",
-                  backgroundColor: "#FEE2E2",
-                  borderRadius: 14,
-                  paddingVertical: 12,
-                }}
-              >
-                <Text className="text-[14px] font-bold text-red-600">
-                  Reset Local App Data
-                </Text>
-              </PressableScale>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

@@ -11,12 +11,15 @@ import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
 import GridViewIcon from "@hugeicons/core-free-icons/GridViewIcon";
 import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleIcon";
 import Layers01Icon from "@hugeicons/core-free-icons/Layers01Icon";
+import MoreVerticalIcon from "@hugeicons/core-free-icons/MoreVerticalIcon";
 import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
 import Robot01Icon from "@hugeicons/core-free-icons/Robot01Icon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
+import Share01Icon from "@hugeicons/core-free-icons/Share01Icon";
 import Shield01Icon from "@hugeicons/core-free-icons/Shield01Icon";
 import ShieldOffIcon from "@hugeicons/core-free-icons/ShieldOffIcon";
 import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
+import StarIcon from "@hugeicons/core-free-icons/StarIcon";
 import Tick01Icon from "@hugeicons/core-free-icons/Tick01Icon";
 import Wallet01Icon from "@hugeicons/core-free-icons/Wallet01Icon";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
@@ -77,7 +80,10 @@ export type GlyphName =
   // equivalent. They are real icons now, so the text fallbacks can go.
   | "receive"
   | "external"
-  | "refresh";
+  | "refresh"
+  | "share"
+  | "more"
+  | "star";
 
 /**
  * Every glyph name that is now a Hugeicons mark. A name absent from this map
@@ -105,6 +111,9 @@ const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
   receive: ArrowDown01Icon,
   external: ArrowUpRight01Icon,
   refresh: Refresh01Icon,
+  share: Share01Icon,
+  more: MoreVerticalIcon,
+  star: StarIcon,
 };
 
 type CategoryGlyphProps = {

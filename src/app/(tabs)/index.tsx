@@ -73,14 +73,6 @@ export default function DiscoverScreen() {
     }
 
     scrollTabIntoView(slug);
-
-    // Ensure the agent list section is in view
-    if (mainScrollRef.current) {
-      mainScrollRef.current.scrollTo({
-        y: Math.max(0, heroBottom),
-        animated: true,
-      });
-    }
   };
 
   return (

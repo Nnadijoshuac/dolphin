@@ -549,29 +549,38 @@ export function AgentDetail({
           {agent.tagline}
         </Text>
 
+        {/*
+         * The toggle is a nested <Text>, not a control beside the paragraph, so
+         * it flows as the last word of the description and wraps with it: the
+         * ellipsis, a space, then "Show more" on the same line. As a sibling
+         * PressableScale it sat on its own line under the block, which read as a
+         * second element rather than as the end of the sentence it continues.
+         *
+         * Nested Text takes onPress directly on both platforms; suppressHighlighting
+         * stops iOS flashing a grey box over the run, which at this size covers
+         * the tail of the paragraph rather than just the link.
+         */}
         <Text
           className="mt-2 text-[14px] leading-[23px]"
           style={{ color: colors.muted }}
         >
           {displayedDescription}
-          {isLongDescription && !expandedAbout ? "…" : ""}
-        </Text>
-
-        {isLongDescription ? (
-          <PressableScale
-            accessibilityLabel={expandedAbout ? "Show less" : "Show more"}
-            accessibilityRole="button"
-            onPress={handleToggleAbout}
-            containerStyle={{ alignSelf: "flex-start", marginTop: 8 }}
-          >
-            <Text
-              className="text-[14px] font-bold"
-              style={{ color: colors.goldDark }}
-            >
-              {expandedAbout ? "Show less" : "Show more"}
+          {isLongDescription ? (
+            <Text>
+              {expandedAbout ? " " : "… "}
+              <Text
+                accessibilityLabel={expandedAbout ? "Show less" : "Show more"}
+                accessibilityRole="button"
+                className="text-[14px] font-bold"
+                onPress={handleToggleAbout}
+                style={{ color: colors.goldDark }}
+                suppressHighlighting
+              >
+                {expandedAbout ? "Show less" : "Show more"}
+              </Text>
             </Text>
-          </PressableScale>
-        ) : null}
+          ) : null}
+        </Text>
 
         {/*
          * Skills only. The three decorative hashtags that used to lead this row

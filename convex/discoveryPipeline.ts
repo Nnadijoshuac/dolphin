@@ -65,7 +65,11 @@ import {
   ERC8004_IDENTITY_REGISTRY,
   type AgentCategory,
 } from "./lib/agentCatalog";
-import { explainShortfall, scoreAgent } from "./lib/agentScoring";
+import {
+  SCORING_RULESET_VERSION,
+  explainShortfall,
+  scoreAgent,
+} from "./lib/agentScoring";
 import { fallbackIconBlob, fetchIcon, type IconSource } from "./lib/agentIcons";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { probeLiveness, type ProbeEndpoint } from "./lib/liveness";
@@ -212,6 +216,31 @@ const SEARCH_VOCABULARY: readonly string[] = [
   "yield", "yield farming", "yield optimizer", "apy", "apr", "auto compound",
   "autocompound", "vault", "staking rewards", "farming", "earn",
   "yield aggregator",
+  // trading
+  //
+  // ADDED 2026-09-05, and it is the reason the Trading category was empty.
+  // `trading` became a browsable category on 2026-09-03 (agentScoring.ts and
+  // agentCatalog.ts both), but this list - which decides what 8004scan is
+  // actually ASKED for - was never extended, so the highest-yield sweep path
+  // has never once requested a trading agent. The other two paths could only
+  // have found one by accident.
+  //
+  // Every term below is drawn from the same place the other categories' terms
+  // were: the `defining` and `supporting` tiers of agentScoring.ts's `trading`
+  // entry, which were themselves measured against real registry rows. No term
+  // is here because it sounds like it should exist.
+  //
+  // Bare "trading" and "trade" are deliberately ABSENT. They are the opening
+  // words of the four largest mass-registration templates on the registry
+  // (Ave.ai's "AI-driven multi-chain trading agent" at 630/2000 of the Task 0
+  // sample, "autonomous trading agent (simple-mode)" at 131/1446 of the topical
+  // union, the Aster DEX perp series at 38, Debot at 48). Asking for them would
+  // spend five pages per term retrieving records the pre-filter already rejects
+  // by exact template match - real request budget for a guaranteed zero.
+  "trading strategy", "algorithmic trading", "systematic trading",
+  "trade execution", "momentum trading", "trend following", "stop loss",
+  "take profit", "limit order", "dollar-cost averaging", "position sizing",
+  "trading signal", "backtest", "entry and exit",
   // protocols the live-stats readers integrate against
   "venus", "pancakeswap", "aave", "lista", "beefy", "alpaca finance",
   "thena", "wombat", "kinza", "morpho",
@@ -870,6 +899,7 @@ export const recordSweepBatch = internalMutation({
           chainId: BSC_CHAIN_ID,
           registryAddress: ERC8004_IDENTITY_REGISTRY,
           ...record,
+          rulesetVersion: SCORING_RULESET_VERSION,
           source,
           crossCheckState: null,
           crossCheckTokenUri: null,
@@ -907,7 +937,26 @@ export const recordSweepBatch = internalMutation({
       const textUnchanged =
         existing.name === record.name && existing.description === record.description;
 
-      if (textUnchanged) {
+      /*
+       * ...and the rules that produced the stored verdict are still the current
+       * ones. Added 2026-09-05.
+       *
+       * "Same text in, same score out" holds only within ONE version of
+       * agentScoring.ts. When `trading` was added as a category, every row in
+       * the ledger had unchanged text and was therefore skipped here, so the
+       * new category was never applied to a single existing record. The skip
+       * was silently preserving verdicts the scorer would no longer give.
+       *
+       * A prefilter rejection is exempt: it never reached the scorer, so a
+       * scorer version tells us nothing about it, and re-judging 251,922 of
+       * them on a scorer bump would be pure cost.
+       */
+      const rulesetCurrent =
+        record.status === "rejected-prefilter" ||
+        existing.status === "rejected-prefilter" ||
+        (existing.rulesetVersion ?? 0) >= SCORING_RULESET_VERSION;
+
+      if (textUnchanged && rulesetCurrent) {
         await ctx.db.patch(existing._id, { lastSeenAt: seenAt });
         unchanged++;
         continue;
@@ -939,6 +988,7 @@ export const recordSweepBatch = internalMutation({
               matchedTerms: record.matchedTerms,
               classificationEvidence: record.classificationEvidence,
               shortfall: record.shortfall,
+              rulesetVersion: SCORING_RULESET_VERSION,
             }),
         lastSeenAt: seenAt,
         lastEvaluatedAt: seenAt,
@@ -1024,6 +1074,10 @@ export const applyDeepEvaluation = internalMutation({
 
     await ctx.db.patch(id, {
       ...fields,
+      // The deep pass re-scores (see the scoreAgent call in deepEvaluate), so
+      // this row's verdict is now the current ruleset's. Stamping it here is
+      // what stops it being re-judged on every subsequent pass.
+      rulesetVersion: SCORING_RULESET_VERSION,
       lastEvaluatedAt: evaluatedAt,
       lastDeepEvaluatedAt: evaluatedAt,
     });

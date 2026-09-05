@@ -248,6 +248,16 @@ export default defineSchema({
     classificationEvidence: v.array(v.string()),
     /** Why a `likely` agent fell short of `confirmed`. Real information, not decoration. */
     shortfall: v.union(v.string(), v.null()),
+    /**
+     * Which version of convex/lib/agentScoring.ts produced the classification
+     * above. A row whose stamp is behind SCORING_RULESET_VERSION was judged by
+     * rules that no longer apply, so it is re-judged rather than skipped.
+     *
+     * Optional because 257,991 rows predate the stamp. Absent reads as "older
+     * than version 1", which is the correct answer for every one of them, so no
+     * backfill migration is needed - they are simply all stale, which they are.
+     */
+    rulesetVersion: v.optional(v.number()),
 
     // Stage 2b: the agent's own registration file (convex/lib/registrationFile.ts).
     crossCheckState: v.union(v.string(), v.null()),

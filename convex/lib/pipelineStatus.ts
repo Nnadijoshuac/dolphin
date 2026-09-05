@@ -36,6 +36,7 @@
  * human and are not routed through it, so nothing here can delist them.
  */
 
+import { SCORING_RULESET_VERSION } from "./agentScoring";
 import type { AgentCategory } from "./agentCatalog";
 import type { LivenessState } from "./liveness";
 
@@ -194,12 +195,32 @@ export function needsDeepEvaluation(
   candidate: {
     status: CandidateStatus;
     lastDeepEvaluatedAt: string | null;
+    /** Undefined on any row judged before the stamp existed. */
+    rulesetVersion?: number;
   },
   now: number,
 ): boolean {
   if (candidate.lastDeepEvaluatedAt === null) return true;
   const age = now - Date.parse(candidate.lastDeepEvaluatedAt);
   if (!Number.isFinite(age)) return true;
+
+  /*
+   * A verdict produced by superseded rules is stale however recently it was
+   * produced, so it jumps the age checks below rather than waiting them out.
+   *
+   * This is what makes a category added after the fact reach agents already in
+   * the ledger. Without it, `rejected-classifier` rows judged before `trading`
+   * existed would have waited the full 14-day reconsideration window to be
+   * asked a question the scorer could not have asked them at the time - and
+   * rows the sweep re-sees with unchanged text would never be asked at all.
+   *
+   * Excludes rejected-prefilter on purpose: those rows never reached the
+   * scorer, so a scorer version can say nothing about them.
+   */
+  const staleRuleset =
+    candidate.status !== "rejected-prefilter" &&
+    (candidate.rulesetVersion ?? 0) < SCORING_RULESET_VERSION;
+  if (staleRuleset) return true;
 
   switch (candidate.status) {
     case "rejected-prefilter":

@@ -260,6 +260,40 @@ export const CONFIRMED_SCORE = 12;
 export const CONFIRMED_MARGIN = 6;
 export const LIKELY_SCORE = 4;
 
+/* ---------------------------------------------------------------------------
+ * THE RULESET VERSION - bump this whenever anything above changes the verdict.
+ * ---------------------------------------------------------------------------
+ * WHY THIS HAD TO EXIST. The sweep skips any record whose 8004scan text is
+ * unchanged, justified in recordSweepBatch by "the cheap verdict is a pure
+ * function of (name, description) - same text in, same score out". That is true
+ * of any ONE version of this file and false across versions, and the gap was not
+ * theoretical: `trading` was added as a category on 2026-09-03, and because
+ * every one of the 257,991 rows already in the ledger had matching text, not one
+ * of them was ever re-judged against it. The category sat at zero listings with
+ * zero candidates - not because the registry has no trading agents, but because
+ * nothing had ever been asked the question.
+ *
+ * A row stamped with an older version than this constant has a verdict that
+ * predates the current rules, so its verdict is stale by definition and it is
+ * re-judged rather than skipped. A row with no stamp at all is older than the
+ * stamp itself and is treated the same way.
+ *
+ * BUMP THIS when you change CATEGORY_TERMS, the WEIGHT table,
+ * OFF_DOMAIN_CAPABILITIES, ACTION_VERBS, BREADTH_VERB_THRESHOLD, or any of the
+ * three thresholds above. Do NOT bump it for a comment or a refactor that
+ * cannot move a score - every bump re-judges the entire ledger, which is real
+ * work, and a bump that changes no verdict is pure cost.
+ *
+ * Prefilter rejections are deliberately NOT invalidated by this. They never
+ * reached the scorer, so no change here can alter their verdict; convex/lib/
+ * prefilter.ts would need a version of its own if its rules ever change.
+ *
+ *   1  the four-category scorer (2026-08-29 - 2026-09-02)
+ *   2  `trading` added as a sixth category (2026-09-03), first actually applied
+ *      to the existing ledger by this stamp on 2026-09-05
+ */
+export const SCORING_RULESET_VERSION = 2;
+
 function normalize(text: string): string {
   return (text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 }

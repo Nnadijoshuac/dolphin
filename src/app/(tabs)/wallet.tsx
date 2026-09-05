@@ -7,50 +7,58 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AltanaWalletCard } from "@/components/altana-wallet-card";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { ConstellationBg } from "@/components/constellation-bg";
-import { IdentityWalletCard } from "@/components/identity-wallet-card";
 import { PressableScale } from "@/components/pressable-scale";
+import { WalletAvatar } from "@/components/wallet-avatar";
+import { WalletOverview } from "@/components/wallet-overview";
 import { colors, shadows } from "@/constants/theme";
 import { useAppStore } from "@/store/use-app-store";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
-const walletHeroImage = require("../../../assets/images/wallet.png");
-
 /**
- * The wallet screen: two accounts, each shown as its own card.
+ * The wallet screen.
  *
  * ---------------------------------------------------------------------------
- * WHAT THIS MIRRORS, AND WHERE IT DELIBERATELY DIFFERS
+ * LAYOUT
  * ---------------------------------------------------------------------------
- * The website's wallet page (web/src/app/wallet/page.tsx) renders
- * AltanaWalletPanel over IdentityWalletSection, and inside that panel the two
- * wallets sit side by side in a two-column grid. This screen carries the same
- * SUBSTANCE - the same two accounts, the same balances read the same way, the
- * same "these are separate wallets" statement - in this app's own visual
- * language, which the two products deliberately do not share.
+ * Follows the consumer-fintech shape the design is aiming at: a slim top bar
+ * carrying identity and one utility control, then the balance itself as the
+ * hero, a row of circular actions, horizontally scrolling account cards, and
+ * uppercase section rules below. wallet-overview.tsx owns everything from the
+ * total down to the cards; this file is the frame around it.
  *
- * ORDER IS INVERTED ON PURPOSE. The website puts the Dolphin Wallet first
- * because in a two-column grid neither card is "above" the other; order there
- * is reading order, not priority. On a phone the stack is vertical, so order IS
- * priority - and the identity wallet is the one that makes hiring work at all
- * and is available on every build, while the Dolphin Wallet is explicitly
- * optional and reports "not available on this build" wherever passkeys are not
- * linked (Expo Go, most notably). Leading with a card that is frequently
- * unsupported would bury the one thing a new user actually needs.
+ * Three things from that reference are deliberately absent, all for the same
+ * reason - Dolphin has nothing real behind them and will not render a control
+ * that does nothing (AGENTS.md §5):
+ *   "Earn $5"          no referral or rewards programme exists.
+ *   "Send" / "Convert" Dolphin never moves funds out of the identity wallet and
+ *                      has no swap or on-ramp. The website deleted its own Send
+ *                      button for precisely this, having found it wired to an
+ *                      empty handler.
+ *   "Recent transactions"
+ *                      Dolphin indexes no transaction history. The honest route
+ *                      to one is the explorer, which the BscScan action already
+ *                      opens, so a section header over an empty list would be a
+ *                      promise nothing here can keep.
  *
- * THE DOLPHIN WALLET CARD IS BACK. It was removed from this screen earlier
- * while the identity wallet was the only working half; the component was kept
- * rather than deleted precisely so restoring it would be one line, and this is
- * that line. Nothing about the wallet itself changed - AltanaWalletProvider was
- * mounted in app-providers.tsx the whole time and the hire flow has been using
- * it continuously.
+ * The wallet.png hero was removed rather than shrunk: the reference makes the
+ * balance the hero, and two heroes stacked left the first real figure below the
+ * fold. The asset is untouched and restoring it is one <Image>.
+ *
+ * ---------------------------------------------------------------------------
+ * STILL TWO ACCOUNTS, NOT ONE
+ * ---------------------------------------------------------------------------
+ * The reference is a single-account product, so its total is unambiguous.
+ * Dolphin's is not: the identity wallet is the user's own MetaMask account that
+ * Dolphin only reads, and the Dolphin Wallet is a passkey smart account that
+ * pays agents. Both feed the total, both get their own card, and the detail
+ * card below keeps the "this is a separate wallet" statement that the website
+ * treats as the one line that must not be softened.
  */
 export default function WalletScreen() {
   const router = useRouter();
@@ -65,18 +73,6 @@ export default function WalletScreen() {
   );
   const clearPreviewHires = useAppStore((state) => state.clearPreviewHires);
   const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
-
-  /*
-   * There is no handleConnectToggle here any more.
-   *
-   * This screen used to own a gold CTA that ran its own Alert-based disconnect
-   * confirm, while WalletConnectButton carried a second, different one. Two
-   * confirms for one action, free to drift apart - which is the exact bug the
-   * website hit and fixed by deleting its bare Disconnect button and delegating
-   * both states to WalletConnectButton. Same fix here: connecting lives in
-   * IdentityWalletCard's empty state, disconnecting lives in the manage row
-   * below, and both are the same component.
-   */
 
   const handleReplayOnboarding = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -114,124 +110,112 @@ export default function WalletScreen() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      {/* Sticky pinned top header */}
+      {/* ── top bar: identity left, one utility control right ── */}
       <View
-        className="w-full self-center px-6 pb-3 pt-2"
-        style={{
-          backgroundColor: colors.canvas,
-          maxWidth: contentWidth,
-          zIndex: 10,
-        }}
+        className="w-full self-center flex-row items-center justify-between px-6 pb-2 pt-1"
+        style={{ backgroundColor: colors.canvas, maxWidth: contentWidth, zIndex: 10 }}
       >
-        <View className="flex-row items-start justify-between">
-          <View>
-            <Text
-              className="text-[32px] font-bold tracking-[-0.6px]"
-              style={{ color: colors.ink }}
-            >
-              Wallet
-            </Text>
-            {/*
-             * The subtitle is back, and it is now true again.
-             *
-             * It was removed when this screen showed exactly one account,
-             * because it described a second card that was no longer here. Both
-             * cards are present again, so the line does its original job:
-             * telling someone why there are two of these before they scroll
-             * into them.
-             */}
-            <Text
-              className="mt-1 text-[13px] leading-[18px]"
-              style={{ color: colors.muted }}
-            >
-              Two accounts: one identifies you, one pays agents.
-            </Text>
-          </View>
-
-          <PressableScale
-            accessibilityLabel="About Dolphin & security"
-            accessibilityRole="button"
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setShowInfoModal(true);
-            }}
-            containerStyle={{
-              alignItems: "center",
-              backgroundColor: "#FFFFFF",
+        {/*
+         * The avatar is the connected address's own face, the same seed used on
+         * its card below, so the two are recognisably one account. With nothing
+         * connected there is no address to seed from, so it falls back to a
+         * neutral mark rather than a face that would imply an account exists.
+         */}
+        {wallet.isConnected && wallet.address ? (
+          <WalletAvatar address={wallet.address} kind="human" size={40} />
+        ) : (
+          <View
+            className="items-center justify-center rounded-full border"
+            style={{
+              backgroundColor: colors.surfaceSubtle,
               borderColor: colors.line,
-              borderRadius: 9999,
-              borderWidth: 1,
-              height: 36,
-              justifyContent: "center",
-              marginTop: 4,
-              width: 36,
-              ...shadows.subtle,
+              height: 40,
+              width: 40,
             }}
           >
-            <CategoryGlyph color={colors.ink} name="info" size={18} />
-          </PressableScale>
-        </View>
+            <CategoryGlyph color={colors.muted} name="wallet" size={18} />
+          </View>
+        )}
+
+        <PressableScale
+          accessibilityLabel="About Dolphin & security"
+          accessibilityRole="button"
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowInfoModal(true);
+          }}
+          containerStyle={{
+            alignItems: "center",
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            borderRadius: 9999,
+            borderWidth: 1,
+            height: 40,
+            justifyContent: "center",
+            width: 40,
+            ...shadows.subtle,
+          }}
+        >
+          <CategoryGlyph color={colors.ink} name="info" size={18} />
+        </PressableScale>
       </View>
 
       <ScrollView
         className="flex-1"
-        /*
-         * Top-aligned again, not centred.
-         *
-         * The centring here existed only because removing the Dolphin Wallet
-         * card left roughly half a screen of content floating under the header.
-         * With both cards back the content fills and overflows the viewport, so
-         * flexGrow + justifyContent: "center" would now fight the scroll rather
-         * than help it. paddingBottom still clears the floating tab bar, which
-         * is absolutely positioned ~90px from the bottom (see (tabs)/_layout).
-         */
         contentContainerStyle={{
           alignItems: "center",
           paddingBottom: 120,
-          paddingTop: 4,
+          paddingTop: 12,
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="w-full px-6" style={{ maxWidth: contentWidth }}>
-          {/*
-           * Hero graphic, at 120px rather than the 190px it occupied when it
-           * was carrying a nearly empty screen. It is brand furniture, not
-           * information: with two real cards below it, the old height pushed
-           * the first balance below the fold on a small device.
-           */}
-          <View
-            className="mb-5 items-center justify-center"
-            style={{ height: 120, width: "100%" }}
-          >
-            <ConstellationBg opacity={0.35} />
-            <Image
-              cachePolicy="memory-disk"
-              contentFit="contain"
-              priority="high"
-              source={walletHeroImage}
-              style={{ height: 112, width: 160 }}
-            />
+        {/*
+         * Not inside the padded column: the account cards scroll horizontally
+         * and must be able to run to the screen edge, otherwise the card that is
+         * meant to peek gets clipped by the padding instead of by the viewport.
+         * wallet-overview.tsx applies its own inset.
+         */}
+        <View className="w-full" style={{ maxWidth: contentWidth }}>
+          <View className="px-6">
+            <WalletOverview />
           </View>
+        </View>
 
-          {/* 1. The identity wallet - the user's own MetaMask/WalletConnect
-                 account. Read-only to Dolphin; identifies hire records. */}
-          <IdentityWalletCard />
+        <View className="w-full px-6" style={{ maxWidth: contentWidth }}>
+          {/* ── section rule, in the reference's typographic style ── */}
+          <Text
+            className="mb-3 mt-8 text-[12px] font-bold uppercase tracking-[1.2px]"
+            style={{ color: colors.muted }}
+          >
+            Account details
+          </Text>
 
-          {/* 2. The Dolphin Wallet - the Altana passkey smart account that
-                 actually pays agents. Renders its own unsupported / no-wallet /
-                 connected states, so it is safe to mount unconditionally. */}
+          {/*
+           * The Dolphin Wallet in full: create/recover, funding, recoverability
+           * and the separate-wallet notice. Its own states are complete, so it
+           * is safe to mount unconditionally - on a build without passkeys
+           * linked it renders the honest "not available on this build" card
+           * rather than nothing.
+           */}
           <AltanaWalletCard />
 
           {/*
-           * Manage row. Only once something is connected, because its only job
-           * is disconnecting - the connect affordance lives in the card's empty
-           * state, and rendering both would put two connect buttons on one
-           * screen. Exactly how the website's IdentityWalletSection behaves.
+           * Manage row. Only once connected, because its only job is
+           * disconnecting - connect lives in the overview's empty state, and
+           * rendering both would put two connect buttons on one screen.
+           *
+           * WalletConnectButton, never a bare Disconnect: it owns the two-step
+           * confirm, and routing every disconnect through it is what stops this
+           * screen and the hire screen from guarding the same action
+           * differently. The website hit exactly that drift.
            */}
           {wallet.isConnected ? (
             <View
               className="rounded-2xl border p-4"
-              style={{ backgroundColor: colors.surfaceSubtle, borderColor: colors.line }}
+              style={{
+                backgroundColor: colors.surfaceSubtle,
+                borderColor: colors.line,
+              }}
             >
               <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
                 Identity wallet
@@ -243,12 +227,6 @@ export default function WalletScreen() {
                 Used to identify you for hire records. Separate from the Dolphin
                 Wallet above, which holds its own balance.
               </Text>
-              {/*
-               * WalletConnectButton, never a bare Disconnect. It owns the
-               * two-step confirm, so routing every disconnect through it is what
-               * stops this screen and the hire screen from guarding the same
-               * action differently.
-               */}
               <View className="mt-3">
                 <WalletConnectButton />
               </View>
@@ -270,10 +248,7 @@ export default function WalletScreen() {
             style={{ borderColor: colors.line, ...shadows.card }}
           >
             <View className="flex-row items-center justify-between pb-3">
-              <Text
-                className="text-[18px] font-bold"
-                style={{ color: colors.ink }}
-              >
+              <Text className="text-[18px] font-bold" style={{ color: colors.ink }}>
                 Wallet & Security Details
               </Text>
               <PressableScale
@@ -281,23 +256,17 @@ export default function WalletScreen() {
                 onPress={() => setShowInfoModal(false)}
                 containerStyle={{ padding: 4 }}
               >
-                <Text className="text-[14px] font-bold text-slate-500">
-                  Done
-                </Text>
+                <Text className="text-[14px] font-bold text-slate-500">Done</Text>
               </PressableScale>
             </View>
 
-            {/* Protocol details */}
             <View
               className="my-3 rounded-2xl border bg-white p-4"
               style={{ borderColor: colors.line }}
             >
               <View className="flex-row justify-between py-1 border-b border-slate-100">
                 <Text className="text-[13px] text-slate-500">Network</Text>
-                <Text
-                  className="text-[13px] font-bold"
-                  style={{ color: colors.ink }}
-                >
+                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
                   BNB Smart Chain (ID: 56)
                 </Text>
               </View>
@@ -305,10 +274,7 @@ export default function WalletScreen() {
                 <Text className="text-[13px] text-slate-500">
                   Saved Local Previews
                 </Text>
-                <Text
-                  className="text-[13px] font-bold"
-                  style={{ color: colors.ink }}
-                >
+                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
                   {previewHires.length}
                 </Text>
               </View>
@@ -322,7 +288,6 @@ export default function WalletScreen() {
               </View>
             </View>
 
-            {/* Actions */}
             <View className="gap-2.5 pt-2">
               <PressableScale
                 accessibilityRole="button"
@@ -336,10 +301,7 @@ export default function WalletScreen() {
                   paddingVertical: 12,
                 }}
               >
-                <Text
-                  className="text-[14px] font-bold"
-                  style={{ color: colors.ink }}
-                >
+                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
                   Replay Onboarding Tour
                 </Text>
               </PressableScale>

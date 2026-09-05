@@ -1,0 +1,504 @@
+import { useState } from "react";
+import { Linking, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import * as Haptics from "expo-haptics";
+import { useBalance } from "wagmi";
+
+import { ConstellationBg } from "@/components/constellation-bg";
+import { PressableScale } from "@/components/pressable-scale";
+import { WalletAvatar } from "@/components/wallet-avatar";
+import { colors, shadows } from "@/constants/theme";
+import { formatBnb } from "@/wallet/altana-policy";
+import { useAltanaWallet } from "@/wallet/altana-provider";
+import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
+
+/**
+ * The top of the wallet screen: one total, three actions, two account cards.
+ *
+ * ---------------------------------------------------------------------------
+ * LAYOUT BORROWED, SUBSTANCE NOT
+ * ---------------------------------------------------------------------------
+ * The shape here follows a consumer-fintech reference the design is aiming at:
+ * a centred TOTAL BALANCE chip, a large figure with a hide toggle, a row of
+ * circular actions, then horizontally scrolling account cards with the next one
+ * peeking off the right edge. What is NOT borrowed is that reference's palette
+ * (white/blue) or its action set.
+ *
+ * THE ACTION ROW IS DELIBERATELY NOT "ADD MONEY / SEND / CONVERT".
+ * Dolphin has nothing real behind any of those three:
+ *   - it never moves funds out of the identity wallet, which is the user's own
+ *     MetaMask account with a far better send UI already;
+ *   - it has no swap or on-ramp integration at all.
+ * The website already learned this the expensive way and deleted its Send
+ * button rather than disable it, because it had been wired to an empty handler
+ * and rendered as a live control that silently did nothing. Every action below
+ * does something real (AGENTS.md §5).
+ *
+ * WHY THIS WHOLE SECTION IS GATED ON `wallet.isAvailable`:
+ * useBalance is a wagmi hook and throws without a WagmiProvider above it. That
+ * provider is mounted only when wallet-provider.native.tsx built a Reown setup,
+ * which needs both a native platform AND a projectId - exactly the condition
+ * `isAvailable` reports. The Expo web target ships no wallet by design, so it
+ * takes the fallback branch rather than crashing the export.
+ */
+
+const CARD_GAP = 12;
+
+function shortenAddress(address: string) {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+/* ─────────────── circular action ─────────────── */
+
+/**
+ * One circular action with its label underneath.
+ *
+ * The icons are the same Unicode marks the website's WalletAction uses (↓ ↗ ↻)
+ * rather than new SVG paths - category-glyph.tsx has no receive/external/refresh
+ * glyph, and adding three for one row would be inventing an icon set to match a
+ * screenshot.
+ */
+function CircleAction({
+  icon,
+  label,
+  onPress,
+  disabled = false,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View className="items-center" style={{ width: 84 }}>
+      <PressableScale
+        accessibilityLabel={label}
+        accessibilityRole="button"
+        disabled={disabled}
+        onPress={onPress}
+        containerStyle={{
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderColor: colors.line,
+          borderRadius: 9999,
+          borderWidth: 1,
+          height: 64,
+          justifyContent: "center",
+          opacity: disabled ? 0.45 : 1,
+          width: 64,
+          ...shadows.subtle,
+        }}
+      >
+        <Text className="text-[24px]" style={{ color: colors.ink }}>
+          {icon}
+        </Text>
+      </PressableScale>
+      <Text
+        className="mt-2 text-center text-[13px] font-semibold"
+        style={{ color: colors.inkSecondary }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/* ─────────────── account card ─────────────── */
+
+/**
+ * One account, summarised. Purely presentational so both wallets render through
+ * the same component and cannot drift into looking like different products.
+ *
+ * `balance` is a pre-resolved string rather than a number, because the caller is
+ * the only place that knows whether a figure was actually read. Passing a
+ * number would force this component to invent a fallback, and the only honest
+ * fallbacks are words ("Unavailable", "Reading…"), not zero.
+ */
+function AccountCard({
+  address,
+  kind,
+  title,
+  subtitle,
+  balance,
+  balanceTone = "normal",
+  footnote,
+  width,
+}: {
+  address: string;
+  kind: "human" | "bot";
+  title: string;
+  subtitle: string;
+  balance: string;
+  balanceTone?: "normal" | "muted" | "error";
+  footnote: string;
+  width: number;
+}) {
+  return (
+    <View
+      className="rounded-2xl border p-4"
+      style={{
+        backgroundColor: colors.surface,
+        borderColor: colors.line,
+        height: 168,
+        justifyContent: "space-between",
+        width,
+        ...shadows.subtle,
+      }}
+    >
+      <View className="flex-row items-center gap-2.5">
+        <WalletAvatar address={address} kind={kind} size={36} />
+        <View className="flex-1">
+          <Text
+            className="text-[15px] font-bold"
+            numberOfLines={1}
+            style={{ color: colors.ink }}
+          >
+            {title}
+          </Text>
+          <Text
+            className="text-[12px] font-semibold"
+            numberOfLines={1}
+            style={{ color: colors.faint }}
+          >
+            {subtitle}
+          </Text>
+        </View>
+      </View>
+
+      <View>
+        <Text
+          className="text-[26px] font-bold tracking-[-0.5px]"
+          numberOfLines={1}
+          style={{
+            color:
+              balanceTone === "error"
+                ? colors.danger
+                : balanceTone === "muted"
+                  ? colors.faint
+                  : colors.ink,
+          }}
+        >
+          {balance}
+        </Text>
+        <Text
+          className="mt-1 text-[12px] font-semibold"
+          numberOfLines={1}
+          style={{ color: colors.muted }}
+        >
+          {footnote}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/* ─────────────── the section ─────────────── */
+
+function Overview() {
+  const identity = useWallet();
+  const altana = useAltanaWallet();
+  const { width: windowWidth } = useWindowDimensions();
+  const [hidden, setHidden] = useState(false);
+
+  const contentWidth = Math.min(windowWidth || 390, 480) - 48;
+  // 0.72 rather than a full width: the point of the horizontal row is that the
+  // next card is visibly cut off, which is what tells someone it scrolls.
+  const cardWidth = Math.round(contentWidth * 0.72);
+
+  const identityAddress = identity.isConnected ? identity.address : null;
+  const {
+    data: identityBalance,
+    isLoading: identityLoading,
+    isError: identityFailed,
+    refetch: refetchIdentity,
+  } = useBalance({
+    address: (identityAddress ?? undefined) as `0x${string}` | undefined,
+    query: { enabled: Boolean(identityAddress) },
+  });
+
+  const dolphinAddress =
+    altana.status === "connected" ? altana.address : null;
+
+  /*
+   * The total, and the rule it follows.
+   *
+   * A total is a CLAIM about everything the user holds here. If any account
+   * that exists could not be read, a number would understate it while looking
+   * complete - which is worse than no number, because nothing signals the
+   * shortfall. So the total renders only when every present account was read;
+   * otherwise it says so and names why (AGENTS.md §5).
+   */
+  const parts: { readable: boolean; wei: bigint | null }[] = [];
+  if (identityAddress) {
+    parts.push({
+      readable: !identityFailed && identityBalance !== undefined,
+      wei: identityBalance?.value ?? null,
+    });
+  }
+  if (dolphinAddress) {
+    parts.push({
+      readable: !altana.balanceError && altana.balanceWei !== null,
+      wei: altana.balanceWei,
+    });
+  }
+
+  const anyLoading = identityLoading || altana.isReadingBalance;
+  const allReadable = parts.length > 0 && parts.every((p) => p.readable);
+  const totalWei = allReadable
+    ? parts.reduce((sum, p) => sum + (p.wei ?? BigInt(0)), BigInt(0))
+    : null;
+
+  const totalText =
+    parts.length === 0
+      ? "—"
+      : totalWei !== null
+        ? hidden
+          ? "••••"
+          : formatBnb(totalWei)
+        : anyLoading
+          ? "…"
+          : "—";
+
+  const totalNote =
+    parts.length === 0
+      ? "Connect a wallet to see a balance"
+      : totalWei !== null
+        ? `Across ${parts.length === 1 ? "1 account" : `${parts.length} accounts`} on BNB Smart Chain`
+        : anyLoading
+          ? "Reading balances…"
+          : "A balance could not be read, so no total is shown";
+
+  const handleCopy = () => {
+    if (!identityAddress) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Clipboard.setStringAsync(identityAddress);
+  };
+
+  const handleExplorer = () => {
+    if (!identityAddress) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Linking.openURL(`https://bscscan.com/address/${identityAddress}`);
+  };
+
+  const handleRefresh = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (identityAddress) void refetchIdentity();
+    if (dolphinAddress) altana.refreshBalance();
+  };
+
+  return (
+    <View>
+      {/* ── total balance ── */}
+      <View className="items-center" style={{ paddingBottom: 4 }}>
+        <ConstellationBg opacity={0.3} />
+
+        {/*
+         * The stacked-avatar chip. The reference stacks currency flags; here the
+         * faces are the accounts themselves, which is the same idea carrying
+         * real information - a person can see at a glance whether one or two
+         * accounts feed the figure below.
+         *
+         * No chevron, unlike the reference. A chevron promises a picker, and
+         * there is nothing to pick between: the total is every account or it is
+         * nothing.
+         */}
+        <View
+          className="mt-2 flex-row items-center gap-2 rounded-full border px-3.5 py-2"
+          style={{ backgroundColor: colors.surface, borderColor: colors.line }}
+        >
+          <View className="flex-row">
+            {identityAddress ? (
+              <WalletAvatar address={identityAddress} kind="human" size={18} />
+            ) : null}
+            {dolphinAddress ? (
+              <View style={{ marginLeft: identityAddress ? -6 : 0 }}>
+                <WalletAvatar address={dolphinAddress} kind="bot" size={18} />
+              </View>
+            ) : null}
+          </View>
+          <Text
+            className="text-[11px] font-bold uppercase tracking-[1px]"
+            style={{ color: colors.muted }}
+          >
+            Total balance
+          </Text>
+        </View>
+
+        <View className="mt-3 flex-row items-center gap-2.5">
+          <Text
+            className="text-[44px] font-bold tracking-[-1.5px]"
+            style={{ color: parts.length === 0 ? colors.faint : colors.ink }}
+          >
+            {totalText}
+          </Text>
+          {totalWei !== null ? (
+            <>
+              {!hidden ? (
+                <Text
+                  className="text-[16px] font-bold"
+                  style={{ color: colors.muted }}
+                >
+                  BNB
+                </Text>
+              ) : null}
+              {/*
+               * A worded toggle rather than an eye icon: category-glyph.tsx has
+               * no eye, and a label is unambiguous to a screen reader without
+               * needing one written for it.
+               */}
+              <PressableScale
+                accessibilityLabel={hidden ? "Show balance" : "Hide balance"}
+                accessibilityRole="button"
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setHidden((value) => !value);
+                }}
+                containerStyle={{
+                  backgroundColor: colors.surfaceSubtle,
+                  borderColor: colors.line,
+                  borderRadius: 9999,
+                  borderWidth: 1,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                }}
+              >
+                <Text
+                  className="text-[11px] font-bold"
+                  style={{ color: colors.muted }}
+                >
+                  {hidden ? "Show" : "Hide"}
+                </Text>
+              </PressableScale>
+            </>
+          ) : null}
+        </View>
+
+        <Text
+          className="mt-1.5 text-center text-[12px]"
+          style={{ color: colors.muted }}
+        >
+          {totalNote}
+        </Text>
+      </View>
+
+      {/* ── actions ── */}
+      {identityAddress ? (
+        <View className="mt-6 flex-row justify-center gap-3">
+          <CircleAction icon="↓" label="Receive" onPress={handleCopy} />
+          <CircleAction icon="↗" label="BscScan" onPress={handleExplorer} />
+          <CircleAction
+            disabled={identityLoading || altana.isReadingBalance}
+            icon="↻"
+            label="Refresh"
+            onPress={handleRefresh}
+          />
+        </View>
+      ) : (
+        /*
+         * No disabled action row while disconnected. Three greyed circles would
+         * be three dead ends where the one thing that unblocks the user is not
+         * offered - the same dead end the website removed from its
+         * recoverability panel.
+         */
+        <View className="mt-6 px-2">
+          <WalletConnectButton connectLabel="Connect wallet" />
+        </View>
+      )}
+
+      {/* ── account cards ── */}
+      <View className="mt-7">
+        <ScrollView
+          contentContainerStyle={{ gap: CARD_GAP, paddingRight: 24 }}
+          decelerationRate="fast"
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={cardWidth + CARD_GAP}
+        >
+          {identityAddress ? (
+            <AccountCard
+              address={identityAddress}
+              balance={
+                hidden
+                  ? "••••"
+                  : identityFailed
+                    ? "Unavailable"
+                    : identityBalance
+                      ? formatBnb(identityBalance.value)
+                      : identityLoading
+                        ? "…"
+                        : "—"
+              }
+              balanceTone={
+                identityFailed ? "error" : identityBalance ? "normal" : "muted"
+              }
+              footnote={shortenAddress(identityAddress)}
+              kind="human"
+              subtitle="BNB · identifies your hires"
+              title="Your wallet"
+              width={cardWidth}
+            />
+          ) : null}
+
+          {dolphinAddress ? (
+            <AccountCard
+              address={dolphinAddress}
+              balance={
+                hidden
+                  ? "••••"
+                  : altana.balanceError
+                    ? "Unavailable"
+                    : altana.balanceWei !== null
+                      ? formatBnb(altana.balanceWei)
+                      : altana.isReadingBalance
+                        ? "…"
+                        : "—"
+              }
+              balanceTone={
+                altana.balanceError
+                  ? "error"
+                  : altana.balanceWei !== null
+                    ? "normal"
+                    : "muted"
+              }
+              footnote={shortenAddress(dolphinAddress)}
+              kind="bot"
+              subtitle="BNB · pays agents you hire"
+              title="Dolphin Wallet"
+              width={cardWidth}
+            />
+          ) : null}
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
+export function WalletOverview() {
+  const identity = useWallet();
+
+  /*
+   * The fallback branch. Reached on the Expo web target (no wallet by design)
+   * and on a native build with no projectId configured. Either way there is no
+   * WagmiProvider, so Overview - which calls useBalance - must not mount.
+   */
+  if (!identity.isAvailable) {
+    return (
+      <View
+        className="rounded-2xl border p-4"
+        style={{ backgroundColor: colors.surface, borderColor: colors.line, ...shadows.subtle }}
+      >
+        <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
+          Balances unavailable here
+        </Text>
+        <Text
+          className="mt-1.5 text-[12px] leading-[18px]"
+          style={{ color: colors.muted }}
+        >
+          {identity.unavailableReason}
+        </Text>
+      </View>
+    );
+  }
+
+  return <Overview />;
+}

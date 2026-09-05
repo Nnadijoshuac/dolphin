@@ -1,10 +1,14 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { Text, View } from "react-native";
+import * as Haptics from "expo-haptics";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
+import { PressableScale } from "@/components/pressable-scale";
 import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
@@ -202,6 +206,19 @@ type AgentDetailProps = {
 
 export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDetailProps) {
   const registeredMetric = agent.registryVerification.registered;
+  const [expandedHowItWorks, setExpandedHowItWorks] = useState(false);
+
+  const MAX_PREVIEW_LENGTH = 150; // Characters to show in preview
+  const description = agent.description;
+  const isLongDescription = description.length > MAX_PREVIEW_LENGTH;
+  const displayedDescription = expandedHowItWorks
+    ? description
+    : description.slice(0, MAX_PREVIEW_LENGTH);
+
+  const handleToggleHowItWorks = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setExpandedHowItWorks((prev) => !prev);
+  };
 
   return (
     <>
@@ -241,11 +258,37 @@ export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDeta
       </DetailSection>
 
       <DetailSection title="How it works">
-        <Surface>
+        <View className="gap-3">
           <Text className="text-[15px] leading-6" style={{ color: colors.ink }}>
-            {agent.description}
+            {displayedDescription}
+            {isLongDescription && !expandedHowItWorks ? "…" : ""}
           </Text>
-          <View className="mt-5 flex-row flex-wrap gap-2">
+          {isLongDescription ? (
+            <PressableScale
+              accessibilityLabel={expandedHowItWorks ? "Show less" : "Show more"}
+              accessibilityRole="button"
+              onPress={handleToggleHowItWorks}
+              containerStyle={{
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <View className="flex-row items-center gap-2">
+                <Text
+                  className="text-[14px] font-semibold"
+                  style={{ color: colors.goldDark }}
+                >
+                  {expandedHowItWorks ? "Show less" : "Show more"}
+                </Text>
+                <CategoryGlyph
+                  color={colors.goldDark}
+                  name={expandedHowItWorks ? "chevron-left" : "chevron-right"}
+                  size={16}
+                />
+              </View>
+            </PressableScale>
+          ) : null}
+          <View className="mt-2 flex-row flex-wrap gap-2">
             {agent.skills.length > 0 ? (
               agent.skills.map((skill) => (
                 <StatusBadge
@@ -258,7 +301,7 @@ export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDeta
               <StatusBadge label="No skills published" tone="unavailable" />
             )}
           </View>
-        </Surface>
+        </View>
       </DetailSection>
 
       <DetailSection title="Recent onchain activity">

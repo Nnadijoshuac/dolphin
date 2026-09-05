@@ -1,4 +1,5 @@
 import {
+  Platform,
   ScrollView,
   Share,
   Text,
@@ -15,6 +16,18 @@ import { StatePanel } from "@/components/state-panel";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
 import { useAppStore } from "@/store/use-app-store";
+
+/**
+ * The Dolphin website. A shared link has to open somewhere a recipient can
+ * actually follow without installing the app, and the site renders the same
+ * agent from the same Convex catalog this screen reads.
+ *
+ * The path is `/agent/<tokenId>`, matching what web/ links to itself
+ * (web/src/components/agent-card.tsx and web/src/app/page.tsx both build
+ * `/agent/${agent.tokenId}`) - so a link shared from mobile resolves to exactly
+ * the page the website would have linked to.
+ */
+const WEB_BASE_URL = "https://dolphinamp.vercel.app";
 
 export default function AgentDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -45,11 +58,30 @@ export default function AgentDetailRoute() {
   const handleShare = async () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!agent) return;
+
+    const url = `${WEB_BASE_URL}/agent/${agent.tokenId}`;
+    const message = `Check out ${agent.name} on Dolphin — ${agent.tagline}`;
+
     try {
-      await Share.share({
-        title: agent.name,
-        message: `Check out ${agent.name} on Dolphin — ${agent.tagline}`,
-      });
+      /*
+       * The link is delivered differently per platform because Share.share
+       * treats `url` differently per platform.
+       *
+       * Android has no `url` field at all - it is dropped, and a share carrying
+       * only `message` would have gone out with no link in it. So the URL is
+       * appended to the message there.
+       *
+       * iOS passes `url` as a distinct activity item, which is what lets
+       * Messages, Mail and Safari render a rich link preview rather than raw
+       * text. Appending it to `message` as well would put the address in the
+       * sheet twice, so on iOS the message carries the words and `url` carries
+       * the link.
+       */
+      await Share.share(
+        Platform.OS === "ios"
+          ? { title: agent.name, message, url }
+          : { title: agent.name, message: `${message}\n\n${url}` },
+      );
     } catch {
       // User cancelled or share unavailable
     }

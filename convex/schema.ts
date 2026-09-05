@@ -226,7 +226,28 @@ export default defineSchema({
     /** Which sweep path or intake first produced this row. */
     source: v.string(),
 
+    /**
+     * Fingerprint of the 8004scan name+description this row was last judged on
+     * (convex/lib/prefilter.ts's hashCandidateText).
+     *
+     * It is what lets a `rejected-prefilter` row store NOTHING of the text that
+     * got it rejected and still answer "has this record changed since we judged
+     * it" - the only question the sweep's skip actually asks. 251,922 of the
+     * 257,991 rows in this table are such rejections, and the description was
+     * the bulk of their bytes.
+     *
+     * Optional because rows written before this existed have none. Absent means
+     * "compare the stored text instead", which is exactly what those rows still
+     * carry, so no reader breaks and the migration is not load-bearing.
+     */
+    textHash: v.optional(v.string()),
+
     // 8004scan's list-item view, as last seen.
+    //
+    // BLANK ON A `rejected-prefilter` ROW, on purpose - see textHash above.
+    // Every other status keeps its real text: those rows are read by the deep
+    // evaluation, the classifier and the catalog, and there are a few thousand
+    // of them rather than a quarter of a million.
     name: v.string(),
     description: v.string(),
     scanIconUrl: v.union(v.string(), v.null()),

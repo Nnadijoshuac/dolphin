@@ -243,3 +243,66 @@ export const PREFILTER_RULES: readonly PrefilterRule[] = [
   "persona-agent",
   "off-topic",
 ];
+
+/**
+ * The reason each rule rejects, without the per-record specifics.
+ *
+ * A prefilter rejection no longer stores its own `statusReason` string: at
+ * 251,922 rejected rows, a written-out sentence per row was tens of megabytes
+ * of prose restating what `prefilterRule` already says. The interpolated
+ * details the live filter produces above ("Description is 12 characters") are
+ * genuinely more precise, and they are what a sweep still returns in the
+ * moment - they are simply not worth persisting a quarter of a million times.
+ *
+ * A reader derives the sentence from the rule. Rejections stay auditable:
+ * the rule is the finding, and the record it was drawn from is one 8004scan
+ * fetch away by tokenId.
+ */
+export const PREFILTER_RULE_REASONS: Record<PrefilterRule, string> = {
+  "empty-description":
+    "No usable description: too short to establish what the agent does, or the name is 8004scan's mint-time default.",
+  "numeric-noise": "Name or description is essentially a digit string, not prose.",
+  "repeated-token": "Name or description is a short token repeated three or more times.",
+  "collectible-series": "Numbered collectible-series naming, not a service registration.",
+  "campaign-template": "Matches a known mass-registration template.",
+  "persona-agent": "Persona / digital-twin product registration, not a DeFi service.",
+  "off-topic":
+    "Nothing in the name or description refers to on-chain finance, so it cannot belong to any browsable category.",
+};
+
+/**
+ * A change-detection fingerprint for one record's 8004scan text.
+ *
+ * WHY A HASH AND NOT THE TEXT. The sweep skips a record whose name and
+ * description are unchanged, which is what stops ~250,000 known rejections
+ * being re-judged every cycle. That comparison needs to know only WHETHER the
+ * text changed, not what it says - so a rejected row can store 16 bytes instead
+ * of the full description that got it rejected, which is the bulk of the
+ * table's document size.
+ *
+ * NOT cryptographic, deliberately, and it does not need to be. The comparison
+ * is per-tokenId: a stored hash is only ever checked against the new text for
+ * that same row, so this is never a birthday problem across the table. The only
+ * failure is one specific record editing its text to a 64-bit collision, which
+ * costs one missed re-evaluation until the next edit.
+ *
+ * Two independently-seeded FNV-1a passes concatenated, because a single 32-bit
+ * pass would make that per-row collision chance 2^-32 rather than 2^-64 - cheap
+ * enough that there is no reason to accept the weaker one. Math.imul keeps the
+ * multiply in 32-bit integer space, which is what makes the result identical on
+ * every runtime rather than drifting through float precision.
+ */
+export function hashCandidateText(name: string, description: string): string {
+  const text = `${name ?? ""} ${description ?? ""}`;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 0x01000193);
+    h2 = Math.imul(h2 ^ code, 0x85ebca6b);
+  }
+  return (
+    (h1 >>> 0).toString(16).padStart(8, "0") +
+    (h2 >>> 0).toString(16).padStart(8, "0")
+  );
+}

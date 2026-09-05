@@ -47,7 +47,7 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   action,
   internalAction,
@@ -73,7 +73,13 @@ import {
 import { fallbackIconBlob, fetchIcon, type IconSource } from "./lib/agentIcons";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { probeLiveness, type ProbeEndpoint } from "./lib/liveness";
-import { PREFILTER_RULES, prefilterAgent } from "./lib/prefilter";
+import {
+  PREFILTER_RULES,
+  PREFILTER_RULE_REASONS,
+  hashCandidateText,
+  prefilterAgent,
+  type PrefilterRule,
+} from "./lib/prefilter";
 import {
   DELIST_AFTER_CONSECUTIVE_FAILURES,
   needsDeepEvaluation,
@@ -498,10 +504,54 @@ export const sweep = internalAction({
         if (verdict.category) byCategory[verdict.category] = (byCategory[verdict.category] ?? 0) + 1;
       }
 
+      const textHash = hashCandidateText(name, description);
+
+      /*
+       * A PREFILTER REJECTION IS STORED NARROW.
+       *
+       * These are 251,922 of the 257,991 rows in the table and they exist to
+       * answer exactly one question on a later sweep: has this record changed
+       * since we rejected it? `textHash` answers that in 16 bytes, so none of
+       * the text, the icon URL, the owner or the written-out reason is kept -
+       * the description that got a record rejected was the single largest
+       * contributor to the 349 MB of documents that took this deployment over
+       * its storage ceiling and switched the sweep off.
+       *
+       * What survives is what makes a rejection auditable: the tokenId, the
+       * rule that fired, and when it was seen. The sentence is derivable from
+       * the rule (PREFILTER_RULE_REASONS) and the record itself is one 8004scan
+       * fetch away by tokenId, so nothing here is unrecoverable - it is simply
+       * not duplicated a quarter of a million times.
+       */
+      if (verdict.status === "rejected-prefilter") {
+        return {
+          tokenId: item.token_id,
+          name: "",
+          description: "",
+          textHash,
+          scanIconUrl: null,
+          ownerAddress: "",
+          registeredAt: null,
+          x402Supported: null,
+          status: verdict.status,
+          statusReason: "",
+          prefilterRule: verdict.prefilterRule,
+          category: null,
+          confidence: null,
+          score: null,
+          runnerUpCategory: null,
+          runnerUpScore: null,
+          matchedTerms: [],
+          classificationEvidence: [],
+          shortfall: null,
+        };
+      }
+
       return {
         tokenId: item.token_id,
         name,
         description,
+        textHash,
         scanIconUrl: item.image_url ?? null,
         ownerAddress: item.owner_address ?? "",
         registeredAt: item.created_at ?? null,
@@ -676,15 +726,32 @@ export const deepEvaluate = internalAction({
           currentlyPublished: candidate.status === "published",
         });
 
-        /* Icon sourcing (Task 4) - part of onboarding, so it runs here. */
-        const iconOutcome = await sourceIcon(ctx, {
-          tokenId: candidate.tokenId,
-          scanIconUrl: directory?.iconUrl ?? candidate.scanIconUrl,
-          registrationIconUrl: registration.iconUrl,
-          alreadyCached: (directory?.iconSource ?? null) !== null,
-        });
-        if (iconOutcome) {
-          report.icons[iconOutcome] = (report.icons[iconOutcome] ?? 0) + 1;
+        /*
+         * Icon sourcing (Task 4) - ONLY for an agent the gate just published.
+         *
+         * This used to run for every deep-evaluated candidate, before the
+         * decision above was consulted. An icon is fetched from a third party
+         * and its BYTES ARE STORED, so a rejected agent left a stored image
+         * behind that nothing ever renders: agentDirectory holds 6,070 rows
+         * with a cached icon against 27 agents that are actually listed. At a
+         * 2 MB per-icon cap that is the largest single storage sink in this
+         * deployment and it was never counted - the cron note blamed
+         * agentCandidates alone.
+         *
+         * Nothing is lost by waiting. A pending agent that later goes live gets
+         * its icon on the pass that publishes it, and ensureCatalogIcons sweeps
+         * published + editorial every 12 hours as a backstop.
+         */
+        if (decision.status === "published") {
+          const iconOutcome = await sourceIcon(ctx, {
+            tokenId: candidate.tokenId,
+            scanIconUrl: directory?.iconUrl ?? candidate.scanIconUrl,
+            registrationIconUrl: registration.iconUrl,
+            alreadyCached: (directory?.iconSource ?? null) !== null,
+          });
+          if (iconOutcome) {
+            report.icons[iconOutcome] = (report.icons[iconOutcome] ?? 0) + 1;
+          }
         }
 
         const wasPublished = candidate.status === "published";
@@ -805,6 +872,7 @@ const sweepRecordValidator = v.object({
   tokenId: v.string(),
   name: v.string(),
   description: v.string(),
+  textHash: v.optional(v.string()),
   scanIconUrl: v.union(v.string(), v.null()),
   ownerAddress: v.string(),
   registeredAt: v.union(v.string(), v.null()),
@@ -934,8 +1002,23 @@ export const recordSweepBatch = internalMutation({
       // forever and every rejected record was re-judged and re-patched on every
       // single cycle. A live backfill run measured it re-writing 8,296 of 8,300
       // records it had already judged an hour earlier.
-      const textUnchanged =
-        existing.name === record.name && existing.description === record.description;
+      /*
+       * Compared by fingerprint, not by the text itself.
+       *
+       * A `rejected-prefilter` row no longer stores its name or description, so
+       * a direct text comparison would find "" === "" on every one of them and
+       * report every record as unchanged forever - including ones whose
+       * publisher had rewritten them into something real.
+       *
+       * Rows written before textHash existed still carry their text, so their
+       * fingerprint is computed on the spot from what they do have. That is what
+       * makes this correct during the migration rather than only after it.
+       */
+      const incomingHash =
+        record.textHash ?? hashCandidateText(record.name, record.description);
+      const storedHash =
+        existing.textHash ?? hashCandidateText(existing.name, existing.description);
+      const textUnchanged = incomingHash === storedHash;
 
       /*
        * ...and the rules that produced the stored verdict are still the current
@@ -970,6 +1053,7 @@ export const recordSweepBatch = internalMutation({
       await ctx.db.patch(existing._id, {
         name: record.name,
         description: record.description,
+        textHash: record.textHash,
         scanIconUrl: record.scanIconUrl,
         ownerAddress: record.ownerAddress || existing.ownerAddress,
         registeredAt: record.registeredAt ?? existing.registeredAt,
@@ -1426,12 +1510,35 @@ export const listCandidates = query({
     ),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, { status, limit }) =>
-    ctx.db
+  handler: async (ctx, { status, limit }) => {
+    const rows = await ctx.db
       .query("agentCandidates")
       .withIndex("by_status_evaluated", (q) => q.eq("status", status))
       .order("desc")
-      .take(limit ?? 50),
+      .take(limit ?? 50);
+
+    /*
+     * A narrowed prefilter rejection stores no statusReason - the sentence is
+     * derivable from `prefilterRule`, and persisting it 251,922 times was tens
+     * of megabytes of prose restating the rule id beside it.
+     *
+     * Derived here rather than left blank so this query keeps its contract: a
+     * caller reading a row still gets a sentence saying why the agent is where
+     * it is, which is the whole reason the ledger is described as an audit
+     * trail. Only the per-record specifics are gone ("Description is 12
+     * characters" becomes the rule's general statement).
+     */
+    return rows.map((row) =>
+      row.statusReason === "" && row.prefilterRule
+        ? {
+            ...row,
+            statusReason:
+              PREFILTER_RULE_REASONS[row.prefilterRule as PrefilterRule] ??
+              `Rejected by the ${row.prefilterRule} rule.`,
+          }
+        : row,
+    );
+  },
 });
 
 /**
@@ -1509,6 +1616,273 @@ export const listIconTargets = internalQuery({
       });
     }
     return targets;
+  },
+});
+
+/* ---------------------------------------------------------------------------
+ * STORAGE RECLAMATION
+ *
+ * Two one-off passes that undo what two bugs accumulated. Both are paginated,
+ * both are idempotent, and both DEFAULT TO A DRY RUN that reports exactly what
+ * it would touch without touching it - deleting stored bytes and blanking a
+ * quarter of a million rows are not things to discover the shape of afterwards.
+ *
+ * Why this deployment needs them: agentCandidates reached ~1.05 GB and the
+ * hourly sweep has been disabled since 2026-09-02 as a result, which is why
+ * discovery coverage has not advanced. These reclaim the space in place, so the
+ * 257,991 existing verdicts, the 47% of the registry already walked, and every
+ * runtime manual override all survive.
+ * ------------------------------------------------------------------------ */
+
+const paginationArgs = {
+  cursor: v.union(v.string(), v.null()),
+  numItems: v.number(),
+};
+
+/**
+ * Cached icons belonging to agents that are not listed anywhere.
+ *
+ * Their existence is the bug fixed in deepEvaluate above: icons were sourced
+ * for every deep-evaluated candidate before the publish gate was consulted, so
+ * ~6,040 agents that were then rejected each left a stored image behind.
+ *
+ * `size` is read from Convex's own `_storage` system table rather than
+ * estimated, so the dry run reports bytes that are actually there.
+ */
+export const listPurgeableIcons = internalQuery({
+  args: paginationArgs,
+  handler: async (ctx, { cursor, numItems }) => {
+    const published = await ctx.db
+      .query("discoveredAgents")
+      .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
+      .collect();
+    const listed = new Set<string>([
+      ...EDITORIAL_TOKEN_IDS,
+      ...published.map((row) => row.tokenId),
+    ]);
+
+    const page = await ctx.db
+      .query("agentDirectory")
+      .paginate({ cursor, numItems });
+
+    const purgeable: { id: Id<"agentDirectory">; storageId: Id<"_storage">; bytes: number }[] = [];
+    for (const row of page.page) {
+      if (!row.iconStorageId) continue;
+      if (listed.has(row.tokenId)) continue;
+      const meta = await ctx.db.system.get(row.iconStorageId);
+      purgeable.push({
+        id: row._id,
+        storageId: row.iconStorageId,
+        bytes: meta?.size ?? 0,
+      });
+    }
+
+    return {
+      purgeable,
+      scanned: page.page.length,
+      isDone: page.isDone,
+      cursor: page.continueCursor,
+    };
+  },
+});
+
+/** Deletes the blobs and clears the row's icon fields, in one transaction. */
+export const purgeIconBatch = internalMutation({
+  args: {
+    rows: v.array(
+      v.object({ id: v.id("agentDirectory"), storageId: v.id("_storage") }),
+    ),
+  },
+  handler: async (ctx, { rows }) => {
+    let deleted = 0;
+    for (const row of rows) {
+      // Storage first, then the pointer. The other order would leave an
+      // unreferenced blob behind on a failure, which nothing would ever find
+      // again - the exact leak this pass exists to clean up.
+      await ctx.storage.delete(row.storageId);
+      await ctx.db.patch(row.id, {
+        iconStorageId: null,
+        iconSource: null,
+        iconCheckedAt: null,
+      });
+      deleted++;
+    }
+    return { deleted };
+  },
+});
+
+/**
+ * Reclaims stored icons for agents nobody can see. DRY RUN BY DEFAULT.
+ *
+ * Run it once to read the report, then again with `{ "apply": true }`.
+ * Idempotent: a second apply finds nothing, because the rows it cleared no
+ * longer carry an iconStorageId.
+ */
+export const reclaimUnlistedIcons = action({
+  args: { apply: v.optional(v.boolean()) },
+  handler: async (
+    ctx,
+    { apply },
+  ): Promise<{ applied: boolean; rows: number; bytes: number; scanned: number }> => {
+    let cursor: string | null = null;
+    let rows = 0;
+    let bytes = 0;
+    let scanned = 0;
+
+    for (;;) {
+      const page: {
+        purgeable: { id: Id<"agentDirectory">; storageId: Id<"_storage">; bytes: number }[];
+        scanned: number;
+        isDone: boolean;
+        cursor: string;
+      } = await ctx.runQuery(internal.discoveryPipeline.listPurgeableIcons, {
+        cursor,
+        numItems: 200,
+      });
+
+      scanned += page.scanned;
+      rows += page.purgeable.length;
+      bytes += page.purgeable.reduce((sum, row) => sum + row.bytes, 0);
+
+      if (apply && page.purgeable.length > 0) {
+        await ctx.runMutation(internal.discoveryPipeline.purgeIconBatch, {
+          rows: page.purgeable.map(({ id, storageId }) => ({ id, storageId })),
+        });
+      }
+
+      if (page.isDone) break;
+      cursor = page.cursor;
+    }
+
+    return { applied: apply === true, rows, bytes, scanned };
+  },
+});
+
+/**
+ * Prefilter rejections still holding the text that got them rejected.
+ *
+ * Returns the text too, because the fingerprint that replaces it has to be
+ * computed from what the row currently carries - once blanked it cannot be
+ * derived, and a row with neither text nor hash would be re-judged forever.
+ */
+export const listWideRejections = internalQuery({
+  args: paginationArgs,
+  handler: async (ctx, { cursor, numItems }) => {
+    const page = await ctx.db
+      .query("agentCandidates")
+      .withIndex("by_status_evaluated", (q) => q.eq("status", "rejected-prefilter"))
+      .paginate({ cursor, numItems });
+
+    const wide = page.page
+      // Already narrowed rows have a hash and no text. Skipping them is what
+      // makes a re-run cheap rather than a second full rewrite.
+      .filter((row) => row.textHash === undefined || row.name !== "" || row.description !== "")
+      .map((row) => ({
+        id: row._id,
+        textHash: hashCandidateText(row.name, row.description),
+        bytes: row.name.length + row.description.length + row.statusReason.length,
+      }));
+
+    return {
+      wide,
+      scanned: page.page.length,
+      isDone: page.isDone,
+      cursor: page.continueCursor,
+    };
+  },
+});
+
+/** Blanks the heavy fields, leaving the fingerprint and the rule. */
+export const narrowRejectionBatch = internalMutation({
+  args: {
+    rows: v.array(v.object({ id: v.id("agentCandidates"), textHash: v.string() })),
+  },
+  handler: async (ctx, { rows }) => {
+    for (const row of rows) {
+      await ctx.db.patch(row.id, {
+        textHash: row.textHash,
+        name: "",
+        description: "",
+        statusReason: "",
+        scanIconUrl: null,
+        ownerAddress: "",
+        registeredAt: null,
+        x402Supported: null,
+        matchedTerms: [],
+        classificationEvidence: [],
+        shortfall: null,
+      });
+    }
+    return { narrowed: rows.length };
+  },
+});
+
+/**
+ * Rewrites existing prefilter rejections into the narrow shape the sweep now
+ * writes. DRY RUN BY DEFAULT - run once to read the report, then with
+ * `{ "apply": true }`.
+ *
+ * `prefilterRule` and every timestamp are untouched, so the funnel counts and
+ * the audit trail are unchanged by this pass. What goes is the description that
+ * got each record rejected, its written-out reason, and the empty classifier
+ * columns - none of which any reader consults for a rejected row.
+ *
+ * Bounded by wall clock rather than run to completion in one call: a Convex
+ * action stops at 10 minutes, and this walks 251,922 rows. It reports its own
+ * cursor position through `isDone`, so re-running it resumes from the start of
+ * whatever is still wide - which, because narrowed rows are filtered out, is
+ * exactly where it left off.
+ */
+export const narrowRejectedRows = action({
+  args: { apply: v.optional(v.boolean()), budgetMs: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    { apply, budgetMs },
+  ): Promise<{
+    applied: boolean;
+    rows: number;
+    approxBytesFreed: number;
+    scanned: number;
+    isDone: boolean;
+  }> => {
+    const startedAt = Date.now();
+    const budget = budgetMs ?? 420_000;
+    let cursor: string | null = null;
+    let rows = 0;
+    let approxBytesFreed = 0;
+    let scanned = 0;
+    let isDone = false;
+
+    for (;;) {
+      const page: {
+        wide: { id: Id<"agentCandidates">; textHash: string; bytes: number }[];
+        scanned: number;
+        isDone: boolean;
+        cursor: string;
+      } = await ctx.runQuery(internal.discoveryPipeline.listWideRejections, {
+        cursor,
+        numItems: 500,
+      });
+
+      scanned += page.scanned;
+      rows += page.wide.length;
+      approxBytesFreed += page.wide.reduce((sum, row) => sum + row.bytes, 0);
+
+      if (apply && page.wide.length > 0) {
+        await ctx.runMutation(internal.discoveryPipeline.narrowRejectionBatch, {
+          rows: page.wide.map(({ id, textHash }) => ({ id, textHash })),
+        });
+      }
+
+      if (page.isDone) {
+        isDone = true;
+        break;
+      }
+      cursor = page.cursor;
+      if (Date.now() > startedAt + budget) break;
+    }
+
+    return { applied: apply === true, rows, approxBytesFreed, scanned, isDone };
   },
 });
 

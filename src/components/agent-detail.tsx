@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { type DimensionValue, ScrollView, Text, View } from "react-native";
+import { Text, View, type ViewStyle } from "react-native";
 import * as Haptics from "expo-haptics";
 
 import { AgentIcon } from "@/components/agent-icon";
@@ -9,12 +9,79 @@ import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
-import { Surface } from "@/components/surface";
 import { colors, radii, shadows } from "@/constants/theme";
 import { syncingLiveStats } from "@/data/editorial-agents";
 import { useAgentCategoryStats } from "@/hooks/use-category-stats";
 import { convexClient } from "@/providers/convex-provider";
-import type { Agent, AgentCategory, AgentLiveStats } from "@/types/agent";
+import type {
+  Agent,
+  AgentCategory,
+  AgentLiveStats,
+  LiveMetric,
+} from "@/types/agent";
+
+/**
+ * The agent detail page.
+ *
+ * ---------------------------------------------------------------------------
+ * ONE SET OF TOKENS, USED EVERYWHERE ON THIS SCREEN
+ * ---------------------------------------------------------------------------
+ * This page had drifted into three card radii (14 / 18 / 24), four vertical
+ * gaps, two nested horizontal scrollers and section headings that carried their
+ * own horizontal padding on top of their parent's - so every heading sat 40pt
+ * in while its own content sat at 20pt. Nothing below sets a radius, an inset or
+ * a gap of its own: `Card`, `Section` and the three constants are the only
+ * places those exist, which is what makes the page read as one surface rather
+ * than as a pile of unrelated boxes.
+ *
+ * The page owns its horizontal inset ONCE, at the root. Sections never re-pad.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT WAS REMOVED, AND WHY IT HAD TO BE (AGENTS.md §5)
+ * ---------------------------------------------------------------------------
+ * The previous version rendered, as if measured:
+ *
+ *   "4.9" trust rating          twice, hardcoded. No rating of any kind exists.
+ *   five filled gold stars      hardcoded.
+ *   92% / 8% / 0% / 0% / 0%     a star histogram. There is no per-star data in
+ *                               the schema, or anywhere upstream of it.
+ *   "Onchain audit: Verified"   nothing has been audited. The word was chosen
+ *                               from `registered`, which means only that a token
+ *                               exists in the ERC-8004 registry.
+ *   "N+ Executions"             the length of the recentActivity array, which is
+ *                               a page of indexed events, not a lifetime count.
+ *   "BNB x402 Streaming"        printed flat, while x402Supported is a live
+ *                               metric that is frequently unavailable.
+ *   "Altana Passkey Protected / session delegation grants execution budget"
+ *                               session execution is feature-gated OFF
+ *                               (FEATURE_SESSION_EXECUTION in altana-policy.ts).
+ *                               No agent can spend from a Dolphin Wallet today,
+ *                               so this described a capability that is not
+ *                               shipped.
+ *
+ * Every one of those is a plausible-looking number or claim presented as live
+ * data about a real agent on a real chain, which is the single thing this
+ * project's data-integrity rule exists to prevent. They are replaced by the
+ * metrics that DO exist - reputation, feedback count, endpoint status, x402
+ * support, registry verification - each rendered through MetricCell, which
+ * already knows how to say "Syncing" and "Not reported" instead of inventing a
+ * value. Where a section had no real source at all, the section is gone.
+ *
+ * A watchlist/bookmark button was removed for the same family of reason: it was
+ * local useState with no store behind it, so it forgot the tap on unmount. The
+ * codebase has deleted controls wired to nothing twice before (the website's
+ * Send button, the recoverability panel's dead action) rather than leave them
+ * looking live.
+ */
+
+/* ─────────────── tokens ─────────────── */
+
+/** The page's single horizontal inset. Set once, at the root, never again. */
+const GUTTER = 20;
+/** The single vertical rhythm between sections. */
+const SECTION_GAP = 30;
+/** The single card radius on this page. */
+const CARD_RADIUS = radii.large;
 
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
@@ -34,41 +101,129 @@ function formatList(value: string[]) {
   return value.length > 0 ? value.join(", ") : "None";
 }
 
-function PlayStoreSectionHeading({
-  title,
-  actionLabel,
-  onAction,
+/* ─────────────── primitives ─────────────── */
+
+/**
+ * The one card shape on this page. Every boxed thing is this, at this radius,
+ * with this border and this shadow - so "a card" means one thing visually and
+ * the eye stops cataloguing differences that carry no meaning.
+ */
+function Card({
+  children,
+  style,
 }: {
-  title: string;
-  actionLabel?: string;
-  onAction?: () => void;
+  children: ReactNode;
+  style?: ViewStyle;
 }) {
   return (
-    <View className="flex-row items-center justify-between mb-3 px-5">
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderColor: colors.line,
+        borderRadius: CARD_RADIUS,
+        borderWidth: 1,
+        padding: 18,
+        ...shadows.subtle,
+        ...style,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+/**
+ * A section: one heading, one body, one gap below. No horizontal padding of its
+ * own - the page already applied it, and applying it twice is what pushed every
+ * heading out of line with the content it labelled.
+ */
+function Section({
+  title,
+  caption,
+  children,
+}: {
+  title: string;
+  caption?: string;
+  children: ReactNode;
+}) {
+  return (
+    <View style={{ marginTop: SECTION_GAP }}>
       <Text
         className="text-[17px] font-bold tracking-[-0.3px]"
         style={{ color: colors.ink }}
       >
         {title}
       </Text>
-      {actionLabel || onAction ? (
-        <PressableScale
-          accessibilityLabel={actionLabel ?? `View ${title}`}
-          accessibilityRole="button"
-          onPress={() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            onAction?.();
-          }}
-          containerStyle={{
-            padding: 4,
-          }}
+      {caption ? (
+        <Text
+          className="mt-1 text-[12px] leading-[17px]"
+          style={{ color: colors.muted }}
         >
-          <CategoryGlyph color={colors.goldDark} name="arrow-right" size={16} />
-        </PressableScale>
+          {caption}
+        </Text>
       ) : null}
+      <View className="mt-3">{children}</View>
     </View>
   );
 }
+
+/** One label/value line inside a card. The only row shape on this page. */
+function FactRow({
+  label,
+  value,
+  isFirst = false,
+}: {
+  label: string;
+  value: string;
+  isFirst?: boolean;
+}) {
+  return (
+    <View
+      className="flex-row items-center justify-between gap-3"
+      style={{
+        borderTopColor: colors.lineLight,
+        borderTopWidth: isFirst ? 0 : 1,
+        paddingBottom: 11,
+        paddingTop: isFirst ? 0 : 11,
+      }}
+    >
+      <Text className="text-[12px] shrink-0" style={{ color: colors.muted }}>
+        {label}
+      </Text>
+      <Text
+        className="flex-1 text-right text-[12px] font-semibold"
+        ellipsizeMode="middle"
+        numberOfLines={1}
+        style={{ color: colors.ink }}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+/** A small pill. One shape, two tones - accented when the fact is verified. */
+function Pill({ label, accent = false }: { label: string; accent?: boolean }) {
+  return (
+    <View
+      className="rounded-full px-3 py-1.5"
+      style={{
+        backgroundColor: accent ? colors.goldSoft : colors.surfaceSubtle,
+        borderColor: accent ? colors.goldBorder : colors.line,
+        borderWidth: 1,
+      }}
+    >
+      <Text
+        className="text-[12px] font-semibold"
+        style={{ color: accent ? colors.goldDark : colors.inkSecondary }}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/* ─────────────── live stats ─────────────── */
 
 function LiveStats({ agent }: { agent: Agent }) {
   if (!convexClient) {
@@ -79,22 +234,26 @@ function LiveStats({ agent }: { agent: Agent }) {
 }
 
 function BackendLiveStats({ agent }: { agent: Agent }) {
-  const cached = useAgentCategoryStats(agent.tokenId, agent.category, agent.agentWallet);
+  const cached = useAgentCategoryStats(
+    agent.tokenId,
+    agent.category,
+    agent.agentWallet,
+  );
   const stats = cached?.stats ?? syncingLiveStats(agent.category);
 
   return <LiveStatsView stats={stats} />;
 }
 
+/**
+ * The category's four metrics, two per row.
+ *
+ * Every cell is a MetricCell, which is the app's one presentation of a
+ * LiveMetric and the reason an unread number reads as "Syncing" or "Not
+ * reported" rather than as a figure.
+ */
 function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   return (
-    <Surface
-      style={{
-        borderWidth: 1,
-        borderColor: colors.line,
-        shadowOpacity: 0.02,
-        elevation: 1,
-      }}
-    >
+    <Card>
       <View className="flex-row flex-wrap gap-y-5">
         {stats.category === "monitoring" ? (
           <>
@@ -193,9 +352,11 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
           </>
         ) : null}
       </View>
-    </Surface>
+    </Card>
   );
 }
+
+/* ─────────────── the page ─────────────── */
 
 type AgentDetailProps = {
   agent: Agent;
@@ -203,13 +364,47 @@ type AgentDetailProps = {
   actionLabel?: string;
 };
 
-export function AgentDetail({ agent, onHire, actionLabel = "Hire Agent" }: AgentDetailProps) {
-  const registeredMetric = agent.registryVerification.registered;
-  const isRegistered = registeredMetric.status === "live" && registeredMetric.value;
-  const [expandedAbout, setExpandedAbout] = useState(false);
-  const [isBookmarked, setIsBookmarked] = useState(false);
+/** A LiveMetric<boolean> as a sentence, never as a bare claim. */
+function booleanMetricText(
+  metric: LiveMetric<boolean>,
+  whenTrue: string,
+  whenFalse: string,
+) {
+  if (metric.status === "live" || metric.status === "stale") {
+    return metric.value ? whenTrue : whenFalse;
+  }
+  return metric.status === "syncing" ? "Checking…" : "Could not be checked";
+}
 
-  const MAX_PREVIEW_LENGTH = 140;
+export function AgentDetail({
+  agent,
+  onHire,
+  actionLabel = "Hire Agent",
+}: AgentDetailProps) {
+  const [expandedAbout, setExpandedAbout] = useState(false);
+
+  const registeredMetric = agent.registryVerification.registered;
+  const isRegistered =
+    registeredMetric.status === "live" && registeredMetric.value;
+
+  /*
+   * The price, resolved the same way hire/[id].tsx resolves it, so the two
+   * screens cannot state different prices for one agent. An unresolved price is
+   * a sentence, not a zero - "free" and "not read yet" must not look alike,
+   * because one of them is a commitment.
+   */
+  const price =
+    agent.priceModel.status === "live" || agent.priceModel.status === "stale"
+      ? agent.priceModel.value
+      : null;
+  const priceText =
+    price === null
+      ? "Price not reported yet"
+      : Number(price.amount) === 0
+        ? "Free to hire"
+        : `${price.amount} ${price.token} per hire`;
+
+  const MAX_PREVIEW_LENGTH = 220;
   const description = agent.description;
   const isLongDescription = description.length > MAX_PREVIEW_LENGTH;
   const displayedDescription = expandedAbout
@@ -218,192 +413,60 @@ export function AgentDetail({ agent, onHire, actionLabel = "Hire Agent" }: Agent
 
   const handleToggleAbout = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setExpandedAbout((prev) => !prev);
-  };
-
-  const handleToggleBookmark = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsBookmarked((prev) => !prev);
+    setExpandedAbout((previous) => !previous);
   };
 
   return (
-    <View className="pt-3">
-      {/* 1. App Hero Identity Block */}
-      <View className="px-5 flex-row items-start gap-4">
-        <View style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.line, overflow: "hidden" }}>
-          <AgentIcon category={agent.category} size={76} uri={agent.iconUrl} />
-        </View>
+    <View style={{ paddingHorizontal: GUTTER, paddingTop: 8 }}>
+      {/* ── 1. identity ────────────────────────────────────────────────── */}
+      <View className="flex-row items-center gap-4">
+        <AgentIcon category={agent.category} size={84} uri={agent.iconUrl} />
 
-        <View className="flex-1 min-w-0 pt-0.5">
+        <View className="min-w-0 flex-1">
           <Text
-            className="text-[21px] font-bold tracking-[-0.4px] leading-tight"
-            ellipsizeMode="tail"
+            className="text-[22px] font-bold leading-[27px] tracking-[-0.5px]"
             numberOfLines={2}
             style={{ color: colors.ink }}
           >
             {agent.name}
           </Text>
 
-          <View className="flex-row items-center gap-1.5 mt-1.5 flex-wrap">
+          <View className="mt-1.5 flex-row items-center gap-1.5">
             <Text
-              className="text-[13px] font-bold"
-              ellipsizeMode="tail"
+              className="shrink text-[13px] font-bold"
               numberOfLines={1}
               style={{ color: colors.goldDark }}
             >
               {agent.publisher}
             </Text>
             {isRegistered ? (
-              <CategoryGlyph color={colors.goldDark} name="check" size={13} strokeWidth={2.4} />
+              <CategoryGlyph
+                color={colors.goldDark}
+                name="check"
+                size={13}
+                strokeWidth={2.4}
+              />
             ) : null}
           </View>
 
+          {/*
+           * One meta line, and every part of it is a fact this record carries.
+           * It replaces two lines of category-agnostic marketing copy
+           * ("Decentralized Finance · Autonomous Agent") that was identical for
+           * every agent in the directory and therefore told a reader nothing.
+           */}
           <Text
-            className="text-[12px] mt-1"
-            ellipsizeMode="tail"
+            className="mt-1 text-[12px]"
             numberOfLines={1}
             style={{ color: colors.muted }}
           >
-            Decentralized Finance · Autonomous Agent
-          </Text>
-
-          <Text
-            className="text-[11px] mt-0.5"
-            ellipsizeMode="tail"
-            numberOfLines={1}
-            style={{ color: colors.faint }}
-          >
-            Contains smart contract transactions · Non-custodial
+            {categoryLabels[agent.category]} · ERC-8004 #{agent.tokenId}
           </Text>
         </View>
       </View>
 
-      {/* 2. Responsive Horizontally-Scrollable Quick-Stats Strip */}
-      <View className="my-4">
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: 20,
-            gap: 8,
-            alignItems: "center",
-          }}
-        >
-          {/* Stat 1: Trust Rating */}
-          <View
-            style={{
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 14,
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.line,
-              alignItems: "center",
-              minWidth: 84,
-            }}
-          >
-            <View className="flex-row items-center gap-1">
-              <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                4.9
-              </Text>
-              <CategoryGlyph color={colors.gold} name="star" size={12} />
-            </View>
-            <Text className="text-[10px] mt-0.5 font-medium" style={{ color: colors.muted }}>
-              Trust rating
-            </Text>
-          </View>
-
-          {/* Stat 2: Standard */}
-          <View
-            style={{
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 14,
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.line,
-              alignItems: "center",
-              minWidth: 84,
-            }}
-          >
-            <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-              ERC-8004
-            </Text>
-            <Text className="text-[10px] mt-0.5 font-medium" style={{ color: colors.muted }}>
-              Standard
-            </Text>
-          </View>
-
-          {/* Stat 3: Category */}
-          <View
-            style={{
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 14,
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.line,
-              alignItems: "center",
-              minWidth: 84,
-            }}
-          >
-            <View className="flex-row items-center gap-1">
-              <CategoryGlyph color={colors.goldDark} name={agent.category} size={13} />
-              <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
-                {categoryLabels[agent.category]}
-              </Text>
-            </View>
-            <Text className="text-[10px] mt-0.5 font-medium" style={{ color: colors.muted }}>
-              Category
-            </Text>
-          </View>
-
-          {/* Stat 4: Verification */}
-          <View
-            style={{
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 14,
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.line,
-              alignItems: "center",
-              minWidth: 84,
-            }}
-          >
-            <Text className="text-[14px] font-bold" style={{ color: isRegistered ? colors.goldDark : colors.ink }}>
-              {isRegistered ? "Verified" : "Audited"}
-            </Text>
-            <Text className="text-[10px] mt-0.5 font-medium" style={{ color: colors.muted }}>
-              Onchain audit
-            </Text>
-          </View>
-
-          {/* Stat 5: Executions */}
-          <View
-            style={{
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 14,
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.line,
-              alignItems: "center",
-              minWidth: 84,
-            }}
-          >
-            <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-              {agent.recentActivity.length > 0 ? `${agent.recentActivity.length}+` : "Active"}
-            </Text>
-            <Text className="text-[10px] mt-0.5 font-medium" style={{ color: colors.muted }}>
-              Executions
-            </Text>
-          </View>
-        </ScrollView>
-      </View>
-
-      {/* 3. Primary Luxury Gold Action ("Hire Agent") */}
-      <View className="px-5 mb-6 flex-row items-center gap-3">
+      {/* ── 2. the action ──────────────────────────────────────────────── */}
+      <View style={{ marginTop: 22 }}>
         <PressableScale
           accessibilityLabel={actionLabel}
           accessibilityRole="button"
@@ -412,474 +475,163 @@ export function AgentDetail({ agent, onHire, actionLabel = "Hire Agent" }: Agent
             onHire();
           }}
           containerStyle={{
-            flex: 1,
-            height: 48,
-            borderRadius: radii.pill,
-            backgroundColor: colors.gold,
             alignItems: "center",
+            backgroundColor: colors.gold,
+            borderRadius: radii.pill,
+            height: 52,
             justifyContent: "center",
             ...shadows.goldGlow,
           }}
         >
-          <Text className="text-[15px] font-bold tracking-[-0.2px]" style={{ color: colors.ink }}>
+          <Text
+            className="text-[15px] font-bold tracking-[-0.2px]"
+            style={{ color: colors.ink }}
+          >
             {actionLabel}
           </Text>
         </PressableScale>
 
-        <PressableScale
-          accessibilityLabel={isBookmarked ? "Remove from watchlist" : "Add to watchlist"}
-          accessibilityRole="button"
-          onPress={handleToggleBookmark}
-          containerStyle={{
-            height: 48,
-            width: 48,
-            borderRadius: 24,
-            borderWidth: 1,
-            borderColor: isBookmarked ? colors.goldBorder : colors.line,
-            backgroundColor: isBookmarked ? colors.goldSoft : colors.surface,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+        <Text
+          className="mt-2.5 text-center text-[12px]"
+          style={{ color: colors.muted }}
         >
-          <CategoryGlyph
-            color={isBookmarked ? colors.goldDark : colors.ink}
-            name={isBookmarked ? "check" : "sparkle"}
-            size={18}
-          />
-        </PressableScale>
+          {priceText}
+        </Text>
       </View>
 
-      {/* 4. App Telemetry Previews Horizontal Carousel */}
-      <View className="mb-7">
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
+      {/* ── 3. what is actually known about this agent ─────────────────── */}
+      <Section
+        caption="Read from the ERC-8004 registry and the 8004scan index. A figure appears only once it has been read."
+        title="At a glance"
+      >
+        <Card>
+          <View className="flex-row flex-wrap gap-y-5">
+            <View className="w-1/2 pr-2.5">
+              <MetricCell
+                format={(value) => value.toFixed(1)}
+                label="Reputation"
+                metric={agent.reputationScore}
+              />
+            </View>
+            <View className="w-1/2 pl-2.5">
+              <MetricCell
+                format={(value) => value.toLocaleString()}
+                label="Feedback records"
+                metric={agent.feedbackCount}
+              />
+            </View>
+            <View className="w-1/2 pr-2.5">
+              <MetricCell
+                format={(value) =>
+                  value.charAt(0).toUpperCase() + value.slice(1)
+                }
+                label="Endpoint"
+                metric={agent.endpointStatus}
+              />
+            </View>
+            <View className="w-1/2 pl-2.5">
+              <MetricCell
+                format={(value) => (value ? "Supported" : "Not supported")}
+                label="x402 payments"
+                metric={agent.x402Supported}
+              />
+            </View>
+          </View>
+        </Card>
+      </Section>
+
+      {/* ── 4. about ───────────────────────────────────────────────────── */}
+      <Section title="About this agent">
+        <Text
+          className="text-[14px] font-semibold leading-[21px]"
+          style={{ color: colors.ink }}
         >
-          {/* Preview Card 1: Strategy & Live Telemetry */}
-          <View
-            style={{
-              width: 256,
-              borderRadius: 18,
-              borderWidth: 1,
-              borderColor: colors.line,
-              backgroundColor: colors.surface,
-              padding: 16,
-              justifyContent: "space-between",
-            }}
+          {agent.tagline}
+        </Text>
+
+        <Text
+          className="mt-2 text-[14px] leading-[23px]"
+          style={{ color: colors.muted }}
+        >
+          {displayedDescription}
+          {isLongDescription && !expandedAbout ? "…" : ""}
+        </Text>
+
+        {isLongDescription ? (
+          <PressableScale
+            accessibilityLabel={expandedAbout ? "Show less" : "Show more"}
+            accessibilityRole="button"
+            onPress={handleToggleAbout}
+            containerStyle={{ alignSelf: "flex-start", marginTop: 8 }}
           >
-            <View>
-              <View className="flex-row items-center justify-between mb-3">
-                <View className="flex-row items-center gap-1.5">
-                  <View
-                    style={{
-                      height: 8,
-                      width: 8,
-                      borderRadius: 4,
-                      backgroundColor: colors.gold,
-                    }}
-                  />
-                  <Text
-                    className="text-[11px] font-bold tracking-wider uppercase"
-                    style={{ color: colors.goldDark }}
-                  >
-                    Live Telemetry
-                  </Text>
-                </View>
-                <CategoryGlyph color={colors.goldDark} name={agent.category} size={15} />
-              </View>
-
-              <Text
-                className="text-[14px] font-bold leading-5"
-                ellipsizeMode="tail"
-                numberOfLines={3}
-                style={{ color: colors.ink }}
-              >
-                {agent.tagline}
-              </Text>
-            </View>
-
-            <View className="mt-3 pt-3 border-t flex-row items-center justify-between" style={{ borderColor: colors.lineLight }}>
-              <Text className="text-[11px]" style={{ color: colors.muted }}>
-                Category
-              </Text>
-              <Text className="text-[12px] font-semibold" style={{ color: colors.ink }}>
-                {categoryLabels[agent.category]}
-              </Text>
-            </View>
-          </View>
-
-          {/* Preview Card 2: Security & Permissions */}
-          <View
-            style={{
-              width: 256,
-              borderRadius: 18,
-              borderWidth: 1,
-              borderColor: colors.line,
-              backgroundColor: colors.surface,
-              padding: 16,
-              justifyContent: "space-between",
-            }}
-          >
-            <View>
-              <View className="flex-row items-center justify-between mb-3">
-                <View className="flex-row items-center gap-1.5">
-                  <CategoryGlyph color={colors.goldDark} name="shield" size={14} />
-                  <Text
-                    className="text-[11px] font-bold tracking-wider uppercase"
-                    style={{ color: colors.goldDark }}
-                  >
-                    Data Safety
-                  </Text>
-                </View>
-                <View
-                  className="px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: colors.goldSoft }}
-                >
-                  <Text className="text-[10px] font-bold" style={{ color: colors.goldDark }}>
-                    Non-Custodial
-                  </Text>
-                </View>
-              </View>
-
-              <Text
-                className="text-[14px] font-bold"
-                style={{ color: colors.ink }}
-              >
-                Altana Passkey Protected
-              </Text>
-              <Text
-                className="text-[12px] leading-4 mt-1"
-                ellipsizeMode="tail"
-                numberOfLines={2}
-                style={{ color: colors.muted }}
-              >
-                Session delegation grants execution budget without exposing private keys.
-              </Text>
-            </View>
-
-            <View className="mt-3 pt-3 border-t flex-row items-center justify-between" style={{ borderColor: colors.lineLight }}>
-              <Text className="text-[11px]" style={{ color: colors.muted }}>
-                Payments
-              </Text>
-              <Text className="text-[11px] font-semibold" style={{ color: colors.goldDark }}>
-                BNB x402 Streaming
-              </Text>
-            </View>
-          </View>
-
-          {/* Preview Card 3: ERC-8004 Registry Specs */}
-          <View
-            style={{
-              width: 256,
-              borderRadius: 18,
-              borderWidth: 1,
-              borderColor: colors.line,
-              backgroundColor: colors.surface,
-              padding: 16,
-              justifyContent: "space-between",
-            }}
-          >
-            <View>
-              <View className="flex-row items-center justify-between mb-3">
-                <View className="flex-row items-center gap-1.5">
-                  <CategoryGlyph color={colors.ink} name="layers" size={14} />
-                  <Text
-                    className="text-[11px] font-bold tracking-wider uppercase"
-                    style={{ color: colors.ink }}
-                  >
-                    Onchain Identity
-                  </Text>
-                </View>
-                <Text className="text-[11px] font-bold" style={{ color: colors.goldDark }}>
-                  #{agent.tokenId}
-                </Text>
-              </View>
-
-              <Text
-                className="text-[14px] font-bold"
-                style={{ color: colors.ink }}
-              >
-                BNB Smart Chain
-              </Text>
-              <Text
-                className="text-[12px] mt-1"
-                ellipsizeMode="middle"
-                numberOfLines={1}
-                style={{ color: colors.muted }}
-              >
-                Registry: {shortAddress(agent.registryAddress)}
-              </Text>
-            </View>
-
-            <View className="mt-3 pt-3 border-t flex-row items-center justify-between" style={{ borderColor: colors.lineLight }}>
-              <Text className="text-[11px]" style={{ color: colors.muted }}>
-                Classification
-              </Text>
-              <Text className="text-[11px] font-semibold capitalize" style={{ color: colors.ink }}>
-                {agent.classificationSource.replaceAll("-", " ")}
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-
-      {/* 5. "About this agent" */}
-      <View className="mb-7">
-        <PlayStoreSectionHeading
-          actionLabel="More info"
-          onAction={handleToggleAbout}
-          title="About this agent"
-        />
-        <View className="px-5">
-          <Text
-            className="text-[14px] font-medium leading-5 mb-2"
-            style={{ color: colors.ink }}
-          >
-            {agent.tagline}
-          </Text>
-
-          <Text
-            className="text-[14px] leading-6"
-            style={{ color: colors.muted }}
-          >
-            {displayedDescription}
-            {isLongDescription && !expandedAbout ? "…" : ""}
-          </Text>
-
-          {isLongDescription ? (
-            <PressableScale
-              accessibilityLabel={expandedAbout ? "Show less" : "Show more"}
-              accessibilityRole="button"
-              onPress={handleToggleAbout}
-              containerStyle={{
-                alignSelf: "flex-start",
-                marginTop: 6,
-              }}
+            <Text
+              className="text-[14px] font-bold"
+              style={{ color: colors.goldDark }}
             >
-              <Text className="text-[14px] font-semibold" style={{ color: colors.goldDark }}>
-                {expandedAbout ? "Show less" : "Show more"}
-              </Text>
-            </PressableScale>
-          ) : null}
+              {expandedAbout ? "Show less" : "Show more"}
+            </Text>
+          </PressableScale>
+        ) : null}
 
-          {/* Luxury Gold Tag Pills */}
+        {/*
+         * Skills only. The three decorative hashtags that used to lead this row
+         * (#Category, #ERC-8004, #BNBChain) restated the meta line two blocks
+         * above and the registry table below, so the row's real content - what
+         * this agent claims it can do, and whether that claim was verified - was
+         * the part a reader reached last.
+         */}
+        {agent.skills.length > 0 ? (
           <View className="mt-4 flex-row flex-wrap gap-2">
-            <View
-              className="px-3 py-1.5 rounded-full"
-              style={{
-                backgroundColor: colors.goldSoft,
-                borderWidth: 1,
-                borderColor: colors.goldBorder,
-              }}
-            >
-              <Text className="text-[12px] font-semibold" style={{ color: colors.goldDark }}>
-                #{categoryLabels[agent.category]}
-              </Text>
-            </View>
-            <View
-              className="px-3 py-1.5 rounded-full"
-              style={{
-                backgroundColor: colors.surfaceSubtle,
-                borderWidth: 1,
-                borderColor: colors.line,
-              }}
-            >
-              <Text className="text-[12px] font-medium" style={{ color: colors.ink }}>
-                #ERC-8004
-              </Text>
-            </View>
-            <View
-              className="px-3 py-1.5 rounded-full"
-              style={{
-                backgroundColor: colors.surfaceSubtle,
-                borderWidth: 1,
-                borderColor: colors.line,
-              }}
-            >
-              <Text className="text-[12px] font-medium" style={{ color: colors.ink }}>
-                #BNBChain
-              </Text>
-            </View>
             {agent.skills.map((skill) => (
-              <View
-                className="px-3 py-1.5 rounded-full"
+              <Pill
+                accent={skill.evidence === "verified"}
                 key={`${skill.name}-${skill.evidence}`}
+                label={skill.name}
+              />
+            ))}
+          </View>
+        ) : null}
+      </Section>
+
+      {/* ── 5. live telemetry ──────────────────────────────────────────── */}
+      <Section title={`${categoryLabels[agent.category]} telemetry`}>
+        <LiveStats agent={agent} />
+      </Section>
+
+      {/* ── 6. published track record ──────────────────────────────────── */}
+      <Section title="Published track record">
+        <PerformancePanel points={agent.performanceSeries} />
+      </Section>
+
+      {/* ── 7. recent on-chain activity ────────────────────────────────── */}
+      <Section title="Recent on-chain activity">
+        {agent.recentActivity.length > 0 ? (
+          <Card style={{ paddingBottom: 7 }}>
+            {agent.recentActivity.map((activity, index) => (
+              <View
+                key={`${activity.timestamp}-${activity.action}`}
                 style={{
-                  backgroundColor: skill.evidence === "verified" ? colors.goldSoft : colors.surfaceSubtle,
-                  borderWidth: 1,
-                  borderColor: skill.evidence === "verified" ? colors.goldBorder : colors.line,
+                  borderTopColor: colors.lineLight,
+                  borderTopWidth: index === 0 ? 0 : 1,
+                  paddingBottom: 12,
+                  paddingTop: index === 0 ? 0 : 12,
                 }}
               >
                 <Text
-                  className="text-[12px] font-medium"
-                  style={{
-                    color: skill.evidence === "verified" ? colors.goldDark : colors.ink,
-                  }}
+                  className="text-[14px] font-bold"
+                  style={{ color: colors.ink }}
                 >
-                  {skill.name}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      </View>
-
-      {/* 6. "Data safety & trust" Card */}
-      <View className="mb-7 px-5">
-        <PlayStoreSectionHeading title="Data safety & trust" />
-        <View
-          style={{
-            borderRadius: 18,
-            borderWidth: 1,
-            borderColor: colors.line,
-            backgroundColor: colors.surface,
-            padding: 18,
-          }}
-        >
-          <Text className="text-[13px] leading-5 mb-4" style={{ color: colors.muted }}>
-            Safety starts with understanding how developers verify contracts, handle permissions, and manage keys.
-          </Text>
-
-          <View className="gap-3.5">
-            <View className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CategoryGlyph color={colors.goldDark} name="shield" size={17} />
-              </View>
-              <View className="flex-1 min-w-0">
-                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
-                  Non-custodial execution
-                </Text>
-                <Text className="text-[12px] mt-0.5 leading-4" style={{ color: colors.muted }}>
-                  Agent smart contract logic cannot transfer or withdraw user principal funds.
-                </Text>
-              </View>
-            </View>
-
-            <View className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CategoryGlyph color={colors.goldDark} name="check" size={17} />
-              </View>
-              <View className="flex-1 min-w-0">
-                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
-                  Altana passkey session delegation
-                </Text>
-                <Text className="text-[12px] mt-0.5 leading-4" style={{ color: colors.muted }}>
-                  Automated actions require cryptographic session grants with strict time & gas bounds.
-                </Text>
-              </View>
-            </View>
-
-            <View className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CategoryGlyph color={colors.goldDark} name="layers" size={17} />
-              </View>
-              <View className="flex-1 min-w-0">
-                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
-                  ERC-8004 Registry verified
-                </Text>
-                <Text className="text-[12px] mt-0.5 leading-4" style={{ color: colors.muted }}>
-                  Identity token #{agent.tokenId} registered on BNB Smart Chain.
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* 7. Live Telemetry & Signals */}
-      <View className="mb-7 px-5">
-        <PlayStoreSectionHeading title="Live telemetry & signals" />
-        <LiveStats agent={agent} />
-      </View>
-
-      {/* 8. Ratings & Track record */}
-      <View className="mb-7 px-5">
-        <PlayStoreSectionHeading title="Ratings and performance" />
-        <View
-          className="mb-3 p-4 flex-row items-center justify-between"
-          style={{
-            borderRadius: 18,
-            borderWidth: 1,
-            borderColor: colors.line,
-            backgroundColor: colors.surface,
-          }}
-        >
-          {/* Left score block */}
-          <View className="items-center pr-4 border-r" style={{ borderColor: colors.lineLight }}>
-            <Text className="text-[30px] font-bold tracking-tight" style={{ color: colors.ink }}>
-              4.9
-            </Text>
-            <View className="flex-row gap-0.5 my-1">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <CategoryGlyph color={colors.gold} key={s} name="star" size={12} />
-              ))}
-            </View>
-            <Text className="text-[10px] font-medium" style={{ color: colors.muted }}>
-              Onchain audited
-            </Text>
-          </View>
-
-          {/* Right horizontal progress bars */}
-          <View className="flex-1 pl-4 gap-1.5 min-w-0">
-            {[
-              { star: "5", pct: "92%" },
-              { star: "4", pct: "8%" },
-              { star: "3", pct: "0%" },
-              { star: "2", pct: "0%" },
-              { star: "1", pct: "0%" },
-            ].map(({ star, pct }) => (
-              <View className="flex-row items-center gap-2" key={star}>
-                <Text className="text-[10px] w-2.5 font-medium" style={{ color: colors.muted }}>
-                  {star}
-                </Text>
-                <View
-                  className="flex-1 h-1.5 rounded-full overflow-hidden"
-                  style={{ backgroundColor: colors.surfaceSubtle }}
-                >
-                  <View
-                    className="h-full rounded-full"
-                    style={{
-                      width: pct as DimensionValue,
-                      backgroundColor: colors.gold,
-                    }}
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <PerformancePanel points={agent.performanceSeries} />
-      </View>
-
-      {/* 9. Recent onchain activity */}
-      <View className="mb-7 px-5">
-        <PlayStoreSectionHeading title="Recent onchain activity" />
-        {agent.recentActivity.length > 0 ? (
-          <Surface
-            style={{
-              borderWidth: 1,
-              borderColor: colors.line,
-              shadowOpacity: 0.02,
-              elevation: 1,
-            }}
-          >
-            {agent.recentActivity.map((activity, index) => (
-              <View
-                className={index === 0 ? "pb-3.5" : "border-t py-3.5"}
-                key={`${activity.timestamp}-${activity.action}`}
-                style={{ borderColor: colors.lineLight }}
-              >
-                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
                   {activity.action}
                 </Text>
-                <Text className="mt-1 text-[11px]" style={{ color: colors.muted }}>
+                <Text
+                  className="mt-1 text-[11px]"
+                  style={{ color: colors.muted }}
+                >
                   {activity.timestamp} · {activity.source.label}
                 </Text>
               </View>
             ))}
-          </Surface>
+          </Card>
         ) : (
           <StatePanel
             body="No auditable execution events were returned by the current data sources."
@@ -888,48 +640,124 @@ export function AgentDetail({ agent, onHire, actionLabel = "Hire Agent" }: Agent
             title="Activity not published"
           />
         )}
-      </View>
+      </Section>
 
-      {/* 10. Developer contact & Onchain specifications */}
-      <View className="mb-7 px-5">
-        <PlayStoreSectionHeading title="App info & contract specifications" />
-        <Surface
-          style={{
-            borderWidth: 1,
-            borderColor: colors.line,
-            shadowOpacity: 0.02,
-            elevation: 1,
-          }}
-        >
-          {[
-            ["ERC-8004 token", `#${agent.tokenId}`],
-            ["Identity registry", shortAddress(agent.registryAddress)],
-            ["Publisher", shortAddress(agent.publisherAddress)],
-            ["Agent wallet", shortAddress(agent.agentWallet)],
-            ["Chain", "BNB Smart Chain · 56"],
-            ["Registered", agent.registeredAt ?? "Not reported"],
-            ["Classification", agent.classificationSource.replaceAll("-", " ")],
-          ].map(([label, value], index) => (
-            <View
-              className={index === 0 ? "flex-row items-center justify-between pb-3.5" : "flex-row items-center justify-between border-t py-3.5"}
-              key={label}
-              style={{ borderColor: colors.lineLight }}
-            >
-              <Text className="text-[12px] flex-shrink-0 mr-3" style={{ color: colors.muted }}>
-                {label}
-              </Text>
-              <Text
-                className="flex-1 text-right text-[12px] font-semibold capitalize"
-                ellipsizeMode="middle"
-                numberOfLines={1}
-                style={{ color: colors.ink }}
-              >
-                {value}
-              </Text>
+      {/* ── 8. what hiring this actually does ──────────────────────────── */}
+      <Section
+        caption="What Dolphin can and cannot do on your behalf today — not a claim about this agent's own code."
+        title="Safety"
+      >
+        <Card>
+          <View className="gap-4">
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CategoryGlyph color={colors.goldDark} name="shield" size={17} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text
+                  className="text-[13px] font-bold"
+                  style={{ color: colors.ink }}
+                >
+                  A hire grants no spending authority
+                </Text>
+                {/*
+                 * The literal state of the app: every category's shipped
+                 * capability is a read-only hire, and session execution is
+                 * feature-gated off. This block used to describe the gated
+                 * feature as though it were live.
+                 */}
+                <Text
+                  className="mt-1 text-[12px] leading-[18px]"
+                  style={{ color: colors.muted }}
+                >
+                  Hiring records that you use this agent. It does not give it
+                  access to your funds, and nothing in Dolphin can spend from
+                  your wallet on an agent&apos;s behalf.
+                </Text>
+              </View>
             </View>
+
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CategoryGlyph color={colors.goldDark} name="wallet" size={17} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text
+                  className="text-[13px] font-bold"
+                  style={{ color: colors.ink }}
+                >
+                  No key ever leaves your device
+                </Text>
+                <Text
+                  className="mt-1 text-[12px] leading-[18px]"
+                  style={{ color: colors.muted }}
+                >
+                  Dolphin never asks for a private key or a seed phrase. It reads
+                  your address and nothing else.
+                </Text>
+              </View>
+            </View>
+
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CategoryGlyph color={colors.goldDark} name="layers" size={17} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text
+                  className="text-[13px] font-bold"
+                  style={{ color: colors.ink }}
+                >
+                  Registry identity
+                </Text>
+                {/*
+                 * The status of the check, not an assertion of its outcome. The
+                 * previous copy said "ERC-8004 Registry verified" unconditionally
+                 * - including while the check was still running, and including
+                 * when it had come back negative.
+                 */}
+                <Text
+                  className="mt-1 text-[12px] leading-[18px]"
+                  style={{ color: colors.muted }}
+                >
+                  {booleanMetricText(
+                    registeredMetric,
+                    `Token #${agent.tokenId} is registered on BNB Smart Chain, checked directly against the registry contract.`,
+                    `Token #${agent.tokenId} was not found in the registry contract.`,
+                  )}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Card>
+      </Section>
+
+      {/* ── 9. the record itself ───────────────────────────────────────── */}
+      <Section title="Registry record">
+        {/* 7pt, because the last FactRow already carries 11 of the 18. */}
+        <Card style={{ paddingBottom: 7 }}>
+          {(
+            [
+              ["ERC-8004 token", `#${agent.tokenId}`],
+              ["Identity registry", shortAddress(agent.registryAddress)],
+              ["Publisher", shortAddress(agent.publisherAddress)],
+              ["Agent wallet", shortAddress(agent.agentWallet)],
+              ["Chain", "BNB Smart Chain · 56"],
+              ["Registered", agent.registeredAt ?? "Not reported"],
+              [
+                "Classification",
+                agent.classificationSource.replaceAll("-", " "),
+              ],
+            ] as const
+          ).map(([label, value], index) => (
+            <FactRow
+              isFirst={index === 0}
+              key={label}
+              label={label}
+              value={value}
+            />
           ))}
-        </Surface>
-      </View>
+        </Card>
+      </Section>
     </View>
   );
 }

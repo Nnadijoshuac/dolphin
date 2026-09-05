@@ -45,6 +45,20 @@ example
 # at the root so they still auto-load.
 Agent/
 
+# Installed agent skills, and the lockfile the installer writes beside them.
+# `npx skills add` drops a vendored copy of a third-party skill here (and mirrors
+# it into Agent/skills/), which is somebody else's documentation rather than this
+# project's source - dozens of .md files that would otherwise show up as commit
+# candidates on every install. Same reasoning as Agent/ above: kept on disk so
+# the skill still loads, out of the repo because it is tooling, not the app.
+.agents/
+skills-lock.json
+# .claude/skills/<name> is a SYMLINK the installer points at .agents/skills/<name>,
+# so without this git walks through it and lists every one of the skill's .md
+# files a second time. The rest of .claude/ stays tracked - settings.json is real
+# project config.
+.claude/skills/
+
 # generated native folders
 /ios
 /android

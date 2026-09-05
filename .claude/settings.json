@@ -110,7 +110,12 @@
       "Bash(sed -n '/export function signerFromPasskey/,/^}/p' passkey.js)",
       "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(JSON.stringify\\({main:p.main,plugin:p.expo,files:p.files},null,1\\)\\)\")",
       "Bash(sed -n '/export function getCredentialCreationOptions/,/^}/p' WebAuthnP256.js)",
-      "Bash(sed -n '/export function getCredentialRequestOptions/,/^}/p' WebAuthnP256.js)"
+      "Bash(sed -n '/export function getCredentialRequestOptions/,/^}/p' WebAuthnP256.js)",
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('altana',p.dependencies['@altananetwork/sdk']\\);console.log\\('passkeys',p.dependencies['react-native-passkeys']\\)\")",
+      "Bash(node b64check.mjs)",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(grep -E \"^[A-Z]:\\\\\\\\\\\\\\\\|warning\")",
+      "Bash(node -e \"console.log\\(require\\('expo-modules-core/package.json'\\).version\\)\")"
     ]
   },
   "enabledPlugins": {

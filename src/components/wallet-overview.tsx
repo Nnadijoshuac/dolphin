@@ -1,4 +1,4 @@
-import { Linking, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Linking, Text, View, useWindowDimensions } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useBalance } from "wagmi";
@@ -41,8 +41,6 @@ import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
  * `isAvailable` reports. The Expo web target ships no wallet by design, so it
  * takes the fallback branch rather than crashing the export.
  */
-
-const CARD_GAP = 12;
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -236,9 +234,8 @@ function Overview({
   const { width: windowWidth } = useWindowDimensions();
 
   const contentWidth = Math.min(windowWidth || 390, 480) - 48;
-  // 0.72 rather than a full width: the point of the horizontal row is that the
-  // next card is visibly cut off, which is what tells someone it scrolls.
-  const cardWidth = Math.round(contentWidth * 0.72);
+  // Single card takes full width.
+  const cardWidth = contentWidth;
 
   const identityAddress = identity.isConnected ? identity.address : null;
   const {
@@ -452,103 +449,60 @@ function Overview({
       )}
 
       {/*
-       * ── account cards ──
+       * ── the agent wallet ──
        *
-       * TWO SLOTS, ALWAYS, IN THIS ORDER: the user's own wallet, then the agent
-       * wallet that pays on their behalf. Both used to be conditional, so the
-       * row collapsed to a single card whenever one account was missing - and
-       * because a Dolphin Wallet does not exist until someone creates one, the
-       * state almost everybody actually met was a lone card showing the user's
-       * own wallet, with the second wallet nowhere on the screen and nothing
-       * saying it existed.
+       * ONE CARD, AND IT IS NOT THE USER'S OWN WALLET. This was a horizontal
+       * row of two, the identity wallet first. That card said nothing the top of
+       * this screen had not already said: the figure above it is that wallet's
+       * balance, the avatar in the bar is its face, and all three actions act on
+       * it. It was the same account stated a third time, and it pushed the one
+       * account that had NOT been mentioned - the agent wallet Dolphin pays
+       * from - off the right edge.
        *
-       * This is the rule the website already settled on for the same pair of
-       * accounts: "The empty state is a CARD, not an absence" - it holds the
-       * slot at the same size, so the shape of the section does not change with
-       * connection state. What changes is only what is inside it.
+       * With one card there is nothing to scroll, so the horizontal ScrollView
+       * went with it and the card takes the full column width.
        *
-       * An empty slot still states no figure it has not read. Its balance line
-       * is a word - "Not set up", "Not connected", "Unavailable" - never a zero,
-       * which would read as a funded account holding nothing (AGENTS.md §5).
+       * The card renders whether or not the wallet exists yet, because its
+       * absence is the thing most people need told. It still states no figure it
+       * has not read: the balance line is a word - "Not set up", "Unavailable",
+       * "…" - never a zero, which would read as a funded account holding nothing
+       * (AGENTS.md §5).
        */}
       <View className="mt-7">
-        <ScrollView
-          contentContainerStyle={{ gap: CARD_GAP, paddingRight: 24 }}
-          decelerationRate="fast"
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          snapToInterval={cardWidth + CARD_GAP}
-        >
-          <AccountCard
-            address={identityAddress}
-            balance={
-              !identityAddress
-                ? "Not connected"
-                : hidden
-                  ? "••••"
-                  : identityFailed
-                    ? "Unavailable"
-                    : identityBalance
-                      ? formatBnb(identityBalance.value)
-                      : identityLoading
-                        ? "…"
-                        : "—"
-            }
-            balanceTone={
-              !identityAddress
-                ? "muted"
-                : identityFailed
-                  ? "error"
-                  : identityBalance
-                    ? "normal"
-                    : "muted"
-            }
-            footnote={
-              identityAddress
-                ? shortenAddress(identityAddress)
-                : "Connect one to record your hires"
-            }
-            kind="human"
-            subtitle="BNB · identifies your hires"
-            title="Your wallet"
-            width={cardWidth}
-          />
-
-          <AccountCard
-            address={dolphinAddress}
-            balance={
-              !dolphinAddress
-                ? dolphinPlaceholder.balance
-                : hidden
-                  ? "••••"
-                  : altana.balanceError
-                    ? "Unavailable"
-                    : altana.balanceWei !== null
-                      ? formatBnb(altana.balanceWei)
-                      : altana.isReadingBalance
-                        ? "…"
-                        : "—"
-            }
-            balanceTone={
-              !dolphinAddress
-                ? "muted"
+        <AccountCard
+          address={dolphinAddress}
+          balance={
+            !dolphinAddress
+              ? dolphinPlaceholder.balance
+              : hidden
+                ? "••••"
                 : altana.balanceError
-                  ? "error"
+                  ? "Unavailable"
                   : altana.balanceWei !== null
-                    ? "normal"
-                    : "muted"
-            }
-            footnote={
-              dolphinAddress
-                ? shortenAddress(dolphinAddress)
-                : dolphinPlaceholder.footnote
-            }
-            kind="bot"
-            subtitle="BNB · pays agents you hire"
-            title="Dolphin Wallet"
-            width={cardWidth}
-          />
-        </ScrollView>
+                    ? formatBnb(altana.balanceWei)
+                    : altana.isReadingBalance
+                      ? "…"
+                      : "—"
+          }
+          balanceTone={
+            !dolphinAddress
+              ? "muted"
+              : altana.balanceError
+                ? "error"
+                : altana.balanceWei !== null
+                  ? "normal"
+                  : "muted"
+          }
+          footnote={
+            dolphinAddress
+              ? shortenAddress(dolphinAddress)
+              : dolphinPlaceholder.footnote
+          }
+          kind="bot"
+          subtitle="BNB · pays agents you hire"
+          title="Dolphin Wallet"
+          width={cardWidth}
+        />
       </View>
     </View>
   );

@@ -4,9 +4,10 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { api } from "../../convex/_generated/api";
-import { CategoryGlyph } from "@/components/category-glyph";
+import { AgentIcon } from "@/components/agent-icon";
 import { PressableScale } from "@/components/pressable-scale";
-import { colors, shadows } from "@/constants/theme";
+import { colors } from "@/constants/theme";
+import { useAgents } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import type { AgentCategory } from "@/types/agent";
 import { useAltanaWallet } from "@/wallet/altana-provider";
@@ -72,36 +73,42 @@ type ActivityItem = {
   key: string;
   title: string;
   category: AgentCategory;
+  /**
+   * The agent's own icon, resolved from the catalog by token id. Null when the
+   * catalog has not loaded or does not carry this agent, in which case AgentIcon
+   * draws the category mark - the same fallback every other list in the app
+   * takes, rather than a second kind of placeholder unique to this one.
+   */
+  iconUrl: string | null;
   detail: string;
   amount: string | null;
   sortAt: number;
   onPress: (() => void) | null;
 };
 
+/**
+ * One record, drawn straight onto the page.
+ *
+ * NO CARD AROUND THE LIST, no rules between rows. The discover screen is the
+ * pattern this follows: its agent rows are transparent, separated by spacing
+ * alone, and the icon plus the type hierarchy is what makes a row a row. A
+ * bordered surface here was drawing a box around content that never needed one
+ * - and it sat directly beneath the account card, so the page read as a stack
+ * of boxes rather than as a balance with a list under it.
+ */
 function ActivityRow({
   item,
   hidden,
-  isLast,
 }: {
   item: ActivityItem;
   hidden: boolean;
-  isLast: boolean;
 }) {
   const body = (
     <View
-      className="flex-row items-center gap-3 px-4"
-      style={{
-        borderBottomColor: colors.line,
-        borderBottomWidth: isLast ? 0 : 1,
-        paddingVertical: 14,
-      }}
+      className="flex-row items-center gap-3.5 px-1"
+      style={{ paddingVertical: 10 }}
     >
-      <View
-        className="items-center justify-center rounded-full"
-        style={{ backgroundColor: colors.surfaceSubtle, height: 44, width: 44 }}
-      >
-        <CategoryGlyph color={colors.muted} name={item.category} size={19} />
-      </View>
+      <AgentIcon category={item.category} size={48} uri={item.iconUrl} />
 
       <View className="flex-1">
         <Text
@@ -162,6 +169,19 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
   );
   const hires = useHiredAgents(identity.address);
 
+  /*
+   * The catalog, purely to put each agent's OWN face on its row.
+   *
+   * No extra network cost in practice: this is the same TanStack query the
+   * discover, search and my-agents screens already hold, keyed identically, so
+   * by the time anyone reaches the wallet tab it is served from cache. A row
+   * renders as soon as its record arrives whether or not the catalog has - the
+   * icon is the only thing that waits on it.
+   */
+  const { data: catalog } = useAgents();
+  const agentFor = (tokenId: string) =>
+    catalog?.find((agent) => agent.tokenId === tokenId) ?? null;
+
   const items: ActivityItem[] = [];
 
   for (const job of jobs ?? []) {
@@ -175,8 +195,12 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
     }
     items.push({
       key: `job-${job.jobId}`,
+      // Still the denormalised name, NOT the catalog's. The row is a record of
+      // a payment, so it names the agent as it was named when the money moved.
+      // Only the icon is resolved live, because the row never stored one.
       title: job.agentName,
       category: job.category,
+      iconUrl: agentFor(job.tokenId)?.iconUrl ?? null,
       detail: [`Paid · ${job.jobStatus.toLowerCase()}`, date].filter(Boolean).join(" · "),
       amount,
       sortAt: Date.parse(job.verifiedAt) || 0,
@@ -191,13 +215,17 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
 
   for (const hire of hires ?? []) {
     const date = formatDate(hire.hiredAt);
+    const agent = agentFor(hire.tokenId);
     items.push({
       key: `hire-${hire.tokenId}`,
-      // Hire rows carry no denormalised name, so the token id is what is
-      // truthfully known here. Resolving it against the directory would mean a
-      // second network read for a label.
-      title: `Agent #${hire.tokenId}`,
+      // A hire row carries no denormalised name, so it used to show the token
+      // id - resolving one was a second network read for a label. The catalog
+      // is now read anyway for the icon, so the name comes with it for free.
+      // It falls back to the id rather than to nothing when the catalog has not
+      // arrived or does not carry this agent.
+      title: agent?.name ?? `Agent #${hire.tokenId}`,
       category: hire.category,
+      iconUrl: agent?.iconUrl ?? null,
       detail: ["Hired · no payment", date].filter(Boolean).join(" · "),
       amount: null,
       sortAt: Date.parse(hire.hiredAt) || 0,
@@ -240,44 +268,35 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
         ) : null}
       </View>
 
-      <View
-        className="overflow-hidden rounded-2xl border"
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.line,
-          ...shadows.subtle,
-        }}
-      >
-        {visible.length > 0 ? (
-          visible.map((item, index) => (
-            <ActivityRow
-              hidden={hidden}
-              isLast={index === visible.length - 1}
-              item={item}
-              key={item.key}
-            />
-          ))
-        ) : (
-          /*
-           * "Loading" is not "none". Telling someone they have no activity
-           * before the answer arrives is a claim, not a placeholder - the same
-           * distinction altana-wallet-card makes about sessions.
-           */
-          <View className="px-4 py-6">
-            <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
-              {isLoading ? "Checking your activity…" : "No agent activity yet"}
-            </Text>
-            <Text
-              className="mt-1.5 text-[12px] leading-[18px]"
-              style={{ color: colors.muted }}
-            >
-              {isLoading
-                ? "Reading hire and payment records."
-                : "Agents you hire and payments you make will appear here. Dolphin shows only records it has verified on-chain — it does not index your wallet's other transactions."}
-            </Text>
-          </View>
-        )}
-      </View>
+      {visible.length > 0 ? (
+        <View className="gap-1">
+          {visible.map((item) => (
+            <ActivityRow hidden={hidden} item={item} key={item.key} />
+          ))}
+        </View>
+      ) : (
+        /*
+         * "Loading" is not "none". Telling someone they have no activity before
+         * the answer arrives is a claim, not a placeholder - the same
+         * distinction altana-wallet-card makes about sessions.
+         *
+         * Unboxed like the rows it stands in for: a bordered empty card was the
+         * most prominent thing on the page in the state everybody starts in.
+         */
+        <View className="px-1 py-2">
+          <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
+            {isLoading ? "Checking your activity…" : "No agent activity yet"}
+          </Text>
+          <Text
+            className="mt-1.5 text-[12px] leading-[18px]"
+            style={{ color: colors.muted }}
+          >
+            {isLoading
+              ? "Reading hire and payment records."
+              : "Agents you hire and payments you make will appear here. Dolphin shows only records it has verified on-chain — it does not index your wallet's other transactions."}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }

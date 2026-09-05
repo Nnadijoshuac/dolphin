@@ -14,7 +14,16 @@
       "supportsTablet": true,
       "associatedDomains": [
         "webcredentials:nnadijoshuac.github.io"
-      ]
+      ],
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "metamask",
+          "trust",
+          "safe",
+          "rainbow",
+          "uniswap"
+        ]
+      }
     },
     "android": {
       "package": "com.nnadijoshuac.dolphin",
@@ -50,7 +59,8 @@
           "style": "dark"
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "./queries.js"
     ],
     "experiments": {
       "typedRoutes": false,

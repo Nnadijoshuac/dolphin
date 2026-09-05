@@ -61,9 +61,21 @@ export default function AgentDetailRoute() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      {/* Premium Google Play Style Top Bar */}
+      {/*
+       * The app bar: back, the name, one action.
+       *
+       * It carried four controls - back, search, share and a category button -
+       * three of them identical 38pt circles crowded against the right edge,
+       * which is what made the top of this page read as a toolbar rather than a
+       * header. Search is a permanent tab one gesture away; the category is on
+       * the record below and did not warrant a control that looked exactly like
+       * the two beside it while navigating somewhere else entirely.
+       *
+       * 40pt and a 20pt gutter, matching the page body's inset below, so the
+       * back button sits on the same vertical line as the agent's icon.
+       */}
       <View
-        className="flex-row items-center justify-between px-4 py-2.5"
+        className="flex-row items-center gap-3 px-5 pb-2.5 pt-1"
         style={{ backgroundColor: colors.canvas }}
       >
         <PressableScale
@@ -74,111 +86,50 @@ export default function AgentDetailRoute() {
             router.back();
           }}
           containerStyle={{
-            height: 38,
-            width: 38,
-            borderRadius: 19,
             alignItems: "center",
-            justifyContent: "center",
             backgroundColor: colors.surface,
-            borderWidth: 1,
             borderColor: colors.line,
+            borderRadius: 20,
+            borderWidth: 1,
+            height: 40,
+            justifyContent: "center",
+            width: 40,
           }}
         >
           <CategoryGlyph
             color={colors.ink}
             name="chevron-left"
-            size={18}
-            strokeWidth={2}
+            size={20}
+            strokeWidth={2.2}
           />
         </PressableScale>
 
         <Text
-          className="text-[15px] font-bold flex-1 mx-3"
+          className="flex-1 text-[15px] font-bold tracking-[-0.2px]"
           ellipsizeMode="tail"
           numberOfLines={1}
           style={{ color: colors.ink }}
         >
-          {agent?.name ?? "Agent Details"}
+          {agent?.name ?? "Agent"}
         </Text>
 
-        <View className="flex-row items-center gap-1.5">
-          <PressableScale
-            accessibilityLabel="Search agents"
-            accessibilityRole="button"
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/(tabs)/search");
-            }}
-            containerStyle={{
-              height: 38,
-              width: 38,
-              borderRadius: 19,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.line,
-            }}
-          >
-            <CategoryGlyph
-              color={colors.ink}
-              name="search"
-              size={18}
-            />
-          </PressableScale>
-
-          <PressableScale
-            accessibilityLabel="Share agent"
-            accessibilityRole="button"
-            onPress={handleShare}
-            containerStyle={{
-              height: 38,
-              width: 38,
-              borderRadius: 19,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.line,
-            }}
-          >
-            <CategoryGlyph
-              color={colors.ink}
-              name="share"
-              size={17}
-            />
-          </PressableScale>
-
-          <PressableScale
-            accessibilityLabel="Category badge"
-            accessibilityRole="button"
-            onPress={() => {
-              if (agent) {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push({
-                  pathname: "/category/[slug]",
-                  params: { slug: agent.category },
-                });
-              }
-            }}
-            containerStyle={{
-              height: 38,
-              width: 38,
-              borderRadius: 19,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.line,
-            }}
-          >
-            <CategoryGlyph
-              color={colors.goldDark}
-              name={agent ? agent.category : "more"}
-              size={18}
-            />
-          </PressableScale>
-        </View>
+        <PressableScale
+          accessibilityLabel="Share agent"
+          accessibilityRole="button"
+          onPress={handleShare}
+          containerStyle={{
+            alignItems: "center",
+            backgroundColor: colors.surface,
+            borderColor: colors.line,
+            borderRadius: 20,
+            borderWidth: 1,
+            height: 40,
+            justifyContent: "center",
+            width: 40,
+          }}
+        >
+          <CategoryGlyph color={colors.ink} name="share" size={18} />
+        </PressableScale>
       </View>
 
       <ScrollView
@@ -187,7 +138,7 @@ export default function AgentDetailRoute() {
         showsVerticalScrollIndicator={false}
       >
         {isLoading ? (
-          <View className="px-6 py-20">
+          <View className="px-5 py-20">
             <StatePanel
               body="Resolving ERC-8004 token identity and verifying contract parameters on BNB Smart Chain..."
               state="syncing"
@@ -195,7 +146,7 @@ export default function AgentDetailRoute() {
             />
           </View>
         ) : isError || !agent ? (
-          <View className="px-6 py-20">
+          <View className="px-5 py-20">
             <StatePanel
               body="Agent specifications could not be loaded from the registry."
               state="unavailable"

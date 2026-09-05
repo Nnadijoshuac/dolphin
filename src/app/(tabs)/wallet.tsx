@@ -131,9 +131,21 @@ export default function WalletScreen() {
          * its card below, so the two are recognisably one account. With nothing
          * connected there is no address to seed from, so it falls back to a
          * neutral mark rather than a face that would imply an account exists.
+         *
+         * Circular, at the same 40pt as the info button opposite it, so the two
+         * ends of the bar are the same shape. As a bare squircle it read as a
+         * stray image dropped into the bar rather than as the row's left-hand
+         * control. The connected and disconnected states now occupy an
+         * identical 40pt circle, so the bar does not change shape when a wallet
+         * connects.
          */}
         {wallet.isConnected && wallet.address ? (
-          <WalletAvatar address={wallet.address} kind="human" size={40} />
+          <WalletAvatar
+            address={wallet.address}
+            kind="human"
+            radius={20}
+            size={40}
+          />
         ) : (
           <View
             className="items-center justify-center rounded-full border"

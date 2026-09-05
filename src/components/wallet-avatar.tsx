@@ -26,10 +26,19 @@ export function WalletAvatar({
   address,
   kind,
   size = 26,
+  radius = 7,
 }: {
   address: string;
   kind: "human" | "bot";
   size?: number;
+  /**
+   * Corner radius, in points. Defaults to the squircle both products use
+   * inline beside a label; pass `size / 2` where the avatar stands alone as an
+   * identity mark and has to read as a circle next to other circular controls
+   * (the wallet screen's top bar). The web mirror sets its own radius in CSS
+   * (`.wcard__avatar`), so this knob has no counterpart to keep in step there.
+   */
+  radius?: number;
 }) {
   // An empty address would seed every wallet the same face, which is worse
   // than none at all - it would imply two different accounts are one.
@@ -48,7 +57,7 @@ export function WalletAvatar({
       style={{
         width: size,
         height: size,
-        borderRadius: 7,
+        borderRadius: radius,
         backgroundColor: colors.surfaceSubtle,
         borderWidth: 1,
         borderColor: colors.line,

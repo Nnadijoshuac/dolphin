@@ -112,6 +112,11 @@ function CircleAction({
  * the only place that knows whether a figure was actually read. Passing a
  * number would force this component to invent a fallback, and the only honest
  * fallbacks are words ("Unavailable", "Reading…"), not zero.
+ *
+ * `address` is nullable because BOTH slots render whether or not their account
+ * exists yet - see the scroller below for why. With no address there is nothing
+ * to seed a face from, so it draws the neutral glyph for that kind of account
+ * rather than a face, which would imply an account that is not there.
  */
 function AccountCard({
   address,
@@ -123,7 +128,7 @@ function AccountCard({
   footnote,
   width,
 }: {
-  address: string;
+  address: string | null;
   kind: "human" | "bot";
   title: string;
   subtitle: string;
@@ -145,7 +150,25 @@ function AccountCard({
       }}
     >
       <View className="flex-row items-center gap-2.5">
-        <WalletAvatar address={address} kind={kind} size={36} />
+        {address ? (
+          <WalletAvatar address={address} kind={kind} size={36} />
+        ) : (
+          <View
+            className="items-center justify-center rounded-[7px] border"
+            style={{
+              backgroundColor: colors.surfaceSubtle,
+              borderColor: colors.line,
+              height: 36,
+              width: 36,
+            }}
+          >
+            <CategoryGlyph
+              color={colors.faint}
+              name={kind === "bot" ? "agents" : "wallet"}
+              size={17}
+            />
+          </View>
+        )}
         <View className="flex-1">
           <Text
             className="text-[15px] font-bold"
@@ -230,6 +253,22 @@ function Overview({
 
   const dolphinAddress =
     altana.status === "connected" ? altana.address : null;
+
+  /*
+   * What the agent-wallet slot says when there is no agent wallet to read.
+   *
+   * Each branch names the actual reason and, where there is one, the next step
+   * - the card is the only place on this screen that mentions the wallet at all
+   * before someone scrolls to Account details. "Not available on this build" is
+   * the one branch with no action attached, because there is genuinely none:
+   * passkey wallets need a dev build, which no tap here can produce.
+   */
+  const dolphinPlaceholder =
+    altana.status === "loading"
+      ? { balance: "…", footnote: "Checking this device…" }
+      : altana.status === "unsupported"
+        ? { balance: "Unavailable", footnote: "Not available on this build" }
+        : { balance: "Not set up", footnote: "Create one in Account details" };
 
   /*
    * The total, and the rule it follows.
@@ -412,7 +451,26 @@ function Overview({
         </View>
       )}
 
-      {/* ── account cards ── */}
+      {/*
+       * ── account cards ──
+       *
+       * TWO SLOTS, ALWAYS, IN THIS ORDER: the user's own wallet, then the agent
+       * wallet that pays on their behalf. Both used to be conditional, so the
+       * row collapsed to a single card whenever one account was missing - and
+       * because a Dolphin Wallet does not exist until someone creates one, the
+       * state almost everybody actually met was a lone card showing the user's
+       * own wallet, with the second wallet nowhere on the screen and nothing
+       * saying it existed.
+       *
+       * This is the rule the website already settled on for the same pair of
+       * accounts: "The empty state is a CARD, not an absence" - it holds the
+       * slot at the same size, so the shape of the section does not change with
+       * connection state. What changes is only what is inside it.
+       *
+       * An empty slot still states no figure it has not read. Its balance line
+       * is a word - "Not set up", "Not connected", "Unavailable" - never a zero,
+       * which would read as a funded account holding nothing (AGENTS.md §5).
+       */}
       <View className="mt-7">
         <ScrollView
           contentContainerStyle={{ gap: CARD_GAP, paddingRight: 24 }}
@@ -421,11 +479,12 @@ function Overview({
           showsHorizontalScrollIndicator={false}
           snapToInterval={cardWidth + CARD_GAP}
         >
-          {identityAddress ? (
-            <AccountCard
-              address={identityAddress}
-              balance={
-                hidden
+          <AccountCard
+            address={identityAddress}
+            balance={
+              !identityAddress
+                ? "Not connected"
+                : hidden
                   ? "••••"
                   : identityFailed
                     ? "Unavailable"
@@ -434,23 +493,33 @@ function Overview({
                       : identityLoading
                         ? "…"
                         : "—"
-              }
-              balanceTone={
-                identityFailed ? "error" : identityBalance ? "normal" : "muted"
-              }
-              footnote={shortenAddress(identityAddress)}
-              kind="human"
-              subtitle="BNB · identifies your hires"
-              title="Your wallet"
-              width={cardWidth}
-            />
-          ) : null}
+            }
+            balanceTone={
+              !identityAddress
+                ? "muted"
+                : identityFailed
+                  ? "error"
+                  : identityBalance
+                    ? "normal"
+                    : "muted"
+            }
+            footnote={
+              identityAddress
+                ? shortenAddress(identityAddress)
+                : "Connect one to record your hires"
+            }
+            kind="human"
+            subtitle="BNB · identifies your hires"
+            title="Your wallet"
+            width={cardWidth}
+          />
 
-          {dolphinAddress ? (
-            <AccountCard
-              address={dolphinAddress}
-              balance={
-                hidden
+          <AccountCard
+            address={dolphinAddress}
+            balance={
+              !dolphinAddress
+                ? dolphinPlaceholder.balance
+                : hidden
                   ? "••••"
                   : altana.balanceError
                     ? "Unavailable"
@@ -459,21 +528,26 @@ function Overview({
                       : altana.isReadingBalance
                         ? "…"
                         : "—"
-              }
-              balanceTone={
-                altana.balanceError
+            }
+            balanceTone={
+              !dolphinAddress
+                ? "muted"
+                : altana.balanceError
                   ? "error"
                   : altana.balanceWei !== null
                     ? "normal"
                     : "muted"
-              }
-              footnote={shortenAddress(dolphinAddress)}
-              kind="bot"
-              subtitle="BNB · pays agents you hire"
-              title="Dolphin Wallet"
-              width={cardWidth}
-            />
-          ) : null}
+            }
+            footnote={
+              dolphinAddress
+                ? shortenAddress(dolphinAddress)
+                : dolphinPlaceholder.footnote
+            }
+            kind="bot"
+            subtitle="BNB · pays agents you hire"
+            title="Dolphin Wallet"
+            width={cardWidth}
+          />
         </ScrollView>
       </View>
     </View>

@@ -1,7 +1,58 @@
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react-native";
+import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
+import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
+import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
+import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
+import ArrowUpRight01Icon from "@hugeicons/core-free-icons/ArrowUpRight01Icon";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
+import Compass01Icon from "@hugeicons/core-free-icons/Compass01Icon";
+import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
+import GridViewIcon from "@hugeicons/core-free-icons/GridViewIcon";
+import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleIcon";
+import Layers01Icon from "@hugeicons/core-free-icons/Layers01Icon";
+import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
+import Robot01Icon from "@hugeicons/core-free-icons/Robot01Icon";
+import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
+import Shield01Icon from "@hugeicons/core-free-icons/Shield01Icon";
+import ShieldOffIcon from "@hugeicons/core-free-icons/ShieldOffIcon";
+import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
+import Tick01Icon from "@hugeicons/core-free-icons/Tick01Icon";
+import Wallet01Icon from "@hugeicons/core-free-icons/Wallet01Icon";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
 import { colors } from "@/constants/theme";
 import type { AgentCategory } from "@/types/agent";
 
+/**
+ * Interface icons come from Hugeicons; the six AGENT CATEGORY glyphs do not.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE SPLIT
+ * ---------------------------------------------------------------------------
+ * The generic interface marks below (wallet, info, copy, chevrons, …) were
+ * hand-drawn here and had no reason to be: they are the same shapes every app
+ * uses, drawn less consistently than a real icon set would draw them, and each
+ * one was a small amount of SVG to maintain.
+ *
+ * The six category glyphs - monitoring, grid-trading, rebalancing,
+ * health-factor, yield, trading - are kept exactly as they were. They are not
+ * generic: each encodes what its category of agent actually does (a radar eye,
+ * a liquidity ladder, a health gauge), and no general-purpose icon set has a
+ * mark that carries that meaning. Swapping them would trade Dolphin's own
+ * visual vocabulary for a stock approximation.
+ *
+ * ---------------------------------------------------------------------------
+ * IMPORT ONE FILE PER ICON. DO NOT IMPORT FROM THE BARREL.
+ * ---------------------------------------------------------------------------
+ * `@hugeicons/core-free-icons` resolves to dist/cjs/index.js under Metro, which
+ * is 6.86 MB of icon data - every icon in the set. Metro does not tree-shake
+ * across modules by default, so a single named import from the barrel would
+ * pull all of it into the bundle. The package's `./*` subpath export maps to
+ * one ~1 KB file per icon, so the twenty below cost roughly 20 KB together.
+ *
+ * Each per-icon file is `module.exports = <array>` in CJS and `export default`
+ * in ESM, hence the default imports.
+ */
 export type GlyphName =
   | AgentCategory
   | "discover"
@@ -20,7 +71,41 @@ export type GlyphName =
   | "chevron-right"
   | "chevron-left"
   | "close"
-  | "arrow-right";
+  | "arrow-right"
+  // Added with the Hugeicons switch: these three were previously drawn as raw
+  // Unicode characters (↓ ↗ ↻) in wallet-overview.tsx because this file had no
+  // equivalent. They are real icons now, so the text fallbacks can go.
+  | "receive"
+  | "external"
+  | "refresh";
+
+/**
+ * Every glyph name that is now a Hugeicons mark. A name absent from this map
+ * falls through to the hand-drawn category glyphs below, which is what keeps
+ * the two systems from silently overlapping.
+ */
+const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
+  discover: Compass01Icon,
+  categories: GridViewIcon,
+  search: Search01Icon,
+  agents: Robot01Icon,
+  wallet: Wallet01Icon,
+  shield: Shield01Icon,
+  clock: Clock01Icon,
+  revoke: ShieldOffIcon,
+  check: Tick01Icon,
+  copy: Copy01Icon,
+  sparkle: SparklesIcon,
+  layers: Layers01Icon,
+  info: InformationCircleIcon,
+  "chevron-right": ArrowRight01Icon,
+  "chevron-left": ArrowLeft01Icon,
+  close: Cancel01Icon,
+  "arrow-right": ArrowRight02Icon,
+  receive: ArrowDown01Icon,
+  external: ArrowUpRight01Icon,
+  refresh: Refresh01Icon,
+};
 
 type CategoryGlyphProps = {
   name: GlyphName;
@@ -35,6 +120,25 @@ export function CategoryGlyph({
   color = colors.ink,
   strokeWidth = 1.8,
 }: CategoryGlyphProps) {
+  const hugeicon = HUGEICONS[name];
+  if (hugeicon) {
+    /*
+     * `color` is honoured here, which it was NOT by the old hand-drawn "check".
+     * That one hardcoded a gold disc with a white tick and ignored the prop
+     * entirely, so call sites passing a colour (altana-wallet-card passes green
+     * when a copy succeeds) were silently overridden. They now get the colour
+     * they asked for.
+     */
+    return (
+      <HugeiconsIcon
+        color={color}
+        icon={hugeicon}
+        size={size}
+        strokeWidth={strokeWidth}
+      />
+    );
+  }
+
   const common = {
     fill: "none",
     stroke: color,
@@ -122,135 +226,6 @@ export function CategoryGlyph({
         </>
       ) : null}
 
-      {name === "discover" ? (
-        <>
-          <Circle cx="12" cy="12" r="9" {...common} />
-          <Path d="m15.5 8.5-2.5 5-5 2.5 2.5-5 5-2.5Z" {...common} />
-          <Circle cx="12" cy="12" fill={color} r="1" />
-        </>
-      ) : null}
-
-      {name === "categories" ? (
-        <>
-          {/* 4 Square Tiles */}
-          <Rect height="7" rx="2" width="7" x="4" y="4" {...common} />
-          <Rect height="7" rx="2" width="7" x="13" y="4" {...common} />
-          <Rect height="7" rx="2" width="7" x="4" y="13" {...common} />
-          <Rect height="7" rx="2" width="7" x="13" y="13" {...common} />
-        </>
-      ) : null}
-
-      {name === "search" ? (
-        <>
-          <Circle cx="11" cy="11" r="7" {...common} />
-          <Line x1="16.5" x2="21" y1="16.5" y2="21" {...common} />
-        </>
-      ) : null}
-
-      {name === "agents" ? (
-        <>
-          {/* Bot / Agent face with antenna */}
-          <Rect height="12" rx="3.5" width="16" x="4" y="8" {...common} />
-          <Line x1="12" x2="12" y1="4" y2="8" {...common} />
-          <Circle cx="12" cy="3" fill={color} r="1.5" />
-          <Circle cx="9" cy="13" fill={color} r="1.2" />
-          <Circle cx="15" cy="13" fill={color} r="1.2" />
-          <Line x1="9" x2="15" y1="16" y2="16" {...common} />
-        </>
-      ) : null}
-
-      {name === "wallet" ? (
-        <>
-          <Rect height="14" rx="3" width="18" x="3" y="5" {...common} />
-          <Path d="M15 10h6v4h-6a2 2 0 0 1 0-4Z" {...common} />
-          <Circle cx="16.5" cy="12" fill={color} r="0.8" />
-        </>
-      ) : null}
-
-      {name === "shield" ? (
-        <>
-          <Path
-            d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11Z"
-            {...common}
-          />
-          <Path d="m9 12 2 2 4-4" {...common} />
-        </>
-      ) : null}
-
-      {name === "clock" ? (
-        <>
-          <Circle cx="12" cy="12" r="9" {...common} />
-          <Path d="M12 7v5l3 2" {...common} />
-        </>
-      ) : null}
-
-      {name === "revoke" ? (
-        <>
-          <Circle cx="12" cy="12" r="9" {...common} />
-          <Line x1="6" x2="18" y1="6" y2="18" {...common} />
-        </>
-      ) : null}
-
-      {name === "check" ? (
-        <>
-          <Circle cx="12" cy="12" fill={colors.gold} r="9" />
-          <Path d="m8.5 12 2.5 2.5 5-5" stroke="#FFFFFF" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
-        </>
-      ) : null}
-
-      {name === "copy" ? (
-        <>
-          <Rect height="10" rx="2" width="10" x="9" y="9" {...common} />
-          <Path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" {...common} />
-        </>
-      ) : null}
-
-      {name === "sparkle" ? (
-        <>
-          <Path
-            d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"
-            fill={color}
-          />
-        </>
-      ) : null}
-
-      {name === "layers" ? (
-        <>
-          <Path d="m12 2 10 5-10 5-10-5 10-5Z" {...common} />
-          <Path d="m2 12 10 5 10-5" {...common} />
-          <Path d="m2 17 10 5 10-5" {...common} />
-        </>
-      ) : null}
-
-      {name === "info" ? (
-        <>
-          <Circle cx="12" cy="12" r="9" {...common} />
-          <Line x1="12" x2="12" y1="11" y2="16" {...common} />
-          <Circle cx="12" cy="8" fill={color} r="1" />
-        </>
-      ) : null}
-
-      {name === "chevron-right" ? (
-        <Path d="m9 18 6-6-6-6" {...common} />
-      ) : null}
-
-      {name === "chevron-left" ? (
-        <Path d="m15 18-6-6 6-6" {...common} />
-      ) : null}
-
-      {name === "close" ? (
-        <>
-          <Line x1="6" x2="18" y1="6" y2="18" {...common} />
-          <Line x1="18" x2="6" y1="6" y2="18" {...common} />
-        </>
-      ) : null}
-
-      {name === "arrow-right" ? (
-        <>
-          <Line x1="5" x2="19" y1="12" y2="12" {...common} />
-          <Path d="m12 5 7 7-7 7" {...common} />
-        </>
-      ) : null}
     </Svg>
   );
 }

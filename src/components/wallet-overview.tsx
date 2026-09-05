@@ -3,6 +3,7 @@ import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useBalance } from "wagmi";
 
+import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
 import { WalletAvatar } from "@/components/wallet-avatar";
@@ -52,18 +53,19 @@ function shortenAddress(address: string) {
 /**
  * One circular action with its label underneath.
  *
- * The icons are the same Unicode marks the website's WalletAction uses (↓ ↗ ↻)
- * rather than new SVG paths - category-glyph.tsx has no receive/external/refresh
- * glyph, and adding three for one row would be inventing an icon set to match a
- * screenshot.
+ * These were Unicode marks (↓ ↗ ↻) while category-glyph.tsx had no
+ * receive/external/refresh glyph and drawing three by hand for one row was not
+ * worth it. That file now delegates its interface icons to Hugeicons and
+ * carries all three, so these are real icons that scale and take a stroke
+ * weight like every other icon on the screen.
  */
 function CircleAction({
-  icon,
+  glyph,
   label,
   onPress,
   disabled = false,
 }: {
-  icon: string;
+  glyph: GlyphName;
   label: string;
   onPress: () => void;
   disabled?: boolean;
@@ -88,9 +90,7 @@ function CircleAction({
           ...shadows.subtle,
         }}
       >
-        <Text className="text-[24px]" style={{ color: colors.ink }}>
-          {icon}
-        </Text>
+        <CategoryGlyph color={colors.ink} name={glyph} size={24} />
       </PressableScale>
       <Text
         className="mt-2 text-center text-[13px] font-semibold"
@@ -396,11 +396,11 @@ function Overview({
       {/* ── actions ── */}
       {identityAddress ? (
         <View className="mt-6 flex-row justify-center gap-3">
-          <CircleAction icon="↓" label="Receive" onPress={handleCopy} />
-          <CircleAction icon="↗" label="BscScan" onPress={handleExplorer} />
+          <CircleAction glyph="receive" label="Receive" onPress={handleCopy} />
+          <CircleAction glyph="external" label="BscScan" onPress={handleExplorer} />
           <CircleAction
             disabled={identityLoading || altana.isReadingBalance}
-            icon="↻"
+            glyph="refresh"
             label="Refresh"
             onPress={handleRefresh}
           />

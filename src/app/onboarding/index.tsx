@@ -482,7 +482,11 @@ export default function OnboardingScreen() {
                 }}
               >
                 {step < currentIndex ? (
-                  <CategoryGlyph name="check" size={16} />
+                  /* Gold, explicitly. The old hand-drawn "check" was a gold
+                     disc with a white tick and ignored the color prop; the
+                     Hugeicons one honours it and would otherwise default to
+                     ink, putting a dark mark next to the gold active pill. */
+                  <CategoryGlyph color="#F5B300" name="check" size={16} />
                 ) : (
                   <View
                     className={`rounded-full transition-all ${

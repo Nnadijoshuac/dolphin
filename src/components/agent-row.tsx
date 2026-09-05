@@ -71,14 +71,15 @@ export function AgentRow({ agent, onPress, subtitle }: AgentRowProps) {
 
         {/* Action Button (Pill-shaped) */}
         <View
-          className="items-center justify-center px-4 py-1.5"
+          className="items-center justify-center px-3.5 py-1.5"
           style={{
-            borderColor: "rgba(17,18,20,0.15)",
+            borderColor: colors.goldBorder,
+            backgroundColor: colors.goldSoft,
             borderWidth: 1,
             borderRadius: 9999,
           }}
         >
-          <Text className="text-[13px] font-medium" style={{ color: colors.ink }}>
+          <Text className="text-[12px] font-bold" style={{ color: colors.goldDark }}>
             View
           </Text>
         </View>

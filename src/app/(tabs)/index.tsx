@@ -1,7 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -11,25 +10,23 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AdvertCarousel } from "@/components/advert-carousel";
 import { AgentRow } from "@/components/agent-row";
 import { AppHeader } from "@/components/app-header";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { ConstellationBg } from "@/components/constellation-bg";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
-
-const coinVideoSource = require("../../../assets/videos/Coin.mp4");
-
 const categoryLabels: Record<AgentCategory, string> = {
   monitoring: "Monitoring",
   rebalancing: "Rebalancing",
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
+  trading: "Trading",
 };
 
 export default function DiscoverScreen() {
@@ -38,13 +35,6 @@ export default function DiscoverScreen() {
   const [activeCategory, setActiveCategory] = useState<AgentCategory>("rebalancing");
   const horizontalScrollRef = useRef<ScrollView>(null);
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
-
-  const coinPlayer = useVideoPlayer(coinVideoSource, (player) => {
-    player.loop = true;
-    player.muted = true;
-    player.playbackRate = 1.0;
-    player.play();
-  });
 
   const handleAgentPress = (agent: Agent) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -71,14 +61,15 @@ export default function DiscoverScreen() {
 
   const categoryTabsElement = (
     <View
-      className="px-4 pt-2 pb-2"
+      className="pt-3 pb-3"
       style={{
         backgroundColor: colors.canvas,
       }}
     >
-      <View
-        className="flex-row items-center justify-between border-b"
-        style={{ borderColor: "rgba(17,18,20,0.06)" }}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
       >
         {AGENT_CATEGORIES.map((cat) => {
           const isActive = activeCategory === cat.slug;
@@ -90,33 +81,29 @@ export default function DiscoverScreen() {
               accessibilityState={{ selected: isActive }}
               onPress={() => handleSelectCategory(cat.slug)}
               containerStyle={{
-                paddingBottom: 8,
-                paddingTop: 4,
-                paddingHorizontal: 2,
+                paddingVertical: 6,
+                paddingHorizontal: 16,
                 alignItems: "center",
-                position: "relative",
+                justifyContent: "center",
+                borderRadius: 9999,
+                backgroundColor: isActive ? "rgba(1, 135, 95, 0.1)" : "#FFFFFF",
+                borderWidth: 1,
+                borderColor: isActive ? "transparent" : "rgba(17,18,20,0.1)",
               }}
             >
               <Text
                 className="text-[13px]"
                 style={{
-                  color: isActive ? colors.ink : "#7A7B7E",
-                  fontWeight: isActive ? "800" : "500",
+                  color: isActive ? "#01875F" : colors.ink,
+                  fontWeight: isActive ? "600" : "500",
                 }}
               >
                 {cat.label}
               </Text>
-
-              {isActive ? (
-                <View
-                  className="absolute bottom-0 h-1 w-full rounded-full"
-                  style={{ backgroundColor: colors.gold }}
-                />
-              ) : null}
             </PressableScale>
           );
         })}
-      </View>
+      </ScrollView>
     </View>
   );
 
@@ -126,7 +113,6 @@ export default function DiscoverScreen() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      <ConstellationBg opacity={0.3} />
 
       <ScrollView
         className="flex-1"
@@ -202,80 +188,13 @@ export default function DiscoverScreen() {
           {isTabsSticky ? categoryTabsElement : null}
         </View>
 
-        {/* Child 2: Compact Featured Hero Card */}
+        {/* Child 2: Advert Carousel */}
         <View
-          className="px-2 pb-1 pt-1"
           onLayout={(e) => {
             setHeroBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
           }}
         >
-          <PressableScale
-            accessibilityLabel="Explore Rebalancing Agents collection"
-            accessibilityRole="button"
-            onPress={() => handleSelectCategory("rebalancing")}
-            containerStyle={{
-              backgroundColor: "#000000",
-              borderColor: "rgba(255,255,255,0.08)",
-              borderRadius: 26,
-              borderWidth: 1,
-              overflow: "hidden",
-              paddingHorizontal: 20,
-              paddingVertical: 24,
-              ...shadows.floating,
-            }}
-          >
-            {/* Absolute Background Video */}
-            <View
-              pointerEvents="none"
-              style={{
-                position: "absolute",
-                right: -60,
-                top: -15,
-                bottom: -15,
-                width: 250,
-                opacity: 0.95,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <VideoView
-                // SDK 55 removed the `allowsFullscreen` prop in favour of
-                // `fullscreenOptions.enable`.
-                fullscreenOptions={{ enable: false }}
-                allowsPictureInPicture={false}
-                contentFit="contain"
-                nativeControls={false}
-                player={coinPlayer}
-                style={{ height: "100%", width: "100%" }}
-              />
-            </View>
-
-            {/* Foreground Content */}
-            <View style={{ zIndex: 10 }}>
-              {/* Text Column */}
-              <View style={{ maxWidth: "68%" }}>
-                <Text className="text-[22px] font-black text-white leading-[26px] tracking-tight">
-                  Agents that reset{"\n"}your LP range
-                </Text>
-
-                <Text className="mt-1.5 text-[11.5px] leading-[16px] text-zinc-400">
-                  Autonomous agents that manage concentrated-liquidity positions 24/7.
-                </Text>
-
-                <View className="mt-3 flex-row items-center gap-1.5">
-                  <Text className="text-[12.5px] font-bold text-[#F5B300]">
-                    Explore collection
-                  </Text>
-                  <CategoryGlyph
-                    color="#F5B300"
-                    name="arrow-right"
-                    size={13}
-                    strokeWidth={2.5}
-                  />
-                </View>
-              </View>
-            </View>
-          </PressableScale>
+          <AdvertCarousel agents={agents ?? []} onAgentPress={handleAgentPress} />
         </View>
 
         {/* Child 3: Category Filter Tabs Bar (In-flow position) */}

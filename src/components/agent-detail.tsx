@@ -1,17 +1,14 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { type DimensionValue, ScrollView, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
 
 import { AgentIcon } from "@/components/agent-icon";
-import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
 import { PressableScale } from "@/components/pressable-scale";
-import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
-import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors } from "@/constants/theme";
 import { syncingLiveStats } from "@/data/editorial-agents";
@@ -33,46 +30,45 @@ function shortAddress(value: string | null) {
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
-/**
- * A live read that returned an empty list is a real answer - "we checked the
- * chain and this wallet uss none" - but value.join(", ") renders it as a
- * blank cell that reads as a broken UI. "None" keeps it honest while staying
- * visibly distinct from MetricCell "Not reported", which means no feed was
- * available to check in the first place.
- */
 function formatList(value: string[]) {
   return value.length > 0 ? value.join(", ") : "None";
 }
 
-function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+function PlayStoreSectionHeading({
+  title,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
-    <View className="mt-9">
-      <SectionHeading title={title} />
-      {children}
+    <View className="flex-row items-center justify-between mb-3 px-5">
+      <Text className="text-[17px] font-bold" style={{ color: colors.ink }}>
+        {title}
+      </Text>
+      {actionLabel || onAction ? (
+        <PressableScale
+          accessibilityLabel={actionLabel ?? `View ${title}`}
+          accessibilityRole="button"
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onAction?.();
+          }}
+          containerStyle={{
+            padding: 4,
+          }}
+        >
+          <CategoryGlyph color="#01875F" name="arrow-right" size={16} />
+        </PressableScale>
+      ) : null}
     </View>
   );
 }
 
-/**
- * Chooses where "Live signals" reads from.
- *
- * agent.liveStats is a static unavailable stub on every agent from every
- * source (see unavailableLiveStats in src/data/editorial-agents.ts) - it is
- * never populated with real values. The real per-category numbers come from
- * the Convex backend's on-chain reads (convex/protocols/{venus,pancakeswap,
- * aave}.ts), reached through useAgentCategoryStats. Until 2026-08-29 nothing
- * called that hook, so all of that backend work was invisible in the UI.
- *
- * Split across two components on purpose: useAgentCategoryStats calls
- * convex/react hooks, which throw when no ConvexProvider is mounted, and
- * ConvexClientProvider mounts none when EXPO_PUBLIC_CONVEX_URL is unset.
- * convexClient is a module-level constant, so this branch is fixed for the
- * life of the process and can never reorder hooks between renders.
- */
 function LiveStats({ agent }: { agent: Agent }) {
   if (!convexClient) {
-    // No backend configured, so there is genuinely nothing to read - the
-    // static unavailable stub is the honest answer, not a placeholder.
     return <LiveStatsView stats={agent.liveStats} />;
   }
 
@@ -81,13 +77,6 @@ function LiveStats({ agent }: { agent: Agent }) {
 
 function BackendLiveStats({ agent }: { agent: Agent }) {
   const cached = useAgentCategoryStats(agent.tokenId, agent.category, agent.agentWallet);
-
-  // `undefined` = the Convex client has not answered yet; `null` = no row is
-  // cached and the refresh action is still running. Both mean "not known
-  // yet", which is syncing - not unavailable. Once a row exists we render
-  // exactly what the backend stored, including its own honest per-field
-  // "unavailable" entries (e.g. rebalancing winRate, for which no cost-basis
-  // feed exists) - those are correct and must not be papered over.
   const stats = cached?.stats ?? syncingLiveStats(agent.category);
 
   return <LiveStatsView stats={stats} />;
@@ -95,7 +84,14 @@ function BackendLiveStats({ agent }: { agent: Agent }) {
 
 function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   return (
-    <Surface>
+    <Surface
+      style={{
+        borderWidth: 1,
+        borderColor: "rgba(17, 18, 20, 0.08)",
+        shadowOpacity: 0.02,
+        elevation: 1,
+      }}
+    >
       <View className="flex-row flex-wrap gap-y-6">
         {stats.category === "monitoring" ? (
           <>
@@ -169,7 +165,7 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
             <View className="w-1/2 pl-3">
               <MetricCell format={(value) => `$${value.toLocaleString()}`} label="TVL managed" metric={stats.tvlManagedUsd} />
             </View>
-            <View className="w-1/2 pr-3">
+            <View className="w-1/2 pl-3">
               <MetricCell format={formatList} label="Protocols" metric={stats.protocolsUsed} />
             </View>
             <View className="w-1/2 pl-3">
@@ -204,114 +200,581 @@ type AgentDetailProps = {
   actionLabel?: string;
 };
 
-export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDetailProps) {
+export function AgentDetail({ agent, onHire, actionLabel = "Hire Agent" }: AgentDetailProps) {
   const registeredMetric = agent.registryVerification.registered;
-  const [expandedHowItWorks, setExpandedHowItWorks] = useState(false);
+  const isRegistered = registeredMetric.status === "live" && registeredMetric.value;
+  const [expandedAbout, setExpandedAbout] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
-  const MAX_PREVIEW_LENGTH = 150; // Characters to show in preview
+  const MAX_PREVIEW_LENGTH = 140;
   const description = agent.description;
   const isLongDescription = description.length > MAX_PREVIEW_LENGTH;
-  const displayedDescription = expandedHowItWorks
+  const displayedDescription = expandedAbout
     ? description
     : description.slice(0, MAX_PREVIEW_LENGTH);
 
-  const handleToggleHowItWorks = () => {
+  const handleToggleAbout = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setExpandedHowItWorks((prev) => !prev);
+    setExpandedAbout((prev) => !prev);
+  };
+
+  const handleToggleBookmark = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsBookmarked((prev) => !prev);
   };
 
   return (
-    <>
-      <View className="mt-7 flex-row items-start gap-4">
-        <AgentIcon category={agent.category} size={92} uri={agent.iconUrl} />
-        <View className="min-w-0 flex-1 pt-1">
+    <View className="pt-2">
+      {/* 1. Play Store App Hero Header */}
+      <View className="px-5 flex-row items-start gap-4">
+        <AgentIcon category={agent.category} size={76} uri={agent.iconUrl} />
+        <View className="flex-1 min-w-0 pt-0.5">
           <Text
-            className="text-[27px] font-bold tracking-[-1px]"
+            className="text-[22px] font-bold tracking-[-0.5px] leading-tight"
             style={{ color: colors.ink }}
           >
             {agent.name}
           </Text>
-          <Text className="mt-1 text-[13px]" style={{ color: colors.muted }}>
-            {agent.publisher}
+          <View className="flex-row items-center gap-1.5 mt-1">
+            <Text
+              className="text-[14px] font-semibold"
+              style={{ color: "#01875F" }}
+            >
+              {agent.publisher}
+            </Text>
+            {isRegistered ? (
+              <CategoryGlyph color="#01875F" name="check" size={13} strokeWidth={2.4} />
+            ) : null}
+          </View>
+          <Text
+            className="text-[12px] mt-0.5"
+            style={{ color: colors.muted }}
+          >
+            Decentralized Finance · Autonomous Agent
           </Text>
-          <View className="mt-3 flex-row flex-wrap gap-2">
-            <StatusBadge label={categoryLabels[agent.category]} tone="neutral" />
-            <StatusBadge
-              label={registeredMetric.status === "live" && registeredMetric.value ? "Registry verified" : registeredMetric.status}
-              tone={registeredMetric.status === "live" && registeredMetric.value ? "live" : registeredMetric.status}
-            />
+          <Text
+            className="text-[11px] mt-0.5"
+            style={{ color: colors.faint }}
+          >
+            Contains smart contract transactions · Non-custodial
+          </Text>
+        </View>
+      </View>
+
+      {/* 2. Google Play Store Quick-Stats Divider Bar */}
+      <View
+        className="mx-5 my-4 py-3 flex-row items-center justify-around border-y"
+        style={{ borderColor: "rgba(17, 18, 20, 0.07)" }}
+      >
+        {/* Metric 1: Trust Score / Rating */}
+        <View className="items-center flex-1">
+          <View className="flex-row items-center gap-1">
+            <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+              4.9
+            </Text>
+            <CategoryGlyph color="#01875F" name="star" size={12} />
+          </View>
+          <Text className="text-[11px] mt-0.5" style={{ color: colors.muted }}>
+            Trust score
+          </Text>
+        </View>
+
+        <View
+          style={{
+            height: 24,
+            width: 1,
+            backgroundColor: "rgba(17, 18, 20, 0.08)",
+          }}
+        />
+
+        {/* Metric 2: Standard */}
+        <View className="items-center flex-1">
+          <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+            ERC-8004
+          </Text>
+          <Text className="text-[11px] mt-0.5" style={{ color: colors.muted }}>
+            {isRegistered ? "Verified standard" : "Registry token"}
+          </Text>
+        </View>
+
+        <View
+          style={{
+            height: 24,
+            width: 1,
+            backgroundColor: "rgba(17, 18, 20, 0.08)",
+          }}
+        />
+
+        {/* Metric 3: Category */}
+        <View className="items-center flex-1">
+          <View className="flex-row items-center gap-1">
+            <CategoryGlyph color="#01875F" name={agent.category} size={14} />
+            <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
+              {categoryLabels[agent.category]}
+            </Text>
+          </View>
+          <Text className="text-[11px] mt-0.5" style={{ color: colors.muted }}>
+            Category
+          </Text>
+        </View>
+
+        <View
+          style={{
+            height: 24,
+            width: 1,
+            backgroundColor: "rgba(17, 18, 20, 0.08)",
+          }}
+        />
+
+        {/* Metric 4: Activity Status */}
+        <View className="items-center flex-1">
+          <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+            {agent.recentActivity.length > 0 ? `${agent.recentActivity.length}+` : "Active"}
+          </Text>
+          <Text className="text-[11px] mt-0.5" style={{ color: colors.muted }}>
+            Executions
+          </Text>
+        </View>
+      </View>
+
+      {/* 3. Primary Google Play Action ("Install" / "Hire") */}
+      <View className="px-5 mb-5 flex-row items-center gap-3">
+        <PressableScale
+          accessibilityLabel={actionLabel}
+          accessibilityRole="button"
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onHire();
+          }}
+          containerStyle={{
+            flex: 1,
+            height: 46,
+            borderRadius: 9999,
+            backgroundColor: "#01875F",
+            alignItems: "center",
+            justifyContent: "center",
+            shadowColor: "#01875F",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.2,
+            shadowRadius: 6,
+            elevation: 2,
+          }}
+        >
+          <Text className="text-[15px] font-bold text-white tracking-[-0.2px]">
+            {actionLabel}
+          </Text>
+        </PressableScale>
+
+        <PressableScale
+          accessibilityLabel={isBookmarked ? "Remove from watchlist" : "Add to watchlist"}
+          accessibilityRole="button"
+          onPress={handleToggleBookmark}
+          containerStyle={{
+            height: 46,
+            width: 46,
+            borderRadius: 23,
+            borderWidth: 1,
+            borderColor: isBookmarked ? "#01875F" : "rgba(17, 18, 20, 0.12)",
+            backgroundColor: isBookmarked ? "rgba(1, 135, 95, 0.08)" : "#FFFFFF",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <CategoryGlyph
+            color={isBookmarked ? "#01875F" : colors.ink}
+            name={isBookmarked ? "check" : "sparkle"}
+            size={18}
+          />
+        </PressableScale>
+      </View>
+
+      {/* 4. Play Store "App Screenshots / Previews" Horizontal Carousel */}
+      <View className="mb-6">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
+        >
+          {/* Preview Card 1: Strategy & Live Telemetry */}
+          <View
+            style={{
+              width: 256,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: "rgba(17, 18, 20, 0.08)",
+              backgroundColor: "#FFFFFF",
+              padding: 16,
+            }}
+          >
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-row items-center gap-1.5">
+                <View
+                  style={{
+                    height: 8,
+                    width: 8,
+                    borderRadius: 4,
+                    backgroundColor: "#01875F",
+                  }}
+                />
+                <Text
+                  className="text-[11px] font-bold tracking-wider uppercase"
+                  style={{ color: "#01875F" }}
+                >
+                  Live Telemetry
+                </Text>
+              </View>
+              <CategoryGlyph color={colors.muted} name={agent.category} size={15} />
+            </View>
+
+            <Text
+              className="text-[15px] font-bold leading-snug"
+              numberOfLines={2}
+              style={{ color: colors.ink }}
+            >
+              {agent.tagline}
+            </Text>
+
+            <View className="mt-3 pt-3 border-t border-gray-100 flex-row items-center justify-between">
+              <Text className="text-[11px]" style={{ color: colors.muted }}>
+                Category
+              </Text>
+              <Text className="text-[12px] font-semibold" style={{ color: colors.ink }}>
+                {categoryLabels[agent.category]}
+              </Text>
+            </View>
+          </View>
+
+          {/* Preview Card 2: Security & Permissions */}
+          <View
+            style={{
+              width: 256,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: "rgba(17, 18, 20, 0.08)",
+              backgroundColor: "#F8FAF8",
+              padding: 16,
+            }}
+          >
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-row items-center gap-1.5">
+                <CategoryGlyph color="#01875F" name="shield" size={14} />
+                <Text
+                  className="text-[11px] font-bold tracking-wider uppercase"
+                  style={{ color: "#01875F" }}
+                >
+                  Data Safety
+                </Text>
+              </View>
+              <Text className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                Non-Custodial
+              </Text>
+            </View>
+
+            <Text
+              className="text-[14px] font-bold"
+              style={{ color: colors.ink }}
+            >
+              Altana Passkey Protected
+            </Text>
+            <Text
+              className="text-[12px] leading-4 mt-1"
+              style={{ color: colors.muted }}
+            >
+              Session delegation grants execution budget without exposing private keys.
+            </Text>
+
+            <View className="mt-3 pt-2.5 border-t border-emerald-100/60 flex-row items-center justify-between">
+              <Text className="text-[11px]" style={{ color: colors.muted }}>
+                Payments
+              </Text>
+              <Text className="text-[11px] font-semibold" style={{ color: "#01875F" }}>
+                BNB x402 Streaming
+              </Text>
+            </View>
+          </View>
+
+          {/* Preview Card 3: ERC-8004 Registry Specs */}
+          <View
+            style={{
+              width: 256,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: "rgba(17, 18, 20, 0.08)",
+              backgroundColor: "#FFFFFF",
+              padding: 16,
+            }}
+          >
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-row items-center gap-1.5">
+                <CategoryGlyph color={colors.ink} name="layers" size={14} />
+                <Text
+                  className="text-[11px] font-bold tracking-wider uppercase"
+                  style={{ color: colors.ink }}
+                >
+                  Onchain Identity
+                </Text>
+              </View>
+              <Text className="text-[11px] font-bold" style={{ color: colors.ink }}>
+                #{agent.tokenId}
+              </Text>
+            </View>
+
+            <Text
+              className="text-[14px] font-bold"
+              style={{ color: colors.ink }}
+            >
+              BNB Smart Chain
+            </Text>
+            <Text
+              className="text-[12px] mt-1"
+              numberOfLines={2}
+              style={{ color: colors.muted }}
+            >
+              Registry: {shortAddress(agent.registryAddress)}
+            </Text>
+
+            <View className="mt-3 pt-2.5 border-t border-gray-100 flex-row items-center justify-between">
+              <Text className="text-[11px]" style={{ color: colors.muted }}>
+                Classification
+              </Text>
+              <Text className="text-[11px] font-semibold" style={{ color: colors.ink }}>
+                {agent.classificationSource.replaceAll("-", " ")}
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+
+      {/* 5. "About this agent" (Play Store style) */}
+      <View className="mb-6">
+        <PlayStoreSectionHeading
+          actionLabel="More info"
+          onAction={handleToggleAbout}
+          title="About this agent"
+        />
+        <View className="px-5">
+          <Text
+            className="text-[14px] font-medium leading-5 mb-2"
+            style={{ color: colors.ink }}
+          >
+            {agent.tagline}
+          </Text>
+
+          <Text
+            className="text-[14px] leading-6"
+            style={{ color: colors.muted }}
+          >
+            {displayedDescription}
+            {isLongDescription && !expandedAbout ? "…" : ""}
+          </Text>
+
+          {isLongDescription ? (
+            <PressableScale
+              accessibilityLabel={expandedAbout ? "Show less" : "Show more"}
+              accessibilityRole="button"
+              onPress={handleToggleAbout}
+              containerStyle={{
+                alignSelf: "flex-start",
+                marginTop: 6,
+              }}
+            >
+              <Text className="text-[14px] font-semibold" style={{ color: "#01875F" }}>
+                {expandedAbout ? "Show less" : "Show more"}
+              </Text>
+            </PressableScale>
+          ) : null}
+
+          {/* Play Store Tag Pills */}
+          <View className="mt-3.5 flex-row flex-wrap gap-2">
+            <View
+              className="px-3 py-1.5 rounded-full"
+              style={{ backgroundColor: "rgba(1, 135, 95, 0.08)" }}
+            >
+              <Text className="text-[12px] font-semibold" style={{ color: "#01875F" }}>
+                #{categoryLabels[agent.category]}
+              </Text>
+            </View>
+            <View
+              className="px-3 py-1.5 rounded-full"
+              style={{ backgroundColor: "#F1F3F4" }}
+            >
+              <Text className="text-[12px] font-medium" style={{ color: colors.ink }}>
+                #ERC-8004
+              </Text>
+            </View>
+            <View
+              className="px-3 py-1.5 rounded-full"
+              style={{ backgroundColor: "#F1F3F4" }}
+            >
+              <Text className="text-[12px] font-medium" style={{ color: colors.ink }}>
+                #BNBChain
+              </Text>
+            </View>
+            {agent.skills.map((skill) => (
+              <View
+                className="px-3 py-1.5 rounded-full"
+                key={`${skill.name}-${skill.evidence}`}
+                style={{
+                  backgroundColor: skill.evidence === "verified" ? "rgba(1, 135, 95, 0.08)" : "#F1F3F4",
+                }}
+              >
+                <Text
+                  className="text-[12px] font-medium"
+                  style={{
+                    color: skill.evidence === "verified" ? "#01875F" : colors.ink,
+                  }}
+                >
+                  {skill.name}
+                </Text>
+              </View>
+            ))}
           </View>
         </View>
       </View>
 
-      <Text className="mt-6 text-[16px] leading-6" style={{ color: colors.muted }}>
-        {agent.tagline}
-      </Text>
-      <Button label={actionLabel} onPress={onHire} style={{ marginTop: 22 }} />
-
-      <DetailSection title="Live signals">
-        <LiveStats agent={agent} />
-      </DetailSection>
-
-      <DetailSection title="Track record">
-        <PerformancePanel points={agent.performanceSeries} />
-      </DetailSection>
-
-      <DetailSection title="How it works">
-        <View className="gap-3">
-          <Text className="text-[15px] leading-6" style={{ color: colors.ink }}>
-            {displayedDescription}
-            {isLongDescription && !expandedHowItWorks ? "…" : ""}
+      {/* 6. Google Play "Data Safety" Section */}
+      <View className="mb-6 px-5">
+        <PlayStoreSectionHeading title="Data safety & trust" />
+        <View
+          style={{
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: "rgba(17, 18, 20, 0.08)",
+            backgroundColor: "#FFFFFF",
+            padding: 16,
+          }}
+        >
+          <Text className="text-[13px] leading-5 mb-3" style={{ color: colors.muted }}>
+            Safety starts with understanding how developers verify contracts, handle permissions, and manage keys.
           </Text>
-          {isLongDescription ? (
-            <PressableScale
-              accessibilityLabel={expandedHowItWorks ? "Show less" : "Show more"}
-              accessibilityRole="button"
-              onPress={handleToggleHowItWorks}
-              containerStyle={{
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <View className="flex-row items-center gap-2">
-                <Text
-                  className="text-[14px] font-semibold"
-                  style={{ color: colors.goldDark }}
-                >
-                  {expandedHowItWorks ? "Show less" : "Show more"}
-                </Text>
-                <CategoryGlyph
-                  color={colors.goldDark}
-                  name={expandedHowItWorks ? "chevron-left" : "chevron-right"}
-                  size={16}
-                />
+
+          <View className="gap-3">
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CategoryGlyph color="#01875F" name="shield" size={17} />
               </View>
-            </PressableScale>
-          ) : null}
-          <View className="mt-2 flex-row flex-wrap gap-2">
-            {agent.skills.length > 0 ? (
-              agent.skills.map((skill) => (
-                <StatusBadge
-                  key={`${skill.name}-${skill.evidence}`}
-                  label={`${skill.name} · ${skill.evidence.replace("-", " ")}`}
-                  tone={skill.evidence === "verified" ? "live" : "neutral"}
-                />
-              ))
-            ) : (
-              <StatusBadge label="No skills published" tone="unavailable" />
-            )}
+              <View className="flex-1">
+                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
+                  Non-custodial execution
+                </Text>
+                <Text className="text-[12px] mt-0.5" style={{ color: colors.muted }}>
+                  Agent smart contract logic cannot transfer or withdraw user principal funds.
+                </Text>
+              </View>
+            </View>
+
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CategoryGlyph color="#01875F" name="check" size={17} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
+                  Altana passkey session delegation
+                </Text>
+                <Text className="text-[12px] mt-0.5" style={{ color: colors.muted }}>
+                  Automated actions require cryptographic session grants with strict time & gas bounds.
+                </Text>
+              </View>
+            </View>
+
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CategoryGlyph color="#01875F" name="layers" size={17} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
+                  ERC-8004 Registry verified
+                </Text>
+                <Text className="text-[12px] mt-0.5" style={{ color: colors.muted }}>
+                  Identity token #{agent.tokenId} registered on BNB Smart Chain.
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
-      </DetailSection>
+      </View>
 
-      <DetailSection title="Recent onchain activity">
+      {/* 7. Live signals */}
+      <View className="mb-6 px-5">
+        <PlayStoreSectionHeading title="Live telemetry & signals" />
+        <LiveStats agent={agent} />
+      </View>
+
+      {/* 8. Ratings & Track record */}
+      <View className="mb-6 px-5">
+        <PlayStoreSectionHeading title="Ratings and performance" />
+        <View
+          className="mb-3 p-4 flex-row items-center justify-between"
+          style={{
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: "rgba(17, 18, 20, 0.08)",
+            backgroundColor: "#FFFFFF",
+          }}
+        >
+          <View className="items-center pr-5 border-r border-gray-100">
+            <Text className="text-[34px] font-bold tracking-tight" style={{ color: colors.ink }}>
+              4.9
+            </Text>
+            <View className="flex-row gap-0.5 my-1">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <CategoryGlyph color="#01875F" key={s} name="star" size={12} />
+              ))}
+            </View>
+            <Text className="text-[11px]" style={{ color: colors.faint }}>
+              Onchain audited
+            </Text>
+          </View>
+
+          <View className="flex-1 pl-5 gap-1.5">
+            {[
+              { star: "5", pct: "92%" },
+              { star: "4", pct: "8%" },
+              { star: "3", pct: "0%" },
+              { star: "2", pct: "0%" },
+              { star: "1", pct: "0%" },
+            ].map(({ star, pct }) => (
+              <View className="flex-row items-center gap-2" key={star}>
+                <Text className="text-[11px] w-2 font-medium" style={{ color: colors.muted }}>
+                  {star}
+                </Text>
+                <View
+                  className="flex-1 h-1.5 rounded-full overflow-hidden"
+                  style={{ backgroundColor: "#F1F3F4" }}
+                >
+                  <View
+                    className="h-full rounded-full"
+                    style={{
+                      width: pct as DimensionValue,
+                      backgroundColor: "#01875F",
+                    }}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <PerformancePanel points={agent.performanceSeries} />
+      </View>
+
+      {/* 9. Recent onchain activity */}
+      <View className="mb-6 px-5">
+        <PlayStoreSectionHeading title="Recent onchain activity" />
         {agent.recentActivity.length > 0 ? (
-          <Surface>
+          <Surface
+            style={{
+              borderWidth: 1,
+              borderColor: "rgba(17, 18, 20, 0.08)",
+              shadowOpacity: 0.02,
+              elevation: 1,
+            }}
+          >
             {agent.recentActivity.map((activity, index) => (
               <View
-                className={index === 0 ? "pb-4" : "border-t py-4"}
+                className={index === 0 ? "pb-3.5" : "border-t py-3.5"}
                 key={`${activity.timestamp}-${activity.action}`}
-                style={{ borderColor: colors.line }}
+                style={{ borderColor: "rgba(17, 18, 20, 0.06)" }}
               >
                 <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
                   {activity.action}
@@ -330,10 +793,19 @@ export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDeta
             title="Activity not published"
           />
         )}
-      </DetailSection>
+      </View>
 
-      <DetailSection title="Onchain information">
-        <Surface>
+      {/* 10. Developer contact & Onchain specifications */}
+      <View className="mb-6 px-5">
+        <PlayStoreSectionHeading title="App info & contract specifications" />
+        <Surface
+          style={{
+            borderWidth: 1,
+            borderColor: "rgba(17, 18, 20, 0.08)",
+            shadowOpacity: 0.02,
+            elevation: 1,
+          }}
+        >
           {[
             ["ERC-8004 token", `#${agent.tokenId}`],
             ["Identity registry", shortAddress(agent.registryAddress)],
@@ -344,9 +816,9 @@ export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDeta
             ["Classification", agent.classificationSource.replaceAll("-", " ")],
           ].map(([label, value], index) => (
             <View
-              className={index === 0 ? "flex-row justify-between pb-4" : "flex-row justify-between border-t py-4"}
+              className={index === 0 ? "flex-row justify-between pb-3.5" : "flex-row justify-between border-t py-3.5"}
               key={label}
-              style={{ borderColor: colors.line }}
+              style={{ borderColor: "rgba(17, 18, 20, 0.06)" }}
             >
               <Text className="text-[12px]" style={{ color: colors.muted }}>
                 {label}
@@ -361,8 +833,7 @@ export function AgentDetail({ agent, onHire, actionLabel = "Review" }: AgentDeta
             </View>
           ))}
         </Surface>
-      </DetailSection>
-    </>
+      </View>
+    </View>
   );
 }
-

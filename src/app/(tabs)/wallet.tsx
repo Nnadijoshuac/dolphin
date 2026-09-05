@@ -11,6 +11,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AgentActivity } from "@/components/agent-activity";
 import { AltanaWalletCard } from "@/components/altana-wallet-card";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
@@ -66,6 +67,16 @@ export default function WalletScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const contentWidth = Math.min(windowWidth || 390, 480);
   const [showInfoModal, setShowInfoModal] = useState(false);
+
+  /*
+   * One hide toggle for the whole page, owned here.
+   *
+   * The reference blanks the total, the card balances AND the amounts in the
+   * list from a single control. Keeping this in wallet-overview would have left
+   * the activity list showing figures after the user asked for privacy, which
+   * is the one outcome a hide control must not produce.
+   */
+  const [balancesHidden, setBalancesHidden] = useState(false);
 
   const previewHires = useAppStore((state) => state.previewHires);
   const setHasCompletedOnboarding = useAppStore(
@@ -177,11 +188,36 @@ export default function WalletScreen() {
          */}
         <View className="w-full" style={{ maxWidth: contentWidth }}>
           <View className="px-6">
-            <WalletOverview />
+            <WalletOverview
+              hidden={balancesHidden}
+              onToggleHidden={() => setBalancesHidden((value) => !value)}
+            />
           </View>
         </View>
 
         <View className="w-full px-6" style={{ maxWidth: contentWidth }}>
+          {/*
+           * ── agent activity ──
+           *
+           * The reference's "recent transactions" slot. Every row is a record
+           * Dolphin already holds - an ERC-8183 job it read back off the chain,
+           * or a free hire - so the list is short and often empty rather than
+           * padded. See agent-activity.tsx for why it reads two sources keyed by
+           * two different wallets.
+           */}
+          <View className="mt-8">
+            <AgentActivity hidden={balancesHidden} />
+          </View>
+
+          {/*
+           * The reference's "OTHER PRODUCTS" chip row has no counterpart here
+           * and was left out. The only destinations Dolphin could put in it -
+           * browse, search, my agents - are already permanent tabs one thumb
+           * away, so a chip row would be a section header over duplicated
+           * navigation. If something belongs there, it is a product that does
+           * not exist yet rather than a layout gap.
+           */}
+
           {/* ── section rule, in the reference's typographic style ── */}
           <Text
             className="mb-3 mt-8 text-[12px] font-bold uppercase tracking-[1.2px]"

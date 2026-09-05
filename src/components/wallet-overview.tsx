@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Linking, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -194,11 +193,24 @@ function AccountCard({
 
 /* ─────────────── the section ─────────────── */
 
-function Overview() {
+/**
+ * `hidden` is owned by the screen, not by this component.
+ *
+ * The reference hides the total AND every amount below it from one control, so
+ * the state has to sit above both this section and the activity list. Keeping
+ * it local would have given the page two independent notions of "hidden" and a
+ * toggle that visibly missed half the figures.
+ */
+function Overview({
+  hidden,
+  onToggleHidden,
+}: {
+  hidden: boolean;
+  onToggleHidden: () => void;
+}) {
   const identity = useWallet();
   const altana = useAltanaWallet();
   const { width: windowWidth } = useWindowDimensions();
-  const [hidden, setHidden] = useState(false);
 
   const contentWidth = Math.min(windowWidth || 390, 480) - 48;
   // 0.72 rather than a full width: the point of the horizontal row is that the
@@ -351,7 +363,7 @@ function Overview() {
                 accessibilityRole="button"
                 onPress={() => {
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setHidden((value) => !value);
+                  onToggleHidden();
                 }}
                 containerStyle={{
                   backgroundColor: colors.surfaceSubtle,
@@ -473,7 +485,13 @@ function Overview() {
   );
 }
 
-export function WalletOverview() {
+export function WalletOverview({
+  hidden,
+  onToggleHidden,
+}: {
+  hidden: boolean;
+  onToggleHidden: () => void;
+}) {
   const identity = useWallet();
 
   /*
@@ -500,5 +518,5 @@ export function WalletOverview() {
     );
   }
 
-  return <Overview />;
+  return <Overview hidden={hidden} onToggleHidden={onToggleHidden} />;
 }

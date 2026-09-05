@@ -27,6 +27,7 @@ const categoryBgColors: Record<AgentCategory, string> = {
   "grid-trading": "#FAF5E6",
   "health-factor": "#F9F3F0",
   yield: "#F0F7F2",
+  trading: "#F4F0FA",
 };
 
 const categorySubtitles: Record<AgentCategory, string> = {
@@ -35,6 +36,7 @@ const categorySubtitles: Record<AgentCategory, string> = {
   "grid-trading": "Price ladders",
   "health-factor": "Borrow risk",
   yield: "Find yield",
+  trading: "Trade markets",
 };
 
 const categoryLabels: Record<AgentCategory, string> = {
@@ -43,6 +45,7 @@ const categoryLabels: Record<AgentCategory, string> = {
   "grid-trading": "Grid trading",
   "health-factor": "Health factor",
   yield: "Yield",
+  trading: "Trading",
 };
 
 export default function SearchScreen() {
@@ -152,7 +155,7 @@ export default function SearchScreen() {
         <View
           className="flex-row items-center rounded-full bg-white px-3.5 h-[42px]"
           style={{
-            borderColor: isFocused ? colors.goldDark : "rgba(17,18,20,0.08)",
+            borderColor: isFocused ? "#01875F" : "rgba(17,18,20,0.08)",
             borderWidth: 1.2,
             ...shadows.subtle,
           }}
@@ -314,42 +317,32 @@ export default function SearchScreen() {
                       style={{ flexBasis: "47%", flexGrow: 1 }}
                       containerStyle={{
                         alignItems: "center",
-                        backgroundColor: "#FFFFFF",
-                        borderColor: "rgba(17,18,20,0.06)",
-                        borderRadius: 18,
-                        borderWidth: 1,
+                        backgroundColor: categoryBgColors[cat.slug] ?? "#F5F3EC",
+                        borderRadius: 16,
                         flexDirection: "row",
-                        gap: 10,
-                        paddingHorizontal: 12,
-                        paddingVertical: 12,
-                        ...shadows.subtle,
+                        gap: 12,
+                        paddingHorizontal: 16,
+                        paddingVertical: 16,
                       }}
                     >
-                      <View
-                        className="h-10 w-10 items-center justify-center rounded-xl overflow-hidden"
-                        style={{
-                          backgroundColor: categoryBgColors[cat.slug] ?? "#F5F3EC",
-                          borderColor: "rgba(17,18,20,0.04)",
-                          borderWidth: 1,
-                        }}
-                      >
+                      <View className="h-10 w-10 items-center justify-center">
                         <CategoryGlyph
                           color={colors.ink}
                           name={cat.slug}
-                          size={20}
+                          size={24}
                           strokeWidth={2}
                         />
                       </View>
                       <View className="flex-1">
                         <Text
-                          className="text-[13.5px] font-bold"
+                          className="text-[14px] font-bold"
                           numberOfLines={1}
                           style={{ color: colors.ink }}
                         >
                           {cat.label}
                         </Text>
                         <Text
-                          className="text-[11px] text-zinc-500 mt-0.5 font-medium"
+                          className="text-[12px] text-zinc-600 mt-0.5 font-medium"
                           numberOfLines={1}
                         >
                           {allAgents

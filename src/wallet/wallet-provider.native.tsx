@@ -3,6 +3,32 @@
 // no native implementation of.
 import "react-native-get-random-values";
 
+/**
+ * TextEncoder / TextDecoder, which Hermes does not provide.
+ *
+ * This is the polyfill the hand-rolled block below was missing that could
+ * actually stop a connection dead rather than merely degrade it.
+ * @walletconnect/relay-auth builds the JWT that authenticates the relay
+ * WebSocket, and its utf8ToBytes is `new Uint8Array(new TextEncoder().encode(t))`
+ * - unguarded. With TextEncoder undefined that throws while the socket is being
+ * opened, so the relay never connects, the session proposal is queued and never
+ * acked, and the only thing the app surfaces is a publish timeout
+ * ("Failed to publish custom payload") from sign-client's publishCustom -
+ * pointing at the wrong layer entirely, because AppKit's default logger level
+ * suppresses the transport error underneath it.
+ *
+ * fast-text-encoding is the same package @walletconnect/react-native-compat
+ * uses for this (it is compat's own dependency, pinned there at the 1.0.6 now
+ * declared in package.json), so this matches upstream rather than hand-rolling
+ * text codecs. It self-guards: it only assigns when the globals are absent, so
+ * on any runtime that does provide them this import is inert.
+ *
+ * Ordered after react-native-get-random-values and before everything else for
+ * the same reason that one is first - WalletConnect touches both during
+ * module init (AGENTS.md §3).
+ */
+import "fast-text-encoding";
+
 // We purposefully do NOT use @walletconnect/react-native-compat here because
 // it imports react-native-url-polyfill, which BREAKS WebSockets in React Native 0.74+ (Expo 51+).
 // Instead, we manually polyfill only what WalletConnect strictly needs.
@@ -106,6 +132,7 @@ import {
   type Storage,
 } from "@reown/appkit-react-native";
 import { WagmiAdapter } from "@reown/appkit-wagmi-react-native";
+import * as Linking from "expo-linking";
 import {
   createContext,
   useContext,
@@ -205,8 +232,24 @@ const reownSetup = projectId && Platform.OS !== "web"
           description: "BSC agent marketplace",
           url: "https://github.com/Nnadijoshuac/dolphin",
           icons: [],
+          /**
+           * Where the wallet sends the user back after they approve.
+           *
+           * This was hardcoded to "dolphin://", which is correct for a dev or
+           * production build but WRONG under Expo Go: there the app does not
+           * own the dolphin:// scheme at all - it is reached through Expo's own
+           * exp://<host>:8081/--/ URL - so the wallet's redirect resolved to
+           * nothing and the user was left staring at the wallet app after
+           * approving.
+           *
+           * Linking.createURL("") asks the runtime what the app's URL actually
+           * is, so it yields exp://…/--/ under Expo Go and dolphin:// once the
+           * scheme in app.json is real (dev build / release). One expression,
+           * correct in both, and it stays correct if the scheme is ever
+           * renamed.
+           */
           redirect: {
-            native: "dolphin://",
+            native: Linking.createURL(""),
           },
         },
         adapters: [wagmiAdapter],

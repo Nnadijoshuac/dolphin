@@ -6,17 +6,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
 import { NavigationButton } from "@/components/navigation-button";
-import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
-import { Surface } from "@/components/surface";
+import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
-import {
-  AUTHORIZATION_FACTS,
-  assessAuthorizationCapability,
-} from "@/services/authorization";
 import { useAppStore } from "@/store/use-app-store";
 import { useWallet } from "@/wallet/wallet-provider";
 
@@ -51,9 +46,9 @@ export default function ManageAgentRoute() {
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.canvas }}>
         <View className="flex-1 justify-center px-5">
           <StatePanel
-            body="Loading the saved preview and current capability evidence."
+            body="Loading agent details..."
             state="syncing"
-            title="Opening preview"
+            title="Loading"
           />
         </View>
       </SafeAreaView>
@@ -68,7 +63,7 @@ export default function ManageAgentRoute() {
         </View>
         <View className="flex-1 justify-center px-5">
           <StatePanel
-            body="No hire or device preview is on record for this agent and wallet."
+            body="No hire or preview is on record for this agent."
             state="empty"
             title="Nothing to manage"
           />
@@ -83,9 +78,8 @@ export default function ManageAgentRoute() {
   }
 
   const category = agent?.category ?? "monitoring";
-  // Every category's real capability today is a read-only backend hire - no
-  // category has a live action-session flow built yet (see authorization.ts).
-  const access = assessAuthorizationCapability(category, "read_only_hire");
+  const categoryLabel =
+    AGENT_CATEGORIES.find((c) => c.slug === category)?.label ?? category;
 
   if (realHire) {
     return (
@@ -107,82 +101,74 @@ export default function ManageAgentRoute() {
           contentContainerStyle={{ paddingBottom: 48 }}
           showsVerticalScrollIndicator={false}
         >
-          <Surface gradient>
-            <View className="flex-row items-center gap-4">
-              <AgentIcon category={category} size={62} uri={agent?.iconUrl} />
-              <View className="min-w-0 flex-1">
-                <Text
-                  className="text-[20px] font-bold"
-                  numberOfLines={1}
-                  style={{ color: colors.ink }}
-                >
-                  {agent?.name ?? `Agent #${realHire.tokenId}`}
-                </Text>
-                <Text className="mt-1 text-[12px]" style={{ color: colors.muted }}>
-                  Hired {new Date(realHire.hiredAt).toLocaleDateString()}
-                </Text>
-                <View className="mt-3">
-                  <StatusBadge label="Hired · backend record" tone="live" />
-                </View>
+          {/* Agent Banner */}
+          <View className="flex-row items-center gap-4 pt-2 pb-6">
+            <AgentIcon category={category} size={60} uri={agent?.iconUrl} />
+            <View className="min-w-0 flex-1">
+              <Text
+                className="text-[20px] font-bold tracking-tight"
+                numberOfLines={1}
+                style={{ color: colors.ink }}
+              >
+                {agent?.name ?? `Agent #${realHire.tokenId}`}
+              </Text>
+              <Text className="mt-1 text-[12.5px]" style={{ color: colors.muted }}>
+                Hired {new Date(realHire.hiredAt).toLocaleDateString()}
+              </Text>
+              <View className="mt-2.5 flex-row items-center">
+                <StatusBadge label="Hired" tone="live" />
               </View>
             </View>
-          </Surface>
+          </View>
 
-          <View className="mt-8">
-            <SectionHeading title="Current state" />
-            <Surface>
+          {/* Details */}
+          <View className="pt-2">
+            <Text
+              className="text-[14px] font-bold pb-2"
+              style={{ color: colors.ink }}
+            >
+              Details
+            </Text>
+            <View className="border-t" style={{ borderColor: colors.line }}>
               {[
-                ["Hire record", "Saved — backend subscription, not an onchain transaction"],
-                ["Wallet hired", shortAddress(realHire.walletAddress)],
-                ["Payment", "Free (no charge)"],
-                ["Live activity", "Not yet wired — no generic per-category activity feed exists yet"],
-              ].map(([label, value], index) => (
+                ["Status", "Active"],
+                ["Category", categoryLabel],
+                ["Wallet", shortAddress(realHire.walletAddress)],
+                ["Authorization", "Read-only"],
+                ["Price", "Free"],
+              ].map(([label, value]) => (
                 <View
-                  className={
-                    index === 0
-                      ? "flex-row justify-between pb-4"
-                      : "flex-row justify-between border-t py-4"
-                  }
+                  className="flex-row items-center justify-between py-3.5 border-b"
                   key={label}
                   style={{ borderColor: colors.line }}
                 >
-                  <Text className="text-[12px]" style={{ color: colors.muted }}>
+                  <Text
+                    className="text-[13.5px] font-medium"
+                    style={{ color: colors.muted }}
+                  >
                     {label}
                   </Text>
-                  <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+                  <Text
+                    className="text-[13.5px] font-semibold"
+                    style={{ color: colors.ink }}
+                  >
                     {value}
                   </Text>
                 </View>
               ))}
-            </Surface>
+            </View>
           </View>
 
           <View className="mt-8">
-            <SectionHeading title="Authorization readiness" />
-            <Surface>
-              <View className="flex-row items-center justify-between gap-3">
-                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                  Read-only observation
-                </Text>
-                <StatusBadge
-                  label={access.status}
-                  tone={access.available ? "live" : "unavailable"}
-                />
-              </View>
-              <Text className="mt-3 text-[13px] leading-5" style={{ color: colors.muted }}>
-                {access.reason}
-              </Text>
-            </Surface>
-          </View>
-
-          <View className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <Text className="text-[12px] font-bold text-amber-900">
-              Cancelling isn&apos;t available yet
-            </Text>
-            <Text className="mt-1 text-[12px] leading-4 text-amber-800">
-              There&apos;s no un-hire action wired up in this build. This record will stay
-              until that&apos;s built.
-            </Text>
+            <Button
+              label="View agent profile"
+              onPress={() =>
+                router.push({
+                  pathname: "/agent/[id]",
+                  params: { id: agent?.tokenId ?? realHire.tokenId },
+                })
+              }
+            />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -190,8 +176,6 @@ export default function ManageAgentRoute() {
   }
 
   if (!preview) {
-    // Unreachable: the guard above already returned unless preview || realHire,
-    // and the realHire branch above already returned. Narrows the type below.
     return null;
   }
 
@@ -214,111 +198,78 @@ export default function ManageAgentRoute() {
         contentContainerStyle={{ paddingBottom: 48 }}
         showsVerticalScrollIndicator={false}
       >
-        <Surface gradient>
-          <View className="flex-row items-center gap-4">
-            <AgentIcon category={category} size={62} uri={agent?.iconUrl} />
-            <View className="min-w-0 flex-1">
-              <Text
-                className="text-[20px] font-bold"
-                numberOfLines={1}
-                style={{ color: colors.ink }}
-              >
-                {agent?.name ?? `Agent #${preview.agentId}`}
-              </Text>
-              <Text className="mt-1 text-[12px]" style={{ color: colors.muted }}>
-                Saved {new Date(preview.savedAt).toLocaleDateString()}
-              </Text>
-              <View className="mt-3">
-                <StatusBadge label="Device preview · not onchain" tone="preview" />
-              </View>
+        {/* Agent Banner */}
+        <View className="flex-row items-center gap-4 pt-2 pb-6">
+          <AgentIcon category={category} size={60} uri={agent?.iconUrl} />
+          <View className="min-w-0 flex-1">
+            <Text
+              className="text-[20px] font-bold tracking-tight"
+              numberOfLines={1}
+              style={{ color: colors.ink }}
+            >
+              {agent?.name ?? `Agent #${preview.agentId}`}
+            </Text>
+            <Text className="mt-1 text-[12.5px]" style={{ color: colors.muted }}>
+              Saved {new Date(preview.savedAt).toLocaleDateString()}
+            </Text>
+            <View className="mt-2.5 flex-row items-center">
+              <StatusBadge label="Device preview" tone="preview" />
             </View>
           </View>
-        </Surface>
+        </View>
 
-        <View className="mt-8">
-          <SectionHeading title="Current state" />
-          <Surface>
+        {/* Details */}
+        <View className="pt-2">
+          <Text
+            className="text-[14px] font-bold pb-2"
+            style={{ color: colors.ink }}
+          >
+            Details
+          </Text>
+          <View className="border-t" style={{ borderColor: colors.line }}>
             {[
-              ["Activity", "Not started"],
-              ["Wallet authorization", "None"],
-              ["Payment or escrow", "None"],
-              ["Onchain activity log", "Unavailable"],
-            ].map(([label, value], index) => (
+              ["Status", "Saved preview"],
+              ["Category", categoryLabel],
+              ["Authorization", "Read-only"],
+            ].map(([label, value]) => (
               <View
-                className={
-                  index === 0
-                    ? "flex-row justify-between pb-4"
-                    : "flex-row justify-between border-t py-4"
-                }
+                className="flex-row items-center justify-between py-3.5 border-b"
                 key={label}
                 style={{ borderColor: colors.line }}
               >
-                <Text className="text-[12px]" style={{ color: colors.muted }}>
+                <Text
+                  className="text-[13.5px] font-medium"
+                  style={{ color: colors.muted }}
+                >
                   {label}
                 </Text>
-                <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+                <Text
+                  className="text-[13.5px] font-semibold"
+                  style={{ color: colors.ink }}
+                >
                   {value}
                 </Text>
               </View>
             ))}
-          </Surface>
+          </View>
         </View>
 
-        <View className="mt-8">
-          <SectionHeading title="Authorization readiness" />
-          <Surface>
-            <View className="flex-row items-center justify-between gap-3">
-              <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                Read-only observation
-              </Text>
-              <StatusBadge
-                label={access.status}
-                tone={access.available ? "live" : "unavailable"}
-              />
-            </View>
-            <Text className="mt-3 text-[13px] leading-5" style={{ color: colors.muted }}>
-              {access.reason}
-            </Text>
-            <Text className="mt-2 text-[12px] leading-5" style={{ color: colors.muted }}>
-              {access.nextStep}
-            </Text>
-          </Surface>
+        <View className="mt-8 gap-3">
+          <Button
+            label="View agent profile"
+            onPress={() =>
+              router.push({
+                pathname: "/agent/[id]",
+                params: { id: agent?.tokenId ?? preview.agentId },
+              })
+            }
+          />
+          <Button
+            label="Remove preview"
+            onPress={handleRemove}
+            variant="destructive"
+          />
         </View>
-
-        <View className="mt-8">
-          <SectionHeading title="Protocol boundaries" />
-          <Surface>
-            {Object.entries(AUTHORIZATION_FACTS.protocols).map(
-              ([protocol, description], index) => (
-                <View
-                  className={index === 0 ? "pb-4" : "border-t py-4"}
-                  key={protocol}
-                  style={{ borderColor: colors.line }}
-                >
-                  <Text
-                    className="text-[11px] font-bold uppercase tracking-[1px]"
-                    style={{ color: colors.muted }}
-                  >
-                    {protocol}
-                  </Text>
-                  <Text className="mt-1 text-[12px] leading-5" style={{ color: colors.ink }}>
-                    {description}
-                  </Text>
-                </View>
-              ),
-            )}
-            <Text className="border-t pt-4 text-[11px] leading-4" style={{ borderColor: colors.line, color: colors.danger }}>
-              Revoking an authorization would not cancel or refund a separate escrow.
-            </Text>
-          </Surface>
-        </View>
-
-        <Button
-          label="Remove device preview"
-          onPress={handleRemove}
-          style={{ marginTop: 28 }}
-          variant="destructive"
-        />
       </ScrollView>
     </SafeAreaView>
   );

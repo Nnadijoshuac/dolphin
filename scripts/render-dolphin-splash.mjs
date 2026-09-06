@@ -233,8 +233,12 @@ try {
     const poster = join(root, 'assets/images/dolphin-loading.png');
     const video = join(root, 'assets/videos/dolphin-loading.mp4');
     await copyFile(join(frameDir, '000.png'), poster);
+    // Limited-range H.264 conversion otherwise decodes the cream one RGB level
+    // darker. This tiny compensation was checked against decoded pixels so the
+    // movie's flat border matches the native #F6F4EE background exactly.
     execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'warning', '-y', '-framerate', `${fps}`,
-      '-i', join(frameDir, '%03d.png'), '-c:v', 'libx264', '-preset', 'slow', '-crf', '22',
+      '-i', join(frameDir, '%03d.png'), '-vf', 'lutrgb=r=val+2:g=val+2:b=val+2,scale=out_color_matrix=bt709:out_range=tv',
+      '-c:v', 'libx264', '-preset', 'slow', '-crf', '18',
       '-profile:v', 'baseline', '-level', '3.0', '-pix_fmt', 'yuv420p', '-an',
       '-movflags', '+faststart', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', video]);
     console.log(`Created ${poster}\nCreated ${video}`);

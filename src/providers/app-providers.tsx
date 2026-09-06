@@ -4,6 +4,7 @@ import { ConvexClientProvider } from "@/providers/convex-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { AltanaWalletProvider } from "@/wallet/altana-provider";
 import { WalletProvider } from "@/wallet/wallet-provider";
+import { WalletSessionProvider } from "@/wallet/wallet-session";
 
 /**
  * AltanaWalletProvider sits alongside WalletProvider, not in place of it.
@@ -16,13 +17,21 @@ import { WalletProvider } from "@/wallet/wallet-provider";
  * It is innermost because it reads its session grants from Convex, which is
  * the single source of truth for them (convex/agentSessions.ts) and must
  * therefore already be mounted.
+ *
+ * WalletSessionProvider sits between them, and its position is forced from both
+ * sides: it asks WalletProvider for a signature and asks Convex to verify it,
+ * so both must already be mounted above it. It is what turns the connected
+ * address into a proven one - see wallet/wallet-session.tsx for why a connected
+ * address alone is not something a backend can act on.
  */
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <WalletProvider>
       <QueryProvider>
         <ConvexClientProvider>
-          <AltanaWalletProvider>{children}</AltanaWalletProvider>
+          <WalletSessionProvider>
+            <AltanaWalletProvider>{children}</AltanaWalletProvider>
+          </WalletSessionProvider>
         </ConvexClientProvider>
       </QueryProvider>
     </WalletProvider>

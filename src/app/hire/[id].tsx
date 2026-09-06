@@ -20,6 +20,7 @@ import { useAppStore } from "@/store/use-app-store";
 import type { AgentCategory } from "@/types/agent";
 import { canNegotiate } from "@/wallet/erc8183-policy";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
+import { useWalletSession } from "@/wallet/wallet-session";
 import { toUserMessage } from "@/wallet/wallet-errors";
 
 type AgentDetail = NonNullable<ReturnType<typeof useAgentDetail>["data"]>;
@@ -135,20 +136,7 @@ export default function HireModalRoute() {
             <AccessReview category={agent.category} walletAddress={wallet.address} />
             <PaymentReview agent={agent} />
 
-            <Surface gradient>
-              <Text className="text-[15px] font-bold" style={{ color: colors.ink }}>
-                Wallet readiness
-              </Text>
-              <Text className="mt-2 text-[13px] leading-5" style={{ color: colors.muted }}>
-                {wallet.isConnected
-                  ? `Connected as ${shortAddress(wallet.address)}. No signature is requested by this preview.`
-                  : wallet.unavailableReason ??
-                    "Connect a BNB Chain wallet to prepare for future verified flows."}
-              </Text>
-              <View className="mt-4">
-                <WalletConnectButton connectLabel="Connect BNB wallet" />
-              </View>
-            </Surface>
+            <WalletReadiness />
 
             <ReadOnlyHireAction
               agent={agent}
@@ -191,6 +179,79 @@ export default function HireModalRoute() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Connect, then prove it.
+ *
+ * These are two different things and the card keeps them visibly separate,
+ * because until 2026-09-06 only the first existed and the backend treated it as
+ * if it were the second. Connecting tells Dolphin an address; signing proves
+ * the person holds its key. Only the second is something a hire record can be
+ * written against - see src/wallet/wallet-session.tsx.
+ *
+ * The signature moves nothing and approves no spending, and that sentence is
+ * inside the message the wallet displays rather than only here, so a user does
+ * not have to take this screen's word for it.
+ */
+function WalletReadiness() {
+  const wallet = useWallet();
+  const session = useWalletSession();
+
+  const body = (() => {
+    if (!wallet.isConnected) {
+      return (
+        wallet.unavailableReason ??
+        "Connect a BNB Chain wallet. Dolphin reads your public address and never asks for a private key."
+      );
+    }
+    switch (session.status) {
+      case "unavailable":
+        return `Connected as ${shortAddress(wallet.address)}. This build has no Dolphin backend configured, so hires cannot be recorded.`;
+      case "restoring":
+      case "checking":
+        return `Connected as ${shortAddress(wallet.address)}. Checking your sign-in…`;
+      case "signed-in":
+        return `Signed in as ${shortAddress(session.address)}. Dolphin has verified you control this address.`;
+      default:
+        return `Connected as ${shortAddress(wallet.address)}. One signature proves you control this address. It moves no funds and approves no spending.`;
+    }
+  })();
+
+  return (
+    <Surface gradient>
+      <View className="flex-row items-center justify-between gap-3">
+        <Text className="text-[15px] font-bold" style={{ color: colors.ink }}>
+          Wallet
+        </Text>
+        <StatusBadge
+          label={session.isSignedIn ? "Signed in" : wallet.isConnected ? "Not signed in" : "Not connected"}
+          tone={session.isSignedIn ? "live" : "neutral"}
+        />
+      </View>
+
+      <Text className="mt-2 text-[13px] leading-5" style={{ color: colors.muted }}>
+        {body}
+      </Text>
+
+      {session.error ? (
+        <Text className="mt-2 text-[12px] leading-4" style={{ color: colors.danger }}>
+          {session.error}
+        </Text>
+      ) : null}
+
+      <View className="mt-4 gap-2">
+        <WalletConnectButton connectLabel="Connect BNB wallet" />
+        {wallet.isConnected && !session.isSignedIn && session.status !== "unavailable" ? (
+          <Button
+            label={session.isSigningIn ? "Waiting for signature…" : "Sign in with wallet"}
+            loading={session.isSigningIn}
+            onPress={() => void session.signIn()}
+          />
+        ) : null}
+      </View>
+    </Surface>
   );
 }
 
@@ -352,6 +413,10 @@ function ReadOnlyHireAction({
   onHired: () => void;
 }) {
   const hireReadOnlyAgent = useHireReadOnlyAgent();
+  const session = useWalletSession();
+  // Read against the CONNECTED address, deliberately: showing someone their own
+  // existing hire is a read and needs no proof of ownership. Only the write
+  // below requires a signed-in session.
   const hiredAgents = useHiredAgents(walletAddress);
   const [status, setStatus] = useState<"idle" | "hiring" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -378,7 +443,10 @@ function ReadOnlyHireAction({
     !alreadyHired && (priceRequiresPayment || canNegotiate(agent.services));
 
   const handleHire = async () => {
-    if (!walletAddress) return;
+    // The address is no longer sent - the mutation derives it from the session -
+    // so what has to be true here is that a session exists, not that an address
+    // is known.
+    if (!session.isSignedIn) return;
     if (paymentOutstanding) return;
     setStatus("hiring");
     setErrorMessage(null);
@@ -386,7 +454,6 @@ function ReadOnlyHireAction({
       await hireReadOnlyAgent(
         agent.tokenId,
         agent.category,
-        walletAddress,
         priceModel,
         paidJobId,
       );
@@ -414,7 +481,12 @@ function ReadOnlyHireAction({
     tone = "amber";
     title = "Connect a wallet to hire";
     body =
-      "Hiring this agent only needs your public wallet address - no signature, spend cap, or session is created.";
+      "Dolphin reads your public address to know whose hire this is. It never asks for a private key.";
+  } else if (!session.isSignedIn) {
+    tone = "amber";
+    title = "Sign in to hire";
+    body =
+      "One signature proves you control this address, so the hire is recorded against a wallet Dolphin has verified rather than one it was merely told about. It moves no funds and grants no spending permission.";
   } else if (priceModel === null) {
     tone = "amber";
     title = "Waiting on published price";
@@ -441,7 +513,7 @@ function ReadOnlyHireAction({
   const bannerStyle = HIRE_BANNER_STYLES[tone];
   const disabled = alreadyHired
     ? false
-    : !isWalletConnected || priceModel === null || paymentOutstanding;
+    : !session.isSignedIn || priceModel === null || paymentOutstanding;
 
   return (
     <View className="gap-4">

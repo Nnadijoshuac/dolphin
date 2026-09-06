@@ -4,6 +4,40 @@ import { v } from "convex/values";
 import { agentCategoryValidator, agentLiveStatsValidator } from "./categoryStatsValidators";
 
 export default defineSchema({
+  /**
+   * Login challenges. One row per sign-in attempt, single-use, short-lived.
+   *
+   * `message` is the EIP-4361 text THE SERVER built and the client was asked to
+   * sign. Verification runs against this stored copy, never against a message
+   * the client sends back - if the client chose the message it could sign
+   * anything and present the result as a login. See convex/lib/walletAuth.ts.
+   */
+  authNonces: defineTable({
+    nonce: v.string(),
+    address: v.string(),
+    message: v.string(),
+    issuedAt: v.string(),
+    expiresAt: v.string(),
+  }).index("by_nonce", ["nonce"]),
+
+  /**
+   * Signed-in wallets.
+   *
+   * `tokenHash` is SHA-256 of the bearer token; the token itself is never
+   * stored, so a dump of this table yields no usable credential. Expiry is
+   * enforced on read rather than by a sweep, so an expired row is inert the
+   * moment it expires.
+   */
+  walletSessions: defineTable({
+    tokenHash: v.string(),
+    address: v.string(),
+    chainId: v.number(),
+    issuedAt: v.string(),
+    expiresAt: v.string(),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_address", ["address"]),
+
   agentLiveStats: defineTable({
     chainId: v.number(),
     tokenId: v.string(),

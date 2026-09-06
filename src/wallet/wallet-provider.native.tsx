@@ -61,8 +61,9 @@ import {
   type PropsWithChildren,
 } from "react";
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { getAddress } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
-import { WagmiProvider } from "wagmi";
+import { WagmiProvider, useSignMessage } from "wagmi";
 
 import type {
   WalletConnectButtonProps,
@@ -194,11 +195,15 @@ const unavailableWallet: WalletContextValue = {
   unavailableReason: MISSING_PROJECT_ID_MESSAGE,
   connect: async () => undefined,
   disconnect: async () => undefined,
+  signMessage: async () => {
+    throw new Error(MISSING_PROJECT_ID_MESSAGE);
+  },
 };
 
 function ReownWalletBridge({ children }: PropsWithChildren) {
   const { address, chainId, isConnected } = useAccount();
   const { disconnect, open } = useAppKit();
+  const { signMessageAsync } = useSignMessage();
 
   const value = useMemo<WalletContextValue>(
     () => ({
@@ -214,8 +219,31 @@ function ReownWalletBridge({ children }: PropsWithChildren) {
       disconnect: async () => {
         disconnect();
       },
+      /**
+       * EIP-191 personal_sign through whichever wallet is connected. wagmi
+       * routes it over the same WalletConnect session the connection uses, so
+       * the user approves it in their wallet app exactly as they approved the
+       * connection.
+       *
+       * The connected-account check is here rather than at the call site
+       * because it is a precondition of the operation, not of any one caller:
+       * personal_sign against no account is a wallet-level error whose message
+       * would tell a user nothing.
+       */
+      signMessage: async (message: string) => {
+        if (!isConnected || !address) {
+          throw new Error(
+            "Connect a wallet before signing. Dolphin cannot request a signature from an account that is not connected.",
+          );
+        }
+        // getAddress rather than a cast: it validates and checksums, so an
+        // address the wallet reported in an unexpected shape fails here with a
+        // clear error instead of being asserted into the right type and
+        // failing later inside wagmi.
+        return signMessageAsync({ account: getAddress(address), message });
+      },
     }),
-    [address, chainId, disconnect, isConnected, open],
+    [address, chainId, disconnect, isConnected, open, signMessageAsync],
   );
 
   return (

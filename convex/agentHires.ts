@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { agentCategoryValidator } from "./categoryStatsValidators";
+import { requireWalletAddress } from "./lib/walletAuth";
 
 // Mirrors AgentPriceModel in src/types/agent.ts field-for-field. Keep these
 // two in sync by hand, same rule as the AGENT_QUERY_TIMINGS.* validators in
@@ -35,7 +36,19 @@ export const hireReadOnlyAgent = mutation({
   args: {
     tokenId: v.string(),
     category: agentCategoryValidator,
-    walletAddress: v.string(),
+    /**
+     * THE CALLER'S PROOF OF IDENTITY, replacing the `walletAddress` string this
+     * mutation used to take on trust (2026-09-06).
+     *
+     * The old signature accepted whatever address the client typed, so anyone
+     * with the deployment URL could write a hire record against any wallet on
+     * earth. That is not only an abuse surface - it meant a hire count was
+     * evidence of nothing, and therefore could never be used as a ranking
+     * signal or a claim. The address is now recovered from the session this
+     * token identifies, and the session only exists because a signature was
+     * verified. See convex/lib/walletAuth.ts.
+     */
+    sessionToken: v.string(),
     // The agent's resolved `priceModel.value` (from its LiveMetric<AgentPriceModel>
     // in src/types/agent.ts), or null if that LiveMetric hasn't resolved to
     // "live"/"stale" yet. Passed in by the caller rather than looked up here
@@ -59,11 +72,12 @@ export const hireReadOnlyAgent = mutation({
      */
     paymentJobId: v.optional(v.union(v.null(), v.string())),
   },
-  handler: async (ctx, { tokenId, category, walletAddress, priceModel, paymentJobId }) => {
-    if (!isAddress(walletAddress)) {
-      throw new Error(`hireReadOnlyAgent: "${walletAddress}" is not a valid EVM address.`);
-    }
-    const normalizedWallet = getAddress(walletAddress);
+  handler: async (ctx, { tokenId, category, sessionToken, priceModel, paymentJobId }) => {
+    const normalizedWallet = await requireWalletAddress(
+      ctx,
+      sessionToken,
+      "hireReadOnlyAgent",
+    );
 
     if (priceModel === null) {
       throw new Error(
@@ -120,6 +134,29 @@ export const hireReadOnlyAgent = mutation({
           `hireReadOnlyAgent: job ${paymentJobId} is still OPEN - its escrow was never funded.`,
         );
       }
+      /*
+       * ADDED 2026-09-06, alongside authentication.
+       *
+       * Now that the hiring address is proven rather than claimed, a payment
+       * can be checked against the person spending it. Without this, a signed-in
+       * wallet could point at somebody else's verified job id and get a paid
+       * hire recorded off a stranger's money - the payment row would be
+       * genuine, it just would not be theirs.
+       *
+       * hirerWalletAddress is nullable (a job funded before a hire exists has
+       * no hire to name), so a null is not treated as a mismatch: the job is
+       * unclaimed, and claiming it is what this hire is doing.
+       */
+      if (
+        payment.hirerWalletAddress &&
+        getAddress(payment.hirerWalletAddress) !== normalizedWallet
+      ) {
+        throw new Error(
+          `hireReadOnlyAgent: job ${paymentJobId} was paid on behalf of ` +
+            `${getAddress(payment.hirerWalletAddress)}, not ${normalizedWallet}. ` +
+            "A payment cannot be claimed by a different wallet.",
+        );
+      }
     }
 
     const existing = await ctx.db
@@ -157,6 +194,68 @@ export const hireReadOnlyAgent = mutation({
       cancelledAt: null,
       paymentJobId: paidBy,
     });
+  },
+});
+
+/**
+ * Ends a hire.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS DID NOT EXIST UNTIL 2026-09-06
+ * ---------------------------------------------------------------------------
+ * It should have. `agentHires.status` has had a `cancelled` literal and a
+ * `cancelledAt` column since the table was first defined, and NOTHING in the
+ * codebase ever wrote either one. A screen titled "Manage hire" offered no way
+ * to end a hire, so the only irreversible action in an app whose entire pitch
+ * is "you stay in control" was the one the user took on purpose.
+ *
+ * WHAT CANCELLING DOES AND DOES NOT TOUCH. It stops the hire: the agent leaves
+ * My Agents and stops counting as active for this wallet. It does NOT refund,
+ * reverse or alter an ERC-8183 escrow job - that money is on-chain, it was paid
+ * for work, and Convex has no authority over it and never will (see
+ * agentPayments.ts's "relay and witness, never a signer"). The paymentJobId is
+ * therefore left intact on the row: a cancelled paid hire is still a record
+ * that this wallet paid this agent, and erasing that would be rewriting
+ * history.
+ *
+ * The row is patched rather than deleted for the same reason. A deleted hire
+ * would silently improve the retention figures this table is about to feed;
+ * a cancelled one is a fact about how long the hire lasted, which is exactly
+ * what an honest retention signal has to count.
+ */
+export const cancelHire = mutation({
+  args: {
+    tokenId: v.string(),
+    sessionToken: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { tokenId, sessionToken }) => {
+    const walletAddress = await requireWalletAddress(ctx, sessionToken, "cancelHire");
+
+    const existing = await ctx.db
+      .query("agentHires")
+      .withIndex("by_agent_wallet", (q) =>
+        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+      )
+      .unique();
+
+    if (!existing) {
+      throw new Error(
+        `cancelHire: ${walletAddress} has no hire on record for agent ${tokenId}.`,
+      );
+    }
+    if (existing.status === "cancelled") {
+      // Already ended. Not an error - a double tap on a slow connection should
+      // not produce a failure the user has to interpret.
+      return null;
+    }
+
+    await ctx.db.patch(existing._id, {
+      status: "cancelled",
+      cancelledAt: new Date().toISOString(),
+    });
+
+    return null;
   },
 });
 

@@ -17,6 +17,9 @@ const webWallet: WalletContextValue = {
   unavailableReason: NATIVE_BUILD_REQUIRED_MESSAGE,
   connect: async () => undefined,
   disconnect: async () => undefined,
+  signMessage: async () => {
+    throw new Error(NATIVE_BUILD_REQUIRED_MESSAGE);
+  },
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);

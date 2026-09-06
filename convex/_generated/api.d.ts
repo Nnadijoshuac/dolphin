@@ -31,11 +31,14 @@ import type * as lib_manualExclusions from "../lib/manualExclusions.js";
 import type * as lib_pipelineStatus from "../lib/pipelineStatus.js";
 import type * as lib_prefilter from "../lib/prefilter.js";
 import type * as lib_registrationFile from "../lib/registrationFile.js";
+import type * as lib_statsHistory from "../lib/statsHistory.js";
+import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as protocols_aave from "../protocols/aave.js";
 import type * as protocols_pancakeswap from "../protocols/pancakeswap.js";
 import type * as protocols_types from "../protocols/types.js";
 import type * as protocols_unavailable from "../protocols/unavailable.js";
 import type * as protocols_venus from "../protocols/venus.js";
+import type * as walletAuth from "../walletAuth.js";
 
 import type {
   ApiFromModules,
@@ -67,11 +70,14 @@ declare const fullApi: ApiFromModules<{
   "lib/pipelineStatus": typeof lib_pipelineStatus;
   "lib/prefilter": typeof lib_prefilter;
   "lib/registrationFile": typeof lib_registrationFile;
+  "lib/statsHistory": typeof lib_statsHistory;
+  "lib/walletAuth": typeof lib_walletAuth;
   "protocols/aave": typeof protocols_aave;
   "protocols/pancakeswap": typeof protocols_pancakeswap;
   "protocols/types": typeof protocols_types;
   "protocols/unavailable": typeof protocols_unavailable;
   "protocols/venus": typeof protocols_venus;
+  walletAuth: typeof walletAuth;
 }>;
 
 /**

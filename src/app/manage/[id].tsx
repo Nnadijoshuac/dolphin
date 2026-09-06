@@ -1,11 +1,15 @@
-import { ScrollView, Text, View } from "react-native";
+import { useQuery } from "convex/react";
+import { Linking, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { api } from "../../../convex/_generated/api";
 import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
+import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { NavigationButton } from "@/components/navigation-button";
+import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { StatusBadge } from "@/components/status-badge";
 import { AGENT_CATEGORIES } from "@/constants/agents";
@@ -13,16 +17,44 @@ import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import { useAppStore } from "@/store/use-app-store";
+import { useAltanaWallet } from "@/wallet/altana-provider";
+import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { useWallet } from "@/wallet/wallet-provider";
 
 function shortAddress(value: string) {
   return `${value.slice(0, 7)}…${value.slice(-5)}`;
 }
 
+function formatActivityDate(dateStr: string) {
+  const ms = Date.parse(dateStr);
+  if (Number.isNaN(ms)) return dateStr;
+  const d = new Date(ms);
+  return d.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+type ActivityEntry = {
+  id: string;
+  title: string;
+  detail: string;
+  date: string;
+  icon: GlyphName;
+  iconColor: string;
+  iconBg: string;
+  amount?: string | null;
+  badge?: string;
+  txHash?: string;
+  sortAt: number;
+};
+
 export default function ManageAgentRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const wallet = useWallet();
+  const altana = useAltanaWallet();
   const { data: agent, isLoading } = useAgentDetail(id);
   const previewHires = useAppStore((state) => state.previewHires);
   const removePreviewHire = useAppStore((state) => state.removePreviewHire);
@@ -32,6 +64,13 @@ export default function ManageAgentRoute() {
   const hiredAgents = useHiredAgents(wallet.address);
   const realHire = hiredAgents?.find(
     (hire) => hire.tokenId === id || hire.tokenId === agent?.tokenId,
+  );
+
+  const jobs = useQuery(
+    api.agentPayments.getJobsForAgent,
+    altana.address
+      ? { tokenId: agent?.tokenId ?? id, altanaWalletAddress: altana.address }
+      : "skip",
   );
 
   const handleRemove = () => {
@@ -81,6 +120,78 @@ export default function ManageAgentRoute() {
   const categoryLabel =
     AGENT_CATEGORIES.find((c) => c.slug === category)?.label ?? category;
 
+  // Build unified agent activity list
+  const activities: ActivityEntry[] = [];
+
+  // 1. Paid escrow jobs on this wallet
+  for (const job of jobs ?? []) {
+    let amountStr: string | null = null;
+    try {
+      amountStr = `${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol}`;
+    } catch {
+      amountStr = null;
+    }
+    activities.push({
+      id: `job-${job.jobId}`,
+      title: "Escrow payment funded",
+      detail: `ERC-8183 escrow · ${job.jobStatus.toLowerCase()}`,
+      date: job.verifiedAt,
+      icon: "wallet",
+      iconColor: "#295C92",
+      iconBg: "#DDE9F8",
+      amount: amountStr,
+      badge: job.jobStatus.toUpperCase(),
+      txHash: job.transactionHash ?? undefined,
+      sortAt: Date.parse(job.verifiedAt) || 0,
+    });
+  }
+
+  // 2. On-chain execution actions from agent track record
+  for (const [index, act] of (agent?.recentActivity ?? []).entries()) {
+    activities.push({
+      id: `exec-${act.timestamp}-${index}`,
+      title: act.action,
+      detail: act.source.label,
+      date: act.timestamp,
+      icon: category,
+      iconColor: colors.ink,
+      iconBg: "#F5F3EC",
+      txHash: act.txHash,
+      sortAt: Date.parse(act.timestamp) || 0,
+    });
+  }
+
+  // 3. Own hire or saved preview event
+  if (realHire) {
+    activities.push({
+      id: `hire-${realHire.tokenId}`,
+      title: "Agent hired",
+      detail: realHire.paymentJobId
+        ? "Paid hire · ERC-8183 escrow"
+        : "Free subscription · Connected to wallet",
+      date: realHire.hiredAt,
+      icon: "check",
+      iconColor: "#1C6A44",
+      iconBg: "#DCEFE4",
+      badge: "Completed",
+      sortAt: Date.parse(realHire.hiredAt) || 0,
+    });
+  } else if (preview) {
+    activities.push({
+      id: `preview-${preview.agentId}`,
+      title: "Saved to preview",
+      detail: "Local device setup",
+      date: preview.savedAt,
+      icon: "sparkle",
+      iconColor: "#946B00",
+      iconBg: "#FEF5D6",
+      badge: "Saved",
+      sortAt: Date.parse(preview.savedAt) || 0,
+    });
+  }
+
+  activities.sort((a, b) => b.sortAt - a.sortAt);
+
   if (realHire) {
     return (
       <SafeAreaView
@@ -113,7 +224,7 @@ export default function ManageAgentRoute() {
                 {agent?.name ?? `Agent #${realHire.tokenId}`}
               </Text>
               <Text className="mt-1 text-[12.5px]" style={{ color: colors.muted }}>
-                Hired {new Date(realHire.hiredAt).toLocaleDateString()}
+                Hired {formatActivityDate(realHire.hiredAt)}
               </Text>
               <View className="mt-2.5 flex-row items-center">
                 <StatusBadge label="Hired" tone="live" />
@@ -154,6 +265,82 @@ export default function ManageAgentRoute() {
                   >
                     {value}
                   </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Agent Activity Section */}
+          <View className="pt-6">
+            <Text
+              className="text-[14px] font-bold pb-2"
+              style={{ color: colors.ink }}
+            >
+              Agent activity
+            </Text>
+            <View className="border-t" style={{ borderColor: colors.line }}>
+              {activities.map((item) => (
+                <View
+                  key={item.id}
+                  className="flex-row items-center justify-between py-3.5 border-b gap-3"
+                  style={{ borderColor: colors.line }}
+                >
+                  <View
+                    className="h-8 w-8 items-center justify-center rounded-full shrink-0"
+                    style={{ backgroundColor: item.iconBg }}
+                  >
+                    <CategoryGlyph color={item.iconColor} name={item.icon} size={15} />
+                  </View>
+
+                  <View className="flex-1 min-w-0">
+                    <Text
+                      className="text-[13.5px] font-semibold"
+                      numberOfLines={1}
+                      style={{ color: colors.ink }}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text
+                      className="text-[12px] mt-0.5"
+                      numberOfLines={1}
+                      style={{ color: colors.muted }}
+                    >
+                      {item.detail} · {formatActivityDate(item.date)}
+                    </Text>
+                  </View>
+
+                  <View className="flex-row items-center gap-2 shrink-0">
+                    {item.amount ? (
+                      <Text
+                        className="text-[13px] font-bold"
+                        style={{ color: colors.ink }}
+                      >
+                        {item.amount}
+                      </Text>
+                    ) : item.badge ? (
+                      <Text
+                        className="text-[11.5px] font-semibold"
+                        style={{ color: item.badge === "Completed" ? "#1C6A44" : colors.muted }}
+                      >
+                        {item.badge}
+                      </Text>
+                    ) : null}
+
+                    {item.txHash ? (
+                      <PressableScale
+                        accessibilityLabel="View transaction on BscScan"
+                        accessibilityRole="button"
+                        hitSlop={8}
+                        onPress={() => {
+                          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          void Linking.openURL(`https://bscscan.com/tx/${item.txHash}`);
+                        }}
+                        containerStyle={{ padding: 2 }}
+                      >
+                        <CategoryGlyph color={colors.muted} name="external" size={13} />
+                      </PressableScale>
+                    ) : null}
+                  </View>
                 </View>
               ))}
             </View>
@@ -210,7 +397,7 @@ export default function ManageAgentRoute() {
               {agent?.name ?? `Agent #${preview.agentId}`}
             </Text>
             <Text className="mt-1 text-[12.5px]" style={{ color: colors.muted }}>
-              Saved {new Date(preview.savedAt).toLocaleDateString()}
+              Saved {formatActivityDate(preview.savedAt)}
             </Text>
             <View className="mt-2.5 flex-row items-center">
               <StatusBadge label="Device preview" tone="preview" />
@@ -249,6 +436,82 @@ export default function ManageAgentRoute() {
                 >
                   {value}
                 </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Agent Activity Section */}
+        <View className="pt-6">
+          <Text
+            className="text-[14px] font-bold pb-2"
+            style={{ color: colors.ink }}
+          >
+            Agent activity
+          </Text>
+          <View className="border-t" style={{ borderColor: colors.line }}>
+            {activities.map((item) => (
+              <View
+                key={item.id}
+                className="flex-row items-center justify-between py-3.5 border-b gap-3"
+                style={{ borderColor: colors.line }}
+              >
+                <View
+                  className="h-8 w-8 items-center justify-center rounded-full shrink-0"
+                  style={{ backgroundColor: item.iconBg }}
+                >
+                  <CategoryGlyph color={item.iconColor} name={item.icon} size={15} />
+                </View>
+
+                <View className="flex-1 min-w-0">
+                  <Text
+                    className="text-[13.5px] font-semibold"
+                    numberOfLines={1}
+                    style={{ color: colors.ink }}
+                  >
+                    {item.title}
+                  </Text>
+                  <Text
+                    className="text-[12px] mt-0.5"
+                    numberOfLines={1}
+                    style={{ color: colors.muted }}
+                  >
+                    {item.detail} · {formatActivityDate(item.date)}
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2 shrink-0">
+                  {item.amount ? (
+                    <Text
+                      className="text-[13px] font-bold"
+                      style={{ color: colors.ink }}
+                    >
+                      {item.amount}
+                    </Text>
+                  ) : item.badge ? (
+                    <Text
+                      className="text-[11.5px] font-semibold"
+                      style={{ color: colors.muted }}
+                    >
+                      {item.badge}
+                    </Text>
+                  ) : null}
+
+                  {item.txHash ? (
+                    <PressableScale
+                      accessibilityLabel="View transaction on BscScan"
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={() => {
+                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        void Linking.openURL(`https://bscscan.com/tx/${item.txHash}`);
+                      }}
+                      containerStyle={{ padding: 2 }}
+                    >
+                      <CategoryGlyph color={colors.muted} name="external" size={13} />
+                    </PressableScale>
+                  ) : null}
+                </View>
               </View>
             ))}
           </View>

@@ -1,12 +1,17 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import NetInfo from "@react-native-community/netinfo";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import {
   QueryClient,
   QueryClientProvider,
   focusManager,
   onlineManager,
 } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { AppState, Platform, type AppStateStatus } from "react-native";
 import { useEffect, type PropsWithChildren } from "react";
+
+import { AGENT_QUERY_TIMINGS } from "@/constants/agents";
 
 // Native only, deliberately. Browsers already have TanStack Query's own
 // onlineManager, driven by window's online/offline events - the same reason
@@ -51,6 +56,42 @@ export const queryClient = new QueryClient({
   },
 });
 
+/* --- disk cache ------------------------------------------------------------
+ *
+ * WHY: the query cache was memory-only, so every cold start began with nothing
+ * and the Discover tab opened on a spinner - even though the catalog is
+ * considered fresh for 5 minutes and is kept for an hour. That hour only ever
+ * applied within a single run of the app. Persisting it means a relaunch paints
+ * the last known catalog immediately and revalidates behind it, which is the
+ * difference between "loading" and "already there".
+ *
+ * NATIVE ONLY, and not as a preference. AsyncStorage's web build is backed by
+ * localStorage, which does not exist during the static web export's SSR pass -
+ * that is the same failure that already crashed the export once via
+ * WalletConnect's Core.init (see the note in wallet-provider.native.tsx). Web
+ * therefore keeps the plain in-memory provider.
+ */
+const CACHE_KEY = "dolphin-query-cache-v1";
+
+/**
+ * Bump to discard every persisted entry - a restored cache is only safe while
+ * the shapes it holds still match what the code expects, and nothing else
+ * invalidates it. Change this in the same commit as any change to the Agent
+ * shape or to what the catalog query returns.
+ */
+const CACHE_BUSTER = "agents-v1";
+
+const persister =
+  Platform.OS === "web"
+    ? null
+    : createAsyncStoragePersister({
+        storage: AsyncStorage,
+        key: CACHE_KEY,
+        // Batches the writes that follow a burst of queries into one, so
+        // restoring a screen full of data does not mean a write per query.
+        throttleTime: 1_000,
+      });
+
 function syncNativeFocus(status: AppStateStatus) {
   focusManager.setFocused(status === "active");
 }
@@ -68,7 +109,41 @@ export function QueryProvider({ children }: PropsWithChildren) {
     return () => subscription.remove();
   }, []);
 
+  if (!persister) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister,
+        // Matches the catalog's gcTime, so disk never hands back something the
+        // in-memory cache would already have dropped.
+        maxAge: AGENT_QUERY_TIMINGS.garbageCollectionTimeMs,
+        buster: CACHE_BUSTER,
+        dehydrateOptions: {
+          /**
+           * Persist settled catalog reads, and NOTHING live.
+           *
+           * The default already excludes errors and pending queries. The
+           * addition is erc8183-job: those polls carry a job's on-chain escrow
+           * status, read fresh every few seconds with staleTime 0
+           * (use-job-delivery.ts). Restoring one from disk would show a
+           * FUNDED/SUBMITTED state from a previous session as though it were
+           * current - a claim about someone's money that Dolphin has not
+           * verified this run. Live chain state is re-read, never remembered
+           * (AGENTS.md §5).
+           */
+          shouldDehydrateQuery: (query) =>
+            query.state.status === "success" &&
+            query.queryKey[0] !== "erc8183-job",
+        },
+      }}
+    >
+      {children}
+    </PersistQueryClientProvider>
   );
 }

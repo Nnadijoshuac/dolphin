@@ -1834,26 +1834,49 @@ export const narrowRejectionBatch = internalMutation({
  * exactly where it left off.
  */
 export const narrowRejectedRows = action({
-  args: { apply: v.optional(v.boolean()), budgetMs: v.optional(v.number()) },
+  args: {
+    apply: v.optional(v.boolean()),
+    budgetMs: v.optional(v.number()),
+    /**
+     * Rows per write transaction. Deliberately an argument rather than a
+     * constant: the read side comfortably pages 500 at a time, but a batch of
+     * patches is bounded by Convex's per-transaction write limits, and the
+     * ceiling is easier to find by moving this than by reasoning about it.
+     */
+    batchSize: v.optional(v.number()),
+    /**
+     * Where to resume. Pass back the `nextCursor` of the previous call.
+     *
+     * Without it each run restarts at the top of the index and re-scans every
+     * row it has already narrowed just to reach the ones it has not - which
+     * grows with progress, so the last run would scan a quarter of a million
+     * rows to do its final few hundred.
+     */
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
   handler: async (
     ctx,
-    { apply, budgetMs },
+    { apply, budgetMs, batchSize, cursor: startCursor },
   ): Promise<{
     applied: boolean;
     rows: number;
     approxBytesFreed: number;
     scanned: number;
     isDone: boolean;
+    nextCursor: string | null;
+    error: string | null;
   }> => {
     const startedAt = Date.now();
-    const budget = budgetMs ?? 420_000;
-    let cursor: string | null = null;
+    const budget = budgetMs ?? 60_000;
+    const writeBatch = batchSize ?? 100;
+    let cursor: string | null = startCursor ?? null;
     let rows = 0;
     let approxBytesFreed = 0;
     let scanned = 0;
     let isDone = false;
+    let error: string | null = null;
 
-    for (;;) {
+    outer: for (;;) {
       const page: {
         wide: { id: Id<"agentCandidates">; textHash: string; bytes: number }[];
         scanned: number;
@@ -1865,24 +1888,52 @@ export const narrowRejectedRows = action({
       });
 
       scanned += page.scanned;
-      rows += page.wide.length;
-      approxBytesFreed += page.wide.reduce((sum, row) => sum + row.bytes, 0);
 
-      if (apply && page.wide.length > 0) {
-        await ctx.runMutation(internal.discoveryPipeline.narrowRejectionBatch, {
-          rows: page.wide.map(({ id, textHash }) => ({ id, textHash })),
-        });
+      if (apply) {
+        /*
+         * Written in sub-batches, and a failure RETURNS rather than throws.
+         *
+         * A thrown error from an action surfaces through `npx convex run` as a
+         * bare "Error" with no message, which is what made the first failure
+         * here undiagnosable. Returning it means the progress made before the
+         * failure is reported too - which matters, because this pass is
+         * resumable and partial progress is kept rather than rolled back.
+         */
+        for (let i = 0; i < page.wide.length; i += writeBatch) {
+          const slice = page.wide.slice(i, i + writeBatch);
+          try {
+            await ctx.runMutation(internal.discoveryPipeline.narrowRejectionBatch, {
+              rows: slice.map(({ id, textHash }) => ({ id, textHash })),
+            });
+          } catch (cause) {
+            error = cause instanceof Error ? cause.message : String(cause);
+            break outer;
+          }
+          rows += slice.length;
+          approxBytesFreed += slice.reduce((sum, row) => sum + row.bytes, 0);
+        }
+      } else {
+        rows += page.wide.length;
+        approxBytesFreed += page.wide.reduce((sum, row) => sum + row.bytes, 0);
       }
 
+      cursor = page.cursor;
       if (page.isDone) {
         isDone = true;
         break;
       }
-      cursor = page.cursor;
       if (Date.now() > startedAt + budget) break;
     }
 
-    return { applied: apply === true, rows, approxBytesFreed, scanned, isDone };
+    return {
+      applied: apply === true,
+      rows,
+      approxBytesFreed,
+      scanned,
+      isDone,
+      nextCursor: isDone ? null : cursor,
+      error,
+    };
   },
 });
 

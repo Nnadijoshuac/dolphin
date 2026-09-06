@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
-import { VideoView, useVideoPlayer } from "expo-video";
+import { VideoView, useVideoPlayer, type VideoPlayerStatus } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Keep this background in sync with the rendered assets and app.json.
@@ -73,17 +73,20 @@ function DolphinLoop({ onError }: { onError: () => void }) {
   });
 
   useEffect(() => {
-    const synchronizePlayback = () => {
-      if (player.status === "error") {
+    const synchronizePlayback = (status: VideoPlayerStatus) => {
+      if (status === "error") {
         onError();
-      } else if (player.status === "readyToPlay" && !player.playing) {
+      } else if (status === "readyToPlay" && !player.playing) {
         player.play();
       }
     };
-    const subscription = player.addListener("statusChange", synchronizePlayback);
+    // expo-video emits the new status before updating player.status on web.
+    const subscription = player.addListener("statusChange", ({ status }) => {
+      synchronizePlayback(status);
+    });
     // A source can settle before subscription. Wait for a playable source so
     // a failed decode never creates an unhandled browser play() rejection.
-    const statusCheck = setTimeout(synchronizePlayback, 0);
+    const statusCheck = setTimeout(() => synchronizePlayback(player.status), 0);
     return () => {
       clearTimeout(statusCheck);
       subscription.remove();

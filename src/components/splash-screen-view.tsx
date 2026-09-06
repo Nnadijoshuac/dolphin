@@ -73,16 +73,19 @@ function DolphinLoop({ onError }: { onError: () => void }) {
   });
 
   useEffect(() => {
-    const subscription = player.addListener("statusChange", ({ status }) => {
-      if (status === "error") onError();
-    });
-    // Source resolution can fail before the event listener is attached.
-    const errorCheck = setTimeout(() => {
-      if (player.status === "error") onError();
-    }, 0);
-    player.play();
+    const synchronizePlayback = () => {
+      if (player.status === "error") {
+        onError();
+      } else if (player.status === "readyToPlay" && !player.playing) {
+        player.play();
+      }
+    };
+    const subscription = player.addListener("statusChange", synchronizePlayback);
+    // A source can settle before subscription. Wait for a playable source so
+    // a failed decode never creates an unhandled browser play() rejection.
+    const statusCheck = setTimeout(synchronizePlayback, 0);
     return () => {
-      clearTimeout(errorCheck);
+      clearTimeout(statusCheck);
       subscription.remove();
     };
   }, [onError, player]);
@@ -216,10 +219,12 @@ export function SplashScreenView({
       accessibilityState={{ busy: true }}
       accessibilityViewIsModal
       accessible
-      className="absolute inset-0 z-[99999]"
       onLayout={() => setLaidOut(true)}
       pointerEvents="auto"
-      style={{ backgroundColor: BACKGROUND, opacity }}
+      style={[
+        StyleSheet.absoluteFill,
+        { backgroundColor: BACKGROUND, zIndex: 99999, opacity },
+      ]}
       testID="dolphin-splash"
     >
       <SafeAreaView className="flex-1 items-center px-5">

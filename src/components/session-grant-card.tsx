@@ -9,7 +9,7 @@
 // agent-side execution runtime are designed.
 // ─────────────────────────────────────────────────────────
 //
-// No caller renders this component today: app/hire/[id].tsx dropped its
+// No caller renders this component today: the hire flow dropped its
 // <SessionGrantCard> in the same change that added FEATURE_SESSION_EXECUTION.
 // The guard below is a second line of defence, so re-adding the tag somewhere
 // cannot quietly put a gas-charging Grant button back in front of a user

@@ -18,7 +18,6 @@ declare module 'expo-router' {
         | { pathname: `/onboarding/index`; params?: Router.UnknownInputParams }
         | { pathname: `/agent/[id]`; params: { id: string } }
         | { pathname: `/category/[slug]`; params: { slug: string } }
-        | { pathname: `/hire/[id]`; params: { id: string } }
         | { pathname: `/manage/[id]`; params: { id: string } }
         | { pathname: `/_sitemap`; params?: Router.UnknownInputParams };
       hrefOutputParams:
@@ -33,7 +32,6 @@ declare module 'expo-router' {
         | { pathname: `/onboarding/index`; params?: Router.UnknownOutputParams }
         | { pathname: `/agent/[id]`; params: { id: string } }
         | { pathname: `/category/[slug]`; params: { slug: string } }
-        | { pathname: `/hire/[id]`; params: { id: string } }
         | { pathname: `/manage/[id]`; params: { id: string } }
         | { pathname: `/_sitemap`; params?: Router.UnknownOutputParams };
       href:
@@ -48,12 +46,10 @@ declare module 'expo-router' {
         | `/onboarding/index`
         | `/agent/${string}`
         | `/category/${string}`
-        | `/hire/${string}`
         | `/manage/${string}`
         | `/_sitemap`
         | { pathname: `/agent/[id]`; params: { id: string } }
         | { pathname: `/category/[slug]`; params: { slug: string } }
-        | { pathname: `/hire/[id]`; params: { id: string } }
         | { pathname: `/manage/[id]`; params: { id: string } }
         | { pathname: string; params?: Router.UnknownInputParams };
     }

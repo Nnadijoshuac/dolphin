@@ -57,10 +57,6 @@ function RootNavigator() {
           <Stack.Screen name="onboarding/index" options={{ animation: "fade" }} />
           <Stack.Screen name="agent/[id]" />
           <Stack.Screen name="category/[slug]" />
-          <Stack.Screen
-            name="hire/[id]"
-            options={{ animation: "slide_from_bottom", presentation: "modal" }}
-          />
           <Stack.Screen name="manage/[id]" />
         </Stack>
       </View>

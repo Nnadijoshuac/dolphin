@@ -695,8 +695,8 @@ export function AgentDetail({
     registeredMetric.status === "live" && registeredMetric.value;
 
   /*
-   * The price, resolved the same way hire/[id].tsx resolves it, so the two
-   * screens cannot state different prices for one agent. An unresolved price is
+   * The price, resolved the same way components/hire-sheet.tsx resolves it,
+   * so the page and the sheet cannot state different prices for one agent. An unresolved price is
    * a sentence, not a zero - "free" and "not read yet" must not look alike,
    * because one of them is a commitment.
    */
@@ -847,47 +847,6 @@ export function AgentDetail({
         )}
       </View>
 
-      {/* ── 3. what is actually known about this agent ─────────────────── */}
-      <Section
-        caption="Read from the ERC-8004 registry and the 8004scan index. A figure appears only once it has been read."
-        title="At a glance"
-      >
-        <Card>
-          <View className="flex-row flex-wrap gap-y-5">
-            <View className="w-1/2 pr-2.5">
-              <MetricCell
-                format={(value) => value.toFixed(1)}
-                label="Reputation"
-                metric={agent.reputationScore}
-              />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell
-                format={(value) => value.toLocaleString()}
-                label="Feedback records"
-                metric={agent.feedbackCount}
-              />
-            </View>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell
-                format={(value) =>
-                  value.charAt(0).toUpperCase() + value.slice(1)
-                }
-                label="Endpoint"
-                metric={agent.endpointStatus}
-              />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell
-                format={(value) => (value ? "Supported" : "Not supported")}
-                label="x402 payments"
-                metric={agent.x402Supported}
-              />
-            </View>
-          </View>
-        </Card>
-      </Section>
-
       {/* ── 4. about ───────────────────────────────────────────────────── */}
       <Section title="About this agent">
         <Text
@@ -1016,137 +975,129 @@ export function AgentDetail({
         <Reviews agent={agent} />
       </Section>
 
-      {/* ── 8. what hiring this actually does ──────────────────────────── */}
-      <Section
-        caption={
-          hireability.hireable
-            ? "What paying this agent does and does not authorise — not a claim about this agent's own code."
-            : "What Dolphin can and cannot do on your behalf today — not a claim about this agent's own code."
-        }
-        title="Safety"
+      {/* ── 8. everything technical, folded away ───────────────────────── */}
+      {/*
+       * WAS three separate sections: "At a glance" (four registry metrics),
+       * "Safety" (three statements about custody) and "Registry record" (seven
+       * address rows). Together they were more than half the page's length, and
+       * a first-time reader met them before deciding anything.
+       *
+       * None of it is deleted, because all of it is true and some of it is the
+       * point of the product - an ERC-8004 marketplace that would not show you
+       * the registry record is hiding its own evidence. It is collapsed instead:
+       * the reader who wants to check Dolphin's work opens it, and the reader
+       * deciding whether to hire is not made to scroll past a contract address
+       * to reach the reviews.
+       */}
+      <Details agent={agent} />
+    </View>
+  );
+}
+
+function Details({ agent }: { agent: Agent }) {
+  const [open, setOpen] = useState(false);
+  const registeredMetric = agent.registryVerification.registered;
+
+  return (
+    <View style={{ marginTop: SECTION_GAP }}>
+      <PressableScale
+        accessibilityLabel="Details and registry record"
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setOpen((previous) => !previous);
+        }}
+        containerStyle={{
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderColor: colors.line,
+          borderRadius: CARD_RADIUS,
+          borderWidth: 1,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          padding: 16,
+        }}
       >
-        <Card>
-          <View className="gap-4">
-            <View className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CategoryGlyph color={colors.goldDark} name="shield" size={17} />
+        <Text className="text-[14px] font-semibold" style={{ color: colors.ink }}>
+          Details & registry record
+        </Text>
+        <CategoryGlyph
+          color={colors.muted}
+          name={open ? "chevron-left" : "chevron-right"}
+          size={15}
+        />
+      </PressableScale>
+
+      {open ? (
+        <View className="mt-3 gap-3">
+          <Card>
+            <View className="flex-row flex-wrap gap-y-5">
+              <View className="w-1/2 pr-2.5">
+                <MetricCell
+                  format={(value) => value.toFixed(1)}
+                  label="Reputation"
+                  metric={agent.reputationScore}
+                />
               </View>
-              <View className="min-w-0 flex-1">
-                <Text
-                  className="text-[13px] font-bold"
-                  style={{ color: colors.ink }}
-                >
-                  A hire grants no spending authority
-                </Text>
-                {/*
-                 * UPDATED 2026-09-06 alongside hireability.
-                 *
-                 * This block used to read "Hiring records that you use this
-                 * agent. It does not give it access to your funds." That was
-                 * true while a hire was a database row and nothing else. It is
-                 * NOT true of a hireable agent any more: hiring one funds a
-                 * real ERC-8183 escrow with real money.
-                 *
-                 * The distinction the sentence has to keep making - and the
-                 * reason it is still under a shield icon - is between PAYING an
-                 * agent a fixed, bounded amount for one job, and GRANTING it
-                 * permission to spend from your wallet. Dolphin does the first
-                 * and cannot do the second: FEATURE_SESSION_EXECUTION is off,
-                 * and even when it is not, an escrow payment is not an
-                 * allowance.
-                 */}
-                <Text
-                  className="mt-1 text-[12px] leading-[18px]"
-                  style={{ color: colors.muted }}
-                >
-                  {hireability.hireable
-                    ? "Hiring pays a fixed amount into an on-chain escrow for one job, which you approve first. It is not an allowance: the agent cannot come back for more, and nothing in Dolphin can spend from your wallet on its behalf."
-                    : "Hiring records that you use this agent. It does not give it access to your funds, and nothing in Dolphin can spend from your wallet on an agent’s behalf."}
-                </Text>
+              <View className="w-1/2 pl-2.5">
+                <MetricCell
+                  format={(value) => value.toLocaleString()}
+                  label="Feedback records"
+                  metric={agent.feedbackCount}
+                />
+              </View>
+              <View className="w-1/2 pr-2.5">
+                <MetricCell
+                  format={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
+                  label="Endpoint"
+                  metric={agent.endpointStatus}
+                />
+              </View>
+              <View className="w-1/2 pl-2.5">
+                <MetricCell
+                  format={(value) => (value ? "Supported" : "Not supported")}
+                  label="x402 payments"
+                  metric={agent.x402Supported}
+                />
               </View>
             </View>
+          </Card>
 
-            <View className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CategoryGlyph color={colors.goldDark} name="wallet" size={17} />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text
-                  className="text-[13px] font-bold"
-                  style={{ color: colors.ink }}
-                >
-                  No key ever leaves your device
-                </Text>
-                <Text
-                  className="mt-1 text-[12px] leading-[18px]"
-                  style={{ color: colors.muted }}
-                >
-                  Dolphin never asks for a private key or a seed phrase. It reads
-                  your address and nothing else.
-                </Text>
-              </View>
-            </View>
-
-            <View className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CategoryGlyph color={colors.goldDark} name="layers" size={17} />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text
-                  className="text-[13px] font-bold"
-                  style={{ color: colors.ink }}
-                >
-                  Registry identity
-                </Text>
-                {/*
-                 * The status of the check, not an assertion of its outcome. The
-                 * previous copy said "ERC-8004 Registry verified" unconditionally
-                 * - including while the check was still running, and including
-                 * when it had come back negative.
-                 */}
-                <Text
-                  className="mt-1 text-[12px] leading-[18px]"
-                  style={{ color: colors.muted }}
-                >
-                  {booleanMetricText(
-                    registeredMetric,
-                    `Token #${agent.tokenId} is registered on BNB Smart Chain, checked directly against the registry contract.`,
-                    `Token #${agent.tokenId} was not found in the registry contract.`,
-                  )}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </Card>
-      </Section>
-
-      {/* ── 9. the record itself ───────────────────────────────────────── */}
-      <Section title="Registry record">
-        {/* 7pt, because the last FactRow already carries 11 of the 18. */}
-        <Card style={{ paddingBottom: 7 }}>
-          {(
-            [
-              ["ERC-8004 token", `#${agent.tokenId}`],
-              ["Identity registry", shortAddress(agent.registryAddress)],
-              ["Publisher", shortAddress(agent.publisherAddress)],
-              ["Agent wallet", shortAddress(agent.agentWallet)],
-              ["Chain", "BNB Smart Chain · 56"],
-              ["Registered", agent.registeredAt ?? "Not reported"],
+          <Card style={{ paddingBottom: 7 }}>
+            {(
               [
-                "Classification",
-                agent.classificationSource.replaceAll("-", " "),
-              ],
-            ] as const
-          ).map(([label, value], index) => (
-            <FactRow
-              isFirst={index === 0}
-              key={label}
-              label={label}
-              value={value}
-            />
-          ))}
-        </Card>
-      </Section>
+                ["ERC-8004 token", `#${agent.tokenId}`],
+                ["Identity registry", shortAddress(agent.registryAddress)],
+                ["Publisher", shortAddress(agent.publisherAddress)],
+                ["Agent wallet", shortAddress(agent.agentWallet)],
+                ["Chain", "BNB Smart Chain · 56"],
+                ["Registered", agent.registeredAt ?? "Not reported"],
+                ["Classification", agent.classificationSource.replaceAll("-", " ")],
+              ] as const
+            ).map(([label, value], index) => (
+              <FactRow
+                isFirst={index === 0}
+                key={label}
+                label={label}
+                value={value}
+              />
+            ))}
+          </Card>
+
+          <Card>
+            <Text className="text-[12px] leading-[18px]" style={{ color: colors.muted }}>
+              {booleanMetricText(
+                registeredMetric,
+                `Token #${agent.tokenId} is registered on BNB Smart Chain, checked directly against the registry contract.`,
+                `Token #${agent.tokenId} was not found in the registry contract.`,
+              )}{" "}
+              Dolphin never asks for a private key or a seed phrase, and nothing
+              in it can spend from your wallet on an agent&apos;s behalf.
+            </Text>
+          </Card>
+        </View>
+      ) : null}
     </View>
   );
 }

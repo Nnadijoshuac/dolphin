@@ -132,7 +132,7 @@ export const AGENT_DATA_SOURCES = {
  * third-party price feed for these agents exists to fall back on.
  *
  * Until now `priceModel` was hardcoded `unavailable` on every agent from
- * every source, and hire/[id].tsx gates its Hire button on the price
+ * every source, and components/hire-sheet.tsx gates its flow on the price
  * resolving to "live"/"stale" - so hiring was unreachable for every agent in
  * every category. That was the single dead end in the judged
  * land -> find -> understand -> activate flow.
@@ -150,7 +150,8 @@ export const AGENT_DATA_SOURCES = {
  * cannot see that and must not assert otherwise. So `source` names Dolphin's
  * own policy instead of a data feed, and `methodology` states the limit -
  * the provenance travels with the value rather than living only in this
- * comment. hire/[id].tsx renders it as "Dolphin hire price", never as a
+ * comment. The hire sheet no longer renders it as a headline price at all -
+ * the price a user sees comes from the agent's own live quote, never as a
  * publisher-published price.
  *
  * TO REVERSE THIS (e.g. once x402 or a real publisher price feed lands):

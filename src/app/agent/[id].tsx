@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Platform,
   ScrollView,
@@ -10,6 +11,7 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentDetail } from "@/components/agent-detail";
+import { HireSheet } from "@/components/hire-sheet";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
@@ -33,6 +35,7 @@ export default function AgentDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { data: agent, isLoading, isError } = useAgentDetail(id);
+  const [hireOpen, setHireOpen] = useState(false);
 
   const previewHires = useAppStore((state) => state.previewHires);
   const isPreviewSaved = previewHires.some(
@@ -40,19 +43,21 @@ export default function AgentDetailRoute() {
       preview.agentId === id || (agent && preview.agentId === agent.tokenId),
   );
 
+  /**
+   * Hiring is a sheet, not a destination.
+   *
+   * It used to push `/hire/[id]`, a whole screen the user navigated away to and
+   * back from. Nothing about buying one job from one agent needs its own page -
+   * a page implies a process, and this is a decision with a price attached. The
+   * route is gone; see components/hire-sheet.tsx.
+   */
   const handleAction = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isPreviewSaved) {
-      router.push({
-        pathname: "/manage/[id]",
-        params: { id: id! },
-      });
-    } else {
-      router.push({
-        pathname: "/hire/[id]",
-        params: { id: id! },
-      });
+      router.push({ pathname: "/manage/[id]", params: { id: id! } });
+      return;
     }
+    setHireOpen(true);
   };
 
   const handleShare = async () => {
@@ -193,6 +198,14 @@ export default function AgentDetailRoute() {
           />
         )}
       </ScrollView>
+
+      {agent ? (
+        <HireSheet
+          agent={agent}
+          onClose={() => setHireOpen(false)}
+          visible={hireOpen}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

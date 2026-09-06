@@ -23,15 +23,24 @@ import { toUserMessage } from "@/wallet/wallet-errors";
  * payment-action.tsx, driving the same Convex actions and the same wallet
  * method, so a paid hire cannot mean two different things on the two products.
  *
- * Rendered only for an agent that publishes a real non-zero price, which today
- * is none of them: Dolphin's catalog prices every agent at zero because no
- * publisher exposes a price field it can read. The step exists so that the
- * moment one does, both products can honour it.
+ * CORRECTED 2026-09-06. Two statements that used to be here had gone stale, and
+ * both understated what this component does - the mirror image of the
+ * overstatement AGENTS.md §5 guards against, and just as wrong.
  *
- * On a native build every path here ends in the same honest refusal the wallet
- * itself gives (React Native has no WebAuthn, so no passkey, so no signature).
- * The Expo WEB export - the build that is actually publicly reachable - runs
- * all of it for real.
+ * It said it was "rendered only for an agent that publishes a real non-zero
+ * price, which today is none of them". It is rendered for any agent that
+ * publishes a callable A2A endpoint, which is a real and non-empty set - see
+ * the decision note in wallet/erc8183-policy.ts for why asking an agent its
+ * price is not the same as inventing one, and services/hireability.ts for the
+ * conditions.
+ *
+ * It also said "on a native build every path here ends in the same honest
+ * refusal the wallet itself gives (React Native has no WebAuthn, so no passkey,
+ * so no signature)". That was true before 2026-09-03. The Altana provider now
+ * drives the platform's own Credential Manager through react-native-passkeys
+ * (`signerFromPasskey(..., { webAuthn: nativeWebAuthn })` in
+ * altana-provider.native.tsx), so iOS and Android sign for real with Face ID or
+ * a fingerprint. Native and web both run this path.
  */
 export function PaymentCard({
   agent,

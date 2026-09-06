@@ -187,7 +187,7 @@ export default function AgentDetailRoute() {
           </View>
         ) : (
           <AgentDetail
-            actionLabel={isPreviewSaved ? "Manage preview" : "Review setup"}
+            actionLabel={isPreviewSaved ? "Open saved agent" : "Hire this agent"}
             agent={agent}
             onHire={handleAction}
           />

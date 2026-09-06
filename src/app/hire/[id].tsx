@@ -16,6 +16,7 @@ import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
 import { useHireReadOnlyAgent, useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import { assessAuthorizationCapability } from "@/services/authorization";
+import { assessHireability } from "@/services/hireability";
 import { useAppStore } from "@/store/use-app-store";
 import type { AgentCategory } from "@/types/agent";
 import { canNegotiate } from "@/wallet/erc8183-policy";
@@ -40,6 +41,10 @@ export default function HireModalRoute() {
   const isSaved = previewHires.some(
     (preview) => preview.agentId === id || preview.agentId === agent?.tokenId,
   );
+  // Whether this screen can actually sell anything. Mirrors the two conditions
+  // convex/agentPayments.ts's requestQuote refuses on, so the screen never
+  // offers a step the backend would reject. See services/hireability.ts.
+  const hireable = agent ? assessHireability(agent).hireable : false;
 
   const handlePreview = () => {
     if (!agent) return;
@@ -58,12 +63,24 @@ export default function HireModalRoute() {
         className="flex-row items-center justify-between border-b px-5 pb-3 pt-2"
         style={{ borderColor: colors.line }}
       >
+        {/*
+         * The header used to read "Review setup / No transaction will be
+         * submitted". The second line stopped being true the moment this screen
+         * could fund an ERC-8183 escrow, and a promise that no transaction will
+         * happen - printed above a flow that submits one - is the most
+         * consequential thing on this screen to get wrong.
+         *
+         * What is true, and is what the line says now: nothing moves until the
+         * user approves an amount they have been shown.
+         */}
         <View>
           <Text className="text-[17px] font-bold" style={{ color: colors.ink }}>
-            Review setup
+            {hireable ? "Hire this agent" : "Review agent"}
           </Text>
           <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
-            No transaction will be submitted
+            {hireable
+              ? "Nothing is paid until you approve an amount"
+              : "No transaction will be submitted"}
           </Text>
         </View>
         <NavigationButton kind="close" onPress={() => router.back()} />
@@ -160,21 +177,36 @@ export default function HireModalRoute() {
                 execute with one, so offering it charged real gas for an
                 unusable permission. */}
 
-            <View className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <Text className="text-[13px] font-bold text-amber-900">
-                Device preview only
+            {/*
+             * Saving for later, demoted to a footnote.
+             *
+             * This used to be the LAST and visually heaviest thing on the
+             * screen - an amber warning panel followed by the only full-width
+             * button - which framed the entire flow as a preview even when a
+             * real, payable hire was available directly above it. A bookmark is
+             * a fine thing to offer; presenting it as the outcome of a hire
+             * flow is what made the product look like it could not do anything.
+             *
+             * It stays honestly labelled: a preview is local to this device and
+             * buys nothing, and the copy has always said so.
+             */}
+            <View
+              className="mt-1 border-t pt-5"
+              style={{ borderColor: colors.line }}
+            >
+              <Text className="text-[12px] leading-[18px]" style={{ color: colors.muted }}>
+                {hireable
+                  ? "Not ready to hire? Saving keeps this agent in My Agents on this device. It pays nothing, authorises nothing, and creates no escrow."
+                  : "Saving keeps this agent in My Agents on this device so you can find it again. It pays nothing and authorises nothing."}
               </Text>
-              <Text className="mt-1 text-[12px] leading-5 text-amber-800">
-                Saving adds this agent to My Agents on this device. It does not pay,
-                authorize, start execution, create an Altana session, or create an
-                ERC-8183 escrow.
-              </Text>
+              <View className="mt-3">
+                <Button
+                  label={isSaved ? "Open saved agent" : "Save for later"}
+                  onPress={handlePreview}
+                  variant="secondary"
+                />
+              </View>
             </View>
-
-            <Button
-              label={isSaved ? "Open saved preview" : "Save device preview"}
-              onPress={handlePreview}
-            />
           </View>
         )}
       </ScrollView>
@@ -304,6 +336,7 @@ function AccessReview({
 
 function PaymentReview({ agent }: { agent: AgentDetail }) {
   const payment = assessAuthorizationCapability(agent.category, "erc8183_hire");
+  const hireability = assessHireability(agent);
   // Deliberately labeled as Dolphin's price, not the publisher's. The value
   // comes from DEFAULT_READ_ONLY_PRICE_MODEL (src/constants/agents.ts) and
   // describes what a hire here costs - it is not a price the publisher
@@ -325,10 +358,18 @@ function PaymentReview({ agent }: { agent: AgentDetail }) {
         <Text className="text-[16px] font-bold" style={{ color: colors.ink }}>
           3. Payment
         </Text>
-        <StatusBadge label="Unavailable" tone="unavailable" />
+        {/*
+         * This badge was hardcoded "Unavailable". ERC-8183 payment is built and
+         * works; what varies is whether THIS agent can be paid, which is a
+         * property of the agent rather than of the rail.
+         */}
+        <StatusBadge
+          label={hireability.hireable ? "Escrow available" : "Not available"}
+          tone={hireability.hireable ? "live" : "unavailable"}
+        />
       </View>
       <Text className="mt-3 text-[13px] leading-5" style={{ color: colors.muted }}>
-        {payment.reason}
+        {hireability.hireable ? payment.reason : hireability.reason}
       </Text>
       <View className="mt-4 gap-3 border-t pt-4" style={{ borderColor: colors.line }}>
         <View className="flex-row justify-between">
@@ -356,9 +397,9 @@ function PaymentReview({ agent }: { agent: AgentDetail }) {
           </Text>
         </View>
         <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
-          Hiring here records a read-only subscription and costs nothing. The
-          publisher may charge separately at its own endpoint - ERC-8004 and
-          8004scan expose no price field for Dolphin to read.
+          {hireability.hireable
+            ? "Neither ERC-8004 nor 8004scan carries a price field, so no figure here would be a real one. This agent publishes an endpoint that can be asked, and asking costs nothing and signs nothing - the price, the token and the payee all come back from the agent itself, and Dolphin checks the payee against its registered on-chain wallet before showing you anything."
+            : "Hiring here records a subscription and costs nothing. The publisher may charge separately at its own endpoint - ERC-8004 and 8004scan expose no price field for Dolphin to read."}
         </Text>
       </View>
     </Surface>

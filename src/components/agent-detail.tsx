@@ -16,6 +16,7 @@ import {
   useAgentStatsHistory,
 } from "@/hooks/use-category-stats";
 import { convexClient } from "@/providers/convex-provider";
+import { assessHireability } from "@/services/hireability";
 import type {
   Agent,
   AgentCategory,
@@ -422,6 +423,7 @@ export function AgentDetail({
   actionLabel = "Hire Agent",
 }: AgentDetailProps) {
   const [expandedAbout, setExpandedAbout] = useState(false);
+  const hireability = assessHireability(agent);
 
   const registeredMetric = agent.registryVerification.registered;
   const isRegistered =
@@ -506,37 +508,78 @@ export function AgentDetail({
       </View>
 
       {/* ── 2. the action ──────────────────────────────────────────────── */}
+      {/*
+       * The button is offered only when a hire would actually do something.
+       *
+       * Every agent used to get "Hire — Free", which wrote a database row and
+       * contacted nobody. Hireability is now a property of the agent
+       * (src/services/hireability.ts), mirroring the two conditions
+       * convex/agentPayments.ts's requestQuote refuses on - so this can never
+       * offer a button that the backend would reject.
+       */}
       <View style={{ marginTop: 22 }}>
-        <PressableScale
-          accessibilityLabel={actionLabel}
-          accessibilityRole="button"
-          onPress={() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            onHire();
-          }}
-          containerStyle={{
-            alignItems: "center",
-            backgroundColor: colors.gold,
-            borderRadius: radii.pill,
-            height: 52,
-            justifyContent: "center",
-            ...shadows.goldGlow,
-          }}
-        >
-          <Text
-            className="text-[15px] font-bold tracking-[-0.2px]"
-            style={{ color: colors.ink }}
-          >
-            {actionLabel}
-          </Text>
-        </PressableScale>
+        {hireability.hireable ? (
+          <>
+            <PressableScale
+              accessibilityLabel={actionLabel}
+              accessibilityRole="button"
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                onHire();
+              }}
+              containerStyle={{
+                alignItems: "center",
+                backgroundColor: colors.gold,
+                borderRadius: radii.pill,
+                height: 52,
+                justifyContent: "center",
+                ...shadows.goldGlow,
+              }}
+            >
+              <Text
+                className="text-[15px] font-bold tracking-[-0.2px]"
+                style={{ color: colors.ink }}
+              >
+                {actionLabel}
+              </Text>
+            </PressableScale>
 
-        <Text
-          className="mt-2.5 text-center text-[12px]"
-          style={{ color: colors.muted }}
-        >
-          {priceText}
-        </Text>
+            <Text
+              className="mt-2.5 text-center text-[12px]"
+              style={{ color: colors.muted }}
+            >
+              {priceText}
+            </Text>
+          </>
+        ) : (
+          <Card style={{ backgroundColor: colors.surfaceSubtle }}>
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CategoryGlyph color={colors.muted} name="info" size={17} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text
+                  className="text-[14px] font-bold"
+                  style={{ color: colors.ink }}
+                >
+                  Not hireable yet
+                </Text>
+                <Text
+                  className="mt-1.5 text-[12px] leading-[18px]"
+                  style={{ color: colors.muted }}
+                >
+                  {hireability.reason}
+                </Text>
+                <Text
+                  className="mt-2 text-[12px] leading-[18px]"
+                  style={{ color: colors.muted }}
+                >
+                  {hireability.nextStep}
+                </Text>
+              </View>
+            </View>
+          </Card>
+        )}
       </View>
 
       {/* ── 3. what is actually known about this agent ─────────────────── */}
@@ -682,7 +725,11 @@ export function AgentDetail({
 
       {/* ── 8. what hiring this actually does ──────────────────────────── */}
       <Section
-        caption="What Dolphin can and cannot do on your behalf today — not a claim about this agent's own code."
+        caption={
+          hireability.hireable
+            ? "What paying this agent does and does not authorise — not a claim about this agent's own code."
+            : "What Dolphin can and cannot do on your behalf today — not a claim about this agent's own code."
+        }
         title="Safety"
       >
         <Card>
@@ -699,18 +746,29 @@ export function AgentDetail({
                   A hire grants no spending authority
                 </Text>
                 {/*
-                 * The literal state of the app: every category's shipped
-                 * capability is a read-only hire, and session execution is
-                 * feature-gated off. This block used to describe the gated
-                 * feature as though it were live.
+                 * UPDATED 2026-09-06 alongside hireability.
+                 *
+                 * This block used to read "Hiring records that you use this
+                 * agent. It does not give it access to your funds." That was
+                 * true while a hire was a database row and nothing else. It is
+                 * NOT true of a hireable agent any more: hiring one funds a
+                 * real ERC-8183 escrow with real money.
+                 *
+                 * The distinction the sentence has to keep making - and the
+                 * reason it is still under a shield icon - is between PAYING an
+                 * agent a fixed, bounded amount for one job, and GRANTING it
+                 * permission to spend from your wallet. Dolphin does the first
+                 * and cannot do the second: FEATURE_SESSION_EXECUTION is off,
+                 * and even when it is not, an escrow payment is not an
+                 * allowance.
                  */}
                 <Text
                   className="mt-1 text-[12px] leading-[18px]"
                   style={{ color: colors.muted }}
                 >
-                  Hiring records that you use this agent. It does not give it
-                  access to your funds, and nothing in Dolphin can spend from
-                  your wallet on an agent&apos;s behalf.
+                  {hireability.hireable
+                    ? "Hiring pays a fixed amount into an on-chain escrow for one job, which you approve first. It is not an allowance: the agent cannot come back for more, and nothing in Dolphin can spend from your wallet on its behalf."
+                    : "Hiring records that you use this agent. It does not give it access to your funds, and nothing in Dolphin can spend from your wallet on an agent’s behalf."}
                 </Text>
               </View>
             </View>

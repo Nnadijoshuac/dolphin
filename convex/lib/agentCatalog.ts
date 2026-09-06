@@ -298,6 +298,54 @@ export interface EditorialAgentInput {
  * identity on BSC mainnet, checked by hand.
  */
 export const EDITORIAL_AGENT_INPUTS: readonly EditorialAgentInput[] = [
+  /**
+   * ADDED 2026-09-06, and the reason is worth recording because it is the only
+   * agent found by a live search of the whole registry that day which could
+   * actually be hired.
+   *
+   * WHAT WAS SEARCHED. 8004scan was queried across sixteen topical terms plus
+   * the four newest pages of registrations; 548 BSC-mainnet identities came
+   * back, and every candidate not already listed had its detail record fetched
+   * and, where it published a callable A2A endpoint, its own `list` skill
+   * asked what it sells. Exactly one new agent answered with a real menu. The
+   * rest were: hundreds of sequentially-named "BORT <noun> #<n>" identities
+   * whose endpoints all return 404, several that answer 405 to a POST, and a
+   * long tail advertising no endpoint at all. The registry really is mostly
+   * spam, and the pipeline's aggressive filtering is right.
+   *
+   * WHY IT IS HERE RATHER THAN DISCOVERED. It is not in agentCandidates at all
+   * - not published, not pending, not rejected - so the sweep has never seen
+   * it. The sweep has been off since 2026-09-02 (see convex/crons.ts), which is
+   * also why its four siblings are listed and it is not.
+   *
+   * WHAT WAS VERIFIED BEFORE ADDING IT (AGENTS.md §5/§9):
+   *   - 8004scan detail: is_active true, is_endpoint_verified true, and an
+   *     agent_wallet equal to the owner address.
+   *   - Its A2A endpoint answered `{skill:"list"}` with HTTP 200 and a real
+   *     menu: services with ids, prices in atomic units, price_display
+   *     "0.10 $U", and ERC-8183 escrow named with its kernel address.
+   *   - Same owner and wallet (0x73809f69...) as the four Brain on BNB agents
+   *     already in the catalog, three of which have been observed returning
+   *     live quotes.
+   *
+   * It also fills the one graded category that had no hireable agent at all.
+   * That is a consequence of adding it, not the reason: an agent that could not
+   * sell would not have been added to fill a gap.
+   */
+  {
+    tokenId: "304493",
+    name: "Brain on BNB — Venus Yield Ranking",
+    ownerAddress: "0x73809f69916fcf7ddc5bb1315fbdf96a569a5963",
+    category: "yield",
+    tagline:
+      "Ranks Venus core-pool markets by what they actually pay, computed from a measured block time.",
+    description:
+      "The publisher describes ranking every Venus core-pool market on BNB Chain by what it actually pays a supplier, computed from the rate per block against a block time measured from the chain rather than the 10,512,000-blocks-per-year constant that three-second blocks implied. The publisher states BSC now produces a block roughly every 0.45s, so that constant understates supply rates substantially, and that every figure is read at request time.",
+    iconUrl: "https://api.8004scan.io/api/v1/media/agents/56/304493/image",
+    // Read from 8004scan's created_at for this token, not estimated.
+    registeredAt: "2026-08-26T06:46:48Z",
+    reportedSkills: ["Venus market ranking", "Supply APY from measured block time"],
+  },
   {
     tokenId: "303727",
     name: "Wallet Watch",

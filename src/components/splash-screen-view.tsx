@@ -262,8 +262,13 @@ export function SplashScreenView({
         </View>
         <View className="flex-row items-center justify-center gap-2.5 pb-9 pt-4">
           <Animated.View
-            className="h-1.5 w-1.5 rounded-full"
-            style={{ backgroundColor: "#B79142", opacity: canAnimate ? pulse : 1 }}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: "#B79142",
+              opacity: canAnimate ? pulse : 1,
+            }}
           />
           <Text
             className="text-[11px] tracking-[0.5px]"

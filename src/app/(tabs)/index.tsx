@@ -19,6 +19,7 @@ import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
+import { useCatalogSignals } from "@/hooks/use-agent-signals";
 import { sortHireableFirst } from "@/services/hireability";
 import type { Agent, AgentCategory } from "@/types/agent";
 
@@ -40,6 +41,8 @@ export default function DiscoverScreen() {
   const horizontalScrollRef = useRef<ScrollView>(null);
   const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
   const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
+  // One query for the whole screen, not one per row.
+  const signals = useCatalogSignals();
   const [heroBottom, setHeroBottom] = useState(320);
 
   const scrollTabIntoView = (slug: AgentCategory) => {
@@ -270,6 +273,7 @@ export default function DiscoverScreen() {
                         key={agent.id}
                         agent={agent}
                         onPress={() => handleAgentPress(agent)}
+                        signals={signals.get(agent.tokenId)}
                         subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
                       />
                     ))}

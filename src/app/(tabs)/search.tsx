@@ -18,6 +18,7 @@ import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import { searchAgentsLocally } from "@/services/agents-api";
+import { useCatalogSignals } from "@/hooks/use-agent-signals";
 import { sortHireableFirst } from "@/services/hireability";
 import { useAppStore } from "@/store/use-app-store";
 import type { Agent, AgentCategory } from "@/types/agent";
@@ -54,6 +55,7 @@ export default function SearchScreen() {
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const { data: allAgents } = useAgents();
+  const signals = useCatalogSignals();
 
   const recentSearches = useAppStore((state) => state.recentSearches);
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
@@ -232,6 +234,7 @@ export default function SearchScreen() {
                     key={agent.id}
                     agent={agent}
                     onPress={() => handleAgentPress(agent)}
+                    signals={signals.get(agent.tokenId)}
                     subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
                   />
                 ))}
@@ -388,6 +391,7 @@ export default function SearchScreen() {
                       key={agent.id}
                       agent={agent}
                       onPress={() => handleAgentPress(agent)}
+                      signals={signals.get(agent.tokenId)}
                       subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
                     />
                   ))}
@@ -418,6 +422,7 @@ export default function SearchScreen() {
                       key={agent.id}
                       agent={agent}
                       onPress={() => handleAgentPress(agent)}
+                      signals={signals.get(agent.tokenId)}
                       subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
                     />
                   ))}

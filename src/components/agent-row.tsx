@@ -3,6 +3,10 @@ import { Text, View } from "react-native";
 import { AgentIcon } from "@/components/agent-icon";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
+import {
+  summariseSignals,
+  type AgentSignals,
+} from "@/hooks/use-agent-signals";
 import { assessHireability } from "@/services/hireability";
 import type { Agent } from "@/types/agent";
 
@@ -11,6 +15,12 @@ type AgentRowProps = {
   onPress: () => void;
   /** Line under the name. Defaults to the agent's own tagline. */
   subtitle?: string;
+  /**
+   * This agent's hire and review counts, from the ONE catalog-wide query the
+   * screen makes. Passed in rather than fetched here on purpose - a row that
+   * fetches its own signals is a query per row.
+   */
+  signals?: AgentSignals;
 };
 
 /**
@@ -19,7 +29,7 @@ type AgentRowProps = {
  * 
  * Styled to look like a Google Play Store app list item.
  */
-export function AgentRow({ agent, onPress, subtitle }: AgentRowProps) {
+export function AgentRow({ agent, onPress, subtitle, signals }: AgentRowProps) {
   /*
    * The pill says what the row can actually do.
    *
@@ -31,10 +41,18 @@ export function AgentRow({ agent, onPress, subtitle }: AgentRowProps) {
    * no extra chrome.
    */
   const hireable = assessHireability(agent).hireable;
-  const feedbackCount =
-    agent.feedbackCount.status === "live" || agent.feedbackCount.status === "stale"
-      ? agent.feedbackCount.value
-      : null;
+  /*
+   * Dolphin's OWN record of this agent, not 8004scan's feedback count.
+   *
+   * The meta line used to read "<n> reviews · BNB Chain", where the count was
+   * ERC-8004 feedback records from the indexer - a measure of activity that
+   * says nothing about whether the agent did its job - and "BNB Chain" was
+   * identical on every row and therefore told a reader nothing at all.
+   *
+   * What decides a hire is how many people hired it and what they said
+   * afterwards. That is what this line carries now.
+   */
+  const summary = summariseSignals(signals);
 
   return (
     <PressableScale
@@ -67,18 +85,14 @@ export function AgentRow({ agent, onPress, subtitle }: AgentRowProps) {
             {subtitle ?? agent.tagline}
           </Text>
           
-          {/* Meta line: e.g. "24 reviews · BNB Chain" */}
-          <View className="mt-1 flex-row items-center gap-1.5">
-            {feedbackCount !== null && feedbackCount > 0 ? (
-              <>
-                <Text className="text-[11px] font-medium text-zinc-500">
-                  {feedbackCount} reviews
-                </Text>
-                <View className="w-0.5 h-0.5 rounded-full bg-zinc-400" />
-              </>
-            ) : null}
-            <Text className="text-[11px] font-medium text-zinc-500">BNB Chain</Text>
-          </View>
+          {/* Meta line: what Dolphin actually knows about this agent. */}
+          <Text
+            className="mt-1 text-[11px] font-medium"
+            numberOfLines={1}
+            style={{ color: summary ? colors.inkSecondary : colors.faint }}
+          >
+            {summary ?? "No hires yet"}
+          </Text>
         </View>
 
         {/* Action Button (Pill-shaped) */}

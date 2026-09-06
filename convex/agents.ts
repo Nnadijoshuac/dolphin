@@ -35,6 +35,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
+import { isListable, probeSellability } from "./lib/sellability";
 import {
   AGENT_DATA_SOURCES,
   EDITORIAL_AGENT_INPUTS,
@@ -69,6 +70,12 @@ type DirectoryRow = {
   iconStorageId?: Id<"_storage"> | null;
   iconSource?: string | null;
   iconCheckedAt?: string | null;
+  // Sellability, written by the directory refresh. See convex/lib/sellability.ts.
+  sellsState?: string | null;
+  sellsDetail?: string | null;
+  sellsServiceCount?: number | null;
+  sellsCheckedAt?: string | null;
+  consecutiveSellFailures?: number | null;
   /** Resolved from iconStorageId by buildCatalog - not a stored column. */
   cachedIconUrl?: string | null;
 };
@@ -218,9 +225,45 @@ async function buildCatalog(ctx: QueryCtx): Promise<CatalogAgent[]> {
         ? await ctx.storage.getUrl(row.iconStorageId)
         : null;
 
-      return applyDirectory(agent, { ...row, cachedIconUrl });
+      const applied = applyDirectory(agent, { ...row, cachedIconUrl });
+      return {
+        ...applied,
+        // Carried through so a caller can say WHY an agent is or is not
+        // hireable without a second query. The gate below uses the same fields.
+        sellsState: row.sellsState ?? null,
+        sellsDetail: row.sellsDetail ?? null,
+        sellsServiceCount: row.sellsServiceCount ?? null,
+        consecutiveSellFailures: row.consecutiveSellFailures ?? 0,
+      };
     }),
   );
+}
+
+/**
+ * Whether this agent belongs in the catalog at all.
+ *
+ * DECISION (2026-09-06, project owner): an agent that cannot be hired to
+ * perform a task does not get listed. Not listed-and-marked, not
+ * listed-and-sorted-last - not listed. A marketplace whose listings are mostly
+ * unbuyable is a directory wearing a shop's clothes, and the earlier compromise
+ * of showing everything with a "View" pill still made a browsing user do the
+ * work of finding the ones that were real.
+ *
+ * Quality is explicitly NOT part of this gate. Whether an agent does its job
+ * WELL is what reviews decide, and a bad agent that really performs a task
+ * belongs in the catalog with a bad review attached - that is the mechanism
+ * working, not a listing failure.
+ *
+ * The one thing this must never do is hide an agent because a probe had a bad
+ * afternoon; see isListable and the failure-counter rules in
+ * convex/lib/sellability.ts.
+ */
+function isCatalogListable(agent: CatalogAgent): boolean {
+  const row = agent as CatalogAgent & {
+    sellsState?: string | null;
+    consecutiveSellFailures?: number | null;
+  };
+  return isListable(row.sellsState as never, row.consecutiveSellFailures ?? 0);
 }
 
 /**
@@ -228,8 +271,21 @@ async function buildCatalog(ctx: QueryCtx): Promise<CatalogAgent[]> {
  * overlaid with 8004scan's indexed data. Both frontends render this as-is.
  */
 export const listAgents = query({
-  args: {},
-  handler: async (ctx) => buildCatalog(ctx),
+  args: {
+    /**
+     * Include agents that cannot currently be hired. Off by default, because
+     * the catalog is a shop.
+     *
+     * Exists for operators and diagnostics - "what did the gate remove and
+     * why" has to be answerable without reading the database, the same reason
+     * the discovery ledger keeps its rejections instead of deleting them.
+     */
+    includeUnhireable: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { includeUnhireable }) => {
+    const catalog = await buildCatalog(ctx);
+    return includeUnhireable ? catalog : catalog.filter(isCatalogListable);
+  },
 });
 
 /**
@@ -242,6 +298,13 @@ export const getAgent = query({
   handler: async (ctx, { reference }) => {
     const parts = reference.split(":");
     const tokenId = parts[parts.length - 1];
+    /*
+     * Deliberately NOT gated on sellability. Someone holding a link, or a hire
+     * they already paid for, must still be able to open the page - and the page
+     * itself says the agent cannot be hired right now. Hiding the record would
+     * make an existing hire unreadable, which is a worse failure than showing
+     * an agent nobody can currently buy from.
+     */
     const catalog = await buildCatalog(ctx);
     return catalog.find((agent) => agent.tokenId === tokenId) ?? null;
   },
@@ -378,7 +441,7 @@ export const refreshAgentDirectory = internalAction({
     tokenIds: number;
     errors: string[];
   }> => {
-    const discovered: { tokenId: string }[] = await ctx.runQuery(
+    const discovered: { tokenId: string; category: string }[] = await ctx.runQuery(
       internal.agents.listDiscoveredTokenIds,
       {},
     );
@@ -388,6 +451,18 @@ export const refreshAgentDirectory = internalAction({
         ...discovered.map(({ tokenId }) => tokenId),
       ]),
     ];
+
+    // The sellability probe needs a category, because its fallback asks the
+    // agent to price a task and a task only makes sense per category.
+    const categoryByToken = new Map<string, string>();
+    for (const input of EDITORIAL_AGENT_INPUTS) {
+      categoryByToken.set(input.tokenId, input.category);
+    }
+    for (const row of discovered) {
+      if (!categoryByToken.has(row.tokenId)) {
+        categoryByToken.set(row.tokenId, row.category);
+      }
+    }
 
     let refreshed = 0;
     let failed = 0;
@@ -426,8 +501,29 @@ export const refreshAgentDirectory = internalAction({
             ? overall
             : null;
 
+        /*
+         * Ask the agent what it sells, in the same pass that refreshes what
+         * 8004scan thinks of it.
+         *
+         * Here rather than in a cron of its own because the two questions are
+         * asked about the same set of agents at the same cadence, and because
+         * the probe needs `services`, which this loop has just decoded. See
+         * convex/lib/sellability.ts for why this is a different question from
+         * liveness and why the catalog gates on this one.
+         */
+        const services = decodeServices(data.services);
+        const sell = await probeSellability(
+          services,
+          categoryByToken.get(tokenId) ?? "monitoring",
+          readString(data, "agent_wallet"),
+        );
+
         await ctx.runMutation(internal.agents.upsertAgentDirectory, {
           tokenId,
+          sellsState: sell.state,
+          sellsDetail: sell.detail,
+          sellsServiceCount: sell.serviceCount,
+          sellsCheckedAt: new Date().toISOString(),
           name: readString(data, "name"),
           description: readString(data, "description"),
           iconUrl: readHttpUrl(data, "image_url"),
@@ -442,7 +538,7 @@ export const refreshAgentDirectory = internalAction({
             ...readStringArray(data, "supported_protocols"),
             ...readStringArray(data, "tags"),
           ],
-          services: decodeServices(data.services),
+          services,
           x402Supported: readBoolean(data, "x402_supported"),
           isActive: readBoolean(data, "is_active"),
           reputationScore: readNumber(data, "average_score"),
@@ -484,13 +580,18 @@ export const listDiscoveredTokenIds = internalQuery({
       .query("discoveredAgents")
       .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
       .collect();
-    return rows.map(({ tokenId }) => ({ tokenId }));
+    return rows.map(({ tokenId, category }) => ({ tokenId, category }));
   },
 });
 
 export const upsertAgentDirectory = internalMutation({
   args: {
     tokenId: v.string(),
+    /** Sellability, probed by the caller. See convex/lib/sellability.ts. */
+    sellsState: v.string(),
+    sellsDetail: v.string(),
+    sellsServiceCount: v.union(v.number(), v.null()),
+    sellsCheckedAt: v.string(),
     name: v.union(v.string(), v.null()),
     description: v.union(v.string(), v.null()),
     iconUrl: v.union(v.string(), v.null()),
@@ -523,7 +624,25 @@ export const upsertAgentDirectory = internalMutation({
       )
       .unique();
 
-    const document = { chainId: BSC_CHAIN_ID, ...args };
+    /*
+     * The consecutive-failure counter, maintained here because this is the only
+     * writer that sees both the new probe and the previous one.
+     *
+     * A structural failure (no-endpoint) does not accumulate: it is decided on
+     * its own, at once, since no amount of retrying turns an unpublished
+     * endpoint into a published one. A transport failure accumulates, so an
+     * agent whose server is having a bad afternoon is tolerated until
+     * SELL_FAILURES_BEFORE_DELIST rather than dropped on the first miss. A
+     * success resets, so recovering re-lists an agent automatically the same
+     * way one successful liveness probe re-lists one in pipelineStatus.ts.
+     */
+    const previousFailures = existing?.consecutiveSellFailures ?? 0;
+    const consecutiveSellFailures =
+      args.sellsState === "sells" || args.sellsState === "no-endpoint"
+        ? 0
+        : previousFailures + 1;
+
+    const document = { chainId: BSC_CHAIN_ID, ...args, consecutiveSellFailures };
 
     if (existing) {
       await ctx.db.patch(existing._id, document);

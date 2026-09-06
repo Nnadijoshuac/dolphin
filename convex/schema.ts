@@ -312,6 +312,26 @@ export default defineSchema({
     // migration. The authoritative list is IconSource in convex/lib/agentIcons.ts.
     iconSource: v.optional(v.union(v.string(), v.null())),
     iconCheckedAt: v.optional(v.union(v.string(), v.null())),
+
+    // SELLABILITY (2026-09-06). Whether this agent can actually be hired to do
+    // a job, measured by asking its own A2A endpoint what it sells - not by
+    // whether it is merely alive. convex/lib/liveness.ts answers a different
+    // question and had never delisted an unsellable agent; see
+    // convex/lib/sellability.ts for why the two differ and why a marketplace
+    // must gate on this one.
+    //
+    // Optional so existing rows stay valid without a migration, the same
+    // convention the icon columns above use. Absent reads as "never probed",
+    // which isListable treats as visible rather than hidden - a new agent
+    // should not be invisible because nothing has got round to asking it yet.
+    sellsState: v.optional(v.union(v.string(), v.null())),
+    /** One checkable sentence, so "why is this hidden" is answerable later. */
+    sellsDetail: v.optional(v.union(v.string(), v.null())),
+    sellsCheckedAt: v.optional(v.union(v.string(), v.null())),
+    /** How many services it listed. Null when it listed none or was not asked. */
+    sellsServiceCount: v.optional(v.union(v.number(), v.null())),
+    /** Drives the delist-after-N rule for TRANSPORT failures only. */
+    consecutiveSellFailures: v.optional(v.number()),
   }).index("by_agent", ["chainId", "tokenId"]),
 
   /**

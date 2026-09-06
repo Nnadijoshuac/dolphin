@@ -36,6 +36,7 @@ import {
 } from "./altana-policy";
 import { ERC8183_CHAIN_ID, JOB_DEADLINE_SECONDS } from "./erc8183-policy";
 import { toUserMessage } from "./wallet-errors";
+import { requireSessionToken, useWalletSession } from "./wallet-session";
 import type {
   AltanaSession,
   AltanaWalletStatus,
@@ -218,6 +219,10 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   ) as AltanaSession[] | undefined;
   const recordGrant = useMutation(api.agentSessions.recordSessionGrant);
   const markRevoked = useMutation(api.agentSessions.markSessionRevoked);
+  // Both grant and revoke are authenticated writes now. This provider mounts
+  // inside WalletSessionProvider (see providers/app-providers.tsx), so the
+  // session is always available here.
+  const walletSession = useWalletSession();
   // Actions, not mutations: both reach outside Convex - one to read the escrow
   // kernel on BSC, one to POST to the seller's endpoint past the CORS wall a
   // browser cannot get through.
@@ -381,6 +386,10 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         // Recorded only after the grant landed - Convex cannot sign, so a row
         // written first would claim something that had not happened.
         await recordGrant({
+          // A session grant hands real spending authority to someone else, so
+          // recording one now requires proof of who is doing it - the mutation
+          // no longer takes anyone's word for hirerWalletAddress.
+          sessionToken: requireSessionToken(walletSession),
           tokenId: input.tokenId,
           agentName: input.agentName,
           category: input.category,
@@ -405,7 +414,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, recordGrant, refreshRecoverability, sessionsUnavailable],
+    [adminSigner, recordGrant, refreshRecoverability, sessionsUnavailable, walletSession],
   );
 
   const revokeSession = useCallback(
@@ -423,7 +432,10 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           chainId: ALTANA_NETWORK.chainId,
         });
         if (!sessionsUnavailable) {
-          await markRevoked({ sessionPublicKey: publicKey });
+          await markRevoked({
+            sessionPublicKey: publicKey,
+            sessionToken: requireSessionToken(walletSession),
+          });
         }
         setLiveSessions((live) => {
           const next = { ...live };
@@ -437,7 +449,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, markRevoked, sessionsUnavailable],
+    [adminSigner, markRevoked, sessionsUnavailable, walletSession],
   );
 
   const registerWallet = useCallback(async (): Promise<void> => {

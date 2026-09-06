@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
 import { agentCategoryValidator } from "./categoryStatsValidators";
+import { requireWalletAddress } from "./lib/walletAuth";
 
 /**
  * Altana session grants, recorded next to the agentHires row they belong to.
@@ -49,6 +50,14 @@ function normalize(label: string, address: string): string {
  */
 export const recordSessionGrant = mutation({
   args: {
+    /**
+     * Proof of who is recording this grant (2026-09-06). A session grant is the
+     * one thing in Dolphin that hands real spending authority to someone else,
+     * so "who says this was granted" must not be an open question - this was a
+     * public unauthenticated write until authentication existed.
+     * See convex/lib/walletAuth.ts.
+     */
+    sessionToken: v.string(),
     tokenId: v.string(),
     /** The agent's name as shown to the user at grant time. */
     agentName: v.string(),
@@ -66,6 +75,12 @@ export const recordSessionGrant = mutation({
     grantTransactionHash: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
+    const signedInAddress = await requireWalletAddress(
+      ctx,
+      args.sessionToken,
+      "recordSessionGrant",
+    );
+
     if (args.allowlist.length === 0) {
       // An empty allowlist is how Altana spells "any contract". Refusing it
       // here means an unrestricted session can never be recorded as though it
@@ -77,10 +92,25 @@ export const recordSessionGrant = mutation({
     }
 
     const altanaWalletAddress = normalize("altanaWalletAddress", args.altanaWalletAddress);
+    /*
+     * The hirer is the signed-in wallet, not a name the client supplies.
+     *
+     * A client-supplied hirerWalletAddress could attribute a spending grant to
+     * a wallet that never made one, which is the worst thing in this table to
+     * be wrong about. A caller may still pass null to mean "no hire record
+     * behind this", but if it names an address, it must be its own.
+     */
+    if (
+      args.hirerWalletAddress !== null &&
+      normalize("hirerWalletAddress", args.hirerWalletAddress) !== signedInAddress
+    ) {
+      throw new Error(
+        "recordSessionGrant: hirerWalletAddress must be the signed-in wallet. " +
+          "A grant cannot be recorded on another address's behalf.",
+      );
+    }
     const hirerWalletAddress =
-      args.hirerWalletAddress === null
-        ? null
-        : normalize("hirerWalletAddress", args.hirerWalletAddress);
+      args.hirerWalletAddress === null ? null : signedInAddress;
     const allowlist = args.allowlist.map((entry) => ({
       address: normalize(`allowlist:${entry.label}`, entry.address),
       label: entry.label,
@@ -132,8 +162,12 @@ export const recordSessionGrant = mutation({
 export const markSessionRevoked = mutation({
   args: {
     sessionPublicKey: v.string(),
+    /** See recordSessionGrant: this was a public unauthenticated write. */
+    sessionToken: v.string(),
   },
-  handler: async (ctx, { sessionPublicKey }) => {
+  handler: async (ctx, { sessionPublicKey, sessionToken }) => {
+    await requireWalletAddress(ctx, sessionToken, "markSessionRevoked");
+
     const existing = await ctx.db
       .query("agentSessions")
       .withIndex("by_session_key", (q) =>

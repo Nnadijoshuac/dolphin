@@ -1,6 +1,7 @@
 import { useQuery } from "convex/react";
-import { Linking, ScrollView, Text, View } from "react-native";
+import { Alert, Linking, ScrollView, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -14,11 +15,13 @@ import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
-import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
+import { useCancelHire, useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import { useAppStore } from "@/store/use-app-store";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { useWallet } from "@/wallet/wallet-provider";
+import { useWalletSession } from "@/wallet/wallet-session";
+import { toUserMessage } from "@/wallet/wallet-errors";
 
 function shortAddress(value: string) {
   return `${value.slice(0, 7)}…${value.slice(-5)}`;
@@ -60,6 +63,10 @@ export default function ManageAgentRoute() {
   const preview = previewHires.find(
     (item) => item.agentId === id || item.agentId === agent?.tokenId,
   );
+  const session = useWalletSession();
+  const cancelHire = useCancelHire();
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const hiredAgents = useHiredAgents(wallet.address);
   const realHire = hiredAgents?.find(
     (hire) => hire.tokenId === id || hire.tokenId === agent?.tokenId,
@@ -77,6 +84,46 @@ export default function ManageAgentRoute() {
     removePreviewHire(preview.agentId);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace("/(tabs)/my-agents");
+  };
+
+  /**
+   * Confirms, then ends the hire.
+   *
+   * The confirmation names the one thing a user could reasonably get wrong -
+   * that stopping a paid hire does not claw back the escrow - because that is
+   * money, and finding out afterwards would be the worst moment to learn it.
+   */
+  const handleCancelHire = () => {
+    const target = realHire;
+    if (!target) return;
+
+    Alert.alert(
+      "Stop using this agent?",
+      target.paymentJobId
+        ? "It leaves My Agents. The escrow you already paid is not refunded - that payment is on-chain and bought work Dolphin cannot reverse."
+        : "It leaves My Agents. Nothing on-chain changes, and you can hire it again at any time.",
+      [
+        { text: "Keep it", style: "cancel" },
+        {
+          text: "Stop using",
+          style: "destructive",
+          onPress: () => {
+            setIsCancelling(true);
+            setCancelError(null);
+            void cancelHire(target.tokenId)
+              .then(() => {
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                router.replace("/(tabs)/my-agents");
+              })
+              .catch((cause: unknown) => {
+                setCancelError(toUserMessage(cause, "Could not stop this hire."));
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+              })
+              .finally(() => setIsCancelling(false));
+          },
+        },
+      ],
+    );
   };
 
   if (isLoading) {
@@ -432,8 +479,45 @@ export default function ManageAgentRoute() {
           </View>
         </View>
 
-        {/* Action Button: only for preview (remove preview) since profile view is on header tap */}
-        {preview && !realHire ? (
+        {/*
+         * Ending the relationship. Both kinds have one now.
+         *
+         * A real hire had NO exit at all until 2026-09-06: agentHires has
+         * carried a "cancelled" status since the table was defined and nothing
+         * ever wrote it, so this screen - titled "Manage hire" - offered no way
+         * to manage anything. In an app whose whole pitch is that the user stays
+         * in control, the only irreversible action was the one they chose on
+         * purpose.
+         */}
+        {realHire ? (
+          <View className="mt-8">
+            <Button
+              disabled={isCancelling || !session.isSignedIn}
+              label={isCancelling ? "Stopping…" : "Stop using this agent"}
+              loading={isCancelling}
+              onPress={handleCancelHire}
+              variant="destructive"
+            />
+            <Text
+              className="mt-2.5 text-center text-[11.5px] leading-4"
+              style={{ color: colors.muted }}
+            >
+              {session.isSignedIn
+                ? realHire.paymentJobId
+                  ? "Removes this agent from My Agents. It does not refund the escrow you already paid — that money is on-chain and bought work Dolphin cannot reverse."
+                  : "Removes this agent from My Agents. Nothing on-chain changes and you can hire it again later."
+                : "Sign in with this wallet to stop a hire — Dolphin only accepts the instruction from the address that made it."}
+            </Text>
+            {cancelError ? (
+              <Text
+                className="mt-2 text-center text-[12px]"
+                style={{ color: colors.danger }}
+              >
+                {cancelError}
+              </Text>
+            ) : null}
+          </View>
+        ) : preview ? (
           <View className="mt-8">
             <Button
               label="Remove preview"

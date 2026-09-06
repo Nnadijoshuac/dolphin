@@ -43,6 +43,7 @@
 import "@walletconnect/react-native-compat";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   AppKit,
   AppKitProvider,
@@ -184,6 +185,23 @@ const reownSetup =
       })()
     : null;
 
+/**
+ * wagmi's own QueryClient. In memory, never persisted - see the note at the
+ * provider below for why it is deliberately not the app's client.
+ *
+ * Module scope so it survives re-renders; a client constructed inside the
+ * component would be replaced on every render and drop every in-flight wallet
+ * request with it.
+ */
+const walletQueryClient = new QueryClient({
+  defaultOptions: {
+    // A wallet action is a user-initiated request to a wallet app. Retrying one
+    // automatically would re-prompt someone who just declined it.
+    mutations: { retry: 0 },
+    queries: { retry: 1 },
+  },
+});
+
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 const unavailableWallet: WalletContextValue = {
@@ -316,10 +334,36 @@ export function WalletProvider({ children }: WalletProviderProps) {
   return (
     <AppKitProvider instance={reownSetup.appKit}>
       <WagmiProvider config={reownSetup.wagmiAdapter.wagmiConfig}>
-        <ReownWalletBridge>{children}</ReownWalletBridge>
-        <View pointerEvents="box-none" style={styles.modalLayer}>
-          <AppKit />
-        </View>
+        {/*
+         * wagmi's ACTION hooks are TanStack Query mutations, so they need a
+         * QueryClient in scope - and until this provider existed there was none
+         * here. WalletProvider sits ABOVE QueryProvider in
+         * providers/app-providers.tsx, so ReownWalletBridge had no QueryClient
+         * ancestor at all. That went unnoticed because the only wagmi hooks it
+         * used were useAccount and useAppKit, which read context and an external
+         * store rather than react-query; adding useSignMessage, useWriteContract
+         * and useSwitchChain crashed the app on launch with "No QueryClient set".
+         *
+         * WHY A SEPARATE CLIENT RATHER THAN REORDERING THE APP'S PROVIDERS.
+         * Hoisting QueryProvider above WalletProvider would also have worked and
+         * would have been worse: the app's client is a PersistQueryClientProvider
+         * that writes successful queries to AsyncStorage, and wagmi's caches are
+         * live chain state - balances, ENS, chain id. Restoring those from disk
+         * on a cold start would present a previous session's on-chain figures as
+         * current, which is precisely the failure query-provider.tsx already
+         * documents excluding erc8183-job polls to avoid (AGENTS.md §5).
+         *
+         * So the wallet gets its own in-memory client. Nothing wagmi caches can
+         * reach the disk, and the two concerns cannot interact. The app's own
+         * QueryProvider mounts below this as one of `children` and takes over
+         * for everything except this bridge, which is the intended split.
+         */}
+        <QueryClientProvider client={walletQueryClient}>
+          <ReownWalletBridge>{children}</ReownWalletBridge>
+          <View pointerEvents="box-none" style={styles.modalLayer}>
+            <AppKit />
+          </View>
+        </QueryClientProvider>
       </WagmiProvider>
     </AppKitProvider>
   );

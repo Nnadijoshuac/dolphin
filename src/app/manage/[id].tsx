@@ -135,13 +135,62 @@ export default function ManageAgentRoute() {
     });
   };
 
-  const detailRows = isReal
+  /**
+   * The job that paid for this hire, if one did.
+   *
+   * Matched by the id recorded on the hire row itself, never by "the most
+   * recent job for this agent": a wallet can pay the same agent more than
+   * once, and only one of those payments is the one that bought this hire.
+   */
+  const payingJob =
+    realHire && realHire.paymentJobId
+      ? ((jobs ?? []).find((job) => job.jobId === realHire.paymentJobId) ?? null)
+      : null;
+
+  /**
+   * What this hire cost, derived rather than asserted.
+   *
+   * This row used to be the literal string "Free" for every real hire,
+   * including one whose `paymentJobId` points at an escrow job the backend had
+   * verified on-chain - so the screen could print "Free" directly above an
+   * "Escrow payment funded - 0.10 $U" row describing the same purchase. That
+   * is a statement about someone's money the screen had not established, which
+   * is exactly what AGENTS.md §5 exists to stop.
+   *
+   * The four outcomes are kept distinct on purpose. "Free" is a fact
+   * (hireReadOnlyAgent writes a null paymentJobId only when nothing paid for
+   * the hire). The other three are degrees of "paid, and here is how much of
+   * that this screen can currently see" - never collapsed into "Free", and
+   * never collapsed into each other.
+   */
+  const hirePriceText = (() => {
+    if (!realHire) return "—";
+    if (!realHire.paymentJobId) return "Free";
+    if (payingJob) {
+      try {
+        return `${formatTokenAmount(
+          payingJob.budgetRaw,
+          payingJob.paymentTokenDecimals,
+        )} ${payingJob.paymentTokenSymbol}`;
+      } catch {
+        return "Paid — amount unreadable";
+      }
+    }
+    // getJobsForAgent is keyed on the Dolphin Wallet that funded the job, so
+    // with that wallet disconnected there is nothing to match against. Say so,
+    // rather than implying the hire was free.
+    if (!altana.address) return "Paid — connect Dolphin Wallet for the amount";
+    if (jobs === undefined) return "Paid — reading escrow…";
+    return `Paid — job #${realHire.paymentJobId} not found`;
+  })();
+
+  const detailRows: readonly (readonly [string, string])[] = isReal
     ? [
-        ["Status", "Active"],
+        ["Status", realHire!.status === "active" ? "Active" : "Cancelled"],
         ["Category", categoryLabel],
         ["Wallet", shortAddress(realHire!.walletAddress)],
         ["Authorization", "Read-only"],
-        ["Price", "Free"],
+        ["Price", hirePriceText],
       ]
     : [
         ["Status", "Saved preview"],

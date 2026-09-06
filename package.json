@@ -70,12 +70,15 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "spike:altana": "node scripts/spike-b-auth.mjs"
+    "spike:altana": "node scripts/spike-b-auth.mjs",
+    "eas-build-pre-install": "npm config set legacy-peer-deps true"
   },
   "overrides": {
     "@walletconnect/universal-provider": "2.21.10",
     "viem": "2.55.19",
-    "valtio": "2.1.8"
+    "valtio": "2.1.8",
+    "@react-native-async-storage/async-storage": "$@react-native-async-storage/async-storage",
+    "typescript": "$typescript"
   },
   "private": true
 }

@@ -52,6 +52,16 @@ export function WalletAvatar({
   return (
     <Image
       accessibilityElementsHidden
+      /**
+       * The only REMOTE image in the app that was not setting this explicitly,
+       * while every other expo-image call site does. It matters more here than
+       * anywhere else: the same address renders several times on one screen
+       * (top bar, account card, total chip) and again on My Agents, so without
+       * a memory cache each instance re-reads and re-decodes the same SVG. It
+       * also means a launch with no network still shows the faces it has
+       * already seen, rather than blank squares where the accounts should be.
+       */
+      cachePolicy="memory-disk"
       importantForAccessibility="no-hide-descendants"
       source={{ uri }}
       style={{

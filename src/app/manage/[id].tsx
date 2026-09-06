@@ -11,7 +11,6 @@ import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { NavigationButton } from "@/components/navigation-button";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
-import { StatusBadge } from "@/components/status-badge";
 import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors } from "@/constants/theme";
 import { useAgentDetail } from "@/hooks/use-agents";
@@ -127,8 +126,6 @@ export default function ManageAgentRoute() {
   const dateText = realHire
     ? `Hired ${formatActivityDate(realHire.hiredAt)}`
     : `Saved ${formatActivityDate(preview!.savedAt)}`;
-  const statusLabel = isReal ? "Hired" : "Device preview";
-  const statusTone = isReal ? ("live" as const) : ("preview" as const);
 
   const handleOpenProfile = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -270,9 +267,6 @@ export default function ManageAgentRoute() {
             <Text className="mt-1 text-[13px]" style={{ color: colors.muted }}>
               {dateText}
             </Text>
-            <View className="mt-2.5 flex-row items-center">
-              <StatusBadge label={statusLabel} tone={statusTone} />
-            </View>
           </View>
         </PressableScale>
 

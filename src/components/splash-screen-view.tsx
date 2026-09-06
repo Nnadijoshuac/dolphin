@@ -1,130 +1,261 @@
-import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
+  AccessibilityInfo,
   Animated,
+  AppState,
+  Easing,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
+import { VideoView, useVideoPlayer } from "expo-video";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BrandMark, BnbBadge } from "@/components/brand-mark";
-import { ConstellationBg } from "@/components/constellation-bg";
-import { colors } from "@/constants/theme";
-
-const splashImage = require("../../assets/images/SplashScreen.jpeg");
+// Keep this background in sync with the rendered assets and app.json.
+const BACKGROUND = "#F6F4EE";
+const dolphinPoster = require("../../assets/images/dolphin-loading.png");
+const dolphinLoop = require("../../assets/videos/dolphin-loading.mp4");
 
 type SplashScreenViewProps = {
-  onFinish?: () => void;
+  isReady: boolean;
+  onReady: () => Promise<void>;
+  onFinish: () => void;
   durationMs?: number;
 };
 
-export function SplashScreenView({
-  onFinish,
-  durationMs = 2200,
-}: SplashScreenViewProps) {
-  const { width: windowWidth } = useWindowDimensions();
-  const contentWidth = Math.min(windowWidth || 390, 480);
-  // Lazy useState rather than useRef(...).current: reading a ref during render
-  // is react-hooks/refs under eslint-plugin-react-hooks 7 (SDK 57). The lazy
-  // initialiser is also strictly less wasteful - useRef(new Animated.Value(1))
-  // constructed a fresh Animated.Value on every render and discarded it.
-  const [fadeAnim] = useState(() => new Animated.Value(1));
-  const [isVisible, setIsVisible] = useState(true);
+function subscribeToAppState(onChange: () => void) {
+  const subscription = AppState.addEventListener("change", onChange);
+  return () => subscription.remove();
+}
+
+function useReduceMotion() {
+  // Do not start a decoder or decorative animation until the setting resolves.
+  const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 450,
-        useNativeDriver: true,
-      }).start(() => {
-        setIsVisible(false);
-        onFinish?.();
+    let active = true;
+    let changed = false;
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      (enabled) => {
+        changed = true;
+        setReduceMotion(enabled);
+      },
+    );
+    void AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        if (active && !changed) setReduceMotion(enabled);
+      })
+      .catch(() => {
+        if (active && !changed) setReduceMotion(true);
       });
-    }, durationMs);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
 
+  return reduceMotion;
+}
+
+function DolphinLoop({ onError }: { onError: () => void }) {
+  const [hasFrame, setHasFrame] = useState(false);
+  const player = useVideoPlayer(dolphinLoop, (video) => {
+    video.loop = true;
+    video.muted = true;
+    video.audioMixingMode = "mixWithOthers";
+    video.allowsExternalPlayback = false;
+    video.keepScreenOnWhilePlaying = false;
+    video.staysActiveInBackground = false;
+    video.showNowPlayingNotification = false;
+  });
+
+  useEffect(() => {
+    const subscription = player.addListener("statusChange", ({ status }) => {
+      if (status === "error") onError();
+    });
+    player.play();
+    return () => subscription.remove();
+  }, [onError, player]);
+
+  // This child unmounts on background, Reduced Motion, failure and completion;
+  // useVideoPlayer then releases the native decoder instead of just hiding it.
+  return (
+    <VideoView
+      accessible={false}
+      allowsPictureInPicture={false}
+      allowsVideoFrameAnalysis={false}
+      contentFit="contain"
+      fullscreenOptions={{ enable: false }}
+      nativeControls={false}
+      onFirstFrameRender={() => setHasFrame(true)}
+      player={player}
+      playsInline
+      pointerEvents="none"
+      // Android needs a texture for the poster reveal and parent opacity fade.
+      // The small, bundled 512px clip limits compositing and decode work.
+      surfaceType="textureView"
+      useExoShutter={false}
+      style={[StyleSheet.absoluteFill, { opacity: hasFrame ? 1 : 0 }]}
+    />
+  );
+}
+
+export function SplashScreenView({
+  isReady,
+  onReady,
+  onFinish,
+  durationMs = 1400,
+}: SplashScreenViewProps) {
+  const { width, height } = useWindowDimensions();
+  const modelSize = Math.max(1, Math.min(width - 40, height * 0.42, 360));
+  const reduceMotion = useReduceMotion();
+  const appState = useSyncExternalStore(
+    subscribeToAppState,
+    () => AppState.currentState,
+    () => "active",
+  );
+  const isActive = appState === null || appState === "active";
+  const [opacity] = useState(() => new Animated.Value(1));
+  const [pulse] = useState(() => new Animated.Value(1));
+  const [laidOut, setLaidOut] = useState(false);
+  const [posterReady, setPosterReady] = useState(false);
+  const [posterWaitExpired, setPosterWaitExpired] = useState(false);
+  const [presented, setPresented] = useState(false);
+  const [minimumElapsed, setMinimumElapsed] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
+  const canPresent = laidOut && (posterReady || posterWaitExpired);
+  const canAnimate = presented && isActive && reduceMotion === false;
+  const handleVideoError = useCallback(() => setVideoFailed(true), []);
+
+  useEffect(() => {
+    // A missing/slow image must never trap users behind the native splash.
+    const timer = setTimeout(() => setPosterWaitExpired(true), 500);
     return () => clearTimeout(timer);
-  }, [durationMs, fadeAnim, onFinish]);
+  }, []);
 
-  if (!isVisible) {
-    return null;
-  }
+  useEffect(() => {
+    if (!canPresent) return;
+    let active = true;
+    void onReady()
+      .catch(() => {})
+      .then(() => {
+        if (active) setPresented(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [canPresent, onReady]);
+
+  useEffect(() => {
+    if (!presented || !isActive) return;
+    // Count only after the native cover is gone. Never wait for video loading
+    // or a full loop, and skip the visual hold when Reduced Motion is enabled.
+    const timer = setTimeout(
+      () => setMinimumElapsed(true),
+      reduceMotion === true ? 0 : durationMs,
+    );
+    return () => clearTimeout(timer);
+  }, [durationMs, isActive, presented, reduceMotion]);
+
+  useEffect(() => {
+    if (!minimumElapsed || !isReady || !isActive) return;
+    const fade = Animated.timing(opacity, {
+      toValue: 0,
+      duration: reduceMotion === true ? 0 : 280,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    fade.start(({ finished }) => {
+      if (finished) onFinish();
+    });
+    return () => fade.stop();
+  }, [isActive, isReady, minimumElapsed, onFinish, opacity, reduceMotion]);
+
+  useEffect(() => {
+    if (!canAnimate) return;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 0.3,
+          duration: 700,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+          isInteraction: false,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+          isInteraction: false,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [canAnimate, pulse]);
 
   return (
     <Animated.View
-      pointerEvents={fadeAnim ? "auto" : "none"}
-      style={[
-        StyleSheet.absoluteFill,
-        {
-          backgroundColor: colors.canvas,
-          zIndex: 99999,
-          opacity: fadeAnim,
-        },
-      ]}
+      accessibilityLabel="Dolphin. Opening your marketplace."
+      accessibilityRole="progressbar"
+      accessibilityState={{ busy: true }}
+      accessibilityViewIsModal
+      accessible
+      className="absolute inset-0 z-[99999]"
+      onLayout={() => setLaidOut(true)}
+      pointerEvents="auto"
+      style={{ backgroundColor: BACKGROUND, opacity }}
+      testID="dolphin-splash"
     >
-      <SafeAreaView
-        className="flex-1 items-center justify-between"
-        style={{ backgroundColor: colors.canvas }}
-      >
-        <ConstellationBg opacity={0.35} />
-
-        <View
-          className="flex-1 justify-between px-6 pt-4 pb-12"
-          style={{ maxWidth: "100%", width: contentWidth }}
-        >
-          {/* Top Brand Header */}
-          <View className="items-center pt-2">
-            <BrandMark size={36} />
-            <Text
-              className="mt-2 text-[16px] font-black uppercase tracking-[2px]"
-              style={{ color: colors.ink }}
-            >
-              DOLPHIN
-            </Text>
-            <Text
-              className="mt-0.5 text-[9px] font-bold uppercase tracking-[1.2px]"
-              style={{ color: colors.muted }}
-            >
-              ERC-8004 AI AGENT MARKETPLACE
-            </Text>
-            <View className="mt-2">
-              <BnbBadge label="BNB SMART CHAIN" />
-            </View>
-          </View>
-
-          {/* Center Graphic */}
-          <View className="my-auto flex-1 items-center justify-center py-2">
+      <SafeAreaView className="flex-1 items-center px-5">
+        <View className="w-full flex-1 items-center justify-center pb-10">
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={{ height: modelSize, width: modelSize }}
+          >
             <Image
-              cachePolicy="memory-disk"
+              accessible={false}
               contentFit="contain"
+              onDisplay={() => setPosterReady(true)}
+              onError={() => setPosterReady(true)}
               priority="high"
-              source={splashImage}
-              style={{
-                height: "100%",
-                maxHeight: 380,
-                width: "100%",
-              }}
+              source={dolphinPoster}
+              style={StyleSheet.absoluteFill}
             />
+            {canAnimate && !videoFailed ? (
+              <DolphinLoop onError={handleVideoError} />
+            ) : null}
           </View>
-
-          {/* Bottom Headline & Subtitle (Without continue button) */}
-          <View className="px-2 pb-6">
-            <Text
-              className="text-[32px] font-extrabold tracking-[-1px] leading-[38px]"
-              style={{ color: colors.ink }}
-            >
-              AI agents,{"\n"}made understandable
-            </Text>
-            <Text
-              className="mt-3 text-[15px] font-normal leading-6"
-              style={{ color: colors.muted }}
-            >
-              Discover onchain helpers that watch, protect, trade, and find
-              yield.
-            </Text>
-          </View>
+          <Text
+            className="mt-1 text-center text-[38px] font-semibold tracking-[-1.8px]"
+            style={{ color: "#202321" }}
+          >
+            Dolphin
+          </Text>
+          <Text
+            className="mt-3 text-center text-[13px] tracking-[0.4px]"
+            style={{ color: "#73766E" }}
+          >
+            Your agents. In motion.
+          </Text>
+        </View>
+        <View className="flex-row items-center justify-center gap-2.5 pb-9 pt-4">
+          <Animated.View
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ backgroundColor: "#B79142", opacity: canAnimate ? pulse : 1 }}
+          />
+          <Text
+            className="text-[11px] tracking-[0.5px]"
+            style={{ color: "#73766E" }}
+          >
+            Opening your marketplace
+          </Text>
         </View>
       </SafeAreaView>
     </Animated.View>

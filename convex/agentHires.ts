@@ -87,7 +87,24 @@ export const hireReadOnlyAgent = mutation({
       );
     }
 
-    if (!isFreePriceModel(priceModel)) {
+    /*
+     * A PAYMENT IS VERIFIED WHENEVER ONE IS CLAIMED, not only when the catalog
+     * says the agent is expensive.
+     *
+     * CHANGED 2026-09-06. The verification below used to sit entirely inside
+     * the non-zero-price branch, and `paidBy` was computed as
+     * `isFreePriceModel(priceModel) ? null : paymentJobId`. Dolphin's catalog
+     * prices EVERY agent at zero (no publisher exposes a price field), so a
+     * user who really did fund an escrow got a hire recorded with
+     * paymentJobId: null - and Manage then told them the hire was "Free" while
+     * the escrow row sat two sections below saying otherwise. The 2026-09-06
+     * fix to that screen made the contradiction visible; this is the actual
+     * cause of it.
+     *
+     * So: any claimed job is checked, and any checked job is recorded. The
+     * zero-price path is unchanged when nothing is claimed.
+     */
+    if (paymentJobId) {
       // ---------------------------------------------------------------------
       // CHANGED 2026-08-31. This used to refuse every non-zero price outright,
       // because there was no honest way to honour one. There is now: paid
@@ -102,15 +119,6 @@ export const hireReadOnlyAgent = mutation({
       // agent's own seller would never have been paid or notified, so nothing
       // false is claimed about it anywhere.
       // ---------------------------------------------------------------------
-      if (!paymentJobId) {
-        throw new Error(
-          `hireReadOnlyAgent: agent ${tokenId} charges ${priceModel.amount} ${priceModel.token} ` +
-            `(${priceModel.type}), so a hire needs a paid ERC-8183 job to point at. Pay through ` +
-            "agentPayments.recordJobPayment first - it verifies the escrow on-chain - then pass " +
-            "its jobId as paymentJobId. Dolphin will not record a paid hire on an unpaid promise.",
-        );
-      }
-
       const payment = await ctx.db
         .query("agentJobs")
         .withIndex("by_job", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("jobId", paymentJobId))
@@ -159,6 +167,18 @@ export const hireReadOnlyAgent = mutation({
       }
     }
 
+    // The original gate, unchanged in substance: a catalog price that is not
+    // zero may not be honoured on an unpaid promise. It reads after the
+    // verification now rather than instead of it.
+    if (!isFreePriceModel(priceModel) && !paymentJobId) {
+      throw new Error(
+        `hireReadOnlyAgent: agent ${tokenId} charges ${priceModel.amount} ${priceModel.token} ` +
+          `(${priceModel.type}), so a hire needs a paid ERC-8183 job to point at. Pay through ` +
+          "agentPayments.recordJobPayment first - it verifies the escrow on-chain - then pass " +
+          "its jobId as paymentJobId. Dolphin will not record a paid hire on an unpaid promise.",
+      );
+    }
+
     const existing = await ctx.db
       .query("agentHires")
       .withIndex("by_agent_wallet", (q) =>
@@ -168,8 +188,14 @@ export const hireReadOnlyAgent = mutation({
 
     const hiredAt = new Date().toISOString();
 
-    // Null for a free hire, which is the honest value: nothing paid for it.
-    const paidBy = isFreePriceModel(priceModel) ? null : (paymentJobId ?? null);
+    /*
+     * Whatever actually paid for this hire, or null when nothing did.
+     *
+     * Not derived from the catalog price any more. The catalog says zero for
+     * every agent, so deriving it from there discarded real, on-chain-verified
+     * payments and recorded them as free hires.
+     */
+    const paidBy = paymentJobId ?? null;
 
     if (existing) {
       if (existing.status === "active") {

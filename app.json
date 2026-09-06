@@ -44,7 +44,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#F6F4EE",
-          "image": "./assets/images/SplashScreen.jpeg",
+          "image": "./assets/images/dolphin-loading.png",
+          "imageWidth": 320,
           "resizeMode": "contain"
         }
       ],

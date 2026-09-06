@@ -105,7 +105,10 @@ function DolphinLoop({ onError }: { onError: () => void }) {
       // The small, bundled 512px clip limits compositing and decode work.
       surfaceType="textureView"
       useExoShutter={false}
-      style={[StyleSheet.absoluteFill, { opacity: hasFrame ? 1 : 0 }]}
+      style={[
+        StyleSheet.absoluteFill,
+        { width: "100%", height: "100%", opacity: hasFrame ? 1 : 0 },
+      ]}
     />
   );
 }

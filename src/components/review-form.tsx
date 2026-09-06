@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Linking, Text, TextInput, View } from "react-native";
 import * as Haptics from "expo-haptics";
 
 import { Button } from "@/components/buttons";
@@ -7,6 +7,7 @@ import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { colors, radii } from "@/constants/theme";
 import {
+  usePublishReviewOnChain,
   useReviewEligibility,
   useSubmitReview,
   type ReviewOutcome,
@@ -231,6 +232,135 @@ function BackendReviewForm({ tokenId }: { tokenId: string }) {
           }
           loading={status === "saving"}
           onPress={() => void handleSubmit()}
+        />
+      </View>
+
+      {/*
+       * Publishing on-chain is offered only once a review exists, because it
+       * publishes THAT review. Never automatic and never bundled into the save
+       * button: it spends the user's own BNB, and a control that spends money
+       * has to be its own deliberate decision.
+       */}
+      {existing ? (
+        <PublishOnChain
+          existingTxHash={existing.onChainTxHash}
+          outcome={existing.outcome}
+          tokenId={tokenId}
+          wouldHireAgain={existing.wouldHireAgain}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * The optional second step: mirror this review into the ERC-8004 Reputation
+ * Registry, from the reviewer's own wallet.
+ *
+ * WHY OFFER IT AT ALL. Dolphin already declared the registry's address in
+ * constants and had never once read or written it. Publishing there turns this
+ * app from a consumer of the standard into a contributor to it: the review
+ * becomes portable, survives Dolphin, and is readable by any other ERC-8004
+ * client. That is the actual argument for putting a review on a public chain
+ * rather than in a database, and it is the only one worth spending someone's
+ * gas on.
+ *
+ * WHAT IS SAID PLAINLY, BEFORE THE BUTTON. It costs real BNB. It cannot be
+ * deleted. And the comment does NOT go on-chain - only the two structured
+ * answers do, because Dolphin hosts no off-chain JSON to point a feedbackURI at
+ * and will not publish a URL to a file that does not exist
+ * (services/reputation-registry.ts).
+ */
+function PublishOnChain({
+  tokenId,
+  outcome,
+  wouldHireAgain,
+  existingTxHash,
+}: {
+  tokenId: string;
+  outcome: ReviewOutcome;
+  wouldHireAgain: boolean;
+  existingTxHash: string | null;
+}) {
+  const publish = usePublishReviewOnChain();
+  const [status, setStatus] = useState<"idle" | "publishing">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  if (existingTxHash) {
+    return (
+      <View
+        className="mt-4 rounded-xl border p-3"
+        style={{ backgroundColor: colors.goldMuted, borderColor: colors.goldBorder }}
+      >
+        <Text className="text-[12px] font-bold" style={{ color: colors.goldDark }}>
+          Published to the ERC-8004 registry
+        </Text>
+        <Text className="mt-1 text-[11px] leading-4" style={{ color: colors.muted }}>
+          This review is on BNB Smart Chain and any other ERC-8004 client can read
+          it.
+        </Text>
+        <PressableScale
+          accessibilityLabel="View the transaction on BscScan"
+          accessibilityRole="button"
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            void Linking.openURL(`https://bscscan.com/tx/${existingTxHash}`);
+          }}
+          containerStyle={{ marginTop: 8 }}
+        >
+          <Text className="text-[11px] font-bold" style={{ color: colors.goldDark }}>
+            View transaction →
+          </Text>
+        </PressableScale>
+      </View>
+    );
+  }
+
+  const handlePublish = async () => {
+    setStatus("publishing");
+    setError(null);
+    try {
+      await publish({ tokenId, outcome, wouldHireAgain });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (cause) {
+      setError(toUserMessage(cause, "Could not publish this review on-chain."));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setStatus("idle");
+    }
+  };
+
+  return (
+    <View
+      className="mt-4 border-t pt-4"
+      style={{ borderColor: colors.lineLight }}
+    >
+      <Text className="text-[12px] font-bold" style={{ color: colors.ink }}>
+        Publish this on-chain
+      </Text>
+      <Text className="mt-1 text-[11px] leading-4" style={{ color: colors.muted }}>
+        Writes your two answers into the ERC-8004 Reputation Registry on BNB
+        Smart Chain, so any other client of the standard can read them and the
+        review outlives Dolphin.
+      </Text>
+      <Text className="mt-2 text-[11px] leading-4" style={{ color: colors.muted }}>
+        It costs gas in real BNB, it cannot be deleted afterwards, and your
+        written comment stays in Dolphin — only the two answers are published.
+      </Text>
+
+      {error ? (
+        <Text className="mt-2 text-[11px] leading-4" style={{ color: colors.danger }}>
+          {error}
+        </Text>
+      ) : null}
+
+      <View className="mt-3">
+        <Button
+          disabled={status === "publishing"}
+          label={status === "publishing" ? "Confirm in your wallet…" : "Publish on-chain"}
+          loading={status === "publishing"}
+          onPress={() => void handlePublish()}
+          variant="secondary"
         />
       </View>
     </View>

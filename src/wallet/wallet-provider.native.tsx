@@ -63,7 +63,7 @@ import {
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { getAddress } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
-import { WagmiProvider, useSignMessage } from "wagmi";
+import { WagmiProvider, useSignMessage, useSwitchChain, useWriteContract } from "wagmi";
 
 import type {
   WalletConnectButtonProps,
@@ -198,12 +198,17 @@ const unavailableWallet: WalletContextValue = {
   signMessage: async () => {
     throw new Error(MISSING_PROJECT_ID_MESSAGE);
   },
+  writeContract: async () => {
+    throw new Error(MISSING_PROJECT_ID_MESSAGE);
+  },
 };
 
 function ReownWalletBridge({ children }: PropsWithChildren) {
   const { address, chainId, isConnected } = useAccount();
   const { disconnect, open } = useAppKit();
   const { signMessageAsync } = useSignMessage();
+  const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
 
   const value = useMemo<WalletContextValue>(
     () => ({
@@ -242,8 +247,56 @@ function ReownWalletBridge({ children }: PropsWithChildren) {
         // failing later inside wagmi.
         return signMessageAsync({ account: getAddress(address), message });
       },
+      /**
+       * One contract call, on a chain the wallet has been confirmed to be on.
+       *
+       * The chain is checked and, if wrong, a switch is REQUESTED rather than
+       * assumed: sending a call to the right address on the wrong chain either
+       * reverts or hits whatever unrelated contract occupies that address
+       * there, and the second outcome is bad enough to be worth a refusal. If
+       * the user declines the switch, this throws and nothing is sent.
+       */
+      writeContract: async (request) => {
+        if (!isConnected || !address) {
+          throw new Error(
+            "Connect a wallet before sending a transaction.",
+          );
+        }
+
+        const currentChainId = Number(chainId);
+        if (currentChainId !== request.chainId) {
+          try {
+            await switchChainAsync({ chainId: request.chainId });
+          } catch (cause) {
+            throw new Error(
+              `This transaction must be sent on chain ${request.chainId}, and the wallet is on ` +
+                `${Number.isNaN(currentChainId) ? "an unknown chain" : `chain ${currentChainId}`}. ` +
+                "Switch networks in your wallet and try again.",
+              { cause },
+            );
+          }
+        }
+
+        return writeContractAsync({
+          account: getAddress(address),
+          address: request.address,
+          abi: request.abi as never,
+          functionName: request.functionName as never,
+          args: request.args as never,
+          chainId: request.chainId as never,
+        });
+      },
     }),
-    [address, chainId, disconnect, isConnected, open, signMessageAsync],
+    [
+      address,
+      chainId,
+      disconnect,
+      isConnected,
+      open,
+      signMessageAsync,
+      switchChainAsync,
+      writeContractAsync,
+    ],
   );
 
   return (

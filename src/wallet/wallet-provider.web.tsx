@@ -20,6 +20,9 @@ const webWallet: WalletContextValue = {
   signMessage: async () => {
     throw new Error(NATIVE_BUILD_REQUIRED_MESSAGE);
   },
+  writeContract: async () => {
+    throw new Error(NATIVE_BUILD_REQUIRED_MESSAGE);
+  },
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);

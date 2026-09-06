@@ -1,7 +1,19 @@
 import { v } from "convex/values";
+import { decodeFunctionData, getAddress } from "viem";
 
-import { mutation, query } from "./_generated/server";
-import { BSC_CHAIN_ID } from "./lib/bscClient";
+import { internal } from "./_generated/api";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
+import { BSC_CHAIN_ID, bscPublicClient } from "./lib/bscClient";
+import {
+  REPUTATION_REGISTRY_ABI,
+  REPUTATION_REGISTRY_ADDRESS,
+} from "./lib/reputationRegistry";
 import { requireWalletAddress } from "./lib/walletAuth";
 
 /**
@@ -244,6 +256,165 @@ export const submitReview = mutation({
       onChainTxHash: null,
     });
 
+    return null;
+  },
+});
+
+/**
+ * Records that a review was mirrored into the ERC-8004 Reputation Registry -
+ * after reading the transaction back off BNB Chain and checking it really was.
+ *
+ * ---------------------------------------------------------------------------
+ * A WITNESS, NOT A NOTE-TAKER
+ * ---------------------------------------------------------------------------
+ * This is the same shape as convex/agentPayments.ts's recordJobPayment and for
+ * the same reason. The client hands over a transaction hash; everything that
+ * matters is then read from the chain and compared against what this backend
+ * independently knows. A client that made the hash up, or borrowed someone
+ * else's, gets an error naming the failed check rather than an "On-chain" badge.
+ *
+ * Five checks, and each one exists because of a specific way this could
+ * otherwise be lied to:
+ *
+ *   1. the transaction succeeded          a reverted tx published nothing
+ *   2. it was sent to the registry        otherwise it is some unrelated tx
+ *   3. its sender is the reviewer         otherwise it is someone else's review
+ *   4. its calldata is giveFeedback       right contract, wrong function
+ *   5. its agentId is this agent          right function, different agent
+ *
+ * Nothing here can cause a transaction, only confirm one. Convex holds no key
+ * material and this project does not start now.
+ */
+export const attestReviewOnChain = action({
+  args: {
+    sessionToken: v.string(),
+    tokenId: v.string(),
+    transactionHash: v.string(),
+  },
+  returns: v.object({ transactionHash: v.string() }),
+  handler: async (
+    ctx,
+    { sessionToken, tokenId, transactionHash },
+  ): Promise<{ transactionHash: string }> => {
+    const reviewer: string = await ctx.runQuery(
+      internal.agentReviews.reviewerForSession,
+      { sessionToken, tokenId },
+    );
+
+    if (!/^0x[0-9a-fA-F]{64}$/.test(transactionHash)) {
+      throw new Error(`attestReviewOnChain: "${transactionHash}" is not a transaction hash.`);
+    }
+    const hash = transactionHash as `0x${string}`;
+
+    const receipt = await bscPublicClient.getTransactionReceipt({ hash });
+    if (receipt.status !== "success") {
+      throw new Error(
+        "That transaction reverted, so nothing was published to the registry. Nothing has been recorded.",
+      );
+    }
+    if (
+      !receipt.to ||
+      getAddress(receipt.to) !== getAddress(REPUTATION_REGISTRY_ADDRESS)
+    ) {
+      throw new Error(
+        `That transaction was sent to ${receipt.to ?? "a contract creation"}, not to the ERC-8004 ` +
+          "Reputation Registry. Refusing to mark a review as published by it.",
+      );
+    }
+    if (getAddress(receipt.from) !== getAddress(reviewer)) {
+      throw new Error(
+        `That transaction was sent by ${getAddress(receipt.from)}, not by ${getAddress(reviewer)}. ` +
+          "A review can only be published by the wallet that wrote it.",
+      );
+    }
+
+    const transaction = await bscPublicClient.getTransaction({ hash });
+    let decoded;
+    try {
+      decoded = decodeFunctionData({
+        abi: REPUTATION_REGISTRY_ABI,
+        data: transaction.input,
+      });
+    } catch {
+      throw new Error(
+        "That transaction's calldata is not a call this registry's giveFeedback function would produce.",
+      );
+    }
+    if (decoded.functionName !== "giveFeedback") {
+      throw new Error(
+        `That transaction called ${decoded.functionName}, not giveFeedback.`,
+      );
+    }
+
+    const agentIdArg = decoded.args[0];
+    if (String(agentIdArg) !== tokenId) {
+      throw new Error(
+        `That transaction left feedback for agent ${String(agentIdArg)}, not agent ${tokenId}.`,
+      );
+    }
+
+    await ctx.runMutation(internal.agentReviews.setReviewTransaction, {
+      tokenId,
+      walletAddress: reviewer,
+      transactionHash: hash,
+    });
+
+    return { transactionHash: hash };
+  },
+});
+
+/**
+ * The signed-in address, but only if it already has a review of this agent.
+ *
+ * Internal, and deliberately does both jobs at once: an attestation with no
+ * review to attach to is meaningless, and checking that here means the action
+ * cannot proceed far enough to read a chain on behalf of a caller with nothing
+ * at stake.
+ */
+export const reviewerForSession = internalQuery({
+  args: { sessionToken: v.string(), tokenId: v.string() },
+  returns: v.string(),
+  handler: async (ctx, { sessionToken, tokenId }) => {
+    const walletAddress = await requireWalletAddress(
+      ctx,
+      sessionToken,
+      "attestReviewOnChain",
+    );
+
+    const review = await ctx.db
+      .query("agentReviews")
+      .withIndex("by_agent_reviewer", (q) =>
+        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+      )
+      .unique();
+
+    if (!review) {
+      throw new Error(
+        "attestReviewOnChain: there is no Dolphin review by this wallet to attach a transaction to. Save the review first.",
+      );
+    }
+
+    return walletAddress;
+  },
+});
+
+export const setReviewTransaction = internalMutation({
+  args: {
+    tokenId: v.string(),
+    walletAddress: v.string(),
+    transactionHash: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, { tokenId, walletAddress, transactionHash }) => {
+    const review = await ctx.db
+      .query("agentReviews")
+      .withIndex("by_agent_reviewer", (q) =>
+        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+      )
+      .unique();
+
+    if (!review) return null;
+    await ctx.db.patch(review._id, { onChainTxHash: transactionHash });
     return null;
   },
 });

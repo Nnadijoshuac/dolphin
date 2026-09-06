@@ -197,10 +197,11 @@ export default function SearchScreen() {
             <PressableScale
               accessibilityLabel="Clear search text"
               accessibilityRole="button"
+              hitSlop={8}
               onPress={() => setQuery("")}
               containerStyle={{ padding: 4 }}
             >
-              <CategoryGlyph color="#8C8E88" name="revoke" size={14} />
+              <CategoryGlyph color="#8C8E88" name="close" size={14} />
             </PressableScale>
           ) : null}
         </View>
@@ -256,6 +257,7 @@ export default function SearchScreen() {
                     <PressableScale
                       accessibilityLabel="Clear search history"
                       accessibilityRole="button"
+                      hitSlop={8}
                       onPress={() => clearRecentSearches()}
                     >
                       <Text className="text-[11px] font-bold text-zinc-400">
@@ -265,20 +267,44 @@ export default function SearchScreen() {
                   ) : null}
                 </View>
 
-                <View className="rounded-xl bg-white border border-black/5 overflow-hidden divide-y divide-black/5">
-                  {recentSearches.slice(0, 4).map((item) => (
+                <View
+                  className="rounded-2xl bg-white overflow-hidden"
+                  style={{
+                    borderColor: "rgba(17,18,20,0.06)",
+                    borderWidth: 1,
+                    ...shadows.subtle,
+                  }}
+                >
+                  {recentSearches.slice(0, 4).map((item, index) => (
                     <View
                       key={item}
-                      className="flex-row items-center justify-between px-3.5 py-2.5"
+                      className="flex-row items-center justify-between px-3.5 py-3"
+                      style={
+                        index > 0
+                          ? {
+                              borderTopWidth: 1,
+                              borderTopColor: "rgba(17,18,20,0.06)",
+                            }
+                          : undefined
+                      }
                     >
                       <PressableScale
                         accessibilityLabel={`Search ${item}`}
                         accessibilityRole="button"
-                        className="flex-1 flex-row items-center gap-2.5"
+                        style={{ flex: 1 }}
+                        containerStyle={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
                         onPress={() => handleTagPress(item)}
                       >
-                        <CategoryGlyph color="#8C8E88" name="clock" size={14} />
-                        <Text className="text-[13.5px] font-medium text-zinc-800">
+                        <CategoryGlyph color="#8C8E88" name="clock" size={15} />
+                        <Text
+                          className="text-[13.5px] font-medium flex-1"
+                          numberOfLines={1}
+                          style={{ color: colors.ink }}
+                        >
                           {item}
                         </Text>
                       </PressableScale>
@@ -286,10 +312,11 @@ export default function SearchScreen() {
                       <PressableScale
                         accessibilityLabel={`Remove ${item}`}
                         accessibilityRole="button"
+                        hitSlop={8}
                         onPress={() => removeRecentSearch(item)}
                         containerStyle={{ padding: 4 }}
                       >
-                        <CategoryGlyph color="#A0A0A0" name="revoke" size={13} />
+                        <CategoryGlyph color="#A0A0A0" name="close" size={14} />
                       </PressableScale>
                     </View>
                   ))}

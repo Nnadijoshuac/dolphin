@@ -19,6 +19,7 @@ import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
+import { sortHireableFirst } from "@/services/hireability";
 import type { Agent, AgentCategory } from "@/types/agent";
 
 const categoryLabels: Record<AgentCategory, string> = {
@@ -231,7 +232,11 @@ export default function DiscoverScreen() {
           scrollEventThrottle={16}
         >
           {AGENT_CATEGORIES.map((cat) => {
-            const categoryAgents = agents?.filter((agent) => agent.category === cat.slug) ?? [];
+            // Hireable first. A user browsing a category should meet the agents
+            // they can actually buy from before the ones they cannot.
+            const categoryAgents = sortHireableFirst(
+              agents?.filter((agent) => agent.category === cat.slug) ?? [],
+            );
             return (
               <View key={cat.slug} style={{ width: screenWidth }} className="px-4 pt-3">
                 {isLoading ? (

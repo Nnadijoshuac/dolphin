@@ -18,6 +18,7 @@ import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
 import { useAgents } from "@/hooks/use-agents";
 import { searchAgentsLocally } from "@/services/agents-api";
+import { sortHireableFirst } from "@/services/hireability";
 import { useAppStore } from "@/store/use-app-store";
 import type { Agent, AgentCategory } from "@/types/agent";
 
@@ -61,7 +62,9 @@ export default function SearchScreen() {
 
   const searchResults = useMemo(() => {
     if (!allAgents || !query.trim()) return [];
-    return searchAgentsLocally(allAgents, query);
+    // Relevance decides the order, then hireability breaks it: two equally
+    // relevant agents are not equally useful if only one can be hired.
+    return sortHireableFirst(searchAgentsLocally(allAgents, query));
   }, [allAgents, query]);
 
   /**
@@ -410,7 +413,7 @@ export default function SearchScreen() {
                   {allAgents.length} on BNB Chain
                 </Text>
                 <View className="gap-2.5">
-                  {allAgents.map((agent) => (
+                  {sortHireableFirst(allAgents).map((agent) => (
                     <AgentRow
                       key={agent.id}
                       agent={agent}

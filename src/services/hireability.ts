@@ -105,3 +105,25 @@ export function assessHireability(
 export function hireableAgents(agents: readonly Agent[]): Agent[] {
   return agents.filter((agent) => assessHireability(agent).hireable);
 }
+
+/**
+ * Hireable agents first, original order preserved within each group.
+ *
+ * A stable partition rather than a sort key, so the catalog's own ordering
+ * (which carries curation and category intent) survives inside each half. The
+ * only thing being asserted is that an agent you can actually hire should not
+ * sit below one you cannot.
+ *
+ * This does NOT hide anything. A non-hireable agent is a real registry identity
+ * and stays in the list, marked - see the note on hireableAgents above for why
+ * filtering the catalog down to what is purchasable would make the marketplace
+ * look fuller than it is rather than more honest.
+ */
+export function sortHireableFirst(agents: readonly Agent[]): Agent[] {
+  const hireable: Agent[] = [];
+  const rest: Agent[] = [];
+  for (const agent of agents) {
+    (assessHireability(agent).hireable ? hireable : rest).push(agent);
+  }
+  return [...hireable, ...rest];
+}

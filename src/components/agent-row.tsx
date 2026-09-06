@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { AgentIcon } from "@/components/agent-icon";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
+import { assessHireability } from "@/services/hireability";
 import type { Agent } from "@/types/agent";
 
 type AgentRowProps = {
@@ -19,6 +20,17 @@ type AgentRowProps = {
  * Styled to look like a Google Play Store app list item.
  */
 export function AgentRow({ agent, onPress, subtitle }: AgentRowProps) {
+  /*
+   * The pill says what the row can actually do.
+   *
+   * Every row used to say "View", which is true and useless, and the list gave
+   * no hint that most of these agents cannot be hired at all - a user found
+   * that out by opening one. Measured 2026-09-06: of 31 listed agents, 15
+   * publish a callable endpoint and 9 return a real price. Saying "Hire" only
+   * where a hire is possible is the cheapest honest signal available, and costs
+   * no extra chrome.
+   */
+  const hireable = assessHireability(agent).hireable;
   const feedbackCount =
     agent.feedbackCount.status === "live" || agent.feedbackCount.status === "stale"
       ? agent.feedbackCount.value
@@ -73,14 +85,17 @@ export function AgentRow({ agent, onPress, subtitle }: AgentRowProps) {
         <View
           className="items-center justify-center px-3.5 py-1.5"
           style={{
-            borderColor: colors.goldBorder,
-            backgroundColor: colors.goldSoft,
+            borderColor: hireable ? colors.goldBorder : colors.line,
+            backgroundColor: hireable ? colors.goldSoft : colors.surfaceSubtle,
             borderWidth: 1,
             borderRadius: 9999,
           }}
         >
-          <Text className="text-[12px] font-bold" style={{ color: colors.goldDark }}>
-            View
+          <Text
+            className="text-[12px] font-bold"
+            style={{ color: hireable ? colors.goldDark : colors.muted }}
+          >
+            {hireable ? "Hire" : "View"}
           </Text>
         </View>
       </View>

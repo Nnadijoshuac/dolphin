@@ -46,6 +46,9 @@
           "backgroundColor": "#F6F4EE",
           "image": "./assets/images/dolphin-loading.png",
           "imageWidth": 320,
+          "android": {
+            "imageWidth": 240
+          },
           "resizeMode": "contain"
         }
       ],

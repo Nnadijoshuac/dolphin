@@ -13,6 +13,43 @@ export default defineSchema({
     checkedAt: v.string(),
   }).index("by_agent_category", ["chainId", "tokenId", "category"]),
 
+  /**
+   * THE TRACK RECORD. One row per real on-chain reading Dolphin has taken of an
+   * agent's headline metric, kept instead of discarded.
+   *
+   * agentLiveStats above holds only the LATEST reading, because it upserts. That
+   * is correct for "what is true now" and it is why the agent detail page's
+   * chart had no source at all: `performanceSeries` was hardcoded `[]` and
+   * nothing wrote it, so a permanent "track record syncing" state described an
+   * indexer that did not exist.
+   *
+   * Every row here is one protocol read - Venus, PancakeSwap V3, Aave - at the
+   * timestamp it was taken, carrying the source label the metric itself carried.
+   * Nothing is interpolated, backfilled or seeded. An agent nobody has opened
+   * twice has no chart, and that is the honest answer rather than a flat line.
+   *
+   * BOUNDED ON BOTH AXES, deliberately. Writes are gated to one per hour per
+   * agent-category (MIN_OBSERVATION_GAP_MS) and pruned to MAX_OBSERVATIONS, so
+   * a table that only ever grows cannot repeat the storage-ceiling incident of
+   * 2026-09-02 (SESSION-LOG-2026-09-06 §1). See convex/lib/statsHistory.ts.
+   */
+  agentStatsHistory: defineTable({
+    chainId: v.number(),
+    tokenId: v.string(),
+    category: agentCategoryValidator,
+    /** Which field of the category's stats this point is. See CHART_METRIC_BY_CATEGORY. */
+    metric: v.string(),
+    value: v.number(),
+    /** ISO timestamp of the read itself, not of the insert. */
+    observedAt: v.string(),
+    /** Denormalized DataSourceLabel: a point should keep saying where it came from. */
+    source: v.object({
+      id: v.string(),
+      label: v.string(),
+      url: v.optional(v.string()),
+    }),
+  }).index("by_agent_category", ["chainId", "tokenId", "category"]),
+
   agentHires: defineTable({
     chainId: v.number(),
     tokenId: v.string(),

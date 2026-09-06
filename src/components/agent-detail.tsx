@@ -11,7 +11,10 @@ import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { colors, radii, shadows } from "@/constants/theme";
 import { syncingLiveStats } from "@/data/editorial-agents";
-import { useAgentCategoryStats } from "@/hooks/use-category-stats";
+import {
+  useAgentCategoryStats,
+  useAgentStatsHistory,
+} from "@/hooks/use-category-stats";
 import { convexClient } from "@/providers/convex-provider";
 import type {
   Agent,
@@ -356,6 +359,43 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   );
 }
 
+/* ─────────────── track record ─────────────── */
+
+/**
+ * The chart, sourced from convex/categoryStats.ts's stored observations.
+ *
+ * Split out for the same reason LiveStats is: the history query is a Convex
+ * hook, and convex/react's hooks throw without a provider, so a build with no
+ * EXPO_PUBLIC_CONVEX_URL must not mount one. That build has no stored
+ * observations by definition, which is exactly what the no-backend branch says.
+ */
+function TrackRecord({ agent }: { agent: Agent }) {
+  if (!convexClient) {
+    return (
+      <StatePanel
+        body="This build has no Dolphin backend configured, so no readings have been stored to chart."
+        compact
+        state="unavailable"
+        title="Track record unavailable"
+      />
+    );
+  }
+
+  return <BackendTrackRecord agent={agent} />;
+}
+
+function BackendTrackRecord({ agent }: { agent: Agent }) {
+  const history = useAgentStatsHistory(agent.tokenId, agent.category);
+
+  return (
+    <PerformancePanel
+      isLoading={history === undefined}
+      metricLabel={history?.metricLabel ?? null}
+      points={history?.points ?? []}
+    />
+  );
+}
+
 /* ─────────────── the page ─────────────── */
 
 type AgentDetailProps = {
@@ -607,49 +647,38 @@ export function AgentDetail({
         <LiveStats agent={agent} />
       </Section>
 
-      {/* ── 6. published track record ──────────────────────────────────── */}
-      <Section title="Published track record">
-        <PerformancePanel points={agent.performanceSeries} />
+      {/* ── 6. track record ────────────────────────────────────────────── */}
+      <Section
+        caption="Every reading Dolphin has taken of this agent's headline metric, kept rather than overwritten. Each point is one protocol read at the time it was taken."
+        title="Track record"
+      >
+        <TrackRecord agent={agent} />
       </Section>
 
-      {/* ── 7. recent on-chain activity ────────────────────────────────── */}
-      <Section title="Recent on-chain activity">
-        {agent.recentActivity.length > 0 ? (
-          <Card style={{ paddingBottom: 7 }}>
-            {agent.recentActivity.map((activity, index) => (
-              <View
-                key={`${activity.timestamp}-${activity.action}`}
-                style={{
-                  borderTopColor: colors.lineLight,
-                  borderTopWidth: index === 0 ? 0 : 1,
-                  paddingBottom: 12,
-                  paddingTop: index === 0 ? 0 : 12,
-                }}
-              >
-                <Text
-                  className="text-[14px] font-bold"
-                  style={{ color: colors.ink }}
-                >
-                  {activity.action}
-                </Text>
-                <Text
-                  className="mt-1 text-[11px]"
-                  style={{ color: colors.muted }}
-                >
-                  {activity.timestamp} · {activity.source.label}
-                </Text>
-              </View>
-            ))}
-          </Card>
-        ) : (
-          <StatePanel
-            body="No auditable execution events were returned by the current data sources."
-            compact
-            state="unavailable"
-            title="Activity not published"
-          />
-        )}
-      </Section>
+      {/*
+       * ── 7. WAS: recent on-chain activity ─────────────────────────────
+       *
+       * REMOVED 2026-09-06. `recentActivity` is hardcoded `[]` in
+       * convex/lib/agentCatalog.ts and src/data/editorial-agents.ts, and
+       * nothing in the codebase has ever written it. So this section rendered
+       * "Activity not published - no auditable execution events were returned
+       * by the current data sources" for 100% of agents, permanently, implying
+       * a source that had been consulted and had come back empty. No source was
+       * ever consulted, because none is wired.
+       *
+       * That is the same class of defect as the fake numbers listed at the top
+       * of this file: a truthful-sounding sentence creating a false impression
+       * about a real agent. It goes for the same reason they went.
+       *
+       * TO BRING IT BACK, it needs an actual source, and two real ones exist:
+       * ERC-8004 identity-registry logs for this tokenId (registration,
+       * metadata updates, ownership transfers - readable with viem's getLogs,
+       * no API key), and ERC-8183 kernel jobs whose provider is this agent's
+       * wallet, which is the far more valuable signal because it is work the
+       * agent was actually paid for. Both are getLogs range-limited on the
+       * public BSC dataseed endpoints, so either needs its range strategy
+       * settled before it is promised in the UI. Tracked in Agent/TODO.md.
+       */}
 
       {/* ── 8. what hiring this actually does ──────────────────────────── */}
       <Section

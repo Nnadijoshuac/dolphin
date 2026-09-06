@@ -54,3 +54,29 @@ export function useAgentCategoryStats(
 
   return cached;
 }
+
+/**
+ * The agent's charted track record: every real on-chain reading Dolphin has
+ * kept for this agent-category, oldest first, with the name of the metric being
+ * charted.
+ *
+ * The points are written by convex/categoryStats.ts as a by-product of the
+ * refresh above - each one is a protocol read that actually happened, at the
+ * timestamp it happened, carrying its own source label. Nothing is
+ * interpolated or seeded, so an agent that has been observed once has one
+ * point and no chart, which is the honest state rather than a flat line.
+ *
+ * Same precondition as useAgentCategoryStats: only call this under a
+ * configured ConvexClientProvider.
+ */
+export function useAgentStatsHistory(
+  tokenId: string | null | undefined,
+  category: AgentCategory | null | undefined,
+) {
+  return useQuery(
+    api.categoryStats.getAgentStatsHistory,
+    tokenId && category
+      ? { tokenId, category }
+      : "skip",
+  );
+}

@@ -233,7 +233,22 @@ export const requestQuote = action({
       );
     }
 
-    const endpoint = selectNegotiationEndpoint(agent.services);
+    /*
+     * Prefer the endpoint the sellability probe RESOLVED FROM THE AGENT'S CARD
+     * over one derived from the registered URL by path-stripping.
+     *
+     * Measured 2026-09-06: for most of this catalog the registered `a2a` value
+     * is the discovery document, and the real JSON-RPC url lives in the card's
+     * `url` field at a path no string manipulation could produce
+     * (/agents/1/agent-card.json -> /api/a2a). Deriving it here while the probe
+     * used the card would mean the hire knocks on a different door than the one
+     * that answered, so the catalog and the checkout would disagree.
+     *
+     * Falls back to the heuristic when no probe has stored one yet.
+     */
+    const endpoint =
+      (agent as { a2aEndpoint?: string | null }).a2aEndpoint ??
+      selectNegotiationEndpoint(agent.services);
     if (!endpoint) {
       throw new Error(
         `${agent.name} publishes no callable A2A endpoint, so there is no one to ask for a price.`,
@@ -308,7 +323,11 @@ export const notifyJobFunded = action({
     const agent = await ctx.runQuery(api.agents.getAgent, { reference: tokenId });
     if (!agent) throw new Error(`notifyJobFunded: agent ${tokenId} is not in Dolphin's catalog.`);
 
-    const endpoint = selectNegotiationEndpoint(agent.services);
+    // Same resolution as requestQuote - notifying a different endpoint than the
+    // one that quoted would tell the wrong server its job was funded.
+    const endpoint =
+      (agent as { a2aEndpoint?: string | null }).a2aEndpoint ??
+      selectNegotiationEndpoint(agent.services);
     if (!endpoint) {
       throw new Error(`${agent.name} publishes no callable A2A endpoint to notify.`);
     }

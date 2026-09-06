@@ -332,6 +332,12 @@ export default defineSchema({
     sellsServiceCount: v.optional(v.union(v.number(), v.null())),
     /** Drives the delist-after-N rule for TRANSPORT failures only. */
     consecutiveSellFailures: v.optional(v.number()),
+    /**
+     * The A2A JSON-RPC endpoint resolved from the agent's own card, which is
+     * frequently NOT derivable from the registered service URL. Stored so the
+     * hire path posts to the same door the probe proved answers.
+     */
+    a2aEndpoint: v.optional(v.union(v.string(), v.null())),
   }).index("by_agent", ["chainId", "tokenId"]),
 
   /**

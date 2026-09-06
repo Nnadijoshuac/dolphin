@@ -76,6 +76,7 @@ type DirectoryRow = {
   sellsServiceCount?: number | null;
   sellsCheckedAt?: string | null;
   consecutiveSellFailures?: number | null;
+  a2aEndpoint?: string | null;
   /** Resolved from iconStorageId by buildCatalog - not a stored column. */
   cachedIconUrl?: string | null;
 };
@@ -234,6 +235,9 @@ async function buildCatalog(ctx: QueryCtx): Promise<CatalogAgent[]> {
         sellsDetail: row.sellsDetail ?? null,
         sellsServiceCount: row.sellsServiceCount ?? null,
         consecutiveSellFailures: row.consecutiveSellFailures ?? 0,
+        // The door the probe proved answers. requestQuote prefers this over
+        // re-deriving one with the path heuristic.
+        a2aEndpoint: row.a2aEndpoint ?? null,
       };
     }),
   );
@@ -524,6 +528,7 @@ export const refreshAgentDirectory = internalAction({
           sellsDetail: sell.detail,
           sellsServiceCount: sell.serviceCount,
           sellsCheckedAt: new Date().toISOString(),
+          a2aEndpoint: sell.endpoint,
           name: readString(data, "name"),
           description: readString(data, "description"),
           iconUrl: readHttpUrl(data, "image_url"),
@@ -592,6 +597,7 @@ export const upsertAgentDirectory = internalMutation({
     sellsDetail: v.string(),
     sellsServiceCount: v.union(v.number(), v.null()),
     sellsCheckedAt: v.string(),
+    a2aEndpoint: v.union(v.string(), v.null()),
     name: v.union(v.string(), v.null()),
     description: v.union(v.string(), v.null()),
     iconUrl: v.union(v.string(), v.null()),

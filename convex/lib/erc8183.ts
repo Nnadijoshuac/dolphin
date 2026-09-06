@@ -293,6 +293,20 @@ export function buildA2ARequest(data: Record<string, unknown>) {
     method: "message/send",
     params: {
       message: {
+        /*
+         * ADDED 2026-09-06. The A2A spec's Message carries `kind: "message"`,
+         * and this envelope omitted it. Lenient sellers never noticed; a strict
+         * one rejected every call outright with
+         *
+         *   Invalid params: params.message must be a Message with kind, role
+         *   and a non-empty parts array
+         *
+         * which is how three trading agents (SLY, SilentEcho, StellarVoyager)
+         * came to look unsellable. They were answering correctly - Dolphin was
+         * sending a malformed request and recording the rejection as the
+         * agent's fault.
+         */
+        kind: "message",
         role: "user",
         messageId: `dolphin-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         parts: [{ kind: "data", data }],
@@ -322,4 +336,65 @@ export function selectNegotiationEndpoint(
     return service.endpoint.replace(/\/\.well-known\/agent-card\.json$/, "/");
   }
   return null;
+}
+
+/**
+ * The endpoint a hire should actually POST to, resolved from the agent's own
+ * card rather than guessed from its URL.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY selectNegotiationEndpoint IS NOT ENOUGH (2026-09-06)
+ * ---------------------------------------------------------------------------
+ * That function strips a trailing `/.well-known/agent-card.json` and hopes the
+ * RPC endpoint is the card's directory. Measured against three real sellers,
+ * that is true for exactly one of them:
+ *
+ *   /.well-known/agent-card.json          -> url "/"                  strip works
+ *   /grid/.well-known/agent-card.json     -> url "/api/sellers/grid/a2a"
+ *   /agents/1/agent-card.json             -> url "/api/a2a"
+ *
+ * The last two are paths no amount of string manipulation could derive, and
+ * POSTing to the card file itself returns 405. That is why SLY, SilentEcho,
+ * StellarVoyager and the marketplace grid planner all looked dead: Dolphin was
+ * knocking on the wrong door and recording that nobody answered.
+ *
+ * The A2A spec puts the JSON-RPC endpoint in the card's `url` field, which is
+ * the authoritative answer. Fetching the card is one cheap GET, and the result
+ * is cached on the directory row so a hire does not repeat it.
+ *
+ * FALLS BACK RATHER THAN FAILING. A card that cannot be fetched or carries no
+ * `url` leaves the old heuristic in place, so this can only ever find more
+ * endpoints than before, never fewer.
+ */
+export async function resolveA2AEndpoint(
+  services: readonly { name: string; endpoint: string }[],
+  timeoutMs = 15_000,
+): Promise<string | null> {
+  const heuristic = selectNegotiationEndpoint(services);
+  const raw = services.find(
+    (service) => service.name === "a2a" && !service.endpoint.includes("{"),
+  )?.endpoint;
+
+  if (!raw) return heuristic;
+  // Only a card is worth fetching. A plain RPC URL is already the answer, and
+  // GETting it could look like a malformed request to the seller.
+  if (!/\.json($|\?)/i.test(raw)) return raw;
+
+  try {
+    const response = await fetch(raw, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) return heuristic;
+
+    const card = (await response.json()) as { url?: unknown };
+    if (typeof card?.url !== "string" || card.url.trim().length === 0) {
+      return heuristic;
+    }
+
+    // Relative urls are legal in a card; resolve them against the card itself.
+    return new URL(card.url, raw).toString();
+  } catch {
+    return heuristic;
+  }
 }

@@ -61,7 +61,7 @@ import {
   QuoteRejected,
   buildA2ARequest,
   normalizeQuote,
-  selectNegotiationEndpoint,
+  resolveA2AEndpoint,
 } from "./erc8183";
 
 /** Consecutive transport failures before a previously-selling agent is hidden. */
@@ -83,6 +83,14 @@ export type SellProbe = {
   detail: string;
   /** How many services the agent listed, when it listed any. */
   serviceCount: number | null;
+  /**
+   * The endpoint that was actually probed, resolved from the agent's card.
+   *
+   * Persisted so the hire path uses the SAME url the probe proved works,
+   * instead of re-deriving it with the path heuristic and knocking on a
+   * different door than the one that answered.
+   */
+  endpoint: string | null;
 };
 
 /**
@@ -101,7 +109,7 @@ export type SellProbe = {
  * target differently from the hire path is measuring a different endpoint and
  * cannot be evidence about hireability. There is now one implementation.
  */
-export const sellableEndpoint = selectNegotiationEndpoint;
+export const sellableEndpoint = resolveA2AEndpoint;
 
 /*
  * The envelope comes from buildA2ARequest, NOT from a copy written here.
@@ -214,13 +222,14 @@ export async function probeSellability(
   category: string,
   agentWallet: string | null,
 ): Promise<SellProbe> {
-  const endpoint = sellableEndpoint(services);
+  const endpoint = await sellableEndpoint(services);
   if (!endpoint) {
     return {
       state: "no-endpoint",
       detail:
         "The agent advertises no callable A2A endpoint, so there is no way to ask it for a price or send it work.",
       serviceCount: null,
+      endpoint: null,
     };
   }
 
@@ -237,7 +246,8 @@ export async function probeSellability(
         return {
           state: "sells",
           detail: `Publishes a menu of ${menu.length} service${menu.length === 1 ? "" : "s"} over its A2A endpoint.`,
-          serviceCount: menu.length,
+          endpoint,
+      serviceCount: menu.length,
         };
       }
     } catch {
@@ -251,6 +261,7 @@ export async function probeSellability(
     return {
       state: quoted.state,
       detail: `${quoted.detail} to the A2A call a hire begins with, and it publishes no service menu either.`,
+      endpoint,
       serviceCount: null,
     };
   }
@@ -262,6 +273,7 @@ export async function probeSellability(
     return {
       state: "no-menu",
       detail: `${endpoint} answered with something that is not JSON, so it cannot be negotiated with.`,
+      endpoint,
       serviceCount: null,
     };
   }
@@ -270,6 +282,7 @@ export async function probeSellability(
     return {
       state: "no-menu",
       detail: `The agent returned a JSON-RPC error when asked to price work: ${envelope.error.message ?? "unspecified"}.`,
+      endpoint,
       serviceCount: null,
     };
   }
@@ -278,6 +291,7 @@ export async function probeSellability(
     return {
       state: "no-menu",
       detail: "The agent answered the negotiate call with an empty result.",
+      endpoint,
       serviceCount: null,
     };
   }
@@ -305,6 +319,7 @@ export async function probeSellability(
       state: "no-menu",
       detail:
         "The agent answered, but has no registered on-chain wallet, so Dolphin cannot verify who a payment would go to and will not offer a hire it could not settle.",
+      endpoint,
       serviceCount: null,
     };
   }
@@ -320,12 +335,14 @@ export async function probeSellability(
         state: "sells",
         detail:
           "Declined this specific probe task but answered correctly, which is a working seller responding to a task it does not offer.",
-        serviceCount: null,
+        endpoint,
+      serviceCount: null,
       };
     }
     return {
       state: "no-menu",
       detail: `The agent answered but its quote could not be honoured: ${cause instanceof Error ? cause.message : String(cause)}`,
+      endpoint,
       serviceCount: null,
     };
   }
@@ -334,6 +351,7 @@ export async function probeSellability(
     state: "sells",
     detail:
       "Returned a payable quote for the A2A negotiate call a hire begins with. It publishes no separate service menu, which is optional.",
+    endpoint,
     serviceCount: null,
   };
 }

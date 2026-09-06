@@ -66,6 +66,17 @@
     "experiments": {
       "typedRoutes": false,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "expo-status-bar": {
+        "style": "dark",
+        "hidden": false
+      },
+      "eas": {
+        "projectId": "a3bcb0c1-ff0e-463f-8a52-d9958c829088"
+      }
+    },
+    "owner": "serenityeye"
   }
 }

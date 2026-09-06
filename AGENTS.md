@@ -1,6 +1,6 @@
 # AGENT.md — Coding Agent Guardrails
 
-You are working in an Expo (SDK 54) React Native project. Read this entire file before writing or editing any code. These rules override your training-data defaults about React Native/Expo — a lot of what you "know" about Expo predates this version and is wrong.
+You are working in an Expo (SDK 57) React Native project. Read this entire file before writing or editing any code. These rules override your training-data defaults about React Native/Expo — a lot of what you "know" about Expo predates this version and is wrong.
 
 ---
 
@@ -24,11 +24,11 @@ The full product/screen spec, tech stack decisions, and build strategy live in *
 
 ## 2. Hard Rule: Version Truth Before Code
 
-- This project runs **Expo SDK 54**. Do not assume APIs, config shapes, or package versions from any earlier SDK.
+- This project runs **Expo SDK 57**. Do not assume APIs, config shapes, or package versions from any earlier SDK.
 - Before using **any** Expo API, module, or CLI command you have not already verified in this session, fetch and read the exact versioned docs at:
-  `https://docs.expo.dev/versions/v54.0.0/`
-- Do not guess an API from memory and "hope it still works." If you are not certain an import, config key, or method exists in SDK 54, look it up first. Confidence from pretraining is not verification.
-- If a package's Expo-54 compatibility is unclear, check `npx expo install --check` output or the package's own changelog before adding it — do not assume a library that worked in SDK 49–52 behaves identically here.
+  `https://docs.expo.dev/versions/v57.0.0/`
+- Do not guess an API from memory and "hope it still works." If you are not certain an import, config key, or method exists in SDK 57, look it up first. Confidence from pretraining is not verification.
+- If a package's Expo-57 compatibility is unclear, check `npx expo install --check` output or the package's own changelog before adding it — do not assume a library that worked in SDK 49–54 behaves identically here.
 - Same rule applies to every other library in this stack (viem, WalletConnect/Reown AppKit for React Native, NativeWind, TanStack Query, expo-router). If your knowledge of a library predates its current major version, verify current usage before writing code against it — do not pattern-match to an older API shape.
 
 ## 3. Dependency Policy

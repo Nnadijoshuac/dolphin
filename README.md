@@ -6,7 +6,7 @@ drift from the other:
 
 | | | |
 |---|---|---|
-| **Mobile app** | repo root | Expo SDK 54 + Expo Router + NativeWind |
+| **Mobile app** | repo root | Expo SDK 57 + Expo Router + NativeWind |
 | **Website** | `web/` | Next.js 16 + Tailwind v4 |
 | **Backend** | `convex/` | shared by both; `agents.listAgents` is the single source of truth for agent data |
 
@@ -61,7 +61,7 @@ render what `agents.listAgents` returns, which is what stops them drifting.
 ```
 ┌────────────────────────┐        ┌────────────────────────┐
 │      Mobile app        │        │       Website          │
-│  Expo SDK 54 + Router  │        │      Next.js 16        │
+│  Expo SDK 57 + Router  │        │      Next.js 16        │
 │      (repo root)       │        │        (web/)          │
 │                        │        │                        │
 │  own package.json      │        │  own package.json      │
@@ -402,7 +402,7 @@ function changes live.
 
 ## Setup
 
-Requirements: Node.js 20+, npm, and an Expo SDK 54-compatible native toolchain.
+Requirements: Node.js 20+, npm, and an Expo SDK 57-compatible native toolchain.
 
 ```bash
 npm ci

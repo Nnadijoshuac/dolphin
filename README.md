@@ -445,6 +445,48 @@ Wallet deep-link return through `dolphin://` requires a native development or
 release build. The static web build intentionally displays a native-build-required
 wallet state.
 
+## Native builds (EAS)
+
+`eas.json` defines three profiles. The one that matters for getting the app onto
+someone else's phone is **`preview`**: internal distribution, and Android builds
+an **APK** rather than an app bundle, because an `.aab` cannot be sideloaded — a
+reviewer with a link needs a file that installs.
+
+```bash
+npm i -g eas-cli          # or: npx eas-cli@latest <command>
+eas login
+eas init                  # writes extra.eas.projectId into app.json - run once
+
+eas build --profile preview --platform android   # installable APK
+eas build --profile preview --platform ios       # needs an Apple Developer account
+eas build --profile preview:simulator --platform ios   # no Apple account needed
+```
+
+**Set the client environment before building.** `EXPO_PUBLIC_*` values are read
+at build time and baked into the bundle, so a build made without them ships a
+degraded app rather than failing loudly — with `EXPO_PUBLIC_CONVEX_URL` unset
+the catalog silently falls back to the client-side 8004scan path and loses every
+discovered agent (`src/hooks/use-agents.ts` documents that fallback). Set them
+once per profile:
+
+```bash
+eas env:create --scope project --name EXPO_PUBLIC_CONVEX_URL --value <url>
+eas env:create --scope project --name EXPO_PUBLIC_REOWN_PROJECT_ID --value <id>
+eas env:create --scope project --name EXPO_PUBLIC_BSC_RPC_URL --value <url>
+eas env:create --scope project --name EXPO_PUBLIC_ALTANA_RP_ID --value <domain>
+```
+
+None of these is a secret — they are all compiled into a public bundle, which is
+exactly why nothing private may ever be given an `EXPO_PUBLIC_` prefix.
+
+`appVersionSource` is `local`, so `app.json`'s `version` is authoritative and a
+build's identity does not depend on state held remotely. `production` sets
+`autoIncrement` for the build number only.
+
+A `development` profile is deliberately absent: `developmentClient` builds
+require `expo-dev-client`, which this project does not depend on. Add it with
+`npx expo install expo-dev-client` before adding that profile.
+
 ## Routes
 
 4 tabs, not 5 - category browsing lives inside Discover as a chip row rather

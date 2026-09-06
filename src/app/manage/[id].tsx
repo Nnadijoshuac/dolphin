@@ -120,6 +120,38 @@ export default function ManageAgentRoute() {
   const categoryLabel =
     AGENT_CATEGORIES.find((c) => c.slug === category)?.label ?? category;
 
+  const isReal = Boolean(realHire);
+  const targetId = agent?.tokenId ?? (realHire?.tokenId ?? preview?.agentId ?? id);
+  const displayName =
+    agent?.name ?? (realHire ? `Agent #${realHire.tokenId}` : `Agent #${preview?.agentId}`);
+  const dateText = realHire
+    ? `Hired ${formatActivityDate(realHire.hiredAt)}`
+    : `Saved ${formatActivityDate(preview!.savedAt)}`;
+  const statusLabel = isReal ? "Hired" : "Device preview";
+  const statusTone = isReal ? ("live" as const) : ("preview" as const);
+
+  const handleOpenProfile = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({
+      pathname: "/agent/[id]",
+      params: { id: targetId },
+    });
+  };
+
+  const detailRows = isReal
+    ? [
+        ["Status", "Active"],
+        ["Category", categoryLabel],
+        ["Wallet", shortAddress(realHire!.walletAddress)],
+        ["Authorization", "Read-only"],
+        ["Price", "Free"],
+      ]
+    : [
+        ["Status", "Saved preview"],
+        ["Category", categoryLabel],
+        ["Authorization", "Read-only"],
+      ];
+
   // Build unified agent activity list
   const activities: ActivityEntry[] = [];
 
@@ -192,180 +224,6 @@ export default function ManageAgentRoute() {
 
   activities.sort((a, b) => b.sortAt - a.sortAt);
 
-  if (realHire) {
-    return (
-      <SafeAreaView
-        className="flex-1"
-        edges={["top", "left", "right"]}
-        style={{ backgroundColor: colors.canvas }}
-      >
-        <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
-          <NavigationButton onPress={() => router.back()} />
-          <Text className="text-[16px] font-bold" style={{ color: colors.ink }}>
-            Manage hire
-          </Text>
-          <View className="h-[42px] w-[42px]" />
-        </View>
-
-        <ScrollView
-          className="flex-1 px-5"
-          contentContainerStyle={{ paddingBottom: 48 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Agent Banner */}
-          <View className="flex-row items-center gap-4 pt-2 pb-6">
-            <AgentIcon category={category} size={60} uri={agent?.iconUrl} />
-            <View className="min-w-0 flex-1">
-              <Text
-                className="text-[20px] font-bold tracking-tight"
-                numberOfLines={1}
-                style={{ color: colors.ink }}
-              >
-                {agent?.name ?? `Agent #${realHire.tokenId}`}
-              </Text>
-              <Text className="mt-1 text-[12.5px]" style={{ color: colors.muted }}>
-                Hired {formatActivityDate(realHire.hiredAt)}
-              </Text>
-              <View className="mt-2.5 flex-row items-center">
-                <StatusBadge label="Hired" tone="live" />
-              </View>
-            </View>
-          </View>
-
-          {/* Details */}
-          <View className="pt-2">
-            <Text
-              className="text-[14px] font-bold pb-2"
-              style={{ color: colors.ink }}
-            >
-              Details
-            </Text>
-            <View className="border-t" style={{ borderColor: colors.line }}>
-              {[
-                ["Status", "Active"],
-                ["Category", categoryLabel],
-                ["Wallet", shortAddress(realHire.walletAddress)],
-                ["Authorization", "Read-only"],
-                ["Price", "Free"],
-              ].map(([label, value]) => (
-                <View
-                  className="flex-row items-center justify-between py-3.5 border-b"
-                  key={label}
-                  style={{ borderColor: colors.line }}
-                >
-                  <Text
-                    className="text-[13.5px] font-medium"
-                    style={{ color: colors.muted }}
-                  >
-                    {label}
-                  </Text>
-                  <Text
-                    className="text-[13.5px] font-semibold"
-                    style={{ color: colors.ink }}
-                  >
-                    {value}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Agent Activity Section */}
-          <View className="pt-6">
-            <Text
-              className="text-[14px] font-bold pb-2"
-              style={{ color: colors.ink }}
-            >
-              Agent activity
-            </Text>
-            <View className="border-t" style={{ borderColor: colors.line }}>
-              {activities.map((item) => (
-                <View
-                  key={item.id}
-                  className="flex-row items-center justify-between py-3.5 border-b gap-3"
-                  style={{ borderColor: colors.line }}
-                >
-                  <View
-                    className="h-8 w-8 items-center justify-center rounded-full shrink-0"
-                    style={{ backgroundColor: item.iconBg }}
-                  >
-                    <CategoryGlyph color={item.iconColor} name={item.icon} size={15} />
-                  </View>
-
-                  <View className="flex-1 min-w-0">
-                    <Text
-                      className="text-[13.5px] font-semibold"
-                      numberOfLines={1}
-                      style={{ color: colors.ink }}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text
-                      className="text-[12px] mt-0.5"
-                      numberOfLines={1}
-                      style={{ color: colors.muted }}
-                    >
-                      {item.detail} · {formatActivityDate(item.date)}
-                    </Text>
-                  </View>
-
-                  <View className="flex-row items-center gap-2 shrink-0">
-                    {item.amount ? (
-                      <Text
-                        className="text-[13px] font-bold"
-                        style={{ color: colors.ink }}
-                      >
-                        {item.amount}
-                      </Text>
-                    ) : item.badge ? (
-                      <Text
-                        className="text-[11.5px] font-semibold"
-                        style={{ color: item.badge === "Completed" ? "#1C6A44" : colors.muted }}
-                      >
-                        {item.badge}
-                      </Text>
-                    ) : null}
-
-                    {item.txHash ? (
-                      <PressableScale
-                        accessibilityLabel="View transaction on BscScan"
-                        accessibilityRole="button"
-                        hitSlop={8}
-                        onPress={() => {
-                          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          void Linking.openURL(`https://bscscan.com/tx/${item.txHash}`);
-                        }}
-                        containerStyle={{ padding: 2 }}
-                      >
-                        <CategoryGlyph color={colors.muted} name="external" size={13} />
-                      </PressableScale>
-                    ) : null}
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          <View className="mt-8">
-            <Button
-              label="View agent profile"
-              onPress={() =>
-                router.push({
-                  pathname: "/agent/[id]",
-                  params: { id: agent?.tokenId ?? realHire.tokenId },
-                })
-              }
-            />
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  if (!preview) {
-    return null;
-  }
-
   return (
     <SafeAreaView
       className="flex-1"
@@ -375,54 +233,63 @@ export default function ManageAgentRoute() {
       <View className="flex-row items-center justify-between px-5 pb-3 pt-2">
         <NavigationButton onPress={() => router.back()} />
         <Text className="text-[16px] font-bold" style={{ color: colors.ink }}>
-          Manage preview
+          {isReal ? "Manage hire" : "Manage preview"}
         </Text>
         <View className="h-[42px] w-[42px]" />
       </View>
 
       <ScrollView
         className="flex-1 px-5"
-        contentContainerStyle={{ paddingBottom: 48 }}
+        contentContainerStyle={{ paddingBottom: 64, paddingTop: 4 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Agent Banner */}
-        <View className="flex-row items-center gap-4 pt-2 pb-6">
-          <AgentIcon category={category} size={60} uri={agent?.iconUrl} />
+        {/* Agent Hero Banner - tapping icon or name navigates to agent profile */}
+        <PressableScale
+          accessibilityLabel={`View ${displayName} profile`}
+          accessibilityRole="button"
+          onPress={handleOpenProfile}
+          containerStyle={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 14,
+            paddingVertical: 10,
+          }}
+        >
+          <AgentIcon category={category} size={62} uri={agent?.iconUrl} />
           <View className="min-w-0 flex-1">
-            <Text
-              className="text-[20px] font-bold tracking-tight"
-              numberOfLines={1}
-              style={{ color: colors.ink }}
-            >
-              {agent?.name ?? `Agent #${preview.agentId}`}
-            </Text>
-            <Text className="mt-1 text-[12.5px]" style={{ color: colors.muted }}>
-              Saved {formatActivityDate(preview.savedAt)}
+            <View className="flex-row items-center gap-1.5">
+              <Text
+                className="text-[21px] font-bold tracking-tight flex-1"
+                numberOfLines={1}
+                style={{ color: colors.ink }}
+              >
+                {displayName}
+              </Text>
+              <CategoryGlyph color={colors.muted} name="chevron-right" size={15} />
+            </View>
+            <Text className="mt-1 text-[13px]" style={{ color: colors.muted }}>
+              {dateText}
             </Text>
             <View className="mt-2.5 flex-row items-center">
-              <StatusBadge label="Device preview" tone="preview" />
+              <StatusBadge label={statusLabel} tone={statusTone} />
             </View>
           </View>
-        </View>
+        </PressableScale>
 
-        {/* Details */}
-        <View className="pt-2">
+        {/* Details Section */}
+        <View className="mt-7">
           <Text
-            className="text-[14px] font-bold pb-2"
+            className="text-[14px] font-bold tracking-[-0.1px] pb-2.5"
             style={{ color: colors.ink }}
           >
             Details
           </Text>
-          <View className="border-t" style={{ borderColor: colors.line }}>
-            {[
-              ["Status", "Saved preview"],
-              ["Category", categoryLabel],
-              ["Authorization", "Read-only"],
-            ].map(([label, value]) => (
+          <View className="border-t" style={{ borderColor: colors.lineLight }}>
+            {detailRows.map(([label, value]) => (
               <View
-                className="flex-row items-center justify-between py-3.5 border-b"
+                className="flex-row items-center justify-between py-3 border-b"
                 key={label}
-                style={{ borderColor: colors.line }}
+                style={{ borderColor: colors.lineLight }}
               >
                 <Text
                   className="text-[13.5px] font-medium"
@@ -442,19 +309,19 @@ export default function ManageAgentRoute() {
         </View>
 
         {/* Agent Activity Section */}
-        <View className="pt-6">
+        <View className="mt-7">
           <Text
-            className="text-[14px] font-bold pb-2"
+            className="text-[14px] font-bold tracking-[-0.1px] pb-2.5"
             style={{ color: colors.ink }}
           >
             Agent activity
           </Text>
-          <View className="border-t" style={{ borderColor: colors.line }}>
+          <View className="border-t" style={{ borderColor: colors.lineLight }}>
             {activities.map((item) => (
               <View
                 key={item.id}
-                className="flex-row items-center justify-between py-3.5 border-b gap-3"
-                style={{ borderColor: colors.line }}
+                className="flex-row items-center justify-between py-3 border-b gap-3.5"
+                style={{ borderColor: colors.lineLight }}
               >
                 <View
                   className="h-8 w-8 items-center justify-center rounded-full shrink-0"
@@ -491,7 +358,12 @@ export default function ManageAgentRoute() {
                   ) : item.badge ? (
                     <Text
                       className="text-[11.5px] font-semibold"
-                      style={{ color: colors.muted }}
+                      style={{
+                        color:
+                          item.badge === "Completed" || item.badge === "Active"
+                            ? "#1C6A44"
+                            : colors.muted,
+                      }}
                     >
                       {item.badge}
                     </Text>
@@ -517,22 +389,16 @@ export default function ManageAgentRoute() {
           </View>
         </View>
 
-        <View className="mt-8 gap-3">
-          <Button
-            label="View agent profile"
-            onPress={() =>
-              router.push({
-                pathname: "/agent/[id]",
-                params: { id: agent?.tokenId ?? preview.agentId },
-              })
-            }
-          />
-          <Button
-            label="Remove preview"
-            onPress={handleRemove}
-            variant="destructive"
-          />
-        </View>
+        {/* Action Button: only for preview (remove preview) since profile view is on header tap */}
+        {preview && !realHire ? (
+          <View className="mt-8">
+            <Button
+              label="Remove preview"
+              onPress={handleRemove}
+              variant="destructive"
+            />
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

@@ -46,12 +46,33 @@ separate concepts.
 - An Altana passkey smart account ("Dolphin Wallet") on every target — both
   products' browser builds and, since `@altananetwork/sdk` 0.9.0, native iOS and
   Android with the platform's own Face ID / fingerprint passkeys: create,
-  recover, live balance, scoped session grants with a visible spend cap and call
-  allowlist, and one-tap revocation from either the wallet screen or the hire
-  record. See "Wallets and authorization" below.
+  recover, and live balance. See "Wallets and authorization" below.
 - Device-only setup previews that are always labeled as not onchain.
 - A Convex backend (`convex/`) that reads real per-agent-wallet on-chain state
   for category live stats - see "Backend (Convex)" below.
+
+## Built, but gated off
+
+Code that exists, compiles, and is wired end to end, but is deliberately not
+reachable in the running app. Listed separately from "What is implemented"
+because a reader tapping through the app will not find it, and a list that
+mixes the two is a list that misleads.
+
+- **Scoped Altana session grants** — spend cap, call allowlist, expiry, on-chain
+  Keystore record, and one-tap revocation. Gated by
+  `FEATURE_SESSION_EXECUTION` in `src/wallet/altana-policy.ts`, which is
+  `false`. The grant UI is removed from the rendered tree rather than disabled,
+  in both the hire sheet and the agent detail page.
+
+  The reason is not that it is unfinished. A granted session's key is never
+  delivered to an agent, and nothing in Dolphin can execute with one, so
+  offering the grant charged real mainnet BNB for a permission that could not be
+  used. The gate goes away when there is something on the other end of it.
+
+  The on-chain grant → in-bounds → out-of-bounds → revoke lifecycle has **not**
+  been observed on mainnet; it is built to Altana's documented API.
+  `scripts/spike-b-auth.mjs` produces that proof against chain 97 the moment its
+  probe address is funded.
 
 ## How the system fits together
 

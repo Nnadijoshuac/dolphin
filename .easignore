@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Web app (separate Next.js deployment)
+web/
+
+# Build outputs & caches
+.expo/
+dist/
+web-build/
+.next/
+**/.next/
+*.tsbuildinfo
+.expo-verify-dist3/
+example/
+
+# Agent working context and skills
+Agent/
+.agents/
+.claude/
+skills-lock.json
+
+# Local environment files (environment variables are managed directly in EAS)
+.env*.local
+.env
+
+# Native generated folders
+/ios
+/android

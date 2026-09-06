@@ -104,6 +104,62 @@ export default defineSchema({
     .index("by_wallet", ["walletAddress", "status"]),
 
   /**
+   * REVIEWS — one per wallet per agent, and only from a wallet that hired it.
+   *
+   * Deliberately NOT a star rating. The agent detail page's header records that
+   * a hardcoded "4.9", five gold stars and a fabricated star histogram were
+   * removed from it; reintroducing the same shape with real data behind it
+   * would answer the wrong question. A five-star average tells you how people
+   * felt. For an agent that manages money, what matters is whether it did the
+   * thing it said it would, and whether the person who paid for that would do
+   * it again. Those are the two questions here, and both are answerable in one
+   * tap.
+   *
+   * THE EVIDENCE IS DENORMALIZED ON PURPOSE. hireId, hiredAt and paidJobId are
+   * copied onto the review when it is written, so a review keeps its own
+   * provenance: which hire it came from, how long that hire had run, and
+   * whether real money went through an escrow for it. A paid review is a
+   * materially stronger signal than a free one and the UI needs to be able to
+   * say so without re-deriving it.
+   *
+   * NO MODERATION EXISTS YET. `comment` is free text written by users and shown
+   * to other users, capped at REVIEW_COMMENT_MAX_LENGTH and otherwise stored as
+   * typed. That is a known gap rather than an oversight - it is recorded in
+   * Agent/TODO.md, and it is the reason the structured answers above carry the
+   * signal and the comment is decoration.
+   */
+  agentReviews: defineTable({
+    chainId: v.number(),
+    tokenId: v.string(),
+    /** The reviewer. Always from the authenticated session, never from an argument. */
+    walletAddress: v.string(),
+
+    /** Did it do what it said it would? The question a paying user actually has. */
+    outcome: v.union(v.literal("yes"), v.literal("partially"), v.literal("no")),
+    /** The single most predictive question in any review system. */
+    wouldHireAgain: v.boolean(),
+    comment: v.union(v.string(), v.null()),
+
+    // Provenance, copied from the hire at write time. See above.
+    hiredAt: v.string(),
+    /** Non-null when an ERC-8183 escrow paid for the hire this review is about. */
+    paidJobId: v.union(v.string(), v.null()),
+
+    createdAt: v.string(),
+    updatedAt: v.string(),
+
+    /**
+     * The ERC-8004 Reputation Registry transaction that mirrored this review
+     * on-chain, when the reviewer chose to pay for one. Optional so existing
+     * rows stay valid without a migration, the same convention the
+     * agentDirectory icon columns use.
+     */
+    onChainTxHash: v.optional(v.union(v.string(), v.null())),
+  })
+    .index("by_agent", ["chainId", "tokenId"])
+    .index("by_agent_reviewer", ["chainId", "tokenId", "walletAddress"]),
+
+  /**
    * Altana session grants, recorded next to the agentHires row they belong to.
    * See convex/agentSessions.ts for why this lives in the backend rather than
    * only in the granting browser: a session is the one thing in Dolphin that

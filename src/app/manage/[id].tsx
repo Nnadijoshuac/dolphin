@@ -11,6 +11,7 @@ import { Button } from "@/components/buttons";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { NavigationButton } from "@/components/navigation-button";
 import { PressableScale } from "@/components/pressable-scale";
+import { ReviewForm } from "@/components/review-form";
 import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
 import { colors } from "@/constants/theme";
@@ -478,6 +479,29 @@ export default function ManageAgentRoute() {
             ))}
           </View>
         </View>
+
+        {/*
+         * Reviewing, on the screen where the agent has actually been used.
+         *
+         * Not on the agent's public page: that is where reviews are READ, and a
+         * compose form there would be offered to every visitor and refused for
+         * almost all of them. Here, the person looking at it has by definition
+         * hired this agent.
+         *
+         * Renders nothing for a device preview - a bookmark is not an
+         * experience of the agent and has nothing to review.
+         */}
+        {realHire ? (
+          <View className="mt-7">
+            <Text
+              className="text-[14px] font-bold tracking-[-0.1px] pb-2.5"
+              style={{ color: colors.ink }}
+            >
+              Your review
+            </Text>
+            <ReviewForm tokenId={realHire.tokenId} />
+          </View>
+        ) : null}
 
         {/*
          * Ending the relationship. Both kinds have one now.

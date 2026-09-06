@@ -16,6 +16,7 @@ import {
   useAgentRetention,
   useAgentStatsHistory,
 } from "@/hooks/use-category-stats";
+import { useAgentReviews } from "@/hooks/use-agent-reviews";
 import { convexClient } from "@/providers/convex-provider";
 import { assessHireability } from "@/services/hireability";
 import type {
@@ -475,6 +476,155 @@ function BackendRetention({ agent }: { agent: Agent }) {
   );
 }
 
+/* ─────────────── reviews ─────────────── */
+
+/**
+ * What people who actually hired this agent said about it.
+ *
+ * Structured outcomes rather than stars - see convex/agentReviews.ts for why,
+ * and note that this file's own header lists a fabricated "4.9" and a fake star
+ * histogram among the things deleted from this page. Putting that shape back
+ * with real data underneath would answer the wrong question about software that
+ * moves money.
+ *
+ * Every review here comes from a wallet that proved it holds its key, hired
+ * this agent, and kept it for at least a day. A review whose hire went through
+ * an escrow is marked, because real money changing hands is a materially
+ * stronger signal than a free trial and the page should say so.
+ */
+function Reviews({ agent }: { agent: Agent }) {
+  if (!convexClient) return null;
+  return <BackendReviews agent={agent} />;
+}
+
+function BackendReviews({ agent }: { agent: Agent }) {
+  const reviews = useAgentReviews(agent.tokenId);
+
+  if (reviews === undefined) {
+    return (
+      <StatePanel
+        body="Reading reviews left by wallets that hired this agent."
+        compact
+        state="syncing"
+        title="Loading reviews"
+      />
+    );
+  }
+
+  if (reviews.total === 0) {
+    return (
+      <StatePanel
+        body="Nobody who hired this agent has reviewed it yet. Only wallets that hired it can, which is what will make these worth reading."
+        compact
+        state="empty"
+        title="No reviews yet"
+      />
+    );
+  }
+
+  const { outcomes } = reviews;
+
+  return (
+    <View className="gap-3">
+      <Card>
+        <View className="flex-row flex-wrap gap-y-5">
+          <View className="w-1/2 pr-2.5">
+            <Text
+              className="text-[11px] font-bold uppercase tracking-[0.8px]"
+              style={{ color: colors.faint }}
+            >
+              Would hire again
+            </Text>
+            <Text
+              className="mt-1.5 text-[20px] font-bold"
+              style={{ color: colors.ink }}
+            >
+              {reviews.wouldHireAgainRate === null
+                ? `${reviews.wouldHireAgainCount}/${reviews.total}`
+                : `${Math.round(reviews.wouldHireAgainRate * 100)}%`}
+            </Text>
+            <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
+              {reviews.wouldHireAgainRate === null
+                ? "Too few to rate"
+                : `of ${reviews.total} reviews`}
+            </Text>
+          </View>
+          <View className="w-1/2 pl-2.5">
+            <Text
+              className="text-[11px] font-bold uppercase tracking-[0.8px]"
+              style={{ color: colors.faint }}
+            >
+              Did what it said
+            </Text>
+            <Text
+              className="mt-1.5 text-[20px] font-bold"
+              style={{ color: colors.ink }}
+            >
+              {outcomes.yes}
+              <Text className="text-[13px]" style={{ color: colors.muted }}>
+                {` yes · ${outcomes.partially} partly · ${outcomes.no} no`}
+              </Text>
+            </Text>
+          </View>
+        </View>
+
+        {reviews.paidReviews > 0 ? (
+          <View
+            className="mt-4 border-t pt-3"
+            style={{ borderColor: colors.lineLight }}
+          >
+            <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
+              {reviews.paidReviews} of {reviews.total}{" "}
+              {reviews.paidReviews === 1 ? "review is" : "reviews are"} from a hire
+              that paid this agent through an on-chain escrow.
+            </Text>
+          </View>
+        ) : null}
+      </Card>
+
+      {reviews.reviews.map((review) => (
+        <Card key={`${review.walletAddress}-${review.updatedAt}`}>
+          <View className="flex-row items-center justify-between gap-3">
+            <Text
+              className="shrink text-[12px] font-semibold"
+              numberOfLines={1}
+              style={{ color: colors.ink }}
+            >
+              {shortAddress(review.walletAddress)}
+            </Text>
+            <View className="flex-row items-center gap-1.5">
+              {review.paidJobId ? <Pill accent label="Paid hire" /> : null}
+              {review.onChainTxHash ? <Pill accent label="On-chain" /> : null}
+            </View>
+          </View>
+
+          <Text
+            className="mt-2 text-[13px] font-semibold leading-[19px]"
+            style={{ color: colors.ink }}
+          >
+            {review.outcome === "yes"
+              ? "Did what it said"
+              : review.outcome === "partially"
+                ? "Partly did what it said"
+                : "Did not do what it said"}
+            {" · "}
+            {review.wouldHireAgain ? "Would hire again" : "Would not hire again"}
+          </Text>
+
+          {review.comment ? (
+            <Text
+              className="mt-2 text-[13px] leading-[20px]"
+              style={{ color: colors.muted }}
+            >
+              {review.comment}
+            </Text>
+          ) : null}
+        </Card>
+      ))}
+    </View>
+  );
+}
+
 /* ─────────────── track record ─────────────── */
 
 /**
@@ -851,6 +1001,20 @@ export function AgentDetail({
        * public BSC dataseed endpoints, so either needs its range strategy
        * settled before it is promised in the UI. Tracked in Agent/TODO.md.
        */}
+
+      {/* ── 7. reviews ─────────────────────────────────────────────────── */}
+      {/*
+       * Takes the slot the deleted activity feed used to occupy, and it is the
+       * right occupant: this is the section a reader of a marketplace page
+       * looks for, and until now the page had nothing to put in it but
+       * fabrications (see this file's header).
+       */}
+      <Section
+        caption="From wallets that hired this agent, signed in, and kept it for at least a day. Not star ratings — see what the agent was actually asked to do."
+        title="Reviews"
+      >
+        <Reviews agent={agent} />
+      </Section>
 
       {/* ── 8. what hiring this actually does ──────────────────────────── */}
       <Section

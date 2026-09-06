@@ -54,7 +54,7 @@ function createScene() {
   scene.environment = pmrem.fromScene(studio, 0.06).texture;
   scene.environmentIntensity = 1.0;
   const camera = new THREE.OrthographicCamera(-2.9, 2.9, 2.9, -2.9, 0.1, 30);
-  camera.position.set(-0.5, 2.6, 7);
+  camera.position.set(-0.5, 3.1, 7);
   camera.lookAt(0, 0, 0);
   scene.add(new THREE.HemisphereLight('#ffffff', '#c9b697', 1.5));
   const key = new THREE.DirectionalLight('#fff6e5', 3.2);
@@ -111,7 +111,6 @@ function createScene() {
     [1.83, -.13, .07, .065], [2.02, -.09, .05, .07],
     [2.08, -.09, .002, .002],
   ];
-  const profileCurve = new THREE.CatmullRomCurve3(profile.map(p => new THREE.Vector3(p[0], p[1], 0)));
   function interpolate(t, component) {
     const progress = t * (profile.length - 1);
     const i = Math.min(Math.floor(progress), profile.length - 2);
@@ -122,7 +121,6 @@ function createScene() {
     const p3 = profile[Math.min(profile.length - 1, i + 2)][component];
     return .5 * ((2*p1) + (-p0+p2)*f + (2*p0-5*p1+4*p2-p3)*f*f + (-p0+3*p1-3*p2+p3)*f*f*f);
   }
-  void profileCurve; // Profile radii use the same Catmull-Rom cubic interpolation.
   surface(180, 72, (t, angle) => [
     interpolate(t, 0), interpolate(t, 1) + Math.max(.001, interpolate(t, 2)) * Math.cos(angle),
     Math.max(.001, interpolate(t, 3)) * Math.sin(angle),
@@ -130,8 +128,8 @@ function createScene() {
 
   // Smooth, tapered airfoil sections give the fins rounded leading edges.
   surface(52, 40, (t, angle) => {
-    const chord = .45 * Math.pow(1-t, .9) + .003;
-    return [.03 + .55*t + chord*Math.cos(angle), .30 + .94*t,
+    const chord = .45 * Math.pow(1-t, 1.9) + .003;
+    return [.03 + .55*t + chord*Math.cos(angle), .30 + .73*t,
       (.115 * Math.pow(1-t, 1.2) + .002) * Math.sin(angle)];
   });
 
@@ -143,9 +141,9 @@ function createScene() {
         side * (.27 + .84*t)];
     }, gold, side < 0);
     surface(52, 40, (t, angle) => {
-      const chord = .23 * Math.pow(1-t, .65) + .002;
-      return [1.92 + .31*t + .11*Math.sin(Math.PI*t) + chord*Math.cos(angle),
-        -.13 + .08*t + (.055*Math.pow(1-t, .8)+.001)*Math.sin(angle), side * (.01 + .88*t)];
+      const chord = .29 * Math.pow(1-t, .85) + .002;
+      return [1.92 + .39*t + .04*Math.sin(Math.PI*t) + chord*Math.cos(angle),
+        -.13 + .06*t + (.055*Math.pow(1-t, .8)+.001)*Math.sin(angle), side * (.01 + 1.06*t)];
     }, gold, side < 0);
 
     const eye = new THREE.Mesh(new THREE.SphereGeometry(.034, 24, 16), eyeMaterial);
@@ -214,8 +212,9 @@ await new Promise(resolveListen => server.listen(0, '127.0.0.1', resolveListen))
 const require = createRequire(import.meta.url);
 let playwright;
 try { playwright = require(process.env.PLAYWRIGHT_MODULE || 'playwright'); } catch {
-  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const globalModules = execFileSync(npmCommand, ['root', '-g'], { encoding: 'utf8', shell: process.platform === 'win32' }).trim();
+  const globalModules = process.platform === 'win32'
+    ? execFileSync(process.execPath, [join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), 'root', '-g'], { encoding: 'utf8' }).trim()
+    : execFileSync('npm', ['root', '-g'], { encoding: 'utf8' }).trim();
   playwright = require(join(globalModules, '@playwright/cli/node_modules/playwright'));
 }
 let browser;

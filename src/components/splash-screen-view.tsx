@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   AccessibilityInfo,
   Animated,
@@ -76,8 +76,15 @@ function DolphinLoop({ onError }: { onError: () => void }) {
     const subscription = player.addListener("statusChange", ({ status }) => {
       if (status === "error") onError();
     });
+    // Source resolution can fail before the event listener is attached.
+    const errorCheck = setTimeout(() => {
+      if (player.status === "error") onError();
+    }, 0);
     player.play();
-    return () => subscription.remove();
+    return () => {
+      clearTimeout(errorCheck);
+      subscription.remove();
+    };
   }, [onError, player]);
 
   // This child unmounts on background, Reduced Motion, failure and completion;
@@ -164,7 +171,7 @@ export function SplashScreenView({
     if (!minimumElapsed || !isReady || !isActive) return;
     const fade = Animated.timing(opacity, {
       toValue: 0,
-      duration: reduceMotion === true ? 0 : 280,
+      duration: reduceMotion === false ? 280 : 0,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
       isInteraction: false,

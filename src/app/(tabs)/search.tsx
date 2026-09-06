@@ -267,26 +267,11 @@ export default function SearchScreen() {
                   ) : null}
                 </View>
 
-                <View
-                  className="rounded-2xl bg-white overflow-hidden"
-                  style={{
-                    borderColor: "rgba(17,18,20,0.06)",
-                    borderWidth: 1,
-                    ...shadows.subtle,
-                  }}
-                >
-                  {recentSearches.slice(0, 4).map((item, index) => (
+                <View className="gap-1">
+                  {recentSearches.slice(0, 4).map((item) => (
                     <View
                       key={item}
-                      className="flex-row items-center justify-between px-3.5 py-3"
-                      style={
-                        index > 0
-                          ? {
-                              borderTopWidth: 1,
-                              borderTopColor: "rgba(17,18,20,0.06)",
-                            }
-                          : undefined
-                      }
+                      className="flex-row items-center justify-between py-2"
                     >
                       <PressableScale
                         accessibilityLabel={`Search ${item}`}

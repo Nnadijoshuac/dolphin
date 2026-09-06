@@ -80,3 +80,18 @@ export function useAgentStatsHistory(
       : "skip",
   );
 }
+
+/**
+ * Dolphin's own retention record for one agent: how many people who hired it
+ * were still using it a week later, and a month later.
+ *
+ * See convex/agentRetention.ts for the definition and for why a percentage is
+ * withheld below a minimum denominator. Same Convex-provider precondition as
+ * the hooks above.
+ */
+export function useAgentRetention(tokenId: string | null | undefined) {
+  return useQuery(
+    api.agentRetention.getAgentRetention,
+    tokenId ? { tokenId } : "skip",
+  );
+}

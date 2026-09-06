@@ -13,6 +13,7 @@ import { colors, radii, shadows } from "@/constants/theme";
 import { syncingLiveStats } from "@/data/editorial-agents";
 import {
   useAgentCategoryStats,
+  useAgentRetention,
   useAgentStatsHistory,
 } from "@/hooks/use-category-stats";
 import { convexClient } from "@/providers/convex-provider";
@@ -360,6 +361,120 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   );
 }
 
+/* ─────────────── retention ─────────────── */
+
+/**
+ * How many people who hired this agent kept it.
+ *
+ * The first signal in this app that actually distinguishes one agent from
+ * another: reputation is unavailable or zero across the catalog, feedback count
+ * measures activity rather than quality, and every agent costs the same. This
+ * is computed from Dolphin's own hire records (convex/agentRetention.ts), needs
+ * nothing from the user, and is hard to forge now that a hire needs a signature.
+ *
+ * A percentage is shown only when the denominator can carry one. "100%" over a
+ * single hire is true arithmetic and a false impression, so below the threshold
+ * the raw counts are shown instead, and with no hire old enough the section
+ * says so rather than showing a zero.
+ */
+function Retention({ agent }: { agent: Agent }) {
+  if (!convexClient) return null;
+  return <BackendRetention agent={agent} />;
+}
+
+function BackendRetention({ agent }: { agent: Agent }) {
+  const retention = useAgentRetention(agent.tokenId);
+
+  if (retention === undefined) {
+    return (
+      <StatePanel
+        body="Reading Dolphin's hire records for this agent."
+        compact
+        state="syncing"
+        title="Loading retention"
+      />
+    );
+  }
+
+  if (retention.totalHires === 0) {
+    return (
+      <StatePanel
+        body="Nobody has hired this agent through Dolphin yet, so there is nothing to measure. This says nothing about the agent — only that Dolphin has no record of its own to report."
+        compact
+        state="empty"
+        title="No hires yet"
+      />
+    );
+  }
+
+  const describe = (
+    window: { eligible: number; retained: number; rate: number | null },
+    label: string,
+  ) => {
+    if (window.eligible === 0) {
+      return { label, value: "Not yet", detail: `No hire is ${label} old` };
+    }
+    if (window.rate === null) {
+      return {
+        label,
+        value: `${window.retained}/${window.eligible}`,
+        detail: "Too few to rate",
+      };
+    }
+    return {
+      label,
+      value: `${Math.round(window.rate * 100)}%`,
+      detail: `of ${window.eligible} hires`,
+    };
+  };
+
+  const cells = [
+    describe(retention.day7, "7 days"),
+    describe(retention.day30, "30 days"),
+  ];
+
+  return (
+    <Card>
+      <View className="flex-row flex-wrap gap-y-5">
+        {cells.map((cell, index) => (
+          <View
+            className={index % 2 === 0 ? "w-1/2 pr-2.5" : "w-1/2 pl-2.5"}
+            key={cell.label}
+          >
+            <Text
+              className="text-[11px] font-bold uppercase tracking-[0.8px]"
+              style={{ color: colors.faint }}
+            >
+              Kept after {cell.label}
+            </Text>
+            <Text
+              className="mt-1.5 text-[20px] font-bold"
+              style={{ color: colors.ink }}
+            >
+              {cell.value}
+            </Text>
+            <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
+              {cell.detail}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      <View
+        className="mt-4 flex-row items-center justify-between border-t pt-3"
+        style={{ borderColor: colors.lineLight }}
+      >
+        <Text className="text-[12px]" style={{ color: colors.muted }}>
+          Hires through Dolphin
+        </Text>
+        <Text className="text-[12px] font-semibold" style={{ color: colors.ink }}>
+          {retention.activeHires} active of {retention.totalHires}
+        </Text>
+      </View>
+    </Card>
+  );
+}
+
 /* ─────────────── track record ─────────────── */
 
 /**
@@ -688,6 +803,20 @@ export function AgentDetail({
       {/* ── 5. live telemetry ──────────────────────────────────────────── */}
       <Section title={`${categoryLabels[agent.category]} telemetry`}>
         <LiveStats agent={agent} />
+      </Section>
+
+      {/* ── 5b. retention ──────────────────────────────────────────────── */}
+      {/*
+       * Placed immediately after telemetry and before the chart, because it is
+       * the one number on this page that compares this agent to another one.
+       * Everything above it describes the agent; this describes what happened
+       * to the people who hired it.
+       */}
+      <Section
+        caption="Dolphin's own record of whether people who hired this agent kept it. Marketplace-derived, not published by the agent."
+        title="Retention"
+      >
+        <Retention agent={agent} />
       </Section>
 
       {/* ── 6. track record ────────────────────────────────────────────── */}

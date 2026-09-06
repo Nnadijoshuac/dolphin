@@ -10,6 +10,7 @@
 
 import type * as agentHires from "../agentHires.js";
 import type * as agentPayments from "../agentPayments.js";
+import type * as agentRetention from "../agentRetention.js";
 import type * as agentSessions from "../agentSessions.js";
 import type * as agentSubmissions from "../agentSubmissions.js";
 import type * as agents from "../agents.js";
@@ -49,6 +50,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   agentHires: typeof agentHires;
   agentPayments: typeof agentPayments;
+  agentRetention: typeof agentRetention;
   agentSessions: typeof agentSessions;
   agentSubmissions: typeof agentSubmissions;
   agents: typeof agents;

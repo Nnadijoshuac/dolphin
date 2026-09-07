@@ -15,10 +15,10 @@
  * it is presentation logic that several components share.
  */
 
+import type { AgentSignals } from "@/hooks/use-agents";
+
 export type { AgentSignals } from "@/hooks/use-agents";
 export { useAgentSignals } from "@/hooks/use-agents";
-
-import type { AgentSignals } from "@/hooks/use-agents";
 
 /**
  * The one-line summary a list row shows, or null when there is nothing honest

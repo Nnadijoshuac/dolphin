@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -62,16 +62,26 @@ export default function DiscoverScreen() {
   const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
 
   const { categories, isLoading: facetsLoading } = useCategoryFacets();
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  // The first chip is selected once the facets arrive. Deliberately not a
-  // hardcoded default: "rebalancing" used to be selected on mount whether or
-  // not any rebalancing agent existed.
-  useEffect(() => {
-    if (activeCategory === null && categories.length > 0) {
-      setActiveCategory(categories[0].slug);
-    }
-  }, [activeCategory, categories]);
+  /*
+   * The selection is DERIVED, not synchronised into state by an effect.
+   *
+   * The obvious shape is a `useState(null)` plus a `useEffect` that sets the
+   * first category once the facets arrive, and it is wrong twice over: it is a
+   * cascading render (the eslint rule react-hooks/set-state-in-effect catches
+   * exactly this), and it puts the screen through one frame where a category
+   * list exists and nothing is selected.
+   *
+   * `selected` holds only what the USER chose. Everything else falls out of the
+   * data, so the first chip is active on the very first render that has chips.
+   * Deliberately not a hardcoded default either: "rebalancing" used to be
+   * selected on mount whether or not a single rebalancing agent existed.
+   */
+  const [selected, setSelected] = useState<string | null>(null);
+  const activeCategory =
+    selected && categories.some((c) => c.slug === selected)
+      ? selected
+      : (categories[0]?.slug ?? null);
 
   const { agents, status, isLoading, loadMore, isEmpty } = useAgentList({
     category: activeCategory ?? undefined,
@@ -103,7 +113,7 @@ export default function DiscoverScreen() {
 
   const handleSelectCategory = (slug: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setActiveCategory(slug);
+    setSelected(slug);
     scrollTabIntoView(slug);
   };
 

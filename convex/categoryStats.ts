@@ -3,7 +3,7 @@ import { v, type Infer } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
-import { agentCategoryValidator, agentLiveStatsValidator } from "./categoryStatsValidators";
+import { statsCategoryValidator, agentLiveStatsValidator } from "./categoryStatsValidators";
 import {
   CHART_METRIC_LABELS,
   MAX_OBSERVATIONS,
@@ -25,14 +25,14 @@ type AgentLiveStats = Infer<typeof agentLiveStatsValidator>;
 
 export const getAgentCategoryStats = query({
   args: {
-    tokenId: v.string(),
-    category: agentCategoryValidator,
+    agentKey: v.string(),
+    category: statsCategoryValidator,
   },
-  handler: async (ctx, { tokenId, category }) => {
+  handler: async (ctx, { agentKey, category }) => {
     const row = await ctx.db
       .query("agentLiveStats")
       .withIndex("by_agent_category", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("category", category),
+        q.eq("agentKey", agentKey).eq("category", category),
       )
       .unique();
 
@@ -42,8 +42,8 @@ export const getAgentCategoryStats = query({
 
 export const upsertAgentCategoryStats = internalMutation({
   args: {
-    tokenId: v.string(),
-    category: agentCategoryValidator,
+    agentKey: v.string(),
+    category: statsCategoryValidator,
     agentWallet: v.union(v.string(), v.null()),
     stats: agentLiveStatsValidator,
     checkedAt: v.string(),
@@ -52,11 +52,11 @@ export const upsertAgentCategoryStats = internalMutation({
     const existing = await ctx.db
       .query("agentLiveStats")
       .withIndex("by_agent_category", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", args.tokenId).eq("category", args.category),
+        q.eq("agentKey", args.agentKey).eq("category", args.category),
       )
       .unique();
 
-    const document = { chainId: BSC_CHAIN_ID, ...args };
+    const document = { ...args };
 
     if (existing) {
       await ctx.db.patch(existing._id, document);
@@ -71,12 +71,12 @@ export const upsertAgentCategoryStats = internalMutation({
  * because it exists only to let the action decide whether to hit the chain.
  */
 export const peekAgentCategoryStats = internalQuery({
-  args: { tokenId: v.string(), category: agentCategoryValidator },
-  handler: async (ctx, { tokenId, category }) => {
+  args: { agentKey: v.string(), category: statsCategoryValidator },
+  handler: async (ctx, { agentKey, category }) => {
     const row = await ctx.db
       .query("agentLiveStats")
       .withIndex("by_agent_category", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("category", category),
+        q.eq("agentKey", agentKey).eq("category", category),
       )
       .unique();
 
@@ -109,8 +109,8 @@ export const peekAgentCategoryStats = internalQuery({
  */
 export const refreshAgentCategoryStats = action({
   args: {
-    tokenId: v.string(),
-    category: agentCategoryValidator,
+    agentKey: v.string(),
+    category: statsCategoryValidator,
     agentWallet: v.union(v.string(), v.null()),
   },
   // Annotated explicitly, for the reason recordJobPayment in
@@ -118,10 +118,10 @@ export const refreshAgentCategoryStats = action({
   // ctx.runQuery/ctx.runMutation on functions in its OWN module, so inferring
   // its type needs the module's type, which needs this handler's type.
   // TS7022/7023. The annotation breaks the cycle.
-  handler: async (ctx, { tokenId, category, agentWallet }): Promise<AgentLiveStats> => {
+  handler: async (ctx, { agentKey, category, agentWallet }): Promise<AgentLiveStats> => {
     const cached: { stats: AgentLiveStats; checkedAt: string } | null = await ctx.runQuery(
       internal.categoryStats.peekAgentCategoryStats,
-      { tokenId, category },
+      { agentKey, category },
     );
 
     if (cached) {
@@ -153,7 +153,7 @@ export const refreshAgentCategoryStats = action({
     })();
 
     await ctx.runMutation(internal.categoryStats.upsertAgentCategoryStats, {
-      tokenId,
+      agentKey,
       category,
       agentWallet,
       stats,
@@ -166,7 +166,7 @@ export const refreshAgentCategoryStats = action({
     const observation = chartableObservation(stats);
     if (observation) {
       await ctx.runMutation(internal.categoryStats.appendStatsObservation, {
-        tokenId,
+        agentKey,
         category,
         metric: observation.metric,
         value: observation.value,
@@ -189,8 +189,8 @@ export const refreshAgentCategoryStats = action({
  */
 export const appendStatsObservation = internalMutation({
   args: {
-    tokenId: v.string(),
-    category: agentCategoryValidator,
+    agentKey: v.string(),
+    category: statsCategoryValidator,
     metric: v.string(),
     value: v.number(),
     observedAt: v.string(),
@@ -205,8 +205,7 @@ export const appendStatsObservation = internalMutation({
       .query("agentStatsHistory")
       .withIndex("by_agent_category", (q) =>
         q
-          .eq("chainId", BSC_CHAIN_ID)
-          .eq("tokenId", args.tokenId)
+          .eq("agentKey", args.agentKey)
           .eq("category", args.category),
       )
       .collect();
@@ -225,7 +224,7 @@ export const appendStatsObservation = internalMutation({
       return null;
     }
 
-    await ctx.db.insert("agentStatsHistory", { chainId: BSC_CHAIN_ID, ...args });
+    await ctx.db.insert("agentStatsHistory", { ...args });
 
     // Prune oldest-first. `existing` is the pre-insert set, so the ceiling is
     // MAX_OBSERVATIONS counting the row just written.
@@ -251,12 +250,12 @@ export const appendStatsObservation = internalMutation({
  * of that mapping on the client.
  */
 export const getAgentStatsHistory = query({
-  args: { tokenId: v.string(), category: agentCategoryValidator },
-  handler: async (ctx, { tokenId, category }) => {
+  args: { agentKey: v.string(), category: statsCategoryValidator },
+  handler: async (ctx, { agentKey, category }) => {
     const rows = await ctx.db
       .query("agentStatsHistory")
       .withIndex("by_agent_category", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("category", category),
+        q.eq("agentKey", agentKey).eq("category", category),
       )
       .collect();
 

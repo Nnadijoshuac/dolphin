@@ -181,6 +181,8 @@ export interface ScanListItem {
   x402Supported: boolean;
   totalScore: number;
   feedbackCount: number;
+  /** Mean ERC-8004 feedback score, 0-5. Meaningless at feedbackCount 0. */
+  averageScore: number;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -255,6 +257,7 @@ export function normalizeListItem(raw: unknown): ScanListItem | null {
     x402Supported: readBoolean(raw, "x402_supported") ?? false,
     totalScore: readNumber(raw, "total_score") ?? 0,
     feedbackCount: readNumber(raw, "total_feedbacks") ?? 0,
+    averageScore: readNumber(raw, "average_score") ?? 0,
     createdAt: readDate(raw, "created_at"),
     updatedAt: readDate(raw, "updated_at"),
   };

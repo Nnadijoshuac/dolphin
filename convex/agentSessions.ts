@@ -3,7 +3,6 @@ import { v } from "convex/values";
 
 import { internalMutation, mutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
-import { agentCategoryValidator } from "./categoryStatsValidators";
 import { requireWalletAddress } from "./lib/walletAuth";
 
 /**
@@ -58,10 +57,9 @@ export const recordSessionGrant = mutation({
      * See convex/lib/walletAuth.ts.
      */
     sessionToken: v.string(),
-    tokenId: v.string(),
+    agentKey: v.string(),
     /** The agent's name as shown to the user at grant time. */
     agentName: v.string(),
-    category: agentCategoryValidator,
     altanaWalletAddress: v.string(),
     /** The wagmi/injected address on the matching agentHires row, if any. */
     hirerWalletAddress: v.union(v.string(), v.null()),
@@ -137,9 +135,8 @@ export const recordSessionGrant = mutation({
 
     return ctx.db.insert("agentSessions", {
       chainId: BSC_CHAIN_ID,
-      tokenId: args.tokenId,
+      agentKey: args.agentKey,
       agentName: args.agentName,
-      category: args.category,
       altanaWalletAddress,
       hirerWalletAddress,
       sessionPublicKey: args.sessionPublicKey,
@@ -226,10 +223,10 @@ export const getSessionsForAltanaWallet = query({
 /** Active sessions granted to one agent from one Altana wallet. */
 export const getActiveSessionForAgent = query({
   args: {
-    tokenId: v.string(),
+    agentKey: v.string(),
     altanaWalletAddress: v.string(),
   },
-  handler: async (ctx, { tokenId, altanaWalletAddress }) => {
+  handler: async (ctx, { agentKey, altanaWalletAddress }) => {
     if (!isAddress(altanaWalletAddress)) return null;
     const normalized = getAddress(altanaWalletAddress);
     const nowSeconds = Math.floor(Date.now() / 1000);
@@ -244,7 +241,7 @@ export const getActiveSessionForAgent = query({
     return (
       rows.find(
         (row) =>
-          row.tokenId === tokenId &&
+          row.agentKey === agentKey &&
           row.status === "active" &&
           row.expiry > nowSeconds,
       ) ?? null

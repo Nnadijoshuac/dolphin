@@ -3,7 +3,6 @@ import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID } from "./lib/bscClient";
-import { agentCategoryValidator } from "./categoryStatsValidators";
 import { requireWalletAddress } from "./lib/walletAuth";
 
 // Mirrors AgentPriceModel in src/types/agent.ts field-for-field. Keep these
@@ -34,8 +33,7 @@ function isFreePriceModel(priceModel: { amount: string }): boolean {
  */
 export const hireReadOnlyAgent = mutation({
   args: {
-    tokenId: v.string(),
-    category: agentCategoryValidator,
+    agentKey: v.string(),
     /**
      * THE CALLER'S PROOF OF IDENTITY, replacing the `walletAddress` string this
      * mutation used to take on trust (2026-09-06).
@@ -72,7 +70,7 @@ export const hireReadOnlyAgent = mutation({
      */
     paymentJobId: v.optional(v.union(v.null(), v.string())),
   },
-  handler: async (ctx, { tokenId, category, sessionToken, priceModel, paymentJobId }) => {
+  handler: async (ctx, { agentKey, sessionToken, priceModel, paymentJobId }) => {
     const normalizedWallet = await requireWalletAddress(
       ctx,
       sessionToken,
@@ -131,9 +129,9 @@ export const hireReadOnlyAgent = mutation({
             "funded job back off the ERC-8183 kernel.",
         );
       }
-      if (payment.tokenId !== tokenId) {
+      if (payment.agentKey !== agentKey) {
         throw new Error(
-          `hireReadOnlyAgent: job ${paymentJobId} paid for agent ${payment.tokenId}, not ${tokenId}. ` +
+          `hireReadOnlyAgent: job ${paymentJobId} paid for agent ${payment.agentKey}, not ${agentKey}. ` +
             "One payment cannot be spent on two hires.",
         );
       }
@@ -172,7 +170,7 @@ export const hireReadOnlyAgent = mutation({
     // verification now rather than instead of it.
     if (!isFreePriceModel(priceModel) && !paymentJobId) {
       throw new Error(
-        `hireReadOnlyAgent: agent ${tokenId} charges ${priceModel.amount} ${priceModel.token} ` +
+        `hireReadOnlyAgent: agent ${agentKey} charges ${priceModel.amount} ${priceModel.token} ` +
           `(${priceModel.type}), so a hire needs a paid ERC-8183 job to point at. Pay through ` +
           "agentPayments.recordJobPayment first - it verifies the escrow on-chain - then pass " +
           "its jobId as paymentJobId. Dolphin will not record a paid hire on an unpaid promise.",
@@ -182,7 +180,7 @@ export const hireReadOnlyAgent = mutation({
     const existing = await ctx.db
       .query("agentHires")
       .withIndex("by_agent_wallet", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", normalizedWallet),
+        q.eq("agentKey", agentKey).eq("walletAddress", normalizedWallet),
       )
       .unique();
 
@@ -211,9 +209,7 @@ export const hireReadOnlyAgent = mutation({
     }
 
     return ctx.db.insert("agentHires", {
-      chainId: BSC_CHAIN_ID,
-      tokenId,
-      category,
+      agentKey,
       walletAddress: normalizedWallet,
       status: "active",
       hiredAt,
@@ -251,23 +247,23 @@ export const hireReadOnlyAgent = mutation({
  */
 export const cancelHire = mutation({
   args: {
-    tokenId: v.string(),
+    agentKey: v.string(),
     sessionToken: v.string(),
   },
   returns: v.null(),
-  handler: async (ctx, { tokenId, sessionToken }) => {
+  handler: async (ctx, { agentKey, sessionToken }) => {
     const walletAddress = await requireWalletAddress(ctx, sessionToken, "cancelHire");
 
     const existing = await ctx.db
       .query("agentHires")
       .withIndex("by_agent_wallet", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+        q.eq("agentKey", agentKey).eq("walletAddress", walletAddress),
       )
       .unique();
 
     if (!existing) {
       throw new Error(
-        `cancelHire: ${walletAddress} has no hire on record for agent ${tokenId}.`,
+        `cancelHire: ${walletAddress} has no hire on record for agent ${agentKey}.`,
       );
     }
     if (existing.status === "cancelled") {

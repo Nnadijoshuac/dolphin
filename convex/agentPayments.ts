@@ -4,7 +4,6 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
 import { BSC_CHAIN_ID, bscPublicClient } from "./lib/bscClient";
-import { agentCategoryValidator } from "./categoryStatsValidators";
 import {
   QuoteRejected,
   TEXT_PARTS_ONLY,
@@ -234,17 +233,17 @@ async function describeMenu(endpoint: string): Promise<string> {
  */
 export const requestQuote = action({
   args: {
-    tokenId: v.string(),
+    agentKey: v.string(),
     /** What the user is asking the agent to do. Anchored into the job on-chain. */
     taskDescription: v.string(),
     /** Optional seller-side service id, for sellers that publish a menu. */
     serviceId: v.optional(v.string()),
   },
   returns: quoteValidator,
-  handler: async (ctx, { tokenId, taskDescription, serviceId }): Promise<PublicQuote> => {
-    const agent = await ctx.runQuery(api.agents.getAgent, { reference: tokenId });
+  handler: async (ctx, { agentKey, taskDescription, serviceId }): Promise<PublicQuote> => {
+    const agent = await ctx.runQuery(api.agents.get, { reference: agentKey });
     if (!agent) {
-      throw new Error(`requestQuote: agent ${tokenId} is not in Dolphin's catalog.`);
+      throw new Error(`requestQuote: agent ${agentKey} is not in Dolphin's catalog.`);
     }
     if (!agent.agentWallet || !isAddress(agent.agentWallet)) {
       // Without a registered wallet there is nothing to check the payee
@@ -339,11 +338,11 @@ export const requestQuote = action({
  * point the money has already moved, and this call cannot move any more of it.
  */
 export const notifyJobFunded = action({
-  args: { tokenId: v.string(), jobId: v.string() },
+  args: { agentKey: v.string(), jobId: v.string() },
   returns: v.object({ accepted: v.boolean(), detail: v.string() }),
-  handler: async (ctx, { tokenId, jobId }) => {
-    const agent = await ctx.runQuery(api.agents.getAgent, { reference: tokenId });
-    if (!agent) throw new Error(`notifyJobFunded: agent ${tokenId} is not in Dolphin's catalog.`);
+  handler: async (ctx, { agentKey, jobId }) => {
+    const agent = await ctx.runQuery(api.agents.get, { reference: agentKey });
+    if (!agent) throw new Error(`notifyJobFunded: agent ${agentKey} is not in Dolphin's catalog.`);
 
     // Same resolution as requestQuote - notifying a different endpoint than the
     // one that quoted would tell the wrong server its job was funded.
@@ -376,8 +375,7 @@ export const notifyJobFunded = action({
  */
 export const recordJobPayment = action({
   args: {
-    tokenId: v.string(),
-    category: agentCategoryValidator,
+    agentKey: v.string(),
     /** The Altana smart account that funded the job - the job's `client`. */
     altanaWalletAddress: v.string(),
     /** The wagmi address on the matching agentHires row, when there is one. */
@@ -399,13 +397,13 @@ export const recordJobPayment = action({
     ctx,
     args,
   ): Promise<{ recordId: string; jobStatus: string; budgetRaw: string }> => {
-    const agent = await ctx.runQuery(api.agents.getAgent, { reference: args.tokenId });
+    const agent = await ctx.runQuery(api.agents.get, { reference: args.agentKey });
     if (!agent) {
-      throw new Error(`recordJobPayment: agent ${args.tokenId} is not in Dolphin's catalog.`);
+      throw new Error(`recordJobPayment: agent ${args.agentKey} is not in Dolphin's catalog.`);
     }
     if (!agent.agentWallet || !isAddress(agent.agentWallet)) {
       throw new Error(
-        `recordJobPayment: agent ${args.tokenId} has no registered wallet to check a payment against.`,
+        `recordJobPayment: agent ${args.agentKey} has no registered wallet to check a payment against.`,
       );
     }
     if (!isAddress(args.altanaWalletAddress)) {
@@ -457,10 +455,9 @@ export const recordJobPayment = action({
     }
 
     const recordId = await ctx.runMutation(internal.agentPayments.insertJobRecord, {
+      agentKey: args.agentKey,
       chainId: BSC_CHAIN_ID,
-      tokenId: args.tokenId,
       agentName: agent.name,
-      category: args.category,
       altanaWalletAddress: getAddress(args.altanaWalletAddress),
       hirerWalletAddress: args.hirerWalletAddress,
       providerAddress: getAddress(job.provider),
@@ -488,9 +485,8 @@ export const recordJobPayment = action({
 export const insertJobRecord = internalMutation({
   args: {
     chainId: v.number(),
-    tokenId: v.string(),
+    agentKey: v.string(),
     agentName: v.string(),
-    category: agentCategoryValidator,
     altanaWalletAddress: v.string(),
     hirerWalletAddress: v.union(v.string(), v.null()),
     providerAddress: v.string(),
@@ -542,15 +538,14 @@ export const getJobsForAltanaWallet = query({
 
 /** The paid jobs backing one agent's hire, for the hire flow to show. */
 export const getJobsForAgent = query({
-  args: { tokenId: v.string(), altanaWalletAddress: v.string() },
-  handler: async (ctx, { tokenId, altanaWalletAddress }) => {
+  args: { agentKey: v.string(), altanaWalletAddress: v.string() },
+  handler: async (ctx, { agentKey, altanaWalletAddress }) => {
     if (!isAddress(altanaWalletAddress)) return [];
     return ctx.db
       .query("agentJobs")
       .withIndex("by_agent_wallet", (q) =>
         q
-          .eq("chainId", BSC_CHAIN_ID)
-          .eq("tokenId", tokenId)
+          .eq("agentKey", agentKey)
           .eq("altanaWalletAddress", getAddress(altanaWalletAddress)),
       )
       .order("desc")

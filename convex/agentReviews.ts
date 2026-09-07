@@ -10,8 +10,10 @@ import {
   query,
 } from "./_generated/server";
 import { BSC_CHAIN_ID, bscPublicClient } from "./lib/bscClient";
+import { parseAgentKey } from "./model/agent";
 import {
   REPUTATION_REGISTRY_ABI,
+  REPUTATION_REGISTRY_IDENTITY,
   REPUTATION_REGISTRY_ADDRESS,
 } from "./lib/reputationRegistry";
 import { requireWalletAddress } from "./lib/walletAuth";
@@ -94,7 +96,7 @@ const outcomeValidator = v.union(
  */
 export const getReviewEligibility = query({
   args: {
-    tokenId: v.string(),
+    agentKey: v.string(),
     sessionToken: v.union(v.string(), v.null()),
   },
   returns: v.object({
@@ -112,7 +114,7 @@ export const getReviewEligibility = query({
       }),
     ),
   }),
-  handler: async (ctx, { tokenId, sessionToken }) => {
+  handler: async (ctx, { agentKey, sessionToken }) => {
     if (!sessionToken) {
       return {
         eligible: false,
@@ -135,14 +137,14 @@ export const getReviewEligibility = query({
     const hire = await ctx.db
       .query("agentHires")
       .withIndex("by_agent_wallet", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+        q.eq("agentKey", agentKey).eq("walletAddress", walletAddress),
       )
       .unique();
 
     const existingReview = await ctx.db
       .query("agentReviews")
       .withIndex("by_agent_reviewer", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+        q.eq("agentKey", agentKey).eq("walletAddress", walletAddress),
       )
       .unique();
 
@@ -184,19 +186,19 @@ export const getReviewEligibility = query({
 export const submitReview = mutation({
   args: {
     sessionToken: v.string(),
-    tokenId: v.string(),
+    agentKey: v.string(),
     outcome: outcomeValidator,
     wouldHireAgain: v.boolean(),
     comment: v.union(v.string(), v.null()),
   },
   returns: v.null(),
-  handler: async (ctx, { sessionToken, tokenId, outcome, wouldHireAgain, comment }) => {
+  handler: async (ctx, { sessionToken, agentKey, outcome, wouldHireAgain, comment }) => {
     const walletAddress = await requireWalletAddress(ctx, sessionToken, "submitReview");
 
     const hire = await ctx.db
       .query("agentHires")
       .withIndex("by_agent_wallet", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+        q.eq("agentKey", agentKey).eq("walletAddress", walletAddress),
       )
       .unique();
 
@@ -224,7 +226,7 @@ export const submitReview = mutation({
     const existing = await ctx.db
       .query("agentReviews")
       .withIndex("by_agent_reviewer", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+        q.eq("agentKey", agentKey).eq("walletAddress", walletAddress),
       )
       .unique();
 
@@ -243,8 +245,7 @@ export const submitReview = mutation({
     }
 
     await ctx.db.insert("agentReviews", {
-      chainId: BSC_CHAIN_ID,
-      tokenId,
+      agentKey,
       walletAddress,
       outcome,
       wouldHireAgain,
@@ -288,17 +289,17 @@ export const submitReview = mutation({
 export const attestReviewOnChain = action({
   args: {
     sessionToken: v.string(),
-    tokenId: v.string(),
+    agentKey: v.string(),
     transactionHash: v.string(),
   },
   returns: v.object({ transactionHash: v.string() }),
   handler: async (
     ctx,
-    { sessionToken, tokenId, transactionHash },
+    { sessionToken, agentKey, transactionHash },
   ): Promise<{ transactionHash: string }> => {
     const reviewer: string = await ctx.runQuery(
       internal.agentReviews.reviewerForSession,
-      { sessionToken, tokenId },
+      { sessionToken, agentKey },
     );
 
     if (!/^0x[0-9a-fA-F]{64}$/.test(transactionHash)) {
@@ -346,15 +347,38 @@ export const attestReviewOnChain = action({
       );
     }
 
-    const agentIdArg = decoded.args[0];
-    if (String(agentIdArg) !== tokenId) {
+    /*
+     * The registry's `agentId` is the bare ERC-8004 token id, so the composite
+     * key has to be split before the comparison (2026-09-07 re-key).
+     *
+     * The registry address in the key is checked too, and that check is new
+     * rather than cosmetic: the ERC-8004 Reputation Registry is paired with ONE
+     * identity registry, so feedback naming token 25 is about token 25 of that
+     * registry. Under the old bare-tokenId scheme, an attestation for token 25
+     * on the primary registry would have satisfied a review of a completely
+     * different token 25 on BRC8004 - which is the same collision that made
+     * agentKey necessary everywhere else.
+     */
+    const parsedKey = parseAgentKey(agentKey);
+    if (!parsedKey) {
+      throw new Error(`attestReviewOnChain: "${agentKey}" is not a valid agent key.`);
+    }
+    if (parsedKey.registryAddress !== REPUTATION_REGISTRY_IDENTITY.toLowerCase()) {
       throw new Error(
-        `That transaction left feedback for agent ${String(agentIdArg)}, not agent ${tokenId}.`,
+        "That agent is registered on a different identity registry than the one this " +
+          "Reputation Registry attests for, so an attestation could not be checked against it.",
+      );
+    }
+
+    const agentIdArg = decoded.args[0];
+    if (String(agentIdArg) !== parsedKey.tokenId) {
+      throw new Error(
+        `That transaction left feedback for agent ${String(agentIdArg)}, not agent ${parsedKey.tokenId}.`,
       );
     }
 
     await ctx.runMutation(internal.agentReviews.setReviewTransaction, {
-      tokenId,
+      agentKey,
       walletAddress: reviewer,
       transactionHash: hash,
     });
@@ -372,9 +396,9 @@ export const attestReviewOnChain = action({
  * at stake.
  */
 export const reviewerForSession = internalQuery({
-  args: { sessionToken: v.string(), tokenId: v.string() },
+  args: { sessionToken: v.string(), agentKey: v.string() },
   returns: v.string(),
-  handler: async (ctx, { sessionToken, tokenId }) => {
+  handler: async (ctx, { sessionToken, agentKey }) => {
     const walletAddress = await requireWalletAddress(
       ctx,
       sessionToken,
@@ -384,7 +408,7 @@ export const reviewerForSession = internalQuery({
     const review = await ctx.db
       .query("agentReviews")
       .withIndex("by_agent_reviewer", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+        q.eq("agentKey", agentKey).eq("walletAddress", walletAddress),
       )
       .unique();
 
@@ -400,16 +424,16 @@ export const reviewerForSession = internalQuery({
 
 export const setReviewTransaction = internalMutation({
   args: {
-    tokenId: v.string(),
+    agentKey: v.string(),
     walletAddress: v.string(),
     transactionHash: v.string(),
   },
   returns: v.null(),
-  handler: async (ctx, { tokenId, walletAddress, transactionHash }) => {
+  handler: async (ctx, { agentKey, walletAddress, transactionHash }) => {
     const review = await ctx.db
       .query("agentReviews")
       .withIndex("by_agent_reviewer", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId).eq("walletAddress", walletAddress),
+        q.eq("agentKey", agentKey).eq("walletAddress", walletAddress),
       )
       .unique();
 
@@ -428,11 +452,11 @@ export const setReviewTransaction = internalMutation({
  * of what makes a review checkable rather than merely present.
  */
 export const getAgentReviews = query({
-  args: { tokenId: v.string() },
-  handler: async (ctx, { tokenId }) => {
+  args: { agentKey: v.string() },
+  handler: async (ctx, { agentKey }) => {
     const rows = await ctx.db
       .query("agentReviews")
-      .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId))
+      .withIndex("by_agent", (q) => q.eq("agentKey", agentKey))
       .collect();
 
     const total = rows.length;

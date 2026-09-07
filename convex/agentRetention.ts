@@ -116,7 +116,7 @@ function summarise(hires: HireRow[], windowMs: number, now: number) {
 }
 
 export const getAgentRetention = query({
-  args: { tokenId: v.string() },
+  args: { agentKey: v.string() },
   returns: v.object({
     totalHires: v.number(),
     activeHires: v.number(),
@@ -133,13 +133,13 @@ export const getAgentRetention = query({
       rate: v.union(v.number(), v.null()),
     }),
   }),
-  handler: async (ctx, { tokenId }) => {
-    // Prefix query on by_agent_wallet [chainId, tokenId, walletAddress] - every
+  handler: async (ctx, { agentKey }) => {
+    // Prefix query on by_agent_wallet [agentKey, walletAddress] - every
     // hire of this agent by anyone. No new index needed.
     const hires = await ctx.db
       .query("agentHires")
       .withIndex("by_agent_wallet", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", tokenId),
+        q.eq("agentKey", agentKey),
       )
       .collect();
 

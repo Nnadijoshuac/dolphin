@@ -1,659 +1,265 @@
 /**
- * The single authoritative agent listing that both frontends read.
+ * THE READ PATH. Everything the marketplace frontends call.
  *
- * `listAgents` and `getAgent` are the only place the curated catalog, the
- * category taxonomy, the hire-price policy, the discovered->Agent mapping and
- * the editorial/discovered merge rule are applied. The mobile app
- * (src/hooks/use-agents.ts) and the website (web/src/hooks/use-agents.ts) both
- * call these and shape nothing themselves, so the two surfaces cannot show
- * different agents, categories or prices for the same registry.
+ * ---------------------------------------------------------------------------
+ * WHAT THIS REPLACES, AND WHY IT HAD TO
+ * ---------------------------------------------------------------------------
+ * The previous `listAgents` took no arguments and returned THE ENTIRE CATALOG.
+ * It collected `discoveredAgents`, rebuilt a full Agent object for every row,
+ * merged nine hardcoded editorial agents, then performed one indexed lookup
+ * plus one `await ctx.storage.getUrl()` per agent, serially. Both frontends
+ * then filtered by category and searched in JavaScript over the whole result.
  *
- * The decisions live in convex/lib/agentCatalog.ts. This file is the fetch and
- * assembly mechanics around them:
- *
- *   editorial catalog  (hand-vetted, convex/lib/agentCatalog.ts)
- *     + discoveredAgents  (cron keyword discovery, convex/discoveredAgents.ts)
- *     + agentDirectory    (8004scan indexed overlay, refreshed below)
- *     = listAgents
- *
- * Live category stats (Venus/Aave/PancakeSwap reads) are deliberately NOT here
- * - they stay in convex/categoryStats.ts, refreshed per agent on view, because
- * they need the on-chain agent wallet and are far more expensive than a
- * listing.
- */
-
-import { v } from "convex/values";
-
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import {
-  action,
-  internalAction,
-  internalMutation,
-  internalQuery,
-  query,
-  type QueryCtx,
-} from "./_generated/server";
-import { BSC_CHAIN_ID } from "./lib/bscClient";
-import { isListable, probeSellability } from "./lib/sellability";
-import {
-  AGENT_DATA_SOURCES,
-  EDITORIAL_AGENT_INPUTS,
-  EDITORIAL_TOKEN_IDS,
-  buildDiscoveredAgent,
-  buildEditorialAgent,
-  liveMetric,
-  mergeCatalog,
-  unavailableMetric,
-  type CatalogAgent,
-} from "./lib/agentCatalog";
-
-type DirectoryRow = {
-  tokenId: string;
-  name: string | null;
-  description: string | null;
-  iconUrl: string | null;
-  publisher: string | null;
-  ownerAddress: string | null;
-  agentWallet: string | null;
-  registeredAt: string | null;
-  tags: string[];
-  services: { name: string; endpoint: string; version: string | null }[];
-  x402Supported: boolean | null;
-  isActive: boolean | null;
-  reputationScore: number | null;
-  feedbackCount: number | null;
-  endpointStatus: string | null;
-  endpointCheckedAt: string | null;
-  indexedAt: string;
-  refreshedAt: string;
-  iconStorageId?: Id<"_storage"> | null;
-  iconSource?: string | null;
-  iconCheckedAt?: string | null;
-  // Sellability, written by the directory refresh. See convex/lib/sellability.ts.
-  sellsState?: string | null;
-  sellsDetail?: string | null;
-  sellsServiceCount?: number | null;
-  sellsCheckedAt?: string | null;
-  consecutiveSellFailures?: number | null;
-  a2aEndpoint?: string | null;
-  /** Resolved from iconStorageId by buildCatalog - not a stored column. */
-  cachedIconUrl?: string | null;
-};
-
-/**
- * Lays 8004scan's indexed values over a catalog entry. A null field means
- * 8004scan published nothing for it, so the catalog's own value (or an explicit
- * "unavailable" metric) stands - never a filled-in guess.
- *
- * priceModel is deliberately untouched: 8004scan's agent payload carries no
- * price field of any kind (verified against a full raw response), so there is
- * nothing here to overlay. Leaving it alone is what stops a refresh from
- * regressing an agent to an unresolved price and re-breaking the hire button.
- */
-function applyDirectory(agent: CatalogAgent, row: DirectoryRow): CatalogAgent {
-  const asOf = row.indexedAt;
-
-  const skillNames = new Set(agent.skills.map((s) => s.name.toLowerCase()));
-  const skills = [...agent.skills];
-  for (const tag of row.tags) {
-    if (!skillNames.has(tag.toLowerCase())) {
-      skillNames.add(tag.toLowerCase());
-      skills.push({ name: tag, evidence: "registry-metadata" as never });
-    }
-  }
-
-  return {
-    ...agent,
-    name: row.name ?? agent.name,
-    description: row.description ?? agent.description,
-    // Dolphin's own cached copy wins over every external URL. The bytes were
-    // fetched once during onboarding (convex/discoveryPipeline.ts's icon pass)
-    // and are served from Convex storage, so no render depends on a third-party
-    // image host still being up and fast. `cachedIconUrl` falls back to
-    // 8004scan's URL only while an agent is waiting for its first icon pass.
-    iconUrl: row.cachedIconUrl ?? row.iconUrl ?? agent.iconUrl,
-    publisher: row.publisher ?? agent.publisher,
-    publisherAddress: row.ownerAddress ?? agent.publisherAddress,
-    agentWallet: row.agentWallet ?? agent.agentWallet,
-    registeredAt: row.registeredAt ?? agent.registeredAt,
-    skills,
-    services: row.services,
-    x402Supported:
-      row.x402Supported === null
-        ? unavailableMetric(
-            "8004scan did not return x402 support metadata.",
-            AGENT_DATA_SOURCES.scan,
-          )
-        : (liveMetric(row.x402Supported, asOf, AGENT_DATA_SOURCES.scan) as never),
-    isActive:
-      row.isActive === null
-        ? unavailableMetric(
-            "8004scan did not return an active-state value.",
-            AGENT_DATA_SOURCES.scan,
-          )
-        : (liveMetric(row.isActive, asOf, AGENT_DATA_SOURCES.scan) as never),
-    // A score is only meaningful with at least one review behind it; an
-    // average over zero feedbacks is not a rating, it is an artefact.
-    reputationScore:
-      row.reputationScore === null ||
-      row.feedbackCount === null ||
-      row.feedbackCount <= 0
-        ? unavailableMetric(
-            "No indexed ERC-8004 feedback is available for a reputation score.",
-            AGENT_DATA_SOURCES.scan,
-          )
-        : (liveMetric(
-            row.reputationScore,
-            asOf,
-            AGENT_DATA_SOURCES.scan,
-            "Unfiltered 8004scan feedback aggregate. Review count and reviewer trust must be considered separately.",
-          ) as never),
-    feedbackCount:
-      row.feedbackCount === null
-        ? unavailableMetric(
-            "8004scan did not return a feedback count.",
-            AGENT_DATA_SOURCES.scan,
-          )
-        : (liveMetric(row.feedbackCount, asOf, AGENT_DATA_SOURCES.scan) as never),
-    endpointStatus:
-      row.endpointStatus === null
-        ? unavailableMetric(
-            "8004scan has not published a recent endpoint health check.",
-            AGENT_DATA_SOURCES.scan,
-          )
-        : (liveMetric(
-            row.endpointStatus,
-            row.endpointCheckedAt ?? asOf,
-            AGENT_DATA_SOURCES.scan,
-            "Endpoint status checked by 8004scan; it is not an ERC-8004 capability guarantee.",
-          ) as never),
-    recordStatus: "indexed" as const,
-  };
-}
-
-/**
- * MERGE FIRST, THEN FETCH ONLY WHAT THE CATALOG NEEDS.
- *
- * This function used to `.collect()` the whole `agentDirectory` table and then
- * resolve a storage URL for every row, before discarding all but the couple of
- * dozen whose tokenId is actually in the merged catalog. That worked while the
- * directory was small and then took the entire site down on 2026-09-02:
- * `agentDirectory` had reached ~5,400 rows, and one `ctx.storage.getUrl` per
- * row blew Convex's 4,096-read-per-execution limit, so `listAgents` threw
- * "Too many reads in a single function execution" for every caller and both
+ * That design had already taken the site down once: on 2026-09-02 an earlier
+ * version collected the whole `agentDirectory` and crossed Convex's
+ * read-per-execution limit, so `listAgents` threw for every caller and both
  * frontends rendered an empty catalog against a perfectly healthy deployment.
  *
- * The directory only ever contributes an OVERLAY onto agents the catalog
- * already contains (see applyDirectory), so nothing is lost by looking rows up
- * per agent instead: it is a point lookup on the by_agent index, and it costs
- * one read per listed agent rather than one per indexed agent.
+ * There is no version of it that scales, because a Convex QUERY HAS A ONE
+ * SECOND EXECUTION LIMIT and a serial `storage.getUrl` per agent crosses it
+ * somewhere in the low hundreds. The brief targets thousands.
  *
- * WHY THIS SHAPE MATTERS MORE THAN THE READ COUNT ITSELF. `agentDirectory`
- * grows with the REGISTRY (deep evaluation caches an icon for every agent it
- * touches, including rejected ones), whereas the catalog grows with what
- * Dolphin actually lists. Binding the cost to the second of those makes this
- * query safe as the registry keeps growing; going back to a full collect would
- * re-arm the same failure a few thousand rows later.
+ * So: everything here is indexed, paginated, and bounded by page size rather
+ * than by catalog size.
+ *
+ *   list      by_status_category_rank / by_status_rank, cursor-paginated
+ *   search    a Convex search index, cursor-paginated, relevance-ordered
+ *   get       a point lookup on by_key
+ *   signals   batched by key - never one query per rendered row
+ *
+ * ---------------------------------------------------------------------------
+ * LiveMetric IS CONSTRUCTED HERE, NOT STORED
+ * ---------------------------------------------------------------------------
+ * The old schema stored every field as a `LiveMetric<T>` - a value plus a
+ * status, a timestamp, a source label and a methodology sentence. The label and
+ * the sentence are CONSTANT per field, so storing them multiplied every
+ * document by their combined size for no gain. They are presentation, and they
+ * are added on the way out.
  */
-async function buildCatalog(ctx: QueryCtx): Promise<CatalogAgent[]> {
-  const asOf = new Date().toISOString();
 
-  const discoveredRows = (await ctx.db
-    .query("discoveredAgents")
-    .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
-    .collect()) as unknown as Parameters<typeof buildDiscoveredAgent>[0][];
+import { paginationOptsValidator } from "convex/server";
+import { v } from "convex/values";
 
-  const merged = mergeCatalog(
-    EDITORIAL_AGENT_INPUTS.map((input) => buildEditorialAgent(input, asOf)),
-    discoveredRows.map((row) => buildDiscoveredAgent(row, asOf)),
-  );
+import { query } from "./_generated/server";
+import { toPublicAgent } from "./lib/publicAgent";
+import { coerceAgentKey } from "./model/agent";
 
-  return Promise.all(
-    merged.map(async (agent) => {
-      const row = (await ctx.db
-        .query("agentDirectory")
-        .withIndex("by_agent", (q) =>
-          q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", agent.tokenId),
-        )
-        .unique()) as unknown as DirectoryRow | null;
 
-      if (!row) return agent;
-
-      // Resolved here rather than in the client so both frontends keep
-      // rendering `iconUrl` exactly as they already do.
-      const cachedIconUrl = row.iconStorageId
-        ? await ctx.storage.getUrl(row.iconStorageId)
-        : null;
-
-      const applied = applyDirectory(agent, { ...row, cachedIconUrl });
-      return {
-        ...applied,
-        // Carried through so a caller can say WHY an agent is or is not
-        // hireable without a second query. The gate below uses the same fields.
-        sellsState: row.sellsState ?? null,
-        sellsDetail: row.sellsDetail ?? null,
-        sellsServiceCount: row.sellsServiceCount ?? null,
-        consecutiveSellFailures: row.consecutiveSellFailures ?? 0,
-        // The door the probe proved answers. requestQuote prefers this over
-        // re-deriving one with the path heuristic.
-        a2aEndpoint: row.a2aEndpoint ?? null,
-      };
-    }),
-  );
-}
+/* ---------------------------------------------------------------------------
+ * LIST
+ * ------------------------------------------------------------------------ */
 
 /**
- * Whether this agent belongs in the catalog at all.
+ * The catalog, paginated.
  *
- * DECISION (2026-09-06, project owner): an agent that cannot be hired to
- * perform a task does not get listed. Not listed-and-marked, not
- * listed-and-sorted-last - not listed. A marketplace whose listings are mostly
- * unbuyable is a directory wearing a shop's clothes, and the earlier compromise
- * of showing everything with a "View" pill still made a browsing user do the
- * work of finding the ones that were real.
+ * `category` narrows to one drawer via `by_status_category_rank`; without it,
+ * `by_status_rank` walks everything. Both are index ranges, so cost is the page
+ * size and nothing else.
  *
- * Quality is explicitly NOT part of this gate. Whether an agent does its job
- * WELL is what reviews decide, and a bad agent that really performs a task
- * belongs in the catalog with a bad review attached - that is the mechanism
- * working, not a listing failure.
+ * ORDERED BY `rank` DESCENDING, and `rank` is a STORED field for exactly this
+ * reason. An ordering computed at read time can change between page one and
+ * page two, which shows the reader one agent twice and hides another entirely.
  *
- * The one thing this must never do is hide an agent because a probe had a bad
- * afternoon; see isListable and the failure-counter rules in
- * convex/lib/sellability.ts.
+ * `status` is pinned to "live" and "degraded" is deliberately excluded from the
+ * default browse - a degraded agent is one Dolphin currently cannot reach, and
+ * the catalog is a shop. It remains reachable by direct link through `get`.
  */
-function isCatalogListable(agent: CatalogAgent): boolean {
-  const row = agent as CatalogAgent & {
-    sellsState?: string | null;
-    consecutiveSellFailures?: number | null;
-  };
-  return isListable(row.sellsState as never, row.consecutiveSellFailures ?? 0);
-}
-
-/**
- * Every agent Dolphin lists, already curated, categorised, priced, deduped and
- * overlaid with 8004scan's indexed data. Both frontends render this as-is.
- */
-export const listAgents = query({
+export const list = query({
   args: {
-    /**
-     * Include agents that cannot currently be hired. Off by default, because
-     * the catalog is a shop.
-     *
-     * Exists for operators and diagnostics - "what did the gate remove and
-     * why" has to be answerable without reading the database, the same reason
-     * the discovery ledger keeps its rejections instead of deleting them.
-     */
-    includeUnhireable: v.optional(v.boolean()),
+    category: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, { includeUnhireable }) => {
-    const catalog = await buildCatalog(ctx);
-    return includeUnhireable ? catalog : catalog.filter(isCatalogListable);
+  handler: async (ctx, { category, paginationOpts }) => {
+    const page = category
+      ? await ctx.db
+          .query("agents")
+          .withIndex("by_status_category_rank", (q) =>
+            q.eq("status", "live").eq("categorySlug", category),
+          )
+          .order("desc")
+          .paginate(paginationOpts)
+      : await ctx.db
+          .query("agents")
+          .withIndex("by_status_rank", (q) => q.eq("status", "live"))
+          .order("desc")
+          .paginate(paginationOpts);
+
+    return { ...page, page: page.page.map(toPublicAgent) };
   },
 });
 
 /**
- * One agent by tokenId, from exactly the same pipeline as listAgents, so a
- * detail page can never disagree with the card that linked to it. Accepts
- * either a bare tokenId or a full "56:<registry>:<tokenId>" agent id.
+ * Server-side search, paginated.
+ *
+ * Replaces `searchAgentsLocally`, which shipped the entire catalog to the
+ * device and filtered it there - workable at 30 agents, impossible at 3,000,
+ * and the reason the app had to load everything before it could show anything.
+ *
+ * Convex's search index tokenizes on whitespace and punctuation, lowercases,
+ * and prefix-matches the final term, so "reba" finds "rebalancing". Relevance
+ * ordering is the index's own and cannot be combined with `rank` - which is
+ * correct for a search box, where what the user typed should outrank shelf
+ * position.
  */
-export const getAgent = query({
-  args: { reference: v.string() },
-  handler: async (ctx, { reference }) => {
-    const parts = reference.split(":");
-    const tokenId = parts[parts.length - 1];
-    /*
-     * Deliberately NOT gated on sellability. Someone holding a link, or a hire
-     * they already paid for, must still be able to open the page - and the page
-     * itself says the agent cannot be hired right now. Hiding the record would
-     * make an existing hire unreadable, which is a worse failure than showing
-     * an agent nobody can currently buy from.
-     */
-    const catalog = await buildCatalog(ctx);
-    return catalog.find((agent) => agent.tokenId === tokenId) ?? null;
+export const search = query({
+  args: {
+    text: v.string(),
+    category: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, { text, category, paginationOpts }) => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
+      // An empty search is a browse, not a search over an empty string.
+      const page = await ctx.db
+        .query("agents")
+        .withIndex("by_status_rank", (q) => q.eq("status", "live"))
+        .order("desc")
+        .paginate(paginationOpts);
+      return { ...page, page: page.page.map(toPublicAgent) };
+    }
+
+    const page = await ctx.db
+      .query("agents")
+      .withSearchIndex("search_text", (q) => {
+        const base = q.search("searchText", trimmed).eq("status", "live");
+        return category ? base.eq("categorySlug", category) : base;
+      })
+      .paginate(paginationOpts);
+
+    return { ...page, page: page.page.map(toPublicAgent) };
   },
 });
 
 /* ---------------------------------------------------------------------------
- * 8004scan refresh
+ * GET
  * ------------------------------------------------------------------------ */
 
-const AGENT_DETAIL_URL =
-  process.env.SCAN8004_API_URL?.trim() ||
-  "https://api.8004scan.io/api/v1/agents";
-const PER_REQUEST_TIMEOUT_MS = 15_000;
-
-// Same key and same fallback as convex/discoveredAgents.ts - authenticated
-// raises 8004scan's limit from 30/min to 600/min. Never EXPO_PUBLIC_/
-// NEXT_PUBLIC_ prefixed: that would ship it in the client bundle.
-function scan8004Headers(): HeadersInit {
-  const apiKey = process.env.SCAN8004_API_KEY;
-  return apiKey
-    ? { Accept: "application/json", "X-API-Key": apiKey }
-    : { Accept: "application/json" };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(record: Record<string, unknown>, key: string): string | null {
-  const value = record[key];
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
-}
-
-function readBoolean(
-  record: Record<string, unknown>,
-  key: string,
-): boolean | null {
-  const value = record[key];
-  return typeof value === "boolean" ? value : null;
-}
-
-function readNumber(record: Record<string, unknown>, key: string): number | null {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function readDate(record: Record<string, unknown>, key: string): string | null {
-  const value = readString(record, key);
-  return value !== null && Number.isFinite(Date.parse(value)) ? value : null;
-}
-
-function readHttpUrl(
-  record: Record<string, unknown>,
-  key: string,
-): string | null {
-  const value = readString(record, key);
-  if (value === null) return null;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:" || parsed.protocol === "http:"
-      ? value
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function parseJsonValue(value: unknown): unknown {
-  if (typeof value !== "string") return value;
-  const candidate = value.trim();
-  if (candidate.length === 0) return value;
-  try {
-    return JSON.parse(candidate) as unknown;
-  } catch {
-    return value;
-  }
-}
-
-function readStringArray(
-  record: Record<string, unknown>,
-  key: string,
-): string[] {
-  const value = parseJsonValue(record[key]);
-  if (typeof value === "string" && value.trim().length > 0) {
-    return [value.trim()];
-  }
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (item): item is string => typeof item === "string" && item.trim().length > 0,
-  );
-}
-
-function decodeServices(
-  value: unknown,
-): { name: string; endpoint: string; version: string | null }[] {
-  const services: { name: string; endpoint: string; version: string | null }[] =
-    [];
-  const decoded = parseJsonValue(value);
-
-  const append = (name: string, candidate: unknown) => {
-    if (!isRecord(candidate)) return;
-    const endpoint = readHttpUrl(candidate, "endpoint");
-    if (endpoint === null) return;
-    services.push({ name, endpoint, version: readString(candidate, "version") });
-  };
-
-  if (Array.isArray(decoded)) {
-    for (const candidate of decoded) {
-      if (!isRecord(candidate)) continue;
-      append(readString(candidate, "name") ?? "Agent service", candidate);
-    }
-  } else if (isRecord(decoded)) {
-    for (const [name, candidate] of Object.entries(decoded)) {
-      append(name, candidate);
-    }
-  }
-
-  return services;
-}
-
 /**
- * Refreshes 8004scan's indexed view of every agent Dolphin lists - the eight
- * curated token IDs plus whatever the discovery cron has found. One agent
- * failing (8004scan intermittently returns 500/502/524) just leaves that
- * agent's previous row in place; it never empties the table.
+ * One agent, by key or by bare tokenId.
+ *
+ * DELIBERATELY NOT GATED ON STATUS. Someone holding a link, or a hire they
+ * already paid for, must still be able to open the page - and the page itself
+ * says whether the agent can be hired right now. Hiding the record would make
+ * an existing hire unreadable, which is a worse failure than showing an agent
+ * nobody can currently buy from.
+ *
+ * It also accepts a bare tokenId, because every deep link that exists today is
+ * one. See `coerceAgentKey` for why that is a read-path convenience only.
  */
-export const refreshAgentDirectory = internalAction({
-  args: {},
-  handler: async (ctx): Promise<{
-    refreshed: number;
-    failed: number;
-    tokenIds: number;
-    errors: string[];
-  }> => {
-    const discovered: { tokenId: string; category: string }[] = await ctx.runQuery(
-      internal.agents.listDiscoveredTokenIds,
-      {},
-    );
-    const tokenIds = [
-      ...new Set([
-        ...EDITORIAL_TOKEN_IDS,
-        ...discovered.map(({ tokenId }) => tokenId),
-      ]),
-    ];
+export const get = query({
+  args: { reference: v.string() },
+  handler: async (ctx, { reference }) => {
+    const agentKey = coerceAgentKey(reference);
+    if (!agentKey) return null;
 
-    // The sellability probe needs a category, because its fallback asks the
-    // agent to price a task and a task only makes sense per category.
-    const categoryByToken = new Map<string, string>();
-    for (const input of EDITORIAL_AGENT_INPUTS) {
-      categoryByToken.set(input.tokenId, input.category);
-    }
-    for (const row of discovered) {
-      if (!categoryByToken.has(row.tokenId)) {
-        categoryByToken.set(row.tokenId, row.category);
-      }
-    }
+    const row = await ctx.db
+      .query("agents")
+      .withIndex("by_key", (q) => q.eq("agentKey", agentKey))
+      .unique();
+    if (!row) return null;
 
-    let refreshed = 0;
-    let failed = 0;
-    const errors: string[] = [];
-
-    for (const tokenId of tokenIds) {
-      try {
-        const response = await fetch(
-          `${AGENT_DETAIL_URL}/${BSC_CHAIN_ID}/${encodeURIComponent(tokenId)}`,
-          {
-            headers: scan8004Headers(),
-            signal: AbortSignal.timeout(PER_REQUEST_TIMEOUT_MS),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error(`8004scan returned ${response.status}`);
-        }
-
-        const payload = (await response.json()) as unknown;
-        const data =
-          isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
-
-        if (!isRecord(data)) {
-          throw new Error("8004scan returned a non-object agent record");
-        }
-
-        const indexedAt = readDate(data, "updated_at") ?? new Date().toISOString();
-        const health = isRecord(data.health_status) ? data.health_status : null;
-        const overall = health ? readString(health, "overall_status") : null;
-        const endpointStatus =
-          overall === "healthy" ||
-          overall === "degraded" ||
-          overall === "unhealthy" ||
-          overall === "unknown"
-            ? overall
-            : null;
-
-        /*
-         * Ask the agent what it sells, in the same pass that refreshes what
-         * 8004scan thinks of it.
-         *
-         * Here rather than in a cron of its own because the two questions are
-         * asked about the same set of agents at the same cadence, and because
-         * the probe needs `services`, which this loop has just decoded. See
-         * convex/lib/sellability.ts for why this is a different question from
-         * liveness and why the catalog gates on this one.
-         */
-        const services = decodeServices(data.services);
-        const sell = await probeSellability(
-          services,
-          categoryByToken.get(tokenId) ?? "monitoring",
-          readString(data, "agent_wallet"),
-        );
-
-        await ctx.runMutation(internal.agents.upsertAgentDirectory, {
-          tokenId,
-          sellsState: sell.state,
-          sellsDetail: sell.detail,
-          sellsServiceCount: sell.serviceCount,
-          sellsCheckedAt: new Date().toISOString(),
-          a2aEndpoint: sell.endpoint,
-          name: readString(data, "name"),
-          description: readString(data, "description"),
-          iconUrl: readHttpUrl(data, "image_url"),
-          publisher:
-            readString(data, "owner_certified_name") ??
-            readString(data, "owner_username") ??
-            readString(data, "owner_ens"),
-          ownerAddress: readString(data, "owner_address"),
-          agentWallet: readString(data, "agent_wallet"),
-          registeredAt: readDate(data, "created_at"),
-          tags: [
-            ...readStringArray(data, "supported_protocols"),
-            ...readStringArray(data, "tags"),
-          ],
-          services,
-          x402Supported: readBoolean(data, "x402_supported"),
-          isActive: readBoolean(data, "is_active"),
-          reputationScore: readNumber(data, "average_score"),
-          feedbackCount: readNumber(data, "total_feedbacks"),
-          endpointStatus,
-          endpointCheckedAt: health ? readDate(health, "checked_at") : null,
-          indexedAt,
-          refreshedAt: new Date().toISOString(),
-        });
-        refreshed++;
-      } catch (error) {
-        failed++;
-        errors.push(
-          `${tokenId}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    return { refreshed, failed, tokenIds: tokenIds.length, errors };
-  },
-});
-
-/** Public trigger for the same refresh, so it can be run by hand while testing. */
-export const refreshAgentDirectoryNow = action({
-  args: {},
-  handler: async (ctx): Promise<{
-    refreshed: number;
-    failed: number;
-    tokenIds: number;
-    errors: string[];
-  }> => ctx.runAction(internal.agents.refreshAgentDirectory, {}),
-});
-
-/** Internal: just the token IDs refreshAgentDirectory needs to iterate. */
-export const listDiscoveredTokenIds = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const rows = await ctx.db
-      .query("discoveredAgents")
-      .withIndex("by_agent", (q) => q.eq("chainId", BSC_CHAIN_ID))
-      .collect();
-    return rows.map(({ tokenId, category }) => ({ tokenId, category }));
-  },
-});
-
-export const upsertAgentDirectory = internalMutation({
-  args: {
-    tokenId: v.string(),
-    /** Sellability, probed by the caller. See convex/lib/sellability.ts. */
-    sellsState: v.string(),
-    sellsDetail: v.string(),
-    sellsServiceCount: v.union(v.number(), v.null()),
-    sellsCheckedAt: v.string(),
-    a2aEndpoint: v.union(v.string(), v.null()),
-    name: v.union(v.string(), v.null()),
-    description: v.union(v.string(), v.null()),
-    iconUrl: v.union(v.string(), v.null()),
-    publisher: v.union(v.string(), v.null()),
-    ownerAddress: v.union(v.string(), v.null()),
-    agentWallet: v.union(v.string(), v.null()),
-    registeredAt: v.union(v.string(), v.null()),
-    tags: v.array(v.string()),
-    services: v.array(
-      v.object({
-        name: v.string(),
-        endpoint: v.string(),
-        version: v.union(v.string(), v.null()),
-      }),
-    ),
-    x402Supported: v.union(v.boolean(), v.null()),
-    isActive: v.union(v.boolean(), v.null()),
-    reputationScore: v.union(v.number(), v.null()),
-    feedbackCount: v.union(v.number(), v.null()),
-    endpointStatus: v.union(v.string(), v.null()),
-    endpointCheckedAt: v.union(v.string(), v.null()),
-    indexedAt: v.string(),
-    refreshedAt: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("agentDirectory")
-      .withIndex("by_agent", (q) =>
-        q.eq("chainId", BSC_CHAIN_ID).eq("tokenId", args.tokenId),
-      )
+    // The probe's own words about this agent, so a detail page can say WHY an
+    // agent is degraded rather than just that it is.
+    const verification = await ctx.db
+      .query("agentVerification")
+      .withIndex("by_key", (q) => q.eq("agentKey", agentKey))
       .unique();
 
-    /*
-     * The consecutive-failure counter, maintained here because this is the only
-     * writer that sees both the new probe and the previous one.
-     *
-     * A structural failure (no-endpoint) does not accumulate: it is decided on
-     * its own, at once, since no amount of retrying turns an unpublished
-     * endpoint into a published one. A transport failure accumulates, so an
-     * agent whose server is having a bad afternoon is tolerated until
-     * SELL_FAILURES_BEFORE_DELIST rather than dropped on the first miss. A
-     * success resets, so recovering re-lists an agent automatically the same
-     * way one successful liveness probe re-lists one in pipelineStatus.ts.
-     */
-    const previousFailures = existing?.consecutiveSellFailures ?? 0;
-    const consecutiveSellFailures =
-      args.sellsState === "sells" || args.sellsState === "no-endpoint"
-        ? 0
-        : previousFailures + 1;
+    return {
+      ...toPublicAgent(row),
+      verification: verification
+        ? {
+            state: verification.state,
+            detail: verification.detail,
+            lastProbeAt: verification.lastProbeAt,
+            lastOkAt: verification.lastOkAt,
+            consecutiveFailures: verification.consecutiveFailures,
+          }
+        : null,
+    };
+  },
+});
 
-    const document = { chainId: BSC_CHAIN_ID, ...args, consecutiveSellFailures };
+/* ---------------------------------------------------------------------------
+ * SIGNALS
+ * ------------------------------------------------------------------------ */
 
-    if (existing) {
-      await ctx.db.patch(existing._id, document);
-    } else {
-      await ctx.db.insert("agentDirectory", document);
+/**
+ * A rate over one or two data points is arithmetic that creates a false
+ * impression. Below this the rate is null and the caller renders the counts -
+ * "3 hires" is honest at any size.
+ */
+const MIN_DENOMINATOR = 5;
+
+/**
+ * Hire and review counts for a SPECIFIC set of agents.
+ *
+ * TAKES THE KEYS IT NEEDS, rather than reading every hire and review in the
+ * database and bucketing them, which is what `getCatalogSignals` did. That was
+ * fine at four hires and is a full scan of two growing tables - a page of 25
+ * agents should cost a bounded number of indexed reads, not a walk over every
+ * hire Dolphin has ever recorded.
+ *
+ * Returns a sparse list: an agent nobody has hired has nothing to report, and
+ * the caller renders that as "no hires yet" rather than a row of zeroes it has
+ * to special-case anyway.
+ */
+export const signals = query({
+  args: { agentKeys: v.array(v.string()) },
+  handler: async (ctx, { agentKeys }) => {
+    // Bounded so a caller cannot ask for the whole catalog in one query.
+    const keys = [...new Set(agentKeys)].slice(0, 100);
+    const results: {
+      agentKey: string;
+      hires: number;
+      activeHires: number;
+      paidHires: number;
+      reviews: number;
+      wouldHireAgain: number;
+      wouldHireAgainRate: number | null;
+      deliveredCount: number;
+    }[] = [];
+
+    for (const agentKey of keys) {
+      const hires = await ctx.db
+        .query("agentHires")
+        .withIndex("by_agent", (q) => q.eq("agentKey", agentKey))
+        .take(500);
+      const reviews = await ctx.db
+        .query("agentReviews")
+        .withIndex("by_agent", (q) => q.eq("agentKey", agentKey))
+        .take(500);
+
+      if (hires.length === 0 && reviews.length === 0) continue;
+
+      let activeHires = 0;
+      let paidHires = 0;
+      for (const hire of hires) {
+        if (hire.status === "active") activeHires++;
+        if (hire.paymentJobId) paidHires++;
+      }
+
+      let wouldHireAgain = 0;
+      let deliveredCount = 0;
+      for (const review of reviews) {
+        if (review.wouldHireAgain) wouldHireAgain++;
+        if (review.outcome === "yes") deliveredCount++;
+      }
+
+      results.push({
+        agentKey,
+        hires: hires.length,
+        activeHires,
+        paidHires,
+        reviews: reviews.length,
+        wouldHireAgain,
+        wouldHireAgainRate:
+          reviews.length >= MIN_DENOMINATOR ? wouldHireAgain / reviews.length : null,
+        deliveredCount,
+      });
     }
+
+    return results;
   },
 });

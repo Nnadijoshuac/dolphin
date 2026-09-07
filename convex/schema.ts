@@ -156,6 +156,17 @@ export default defineSchema({
     ),
     x402Supported: v.boolean(),
     /**
+     * ERC-8004 feedback, as the indexer aggregates it. Two numbers, kept
+     * because the detail page renders them and re-fetching 8004scan per view to
+     * get them would put a third-party API on the render path.
+     *
+     * `reputationScore` is null unless there is at least one feedback behind
+     * it: an average over zero is not a rating, it is an artefact, and showing
+     * one would be a fabricated number in the place users trust most.
+     */
+    feedbackCount: v.number(),
+    reputationScore: v.union(v.number(), v.null()),
+    /**
      * Hand-vetted. Boosts `rank`; does NOT exempt from verification.
      *
      * The nine editorial agents used to be a TypeScript literal compiled into

@@ -66,9 +66,10 @@ interface AdvertCarouselProps {
 }
 
 const promoImages = {
-  yield: require("../../assets/images/promos/yield.jpg"),
-  health: require("../../assets/images/promos/health.jpg"),
+  brainOnBnb: require("../../assets/images/promos/health.jpg"),
   rebalancing: require("../../assets/images/promos/rebalancing.jpg"),
+  yield: require("../../assets/images/promos/yield.jpg"),
+  security: require("../../assets/images/promos/security.jpg"),
 };
 
 export const AdvertCarousel = ({ agents, onAgentPress }: AdvertCarouselProps) => {
@@ -78,8 +79,8 @@ export const AdvertCarousel = ({ agents, onAgentPress }: AdvertCarouselProps) =>
 
   const promos = [
     {
-      id: "promo-health",
-      imageSource: promoImages.health,
+      id: "promo-brain-on-bnb",
+      imageSource: promoImages.brainOnBnb,
       title: "Brain on BNB",
       subtitle: "Venus Health Factor Monitor: 24/7 liquidation protection.",
       categoryLabel: "Featured Agent",
@@ -101,6 +102,14 @@ export const AdvertCarousel = ({ agents, onAgentPress }: AdvertCarouselProps) =>
       subtitle: "Discover the most profitable vault strategies.",
       categoryLabel: "Top Yield Agents",
       targetCategory: "yield",
+    },
+    {
+      id: "promo-security",
+      imageSource: promoImages.security,
+      title: "Never Get Liquidated",
+      subtitle: "Health factor monitors that act before it's too late.",
+      categoryLabel: "Essential Security",
+      targetCategory: "health-factor",
     },
   ];
 

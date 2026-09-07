@@ -12,9 +12,18 @@ export type PreviewHire = Readonly<{
 
 interface AppState {
   hasCompletedOnboarding: boolean;
+  /**
+   * Whether the "tap Use to copy the link" hint has been dismissed for good.
+   *
+   * It explains a control that is one tap away and self-evident once used, so
+   * it is worth showing once and never being a toll on every subsequent visit.
+   * "Okay" closes this time; this flag is what "Don't show again" writes.
+   */
+  hasDismissedUseHint: boolean;
   previewHires: PreviewHire[];
   recentSearches: string[];
   setHasCompletedOnboarding: (isComplete: boolean) => void;
+  dismissUseHint: () => void;
   addRecentSearch: (query: string) => void;
   removeRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
@@ -25,6 +34,7 @@ interface AppState {
 
 type LegacyPersistedState = {
   hasCompletedOnboarding?: unknown;
+  hasDismissedUseHint?: unknown;
   previewHires?: unknown;
   hiredAgents?: unknown;
   recentSearches?: unknown;
@@ -74,6 +84,9 @@ function migratePersistedState(persistedState: unknown): Partial<AppState> {
 
   return {
     hasCompletedOnboarding: legacy.hasCompletedOnboarding === true,
+    // Absent on every store written before this existed, which reads as "not
+    // dismissed" - the correct answer for someone who has never seen it.
+    hasDismissedUseHint: legacy.hasDismissedUseHint === true,
     previewHires,
     recentSearches,
   };
@@ -83,10 +96,12 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       hasCompletedOnboarding: false,
+      hasDismissedUseHint: false,
       previewHires: [],
       recentSearches: [],
       setHasCompletedOnboarding: (isComplete) =>
         set({ hasCompletedOnboarding: isComplete }),
+      dismissUseHint: () => set({ hasDismissedUseHint: true }),
       addRecentSearch: (query) => {
         const trimmed = query.trim();
         if (!trimmed) return;
@@ -133,6 +148,7 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         hasCompletedOnboarding: state.hasCompletedOnboarding,
+        hasDismissedUseHint: state.hasDismissedUseHint,
         previewHires: state.previewHires,
         recentSearches: state.recentSearches,
       }),

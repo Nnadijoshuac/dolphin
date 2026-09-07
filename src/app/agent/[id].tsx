@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentDetail } from "@/components/agent-detail";
 import { HireSheet } from "@/components/hire-sheet";
+import { UseHintSheet } from "@/components/use-hint-sheet";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
@@ -36,6 +37,21 @@ export default function AgentDetailRoute() {
   const router = useRouter();
   const { data: agent, isLoading, isError } = useAgentDetail(id);
   const [hireOpen, setHireOpen] = useState(false);
+
+  /*
+   * The one-time hint, shown on arrival at an MCP agent rather than an A2A one.
+   *
+   * It explains the Use button, and only MCP agents have one - an A2A agent's
+   * action is Hire, which is a word that already carries its own meaning. It is
+   * derived rather than held in state so it cannot get out of step with the
+   * store, and `hintClosedThisVisit` is what "Okay" sets: dismissed now,
+   * offered again next time, which is the difference between the two buttons.
+   */
+  const hasDismissedUseHint = useAppStore((state) => state.hasDismissedUseHint);
+  const dismissUseHint = useAppStore((state) => state.dismissUseHint);
+  const [hintClosedThisVisit, setHintClosedThisVisit] = useState(false);
+  const showUseHint =
+    agent?.protocol === "mcp" && !hasDismissedUseHint && !hintClosedThisVisit;
 
   const previewHires = useAppStore((state) => state.previewHires);
   const isPreviewSaved = previewHires.some(
@@ -198,6 +214,15 @@ export default function AgentDetailRoute() {
           />
         )}
       </ScrollView>
+
+      <UseHintSheet
+        onDismiss={() => setHintClosedThisVisit(true)}
+        onNeverShowAgain={() => {
+          setHintClosedThisVisit(true);
+          dismissUseHint();
+        }}
+        visible={showUseHint}
+      />
 
       {agent ? (
         <HireSheet

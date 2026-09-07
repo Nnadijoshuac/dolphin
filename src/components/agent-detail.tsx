@@ -5,27 +5,14 @@ import * as Haptics from "expo-haptics";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { McpConnect } from "@/components/mcp-connect";
-import { MetricCell } from "@/components/metric-cell";
-import { PerformancePanel } from "@/components/performance-panel";
+import { McpUseButton } from "@/components/mcp-connect";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { colors, radii, shadows } from "@/constants/theme";
-import { syncingLiveStats } from "@/data/editorial-agents";
-import {
-  useAgentCategoryStats,
-  useAgentRetention,
-  useAgentStatsHistory,
-} from "@/hooks/use-category-stats";
 import { useAgentReviews } from "@/hooks/use-agent-reviews";
 import { convexClient } from "@/providers/convex-provider";
 import { assessHireability } from "@/services/hireability";
-import type {
-  Agent,
-  AgentCategory,
-  AgentLiveStats,
-  LiveMetric,
-} from "@/types/agent";
+import type { Agent, AgentCategory, LiveMetric } from "@/types/agent";
 
 /**
  * The agent detail page.
@@ -104,9 +91,6 @@ function shortAddress(value: string | null) {
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
-function formatList(value: string[]) {
-  return value.length > 0 ? value.join(", ") : "None";
-}
 
 /* ─────────────── primitives ─────────────── */
 
@@ -230,264 +214,22 @@ function Pill({ label, accent = false }: { label: string; accent?: boolean }) {
   );
 }
 
-/* ─────────────── live stats ─────────────── */
-
-/**
- * Renders nothing for a category with no wired protocol reader.
+/* ─────────────── removed 2026-09-07 ─────────────── */
+/*
+ * LiveStats, Retention and TrackRecord lived here and are gone with the three
+ * sections that rendered them (see the note in the page body).
  *
- * `liveStats` is nullable as of the 2026-09-07 rebuild because categories are
- * open strings now: `research`, `security` and anything the registry invents
- * have no protocol holding a number about them. An empty four-cell grid reading
- * "Not reported" four times is worse than no panel - it implies a feed exists
- * and is silent, when in truth none was ever wired.
+ * ONE CONSEQUENCE, RECORDED RATHER THAN DISCOVERED LATER: the telemetry panel
+ * was also what CAUSED stats to be collected. useAgentCategoryStats refreshed
+ * on view and convex/categoryStats.ts appended an observation as a by-product,
+ * which is what fed the track-record chart. With the panel gone nothing calls
+ * it, so no new observations accumulate and the chart could not fill even if
+ * it were re-added tomorrow.
+ *
+ * That is the correct trade while no category has a wired reader - collecting
+ * nothing costs nothing - but whoever wires one must restore the refresh as
+ * well as the section, or they will wire a reader that is never called.
  */
-function LiveStats({ agent }: { agent: Agent }) {
-  if (!agent.hasLiveStats) return null;
-
-  if (!convexClient) {
-    return agent.liveStats ? <LiveStatsView stats={agent.liveStats} /> : null;
-  }
-
-  return <BackendLiveStats agent={agent} />;
-}
-
-function BackendLiveStats({ agent }: { agent: Agent }) {
-  const cached = useAgentCategoryStats(
-    agent.tokenId,
-    agent.category,
-    agent.agentWallet,
-  );
-  const stats = cached?.stats ?? syncingLiveStats(agent.category);
-  if (!stats) return null;
-
-  return <LiveStatsView stats={stats} />;
-}
-
-/**
- * The category's four metrics, two per row.
- *
- * Every cell is a MetricCell, which is the app's one presentation of a
- * LiveMetric and the reason an unread number reads as "Syncing" or "Not
- * reported" rather than as a figure.
- */
-function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
-  return (
-    <Card>
-      <View className="flex-row flex-wrap gap-y-5">
-        {stats.category === "monitoring" ? (
-          <>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => value} label="Alert frequency" metric={stats.alertFrequency} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={formatList} label="Assets watched" metric={stats.assetsWatched} />
-            </View>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => value} label="Last alert" metric={stats.lastAlertAt} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => `${value.toFixed(1)}%`} label="False positives" metric={stats.falsePositiveRate} />
-            </View>
-          </>
-        ) : null}
-        {stats.category === "rebalancing" ? (
-          <>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => `${value.toFixed(1)}%`} label="Rebalance efficiency" metric={stats.winRate} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => value} label="Active range" metric={stats.activeRange} />
-            </View>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => value} label="Current P&L" metric={stats.currentPnl} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => value.toLocaleString()} label="LP positions" metric={stats.positionCount} />
-            </View>
-          </>
-        ) : null}
-        {stats.category === "grid-trading" ? (
-          <>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => `${value.toFixed(1)}%`} label="Win rate" metric={stats.winRate} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => value} label="Active range" metric={stats.activeRange} />
-            </View>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => value} label="Current P&L" metric={stats.currentPnl} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => value.toLocaleString()} label="Grid levels" metric={stats.positionCount} />
-            </View>
-          </>
-        ) : null}
-        {stats.category === "health-factor" ? (
-          <>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => value.toLocaleString()} label="Positions watched" metric={stats.positionsMonitored} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => value.toFixed(2)} label="Average health" metric={stats.averageHealthFactor} />
-            </View>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => value.toLocaleString()} label="Liquidations prevented" metric={stats.liquidationsPrevented} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => `${value} ms`} label="Response latency" metric={stats.responseLatencyMs} />
-            </View>
-          </>
-        ) : null}
-        {stats.category === "yield" ? (
-          <>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => `${value.toFixed(2)}%`} label="Current APY" metric={stats.currentApy} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => `$${value.toLocaleString()}`} label="TVL managed" metric={stats.tvlManagedUsd} />
-            </View>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={formatList} label="Protocols" metric={stats.protocolsUsed} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => value} label="Vault rebalance cadence" metric={stats.rebalanceFrequency} />
-            </View>
-          </>
-        ) : null}
-        {stats.category === "trading" ? (
-          <>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => `${value.toFixed(1)}%`} label="Win rate" metric={stats.winRate} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={(value) => value.toLocaleString()} label="Trades executed" metric={stats.tradesExecuted} />
-            </View>
-            <View className="w-1/2 pr-2.5">
-              <MetricCell format={(value) => value} label="Realized P&L" metric={stats.realizedPnl} />
-            </View>
-            <View className="w-1/2 pl-2.5">
-              <MetricCell format={formatList} label="Markets traded" metric={stats.marketsTraded} />
-            </View>
-          </>
-        ) : null}
-      </View>
-    </Card>
-  );
-}
-
-/* ─────────────── retention ─────────────── */
-
-/**
- * How many people who hired this agent kept it.
- *
- * The first signal in this app that actually distinguishes one agent from
- * another: reputation is unavailable or zero across the catalog, feedback count
- * measures activity rather than quality, and every agent costs the same. This
- * is computed from Dolphin's own hire records (convex/agentRetention.ts), needs
- * nothing from the user, and is hard to forge now that a hire needs a signature.
- *
- * A percentage is shown only when the denominator can carry one. "100%" over a
- * single hire is true arithmetic and a false impression, so below the threshold
- * the raw counts are shown instead, and with no hire old enough the section
- * says so rather than showing a zero.
- */
-function Retention({ agent }: { agent: Agent }) {
-  if (!convexClient) return null;
-  return <BackendRetention agent={agent} />;
-}
-
-function BackendRetention({ agent }: { agent: Agent }) {
-  const retention = useAgentRetention(agent.tokenId);
-
-  if (retention === undefined) {
-    return (
-      <StatePanel
-        body="Reading Dolphin's hire records for this agent."
-        compact
-        state="syncing"
-        title="Loading retention"
-      />
-    );
-  }
-
-  if (retention.totalHires === 0) {
-    return (
-      <StatePanel
-        body="Nobody has hired this agent through Dolphin yet, so there is nothing to measure. This says nothing about the agent — only that Dolphin has no record of its own to report."
-        compact
-        state="empty"
-        title="No hires yet"
-      />
-    );
-  }
-
-  const describe = (
-    window: { eligible: number; retained: number; rate: number | null },
-    label: string,
-  ) => {
-    if (window.eligible === 0) {
-      return { label, value: "Not yet", detail: `No hire is ${label} old` };
-    }
-    if (window.rate === null) {
-      return {
-        label,
-        value: `${window.retained}/${window.eligible}`,
-        detail: "Too few to rate",
-      };
-    }
-    return {
-      label,
-      value: `${Math.round(window.rate * 100)}%`,
-      detail: `of ${window.eligible} hires`,
-    };
-  };
-
-  const cells = [
-    describe(retention.day7, "7 days"),
-    describe(retention.day30, "30 days"),
-  ];
-
-  return (
-    <Card>
-      <View className="flex-row flex-wrap gap-y-5">
-        {cells.map((cell, index) => (
-          <View
-            className={index % 2 === 0 ? "w-1/2 pr-2.5" : "w-1/2 pl-2.5"}
-            key={cell.label}
-          >
-            <Text
-              className="text-[11px] font-bold uppercase tracking-[0.8px]"
-              style={{ color: colors.faint }}
-            >
-              Kept after {cell.label}
-            </Text>
-            <Text
-              className="mt-1.5 text-[20px] font-bold"
-              style={{ color: colors.ink }}
-            >
-              {cell.value}
-            </Text>
-            <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
-              {cell.detail}
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      <View
-        className="mt-4 flex-row items-center justify-between border-t pt-3"
-        style={{ borderColor: colors.lineLight }}
-      >
-        <Text className="text-[12px]" style={{ color: colors.muted }}>
-          Hires through Dolphin
-        </Text>
-        <Text className="text-[12px] font-semibold" style={{ color: colors.ink }}>
-          {retention.activeHires} active of {retention.totalHires}
-        </Text>
-      </View>
-    </Card>
-  );
-}
 
 /* ─────────────── reviews ─────────────── */
 
@@ -638,41 +380,53 @@ function BackendReviews({ agent }: { agent: Agent }) {
   );
 }
 
-/* ─────────────── track record ─────────────── */
-
-/**
- * The chart, sourced from convex/categoryStats.ts's stored observations.
- *
- * Split out for the same reason LiveStats is: the history query is a Convex
- * hook, and convex/react's hooks throw without a provider, so a build with no
- * EXPO_PUBLIC_CONVEX_URL must not mount one. That build has no stored
- * observations by definition, which is exactly what the no-backend branch says.
- */
-function TrackRecord({ agent }: { agent: Agent }) {
-  if (!convexClient) {
-    return (
-      <StatePanel
-        body="This build has no Dolphin backend configured, so no readings have been stored to chart."
-        compact
-        state="unavailable"
-        title="Track record unavailable"
-      />
-    );
-  }
-
-  return <BackendTrackRecord agent={agent} />;
+/** A titled block of label/value rows. The only shape inside Details. */
+function FactGroup({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: readonly (readonly [string, string])[];
+}) {
+  return (
+    <View>
+      <Text
+        className="mb-2 text-[11px] font-bold uppercase tracking-[0.9px]"
+        style={{ color: colors.faint }}
+      >
+        {title}
+      </Text>
+      <Card style={{ paddingBottom: 7 }}>
+        {rows.map(([label, value], index) => (
+          <FactRow isFirst={index === 0} key={label} label={label} value={value} />
+        ))}
+      </Card>
+    </View>
+  );
 }
 
-function BackendTrackRecord({ agent }: { agent: Agent }) {
-  const history = useAgentStatsHistory(agent.tokenId, agent.category);
+/** A date a person can read, or an honest absence. */
+function formatDay(value: string | null): string {
+  if (!value) return "Not reported";
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return "Not reported";
+  return new Date(at).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
-  return (
-    <PerformancePanel
-      isLoading={history === undefined}
-      metricLabel={history?.metricLabel ?? null}
-      points={history?.points ?? []}
-    />
-  );
+/** Dolphin's own verdict, in words rather than an enum. */
+function statusLabel(status: Agent["status"]): string {
+  switch (status) {
+    case "live":
+      return "Answering";
+    case "degraded":
+      return "Failing recently";
+    default:
+      return "Not answering";
+  }
 }
 
 /* ─────────────── the page ─────────────── */
@@ -831,54 +585,18 @@ export function AgentDetail({
           </>
         ) : agent.protocol === "mcp" ? (
           /*
-             AN MCP AGENT HAS NOT FAILED ANYTHING.
+             AN MCP AGENT HAS NOT FAILED ANYTHING, AND ITS ACTION IS ONE BUTTON.
 
-             This branch used to render "Not hireable yet" for every agent that
-             `assessHireability` refused, and that check asks whether an agent
-             publishes an A2A endpoint and a wallet - a fair question for an
-             agent you COMMISSION, and the wrong question entirely for one you
-             RUN. 26 of the 28 live agents are MCP, so the page was telling the
-             overwhelming majority of a real, working catalog that it was
-             broken.
+             This branch was a card explaining the protocol and ending on
+             "Running its tools from inside Dolphin is not wired up yet" - a dead
+             end in front of 26 of the 28 live agents. It then became that card
+             plus an endpoint and a config block, which was accurate and still
+             three things to read before the reader could act.
 
-             An MCP agent publishes tools and answers immediately, for free.
-             What it lacks is a price, because there is nothing to buy. Saying
-             so plainly is both true and better news than the copy it replaces.
+             What an MCP agent needs is its link. Tap Use, it is on the
+             clipboard. See components/mcp-connect.tsx.
           */
-          <Card style={{ backgroundColor: colors.surfaceSubtle }}>
-            <View className="flex-row items-start gap-3">
-              <View className="mt-0.5">
-                <CategoryGlyph color={colors.muted} name="info" size={17} />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                  Free to use
-                </Text>
-                <Text
-                  className="mt-1.5 text-[12px] leading-[18px]"
-                  style={{ color: colors.muted }}
-                >
-                  This agent publishes tools you call directly rather than work you
-                  commission, so there is nothing to pay and no escrow involved.
-                  Dolphin has verified its server answers.
-                </Text>
-                {/*
-                    This ended on "Running its tools from inside Dolphin is not
-                    wired up yet" - a dead end in front of 26 of the 28 live
-                    agents, printed directly on top of the answer.
-
-                    Nobody hires an MCP server; they connect to it. Dolphin is a
-                    platform for discovering agents, and for this kind of agent
-                    discovery ends when the reader has the endpoint. It already
-                    holds one the probe proved answers, plus the tools it
-                    actually listed, so handing both over IS the feature -
-                    building a tool-runner in the app would reproduce what the
-                    reader's own client already does well.
-                */}
-                <McpConnect agent={agent} />
-              </View>
-            </View>
-          </Card>
+          <McpUseButton agent={agent} />
         ) : (
           <Card style={{ backgroundColor: colors.surfaceSubtle }}>
             <View className="flex-row items-start gap-3">
@@ -972,56 +690,30 @@ export function AgentDetail({
         ) : null}
       </Section>
 
-      {/* ── 5. live telemetry ──────────────────────────────────────────── */}
-      <Section title={`${categoryLabels[agent.category]} telemetry`}>
-        <LiveStats agent={agent} />
-      </Section>
-
-      {/* ── 5b. retention ──────────────────────────────────────────────── */}
       {/*
-       * Placed immediately after telemetry and before the chart, because it is
-       * the one number on this page that compares this agent to another one.
-       * Everything above it describes the agent; this describes what happened
-       * to the people who hired it.
-       */}
-      <Section
-        caption="Dolphin's own record of whether people who hired this agent kept it. Marketplace-derived, not published by the agent."
-        title="Retention"
-      >
-        <Retention agent={agent} />
-      </Section>
-
-      {/* ── 6. track record ────────────────────────────────────────────── */}
-      <Section
-        caption="Every reading Dolphin has taken of this agent's headline metric, kept rather than overwritten. Each point is one protocol read at the time it was taken."
-        title="Track record"
-      >
-        <TrackRecord agent={agent} />
-      </Section>
-
-      {/*
-       * ── 7. WAS: recent on-chain activity ─────────────────────────────
+       * ── 5-6. WAS: telemetry, retention, and the track-record chart ──────
        *
-       * REMOVED 2026-09-06. `recentActivity` is hardcoded `[]` in
-       * convex/lib/agentCatalog.ts and src/data/editorial-agents.ts, and
-       * nothing in the codebase has ever written it. So this section rendered
-       * "Activity not published - no auditable execution events were returned
-       * by the current data sources" for 100% of agents, permanently, implying
-       * a source that had been consulted and had come back empty. No source was
-       * ever consulted, because none is wired.
+       * REMOVED 2026-09-07, on the owner's rule: anything that is not
+       * functioning, or that does not help the reader make a clear decision,
+       * must go.
        *
-       * That is the same class of defect as the fake numbers listed at the top
-       * of this file: a truthful-sounding sentence creating a false impression
-       * about a real agent. It goes for the same reason they went.
+       * All three were permanently empty for the overwhelming majority of the
+       * catalog, and empty in three different ways that each cost a reader a
+       * scroll to discover:
        *
-       * TO BRING IT BACK, it needs an actual source, and two real ones exist:
-       * ERC-8004 identity-registry logs for this tokenId (registration,
-       * metadata updates, ownership transfers - readable with viem's getLogs,
-       * no API key), and ERC-8183 kernel jobs whose provider is this agent's
-       * wallet, which is the far more valuable signal because it is work the
-       * agent was actually paid for. Both are getLogs range-limited on the
-       * public BSC dataseed endpoints, so either needs its range strategy
-       * settled before it is promised in the UI. Tracked in Agent/TODO.md.
+       *   telemetry     `liveStats` is null for every category with no wired
+       *                 protocol reader, which since categories became open is
+       *                 most of them. An MCP agent has never had one.
+       *   retention     counted from agentHires. An MCP agent cannot BE hired,
+       *                 so 26 of 28 read "No hires yet" forever - which is the
+       *                 exact "reads as a failure" problem the protocol split
+       *                 was introduced to fix.
+       *   track record  needs two observations of a category metric, and there
+       *                 is no reader producing them for most categories.
+       *
+       * Their sources are untouched and still queried nowhere else, so any of
+       * the three is a re-add of one <Section> once something is actually
+       * feeding it. Deleting the section is not deleting the capability.
        */}
 
       {/* ── 7. reviews ─────────────────────────────────────────────────── */}
@@ -1094,59 +786,43 @@ function Details({ agent }: { agent: Agent }) {
 
       {open ? (
         <View className="mt-3 gap-3">
-          <Card>
-            <View className="flex-row flex-wrap gap-y-5">
-              <View className="w-1/2 pr-2.5">
-                <MetricCell
-                  format={(value) => value.toFixed(1)}
-                  label="Reputation"
-                  metric={agent.reputationScore}
-                />
-              </View>
-              <View className="w-1/2 pl-2.5">
-                <MetricCell
-                  format={(value) => value.toLocaleString()}
-                  label="Feedback records"
-                  metric={agent.feedbackCount}
-                />
-              </View>
-              <View className="w-1/2 pr-2.5">
-                <MetricCell
-                  format={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
-                  label="Endpoint"
-                  metric={agent.endpointStatus}
-                />
-              </View>
-              <View className="w-1/2 pl-2.5">
-                <MetricCell
-                  format={(value) => (value ? "Supported" : "Not supported")}
-                  label="x402 payments"
-                  metric={agent.x402Supported}
-                />
-              </View>
-            </View>
-          </Card>
+          {/*
+           * TWO GROUPS, EVERY ROW A FACT THAT IS ACTUALLY POPULATED.
+           *
+           * This opened on four MetricCells - reputation, feedback records,
+           * endpoint health, x402 support - and three of them earn no reader's
+           * attention: reputation is unavailable or zero across the catalog,
+           * the feedback count measures activity rather than quality, and x402
+           * is not the rail anything here is paid over. A disclosure whose
+           * first screen is mostly "Not reported" teaches the reader not to
+           * open it again.
+           *
+           * What is left is what somebody checking Dolphin's work would
+           * actually want: who this agent is on-chain, and what Dolphin did to
+           * verify it. Grouped and labelled, because the assumption is that
+           * nobody reads this - and the ones who do should find it in seconds.
+           */}
+          <FactGroup
+            rows={[
+              ["ERC-8004 token", `#${agent.tokenId}`],
+              ["Identity registry", shortAddress(agent.registryAddress)],
+              ["Publisher", shortAddress(agent.publisherAddress)],
+              ["Agent wallet", shortAddress(agent.agentWallet)],
+              ["Chain", "BNB Smart Chain · 56"],
+              ["Registered", formatDay(agent.registeredAt)],
+            ]}
+            title="Identity"
+          />
 
-          <Card style={{ paddingBottom: 7 }}>
-            {(
-              [
-                ["ERC-8004 token", `#${agent.tokenId}`],
-                ["Identity registry", shortAddress(agent.registryAddress)],
-                ["Publisher", shortAddress(agent.publisherAddress)],
-                ["Agent wallet", shortAddress(agent.agentWallet)],
-                ["Chain", "BNB Smart Chain · 56"],
-                ["Registered", agent.registeredAt ?? "Not reported"],
-                ["Classification", agent.classificationSource.replaceAll("-", " ")],
-              ] as const
-            ).map(([label, value], index) => (
-              <FactRow
-                isFirst={index === 0}
-                key={label}
-                label={label}
-                value={value}
-              />
-            ))}
-          </Card>
+          <FactGroup
+            rows={[
+              ["Protocol", agent.protocol === "mcp" ? "MCP" : "A2A"],
+              ["Dolphin status", statusLabel(agent.status)],
+              ["Last checked", formatDay(agent.verifiedAt)],
+              ["Endpoint", agent.services[0]?.endpoint ?? "Not reported"],
+            ]}
+            title="Verification"
+          />
 
           <Card>
             <Text className="text-[12px] leading-[18px]" style={{ color: colors.muted }}>
@@ -1155,8 +831,7 @@ function Details({ agent }: { agent: Agent }) {
                 `Token #${agent.tokenId} is registered on BNB Smart Chain, checked directly against the registry contract.`,
                 `Token #${agent.tokenId} was not found in the registry contract.`,
               )}{" "}
-              Dolphin never asks for a private key or a seed phrase, and nothing
-              in it can spend from your wallet on an agent&apos;s behalf.
+              Dolphin never asks for a private key or a seed phrase.
             </Text>
           </Card>
         </View>

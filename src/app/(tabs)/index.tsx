@@ -227,20 +227,15 @@ export default function DiscoverScreen() {
                       ...(isActive ? shadows.goldGlow : shadows.subtle),
                     }}
                   >
-                    <View className="flex-row items-center gap-1.5">
-                      {isActive ? (
-                        <CategoryGlyph color={colors.ink} name={facet.slug} size={13} />
-                      ) : null}
-                      <Text
-                        className="text-[13px]"
-                        style={{
-                          color: isActive ? colors.ink : colors.muted,
-                          fontWeight: isActive ? "700" : "500",
-                        }}
-                      >
-                        {facet.label}
-                      </Text>
-                    </View>
+                    <Text
+                      className="text-[13px]"
+                      style={{
+                        color: isActive ? colors.ink : colors.muted,
+                        fontWeight: isActive ? "700" : "500",
+                      }}
+                    >
+                      {facet.label}
+                    </Text>
                   </PressableScale>
                 </View>
               );

@@ -336,53 +336,52 @@ export default function SearchScreen() {
                   title="Building the catalog"
                 />
               ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  className="-mx-4"
-                  contentContainerStyle={{ paddingHorizontal: 16 }}
-                >
-                  <View style={{ gap: 8 }}>
-                    {categoryRows.map((rowItems, rowIndex) =>
-                      rowItems.length > 0 ? (
-                        <View key={rowIndex} className="flex-row gap-2.5">
-                          {rowItems.map((facet) => (
-                            <PressableScale
-                              key={facet.slug}
-                              accessibilityLabel={facet.label}
-                              accessibilityRole="button"
-                              onPress={() => {
-                                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                router.push({
-                                  pathname: "/category/[slug]",
-                                  params: { slug: facet.slug },
-                                });
-                              }}
-                              containerStyle={{
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: colors.surface,
-                                borderRadius: 9999,
-                                borderWidth: 1,
-                                borderColor: colors.line,
-                                paddingVertical: 8,
-                                paddingHorizontal: 16,
-                                ...shadows.subtle,
-                              }}
+                <View style={{ gap: 8 }}>
+                  {categoryRows.map((rowItems, rowIndex) =>
+                    rowItems.length > 0 ? (
+                      <ScrollView
+                        key={rowIndex}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        className="-mx-4"
+                        contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
+                      >
+                        {rowItems.map((facet) => (
+                          <PressableScale
+                            key={facet.slug}
+                            accessibilityLabel={facet.label}
+                            accessibilityRole="button"
+                            onPress={() => {
+                              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              router.push({
+                                pathname: "/category/[slug]",
+                                params: { slug: facet.slug },
+                              });
+                            }}
+                            containerStyle={{
+                              alignItems: "center",
+                              justifyContent: "center",
+                              backgroundColor: colors.surface,
+                              borderRadius: 9999,
+                              borderWidth: 1,
+                              borderColor: colors.line,
+                              paddingVertical: 8,
+                              paddingHorizontal: 16,
+                              ...shadows.subtle,
+                            }}
+                          >
+                            <Text
+                              className="text-[13px] font-semibold tracking-tight"
+                              style={{ color: colors.ink }}
                             >
-                              <Text
-                                className="text-[13px] font-semibold tracking-tight"
-                                style={{ color: colors.ink }}
-                              >
-                                {facet.label}
-                              </Text>
-                            </PressableScale>
-                          ))}
-                        </View>
-                      ) : null
-                    )}
-                  </View>
-                </ScrollView>
+                              {facet.label}
+                            </Text>
+                          </PressableScale>
+                        ))}
+                      </ScrollView>
+                    ) : null
+                  )}
+                </View>
               )}
             </View>
 

@@ -238,6 +238,66 @@ const walletQueryClient = new QueryClient({
   },
 });
 
+/**
+ * How long to wait for a wallet to answer before giving up on the response.
+ *
+ * Two minutes: long enough to switch apps, unlock a phone and read what is
+ * being signed, and comfortably inside the five-minute nonce TTL in
+ * convex/lib/walletAuth.ts - a signature that arrives after the nonce expires
+ * is useless anyway, so waiting past that only prolongs a spinner.
+ */
+const WALLET_RESPONSE_TIMEOUT_MS = 120_000;
+
+/**
+ * Bounds a request that crosses the WalletConnect relay.
+ *
+ * WHY THIS IS NECESSARY. A relayed request is not a function call: it is
+ * published to a relay, answered by another app, and delivered back on a
+ * subscription. That last hop can be lost, and sign-client says so when it
+ * happens -
+ *
+ *   emitting session_request:1788823707071001 without any listeners
+ *
+ * meaning a response arrived for a request nothing was waiting on any more.
+ * The mirror image happens in the app: the listener is gone, so the promise
+ * NEVER SETTLES. Observed 2026-09-08. Without a bound, `finally` never runs,
+ * `isSigningIn` stays true, and the button spins on "Check your wallet..."
+ * indefinitely with no way back except restarting the app.
+ *
+ * The rejection deliberately does not claim the user declined, because that is
+ * not known: the wallet may well have signed and the answer got lost. It says
+ * what is true - no answer came back - and that retrying is safe, which it is,
+ * since signing in requests a fresh nonce.
+ *
+ * The original promise is left pending rather than cancelled. There is nothing
+ * to cancel: the relay request is already out, and a late answer simply has
+ * nobody listening, which is the warning above and is harmless.
+ */
+async function withWalletTimeout<T>(pending: Promise<T>, action: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Your wallet did not answer the ${action} request in time. It may have been ` +
+                  "approved and the reply lost on the way back - nothing was charged either way. " +
+                  "Try again.",
+              ),
+            ),
+          WALLET_RESPONSE_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 const unavailableWallet: WalletContextValue = {
@@ -331,7 +391,10 @@ function ReownWalletBridge({ children }: PropsWithChildren) {
         // address the wallet reported in an unexpected shape fails here with a
         // clear error instead of being asserted into the right type and
         // failing later inside wagmi.
-        return signMessageAsync({ account: getAddress(address), message });
+        return withWalletTimeout(
+          signMessageAsync({ account: getAddress(address), message }),
+          "signature",
+        );
       },
       /**
        * One contract call, on a chain the wallet has been confirmed to be on.
@@ -363,14 +426,17 @@ function ReownWalletBridge({ children }: PropsWithChildren) {
           }
         }
 
-        return writeContractAsync({
-          account: getAddress(address),
-          address: request.address,
-          abi: request.abi as never,
-          functionName: request.functionName as never,
-          args: request.args as never,
-          chainId: request.chainId as never,
-        });
+        return withWalletTimeout(
+          writeContractAsync({
+            account: getAddress(address),
+            address: request.address,
+            abi: request.abi as never,
+            functionName: request.functionName as never,
+            args: request.args as never,
+            chainId: request.chainId as never,
+          }),
+          "transaction",
+        );
       },
     }),
     [

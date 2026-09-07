@@ -154,28 +154,24 @@ const reownSetup =
 
         const appKit = createAppKit({
           projectId,
-          /**
-           * Raises WalletConnect's own logger in development ONLY.
+          /*
+           * NO `logger` OPTION HERE, DELIBERATELY.
            *
-           * AppKit RN 2.0.6 forwards this straight through to
-           * `@walletconnect/universal-provider`, and from there to the Core
-           * (verified in AppKit.js:282/300 and connectors/WalletConnectConnector.js,
-           * not assumed - an earlier session recorded that this knob did not
-           * exist, which was wrong). Without it the default level swallows the
-           * transport error and the only thing that surfaces is a 60-second
-           * "Failed to publish custom payload" against the wrong layer. With
-           * it, a failing socket says so by name:
+           * AppKit RN 2.0.6 does accept one and forwards it to
+           * `@walletconnect/universal-provider` and on to the Core (AppKit.js
+           * :282/300, connectors/WalletConnectConnector.js:72). It was briefly
+           * set to "debug" under __DEV__ and removed on request: at that level
+           * it floods the Metro console on every render, which makes the app's
+           * own logs unreadable.
            *
-           *     WebSocket connection failed for host: wss://relay.walletconnect.org
-           *
-           * Off in release builds: at "debug" this is extremely noisy, and the
-           * relay URI and session topics it prints have no business in a
-           * production log.
-           *
-           * Remember that createAppKit is a singleton (see below) - toggling
-           * this needs a full reload, not a Fast Refresh.
+           * If a relay problem ever needs diagnosing again, add
+           * `logger: "debug"` back on this line for one run - it names the
+           * transport error directly instead of surfacing it as a sixty-second
+           * publish timeout against the wrong layer. It is one line, and this
+           * comment is here so nobody has to rediscover that it exists.
+           * Remember createAppKit is a singleton (see below): it needs a full
+           * reload, not a Fast Refresh.
            */
-          ...(__DEV__ ? { logger: "debug" as const } : {}),
           metadata: {
             name: "Dolphin",
             description: "BSC agent marketplace",

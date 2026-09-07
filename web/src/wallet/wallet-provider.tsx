@@ -294,32 +294,44 @@ export function useWallet(): WalletState {
       }
 
       /*
-       * ASK WHETHER THE RELAY IS REACHABLE BEFORE OPENING A QR MODAL.
+       * ADVISORY ONLY. THIS MUST NEVER BLOCK THE CONNECTION.
        *
-       * Everything on the WalletConnect path goes over a WebSocket to
-       * relay.walletconnect.org. When a network blocks it, `connectAsync` does
-       * not reject - EthereumProvider opens its modal, the proposal queues, and
-       * the promise never settles, so the button sits on "Connecting..."
-       * indefinitely with nothing on screen to explain it. No `catch` can help,
-       * because nothing is ever thrown.
+       * When a network blocks the relay, `connectAsync` does not reject -
+       * EthereumProvider opens its modal, the proposal queues, and the promise
+       * never settles, so the button sits on "Connecting..." with nothing to
+       * explain it. This probe exists to supply that explanation.
        *
-       * The probe costs one round trip (~250ms warm) and is memoised on
-       * success, so a working network pays it once per page. See
-       * relay-reachability.ts.
+       * It briefly GATED the connection instead, and that was a mistake with a
+       * cost: the same gate on the mobile app refused to open the wallet sheet
+       * on a device whose relay was demonstrably reachable, so nobody could
+       * connect at all. A reachability probe is a heuristic - an ad blocker
+       * (walletconnect.org is on plenty of block lists), a captive portal, a
+       * proxy, or a transient DNS miss all make it report a working network as
+       * dead. Letting it veto the user's primary action turns every false
+       * negative into an outage.
        *
-       * Deliberately NOT a timeout around `connectAsync` instead: someone
-       * reading a QR code with their phone legitimately takes minutes, and
-       * cancelling a connection they are halfway through would be a worse bug
-       * than the one being fixed.
+       * So it runs ALONGSIDE the attempt and only sets a hint. A connection
+       * that then succeeds clears the hint below, because a successful connect
+       * is proof the relay was fine whatever the probe concluded.
+       *
+       * Deliberately still NOT a timeout around `connectAsync`: someone reading
+       * a QR code with their phone legitimately takes minutes.
        */
-      if (target.id === "walletConnect" && !(await isRelayReachable())) {
-        setRelayBlocked(true);
-        setFailure("relay-unreachable");
-        return null;
+      if (target.id === "walletConnect") {
+        void isRelayReachable().then((reachable) => {
+          if (!reachable) {
+            setRelayBlocked(true);
+            setFailure((current) => current ?? "relay-unreachable");
+          }
+        });
       }
 
       try {
         const result = await connectAsync({ connector: target });
+        // Proof the relay was reachable. Retract any advisory hint that landed
+        // while this was in flight.
+        setRelayBlocked(false);
+        setFailure(null);
         return result.accounts[0] ?? null;
       } catch (cause) {
         const kind = classifyConnectError(cause);
@@ -342,27 +354,25 @@ export function useWallet(): WalletState {
         const injectedUnusable = kind === "no-wallet" || kind === "unknown";
         if (injectedUnusable && target.id === "injected" && wcConn && !preferredType) {
           /*
-           * The same relay check guards the automatic fallback, for the same
-           * reason: handing someone a QR modal that can never settle is worse
-           * than telling them what actually failed.
+           * Advisory here too, for the reason above: this must not stop the
+           * fallback from being attempted.
            *
-           * The reported failure stays the INJECTED one, not
-           * "relay-unreachable". Two things are wrong at once here, and the
-           * one the user can act on is the first: "no-wallet" tells them to
-           * install an extension, which is right and which works without the
-           * relay. Saying "this network blocks WalletConnect - use an
-           * extension" to someone who has no extension is advice that leads
-           * nowhere. `relayBlocked` still hides the QR route, so nothing on
-           * screen offers a path that cannot work.
+           * If it does report the relay unreachable, the failure shown stays
+           * the INJECTED one rather than "relay-unreachable". Two things are
+           * wrong at once on this path, and the one the user can act on is the
+           * first: "no-wallet" tells them to install an extension, which is
+           * right and which works without the relay. Telling someone with no
+           * extension to use an extension because WalletConnect is blocked is
+           * advice that leads nowhere.
            */
-          if (!(await isRelayReachable())) {
-            setRelayBlocked(true);
-            setFailure(kind);
-            return null;
-          }
+          void isRelayReachable().then((reachable) => {
+            if (!reachable) setRelayBlocked(true);
+          });
 
           try {
             const result = await connectAsync({ connector: wcConn });
+            setRelayBlocked(false);
+            setFailure(null);
             return result.accounts[0] ?? null;
           } catch (wcCause) {
             setFailure(classifyConnectError(wcCause));

@@ -59,6 +59,7 @@
 
 import {
   QuoteRejected,
+  TEXT_PARTS_ONLY,
   buildA2ARequest,
   normalizeQuote,
   resolveA2AEndpoint,
@@ -124,8 +125,8 @@ export const sellableEndpoint = resolveA2AEndpoint;
  * hireability, it is measuring itself. Importing the builder makes that
  * impossible to get wrong again.
  */
-function buildListRequest() {
-  return buildA2ARequest({ skill: "list" });
+function buildListRequest(partKind: "data" | "text" = "data") {
+  return buildA2ARequest({ skill: "list" }, partKind);
 }
 
 /**
@@ -152,7 +153,7 @@ const PROBE_TASKS: Readonly<Record<string, string>> = {
   trading: `State the trades you would place for ${PROBE_ADDRESS} on BNB Chain right now, with entry, exit, invalidation and size.`,
 };
 
-function buildNegotiateRequest(category: string) {
+function buildNegotiateRequest(category: string, partKind: "data" | "text" = "data") {
   const task = PROBE_TASKS[category] ?? PROBE_TASKS.monitoring;
   return buildA2ARequest({
     skill: "negotiate",
@@ -162,12 +163,39 @@ function buildNegotiateRequest(category: string) {
       deliverables: task,
       quality_standards: "Figures read from BNB Chain at request time.",
     },
-  });
+  }, partKind);
 }
 
 type RawProbe =
   | { ok: true; body: string }
   | { ok: false; state: "unreachable" | "http-error"; detail: string };
+
+/**
+ * One call, retried in the text dialect if the endpoint refuses data parts.
+ *
+ * Mirrors postA2A in convex/agentPayments.ts so the probe and the hire speak
+ * the same protocol. Without this the probe records "Only text parts are
+ * accepted" as the agent's verdict, which is a statement about encoding rather
+ * than about whether the agent sells - and an operator reading that reason
+ * would blame the wrong party.
+ */
+async function postWithDialect(
+  endpoint: string,
+  build: (partKind: "data" | "text") => unknown,
+): Promise<RawProbe> {
+  const first = await post(endpoint, build("data"));
+  if (!first.ok) return first;
+
+  try {
+    const envelope = JSON.parse(first.body) as { error?: { message?: string } };
+    if (envelope?.error && TEXT_PARTS_ONLY.test(envelope.error.message ?? "")) {
+      return post(endpoint, build("text"));
+    }
+  } catch {
+    // Not JSON - let the caller judge it.
+  }
+  return first;
+}
 
 async function post(endpoint: string, payload: unknown): Promise<RawProbe> {
   let response: Response;
@@ -234,7 +262,7 @@ export async function probeSellability(
   }
 
   // 1. The menu, if it publishes one.
-  const listed = await post(endpoint, buildListRequest());
+  const listed = await postWithDialect(endpoint, (kind) => buildListRequest(kind));
   if (listed.ok) {
     try {
       const envelope = JSON.parse(listed.body) as {
@@ -256,7 +284,9 @@ export async function probeSellability(
   }
 
   // 2. The question a hire actually asks.
-  const quoted = await post(endpoint, buildNegotiateRequest(category));
+  const quoted = await postWithDialect(endpoint, (kind) =>
+    buildNegotiateRequest(category, kind),
+  );
   if (!quoted.ok) {
     return {
       state: quoted.state,
@@ -331,12 +361,29 @@ export async function probeSellability(
     });
   } catch (cause) {
     if (cause instanceof QuoteRejected) {
+      /*
+       * A DECLINE IS ONLY EVIDENCE OF SELLING IF THERE IS A MENU BEHIND IT.
+       *
+       * The first version treated every QuoteRejected as a pass, reasoning that
+       * "I don't do that particular task" is a healthy seller answering a
+       * generic probe. Measured against the Singularry platform that is exactly
+       * backwards: SLY, SilentEcho and StellarVoyager answer every call - list
+       * and negotiate alike - with "Identity tier only, deeper data is not
+       * served during beta", which normalizeQuote rejects and which is not a
+       * decline of a task at all. Passing it listed three agents that sell
+       * nothing, and a user tapping Hire would have got the same non-answer.
+       *
+       * Reaching this line means `list` returned NO menu, because a menu
+       * returns "sells" earlier. So there is no evidence this agent sells
+       * anything: it declined the task from its OWN category and published
+       * nothing it would do instead. That is not a seller with a narrow
+       * catalogue; it is an agent with no catalogue.
+       */
       return {
-        state: "sells",
-        detail:
-          "Declined this specific probe task but answered correctly, which is a working seller responding to a task it does not offer.",
+        state: "no-menu",
+        detail: `Declined the task from its own category and publishes no menu of anything else it sells: ${cause.message}`,
         endpoint,
-      serviceCount: null,
+        serviceCount: null,
       };
     }
     return {

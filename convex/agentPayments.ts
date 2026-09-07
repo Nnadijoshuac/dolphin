@@ -7,6 +7,7 @@ import { BSC_CHAIN_ID, bscPublicClient } from "./lib/bscClient";
 import { agentCategoryValidator } from "./categoryStatsValidators";
 import {
   QuoteRejected,
+  TEXT_PARTS_ONLY,
   buildA2ARequest,
   normalizeQuote,
   selectNegotiationEndpoint,
@@ -130,13 +131,17 @@ const JOB_STATUS = ["OPEN", "FUNDED", "SUBMITTED", "COMPLETED", "REJECTED", "EXP
 
 const A2A_TIMEOUT_MS = 45_000;
 
-async function postA2A(endpoint: string, data: Record<string, unknown>): Promise<unknown> {
+async function sendA2A(
+  endpoint: string,
+  data: Record<string, unknown>,
+  partKind: "data" | "text",
+): Promise<{ result?: unknown; error?: { message?: string } }> {
   let response: Response;
   try {
     response = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify(buildA2ARequest(data)),
+      body: JSON.stringify(buildA2ARequest(data, partKind)),
       signal: AbortSignal.timeout(A2A_TIMEOUT_MS),
     });
   } catch (cause) {
@@ -154,16 +159,33 @@ async function postA2A(endpoint: string, data: Record<string, unknown>): Promise
     );
   }
 
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(body);
+    return JSON.parse(body) as { result?: unknown; error?: { message?: string } };
   } catch {
     throw new Error(
       `The agent's endpoint answered with something that is not JSON: ${body.slice(0, 200)}`,
     );
   }
+}
 
-  const envelope = parsed as { error?: { message?: string }; result?: unknown };
+/**
+ * One A2A call, in whichever part dialect the endpoint accepts.
+ *
+ * Data parts first, because every seller in this catalog that returns a real
+ * quote wants them. A `TEXT_PARTS_ONLY` refusal is retried as text rather than
+ * surfaced, since it is a statement about encoding and not about the agent's
+ * willingness to sell - reporting it to a user as a failure would blame the
+ * seller for Dolphin speaking the wrong half of the spec.
+ *
+ * Any other error is returned as-is: it is the agent's actual answer.
+ */
+async function postA2A(endpoint: string, data: Record<string, unknown>): Promise<unknown> {
+  let envelope = await sendA2A(endpoint, data, "data");
+
+  if (envelope?.error && TEXT_PARTS_ONLY.test(envelope.error.message ?? "")) {
+    envelope = await sendA2A(endpoint, data, "text");
+  }
+
   if (envelope?.error) {
     throw new Error(
       `The agent's endpoint returned a JSON-RPC error: ${envelope.error.message ?? JSON.stringify(envelope.error)}`,

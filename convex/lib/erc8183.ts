@@ -286,7 +286,32 @@ export function normalizeQuote(
  * The A2A JSON-RPC envelope both dialects speak. `message/send` with one data
  * part is what every seller card in this catalog documents.
  */
-export function buildA2ARequest(data: Record<string, unknown>) {
+/**
+ * Some endpoints refuse `data` parts and accept only `text`.
+ *
+ * Measured 2026-09-06 against the Singularry platform, which answers
+ * `{"code":-32005,"message":"Only text parts are accepted by this endpoint"}`
+ * to every data-part call. Both are legal A2A: a Part may be text or data, and
+ * a server may accept whichever it likes.
+ *
+ * Callers try data first (it is what the sellers in this catalog that quote
+ * actually want) and retry as text on this specific refusal. Matching the
+ * message rather than the code because -32005 is not reserved for this and a
+ * different server could use it for something else entirely.
+ */
+export const TEXT_PARTS_ONLY = /only text parts/i;
+
+export function buildA2ARequest(
+  data: Record<string, unknown>,
+  partKind: "data" | "text" = "data",
+) {
+  const part =
+    partKind === "text"
+      ? // The same payload, serialised. A text-only endpoint still has to be
+        // told what is being asked, and JSON is what these agents parse.
+        { kind: "text", text: JSON.stringify(data) }
+      : { kind: "data", data };
+
   return {
     jsonrpc: "2.0",
     id: 1,
@@ -309,7 +334,7 @@ export function buildA2ARequest(data: Record<string, unknown>) {
         kind: "message",
         role: "user",
         messageId: `dolphin-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-        parts: [{ kind: "data", data }],
+        parts: [part],
       },
     },
   };

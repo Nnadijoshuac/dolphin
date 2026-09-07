@@ -14,6 +14,7 @@ import { bsc } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
 
 import { BSC_RPC_URL } from "@/constants/agents";
+import { isRelayReachable } from "@/wallet/relay-reachability";
 import {
   classifyConnectError,
   connectFailureCopy,
@@ -115,7 +116,24 @@ const connectors = [
               typeof window !== "undefined"
                 ? window.location.origin
                 : "https://dolphin.agency",
-            icons: ["https://api.8004scan.io/favicon.ico"],
+            /*
+             * The icon a wallet shows on its approval sheet - the screen where
+             * someone decides whether to trust this site.
+             *
+             * It used to point at `api.8004scan.io/favicon.ico`, which is a
+             * THIRD PARTY's icon: the agent-registry API this product reads
+             * from. A wallet approval sheet reading "Dolphin Marketplace" over
+             * somebody else's mark is the exact shape of a phishing prompt, and
+             * it was ours by accident.
+             *
+             * Same-origin, so it is correct on every deployment of this site
+             * without a hardcoded domain to drift - `web/public/dolphin-logo.png`
+             * is served at this path by Next.
+             */
+            icons:
+              typeof window !== "undefined"
+                ? [`${window.location.origin}/dolphin-logo.png`]
+                : [],
           },
           showQrModal: true,
         }),

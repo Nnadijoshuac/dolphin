@@ -208,6 +208,17 @@ export function useWallet(): WalletState {
   const { connectAsync, connectors: available, isPending } = useConnect();
   const { disconnectAsync } = useDisconnect();
   const [failure, setFailure] = useState<ConnectFailureKind | null>(null);
+  /**
+   * Set once the relay has been PROVEN unreachable, which hides the QR
+   * affordance. Leaving "Scan a QR code instead" on screen after establishing
+   * that a QR code cannot possibly work is the app talking past someone it has
+   * just told the connection is blocked.
+   *
+   * Reset at the top of every `connect`, so it describes the most recent
+   * attempt rather than the page's history: someone who moves off a blocking
+   * network and retries gets the QR route back the moment the relay answers.
+   */
+  const [relayBlocked, setRelayBlocked] = useState(false);
 
   const isMounted = useSyncExternalStore(
     subscribe,
@@ -218,6 +229,7 @@ export function useWallet(): WalletState {
   const connect = useCallback(
     async (preferredType?: "injected" | "walletConnect") => {
       setFailure(null);
+      setRelayBlocked(false);
 
       const injectedConn = available.find((c) => c.id === "injected");
       const wcConn = available.find((c) => c.id === "walletConnect");
@@ -249,6 +261,31 @@ export function useWallet(): WalletState {
         return;
       }
 
+      /*
+       * ASK WHETHER THE RELAY IS REACHABLE BEFORE OPENING A QR MODAL.
+       *
+       * Everything on the WalletConnect path goes over a WebSocket to
+       * relay.walletconnect.org. When a network blocks it, `connectAsync` does
+       * not reject - EthereumProvider opens its modal, the proposal queues, and
+       * the promise never settles, so the button sits on "Connecting..."
+       * indefinitely with nothing on screen to explain it. No `catch` can help,
+       * because nothing is ever thrown.
+       *
+       * The probe costs one round trip (~250ms warm) and is memoised on
+       * success, so a working network pays it once per page. See
+       * relay-reachability.ts.
+       *
+       * Deliberately NOT a timeout around `connectAsync` instead: someone
+       * reading a QR code with their phone legitimately takes minutes, and
+       * cancelling a connection they are halfway through would be a worse bug
+       * than the one being fixed.
+       */
+      if (target.id === "walletConnect" && !(await isRelayReachable())) {
+        setRelayBlocked(true);
+        setFailure("relay-unreachable");
+        return;
+      }
+
       try {
         await connectAsync({ connector: target });
       } catch (cause) {
@@ -271,6 +308,26 @@ export function useWallet(): WalletState {
          */
         const injectedUnusable = kind === "no-wallet" || kind === "unknown";
         if (injectedUnusable && target.id === "injected" && wcConn && !preferredType) {
+          /*
+           * The same relay check guards the automatic fallback, for the same
+           * reason: handing someone a QR modal that can never settle is worse
+           * than telling them what actually failed.
+           *
+           * The reported failure stays the INJECTED one, not
+           * "relay-unreachable". Two things are wrong at once here, and the
+           * one the user can act on is the first: "no-wallet" tells them to
+           * install an extension, which is right and which works without the
+           * relay. Saying "this network blocks WalletConnect - use an
+           * extension" to someone who has no extension is advice that leads
+           * nowhere. `relayBlocked` still hides the QR route, so nothing on
+           * screen offers a path that cannot work.
+           */
+          if (!(await isRelayReachable())) {
+            setRelayBlocked(true);
+            setFailure(kind);
+            return;
+          }
+
           try {
             await connectAsync({ connector: wcConn });
             return;
@@ -316,7 +373,10 @@ export function useWallet(): WalletState {
     isConnecting: isBusy,
     failure,
     clearFailure: () => setFailure(null),
-    canUseQr: available.some((c) => c.id === "walletConnect"),
+    // A connector that exists is not the same as a route that works: the QR
+    // path is only offered while the relay behind it has not been proven
+    // unreachable on this network.
+    canUseQr: available.some((c) => c.id === "walletConnect") && !relayBlocked,
     connect,
     disconnect,
   };

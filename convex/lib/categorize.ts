@@ -17,20 +17,29 @@
  * invisible, which they cannot.
  *
  * ---------------------------------------------------------------------------
- * FOUR SOURCES, BEST FIRST, AND THE FIRST TWO ARE THE AGENT'S OWN WORDS
+ * FOUR SOURCES, AND PER-AGENT DATA BEATS PER-ENDPOINT DATA
  * ---------------------------------------------------------------------------
  *   1. The registry's own `categories` - the publisher said so explicitly.
- *   2. The A2A card's `skills` - what the agent tells a client it can do. This
- *      is the highest-quality capability data in the system and the old
- *      pipeline never used it for classification at all, because it classified
- *      from 8004scan's indexed text BEFORE it ever fetched a card.
- *   3. Keyword match over name + description + tags.
+ *   2. Keyword match over the agent's own name + description + tags.
+ *   3. The card's `skills` - real capability data, and the right answer for an
+ *      agent that has an endpoint to itself.
  *   4. `general`.
  *
- * Measured 2026-09-07: token 302257 - a working, quoting agent - publishes an
- * EMPTY `categories` and an EMPTY `tags` at 8004scan while serving a real card.
- * So source 1 is frequently absent and sources 2-4 carry the load, which is
- * exactly why source 2 had to be added.
+ * ORDER CORRECTED 2026-09-07. Skills used to come second, on the reasoning that
+ * a skill is what an agent tells a CLIENT it will do while a description is
+ * marketing. Measured against the real catalog that is wrong whenever several
+ * agents SHARE a card, which is common: the Brain on BNB family publishes a
+ * health-factor agent (302257) and a yield agent (304493) behind one card at
+ * agent.brainonbnb.com, whose skills describe the platform. Both were filed
+ * under `rebalancing` - a category neither is in.
+ *
+ * Name, description and tags are per-agent by construction; a card is
+ * per-endpoint. So the agent's own words decide first, and the card breaks the
+ * tie when they decide nothing.
+ *
+ * Source 1 is frequently absent: token 302257 publishes an EMPTY `categories`
+ * and an EMPTY `tags` at 8004scan while serving a real card, so 2-4 carry the
+ * load in practice.
  *
  * ---------------------------------------------------------------------------
  * THE KEYWORD TABLE IS DATA, NOT STRUCTURE
@@ -247,9 +256,27 @@ export function categorize(input: CategorizeInput): CategoryAssignment {
     if (slug.length > 0) return { slug, label: categoryLabel(slug), source: "registry" };
   }
 
-  // 2. The agent's own card. Weighted above the indexed description because a
-  // skill is what the agent tells a CLIENT it will do, whereas a description is
-  // marketing - and because the card is fetched by the probe anyway.
+  /*
+   * 2. THE AGENT'S OWN TEXT, and it is ahead of the card's skills on purpose.
+   *
+   * This was the other way round - skills first, on the reasoning that a skill
+   * is what an agent tells a CLIENT it will do while a description is
+   * marketing. That holds for an agent with its own endpoint, and breaks when
+   * several agents share one card, which is common. The Brain on BNB family
+   * publishes a health-factor agent and a yield agent behind a single card
+   * whose skills describe the whole platform, so both were being filed under
+   * the same category - a category neither of them is in.
+   *
+   * Name, description and tags are per-agent by construction. Card skills are
+   * per-ENDPOINT, so they are still used, but only when the agent's own words
+   * decide nothing.
+   */
+  const text = `${input.name} ${input.description} ${input.tags.join(" ")}`.toLowerCase();
+  const own = bestKeywordMatch(text);
+  if (own) return { slug: own.slug, label: categoryLabel(own.slug), source: "keyword" };
+
+  // 3. The card. Real capability data, and the right answer whenever the agent
+  // has an endpoint to itself.
   const skillText = input.skills
     .map((skill) => `${skill.name} ${skill.description ?? ""}`)
     .join(" ")
@@ -258,11 +285,6 @@ export function categorize(input: CategorizeInput): CategoryAssignment {
     const match = bestKeywordMatch(skillText);
     if (match) return { slug: match.slug, label: categoryLabel(match.slug), source: "skills" };
   }
-
-  // 3. Everything else the record says about itself.
-  const text = `${input.name} ${input.description} ${input.tags.join(" ")}`.toLowerCase();
-  const match = bestKeywordMatch(text);
-  if (match) return { slug: match.slug, label: categoryLabel(match.slug), source: "keyword" };
 
   // 4. Unlabelled, and listed anyway.
   return { slug: DEFAULT_CATEGORY.slug, label: DEFAULT_CATEGORY.label, source: "default" };

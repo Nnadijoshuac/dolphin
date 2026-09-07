@@ -215,9 +215,23 @@ export const verifyOne = internalAction({
     });
     const tags = buildTags(detail.tags, probe.skills);
 
-    // The agent's own card name beats the indexer's cached copy: it is what the
-    // agent calls itself right now, and the indexer's is a snapshot.
-    const name = probe.cardName ?? detail.name;
+    /*
+     * THE REGISTRY'S NAME WINS, and the card is the fallback (2026-09-07).
+     *
+     * This was the other way round, on the reasoning that a card is what the
+     * agent calls itself right now while the indexer holds a snapshot. That is
+     * true for an agent with its own endpoint and WRONG when several agents
+     * share one, which is common: the Brain on BNB family publishes tokens
+     * 302257 ("Venus Health Factor Monitor") and 304493 ("Venus Yield Ranking")
+     * behind a single card at agent.brainonbnb.com whose name is the PLATFORM's
+     * - "Brain On BNB AI - hireable agents".
+     *
+     * Preferring the card gave both agents that same name, so the catalog
+     * listed what looked like one agent twice. The registry name is per-agent
+     * by construction; the card name is per-endpoint. Per-agent wins, and the
+     * card only fills a gap.
+     */
+    const name = detail.name.trim() || probe.cardName || `Agent ${parsed.tokenId}`;
     const description = detail.description;
 
     const rank = computeRank({

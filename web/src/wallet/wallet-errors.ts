@@ -40,6 +40,16 @@ export type ConnectFailureKind =
   | "no-wallet"
   /** A request is already open in the wallet - usually an unnoticed popup. */
   | "busy"
+  /**
+   * This network cannot reach WalletConnect's relay, so the QR path cannot
+   * work at all.
+   *
+   * Never produced by `classifyConnectError` - no library error distinguishes
+   * it, which is the whole problem. It is set by the caller after
+   * `isRelayReachable()` says no, BEFORE a connect is attempted, so that the
+   * user is told in a second rather than after a sixty-second silence.
+   */
+  | "relay-unreachable"
   /** Anything we did not recognise. Never shown verbatim. */
   | "unknown";
 
@@ -136,6 +146,24 @@ export function connectFailureCopy(kind: ConnectFailureKind): {
         body: "Install a browser wallet — MetaMask or OKX Wallet both work — then reload this page and try again.",
         tone: "warn",
         retryable: false,
+      };
+    /*
+     * Names the network, because nothing the user does on this page will fix
+     * it, and points at the one path that still works: a browser extension
+     * talks to `window.ethereum` and never touches the relay.
+     *
+     * `retryable` is true so the "Try browser extension again" action stays
+     * offered — that is the actual way out. The QR action is suppressed at the
+     * call site for this kind specifically; offering a second scan over a relay
+     * that is provably unreachable is the app talking past someone it has just
+     * told the connection cannot work.
+     */
+    case "relay-unreachable":
+      return {
+        title: "Can't reach WalletConnect",
+        body: "This network is blocking relay.walletconnect.org, so scanning a QR code won't work here. A browser extension wallet still will — or try a different network.",
+        tone: "warn",
+        retryable: true,
       };
     case "unknown":
       return {

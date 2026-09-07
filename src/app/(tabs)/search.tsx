@@ -46,14 +46,24 @@ import type { Agent } from "@/types/agent";
  * counting a client-side array.
  *
  * ---------------------------------------------------------------------------
- * WHAT WAS DELIBERATELY DROPPED
+ * WHAT WAS DROPPED, AND ONE THING THAT SHOULD NOT HAVE BEEN
  * ---------------------------------------------------------------------------
- * "Suggested for you" is gone. Both of its bases depended on holding the whole
- * catalog in memory: the history basis re-ran the local search over every agent
- * once per remembered term, and the fallback sorted every agent in every
- * category by feedback count to take the top one. Neither survives pagination,
- * and reimplementing them would mean new backend queries that nothing has asked
- * for. Recent searches - which is the genuinely personal half - is unchanged.
+ * "Suggested for you" is gone, correctly. Both of its bases depended on holding
+ * the whole catalog in memory: the history basis re-ran the local search over
+ * every agent once per remembered term, and the fallback sorted every agent in
+ * every category by feedback count to take the top one. Neither survives
+ * pagination.
+ *
+ * "All agents" went with it, and that was WRONG - it was cut in the same pass
+ * for the same stated reason, but it never depended on holding the catalog at
+ * all. It is a plain browse, and a browse is exactly what pagination made cheap.
+ * Removing it left the search screen showing nothing but chips until the user
+ * typed, which is an empty shop floor.
+ *
+ * It is back below, and the list query is no longer gated on there being a
+ * query: `useAgentList` routes an empty `search` to `agents.list` (a browse) and
+ * a non-empty one to `agents.search`, so one hook serves both states and the
+ * screen never has a mode where it asks the backend for nothing.
  */
 export default function SearchScreen() {
   const router = useRouter();
@@ -69,9 +79,14 @@ export default function SearchScreen() {
 
   const { categories } = useCategoryFacets();
 
+  /*
+   * NOT gated on there being a query. An empty `search` routes to `agents.list`
+   * (browse) and a non-empty one to `agents.search`, so the same hook feeds both
+   * the "All agents" list below and the results list above, and switching
+   * between them is one subscription swapping rather than a mount/unmount.
+   */
   const { agents, status, isLoading, loadMore, isEmpty } = useAgentList({
     search: deferredQuery,
-    enabled: deferredQuery.length > 0,
   });
 
   // Relevance decides the order, then hireability breaks it: two equally
@@ -338,6 +353,77 @@ export default function SearchScreen() {
                       </PressableScale>
                     );
                   })}
+                </View>
+              )}
+            </View>
+
+            {/*
+              * ALL AGENTS. Restored 2026-09-07 after being cut alongside
+              * "Suggested for you" - see this file's header. Without it the
+              * screen showed nothing but chips until the user typed.
+              *
+              * Paginated, so this is a page of agents and a button, not the
+              * whole catalog the old version rendered at once.
+              */}
+            <View className="pb-4">
+              <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+                All agents
+              </Text>
+              <Text className="text-[11.5px] font-medium text-zinc-500 pt-0.5 pb-2.5">
+                Verified live on BNB Chain
+              </Text>
+
+              {isLoading ? (
+                <View className="items-center py-8">
+                  <ActivityIndicator color={colors.goldDark} />
+                </View>
+              ) : isEmpty ? (
+                <StatePanel
+                  body="No agent has passed verification yet. An agent is listed once its own endpoint answers, and discovery runs every half hour."
+                  state="unavailable"
+                  title="Catalog is empty"
+                />
+              ) : (
+                <View className="gap-2.5">
+                  {results.map((agent) => (
+                    <AgentRow
+                      key={agent.id}
+                      agent={agent}
+                      onPress={() => handleAgentPress(agent)}
+                      signals={signals.get(agent.id)}
+                      subtitle={`${categoryLabel(agent.category)} · ${agent.tagline}`}
+                    />
+                  ))}
+
+                  {status === "LoadingMore" ? (
+                    <View className="items-center py-6">
+                      <ActivityIndicator color={colors.goldDark} />
+                    </View>
+                  ) : null}
+
+                  {status === "CanLoadMore" ? (
+                    <PressableScale
+                      accessibilityLabel="Load more agents"
+                      accessibilityRole="button"
+                      onPress={() => loadMore()}
+                      containerStyle={{
+                        alignItems: "center",
+                        backgroundColor: colors.surface,
+                        borderColor: colors.line,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        marginTop: 4,
+                        paddingVertical: 14,
+                      }}
+                    >
+                      <Text
+                        className="text-[14px] font-semibold"
+                        style={{ color: colors.ink }}
+                      >
+                        Show more
+                      </Text>
+                    </PressableScale>
+                  ) : null}
                 </View>
               )}
             </View>

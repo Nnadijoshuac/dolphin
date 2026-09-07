@@ -53,6 +53,7 @@ import {
   subscribeToAltanaStorage,
 } from "./altana-storage";
 import { toUserMessage } from "./wallet-errors";
+import { requireSessionToken, useWalletSession } from "./wallet-session";
 
 /**
  * Dolphin's Altana wallet - a passkey-backed smart account, separate from the
@@ -309,6 +310,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   );
   const recordGrant = useMutation(agentSessionsApi.agentSessions.recordSessionGrant);
   const markRevoked = useMutation(agentSessionsApi.agentSessions.markSessionRevoked);
+  /**
+   * Both of those writes are authenticated (2026-09-06) and neither was passing
+   * a token, so both would have failed the same way hiring did. The identity
+   * wallet's session is what proves the caller - NOT the Altana wallet, which
+   * is a passkey account the backend has no signature from.
+   */
+  const identitySession = useWalletSession();
   // Actions, not mutations: both reach outside Convex - one to read the escrow
   // kernel on BSC, one to POST to the seller's endpoint past the CORS wall a
   // browser cannot get through.
@@ -504,6 +512,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         // so a row written first would be a claim about something that had not
         // happened - exactly the shape AGENTS.md §5 rules out.
         await recordGrant({
+          sessionToken: requireSessionToken(identitySession),
           tokenId: input.tokenId,
           agentName: input.agentName,
           category: input.category,
@@ -553,7 +562,10 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         });
 
         if (!sessionsUnavailable) {
-          await markRevoked({ sessionPublicKey: publicKey });
+          await markRevoked({
+            sessionPublicKey: publicKey,
+            sessionToken: requireSessionToken(identitySession),
+          });
         }
         setLiveSessions((current) => {
           const next = { ...current };

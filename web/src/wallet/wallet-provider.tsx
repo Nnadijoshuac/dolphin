@@ -9,6 +9,7 @@ import {
   useAccount,
   useConnect,
   useDisconnect,
+  useSignMessage,
 } from "wagmi";
 import { bsc } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
@@ -187,6 +188,23 @@ export interface WalletState {
   canUseQr: boolean;
   connect: (preferredType?: "injected" | "walletConnect") => Promise<void>;
   disconnect: () => Promise<void>;
+  /**
+   * Signs a plain-text message with the connected account (EIP-191), returning
+   * the signature hex.
+   *
+   * ADDED 2026-09-07, and the reason it was missing is worth recording: this
+   * provider's whole contract was "Dolphin only ever READS this address", and
+   * that was true right up until the backend started requiring proof of it.
+   * Sign-in is the one thing that has to be signed here, and it is deliberately
+   * the ONLY signing capability on this site - no transaction, no typed data,
+   * no approval. It moves nothing and authorises no spending; the message says
+   * so in the wallet's own sheet, because SIWE_STATEMENT is part of the signed
+   * text rather than a reassurance printed beside it.
+   *
+   * Throws rather than returning null when nothing is connected, so a caller
+   * cannot proceed on a signature it did not get.
+   */
+  signMessage: (message: string) => Promise<string>;
 }
 
 /** No-op subscribe: the store below never changes after mount. */
@@ -207,6 +225,7 @@ export function useWallet(): WalletState {
   const { address, isConnected, isConnecting: accountConnecting, isReconnecting } = useAccount();
   const { connectAsync, connectors: available, isPending } = useConnect();
   const { disconnectAsync } = useDisconnect();
+  const { signMessageAsync } = useSignMessage();
   const [failure, setFailure] = useState<ConnectFailureKind | null>(null);
   /**
    * Set once the relay has been PROVEN unreachable, which hides the QR
@@ -361,6 +380,24 @@ export function useWallet(): WalletState {
     }
   }, [disconnectAsync]);
 
+  /**
+   * The connected-account check is here rather than at the call site because it
+   * is a precondition of the operation, not of any one caller: personal_sign
+   * against no account is a wallet-level error whose message would tell a user
+   * nothing.
+   */
+  const signMessage = useCallback(
+    async (message: string) => {
+      if (!isConnected || !address) {
+        throw new Error(
+          "Connect a wallet before signing. Dolphin cannot request a signature from an account that is not connected.",
+        );
+      }
+      return signMessageAsync({ account: address, message });
+    },
+    [address, isConnected, signMessageAsync],
+  );
+
   const isBusy = isPending || accountConnecting || isReconnecting;
 
   return {
@@ -379,6 +416,7 @@ export function useWallet(): WalletState {
     canUseQr: available.some((c) => c.id === "walletConnect") && !relayBlocked,
     connect,
     disconnect,
+    signMessage,
   };
 }
 

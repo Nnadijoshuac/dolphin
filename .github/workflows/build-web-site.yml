@@ -58,7 +58,7 @@ jobs:
       # deployment the mobile app uses; that is what makes the two surfaces
       # show identical data. The one real secret in this project
       # (SCAN8004_API_KEY) is Convex-side only and is never referenced here.
-      NEXT_PUBLIC_CONVEX_URL: ${{ vars.NEXT_PUBLIC_CONVEX_URL || 'https://enduring-mastiff-708.eu-west-1.convex.cloud' }}
+      NEXT_PUBLIC_CONVEX_URL: ${{ vars.NEXT_PUBLIC_CONVEX_URL || 'https://greedy-aardvark-200.eu-west-1.convex.cloud' }}
       NEXT_PUBLIC_BSC_RPC_URL: ${{ vars.NEXT_PUBLIC_BSC_RPC_URL }}
     steps:
       - uses: actions/checkout@v4

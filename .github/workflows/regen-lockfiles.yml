@@ -28,8 +28,8 @@ jobs:
     env:
       # Needed so npm install can resolve everything, even though we don't
       # actually build. Use the same public values as the real workflows.
-      EXPO_PUBLIC_CONVEX_URL: 'https://enduring-mastiff-708.eu-west-1.convex.cloud'
-      NEXT_PUBLIC_CONVEX_URL: 'https://enduring-mastiff-708.eu-west-1.convex.cloud'
+      EXPO_PUBLIC_CONVEX_URL: 'https://greedy-aardvark-200.eu-west-1.convex.cloud'
+      NEXT_PUBLIC_CONVEX_URL: 'https://greedy-aardvark-200.eu-west-1.convex.cloud'
     steps:
       - uses: actions/checkout@v4
 

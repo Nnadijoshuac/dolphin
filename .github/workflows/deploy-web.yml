@@ -39,7 +39,7 @@ jobs:
       # and are already readable in any shipped build. The real secret in
       # this project (SCAN8004_API_KEY) is Convex-side only and is never
       # referenced here or in any client bundle.
-      EXPO_PUBLIC_CONVEX_URL: ${{ vars.EXPO_PUBLIC_CONVEX_URL || 'https://enduring-mastiff-708.eu-west-1.convex.cloud' }}
+      EXPO_PUBLIC_CONVEX_URL: ${{ vars.EXPO_PUBLIC_CONVEX_URL || 'https://greedy-aardvark-200.eu-west-1.convex.cloud' }}
       EXPO_PUBLIC_REOWN_PROJECT_ID: ${{ vars.EXPO_PUBLIC_REOWN_PROJECT_ID }}
       EXPO_PUBLIC_BSC_RPC_URL: ${{ vars.EXPO_PUBLIC_BSC_RPC_URL }}
     steps:

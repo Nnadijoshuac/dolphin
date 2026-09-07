@@ -66,6 +66,10 @@ import { getAddress } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
 import { WagmiProvider, useSignMessage, useSwitchChain, useWriteContract } from "wagmi";
 
+import {
+  RELAY_UNREACHABLE_MESSAGE,
+  isRelayReachable,
+} from "./relay-reachability";
 import type {
   WalletConnectButtonProps,
   WalletContextValue,
@@ -150,11 +154,47 @@ const reownSetup =
 
         const appKit = createAppKit({
           projectId,
+          /**
+           * Raises WalletConnect's own logger in development ONLY.
+           *
+           * AppKit RN 2.0.6 forwards this straight through to
+           * `@walletconnect/universal-provider`, and from there to the Core
+           * (verified in AppKit.js:282/300 and connectors/WalletConnectConnector.js,
+           * not assumed - an earlier session recorded that this knob did not
+           * exist, which was wrong). Without it the default level swallows the
+           * transport error and the only thing that surfaces is a 60-second
+           * "Failed to publish custom payload" against the wrong layer. With
+           * it, a failing socket says so by name:
+           *
+           *     WebSocket connection failed for host: wss://relay.walletconnect.org
+           *
+           * Off in release builds: at "debug" this is extremely noisy, and the
+           * relay URI and session topics it prints have no business in a
+           * production log.
+           *
+           * Remember that createAppKit is a singleton (see below) - toggling
+           * this needs a full reload, not a Fast Refresh.
+           */
+          ...(__DEV__ ? { logger: "debug" as const } : {}),
           metadata: {
             name: "Dolphin",
             description: "BSC agent marketplace",
-            url: "https://github.com/Nnadijoshuac/dolphin",
-            icons: [],
+            /**
+             * What the wallet shows on its approval sheet - the screen where
+             * someone decides whether to trust this connection.
+             *
+             * The url was a GitHub REPOSITORY link and the icon list was empty,
+             * so the sheet named a source tree and showed a blank square. Both
+             * now point at the product: the published site, and a logo served
+             * from the public repo (both verified reachable, 200 image/png).
+             * The icon is a raw.githubusercontent URL rather than a path on the
+             * site because the site is an Expo web export whose asset filenames
+             * are content-hashed at build time, so no stable URL exists there.
+             */
+            url: "https://nnadijoshuac.github.io/dolphin/",
+            icons: [
+              "https://raw.githubusercontent.com/Nnadijoshuac/dolphin/main/web/public/dolphin-logo.png",
+            ],
             /**
              * Where the wallet returns the user to after they approve.
              *
@@ -236,7 +276,31 @@ function ReownWalletBridge({ children }: PropsWithChildren) {
       address: address ?? null,
       chainId: chainId ?? null,
       unavailableReason: null,
+      /**
+       * Opens AppKit's connect sheet - but only once the relay behind it has
+       * been shown to be reachable.
+       *
+       * WHY THE CHECK IS HERE RATHER THAN LEFT TO THE LIBRARY. Every wallet
+       * connection is brokered by a WebSocket to relay.walletconnect.org. When
+       * a network blocks it, AppKit does not fail: it opens the sheet, queues
+       * the session proposal, and waits out a sixty-second publish timeout
+       * before logging an empty error object against `core/relayer/publisher`.
+       * The user watches a spinner for a minute and learns nothing. That has
+       * cost this project two debugging sessions already
+       * (Agent/SESSION-LOG-2026-09-05-wallet-connect-and-ui.md §1).
+       *
+       * The probe costs one round trip (~250ms warm) and is memoised on
+       * success, so a working network pays it once per app session.
+       *
+       * THROWS rather than returning quietly. `connect` has exactly one caller
+       * - WalletConnectButton, below - which turns this into an alert. A silent
+       * return would be indistinguishable from a tap that did nothing, which is
+       * the failure being fixed.
+       */
       connect: async () => {
+        if (!(await isRelayReachable())) {
+          throw new Error(RELAY_UNREACHABLE_MESSAGE);
+        }
         open();
       },
       disconnect: async () => {
@@ -415,7 +479,22 @@ export function WalletConnectButton({
     }
 
     if (!wallet.isConnected) {
-      void wallet.connect();
+      /*
+       * Connecting can now fail BEFORE any sheet appears - the relay check in
+       * `connect` throws when this network cannot reach WalletConnect. That has
+       * to be said out loud: a tap that opens nothing and says nothing is the
+       * exact experience this whole path exists to remove.
+       *
+       * Only the message is shown, never the error. Everything reaching here is
+       * Dolphin's own copy (RELAY_UNREACHABLE_MESSAGE); a library error would
+       * be caught by AppKit inside its own sheet, not by this.
+       */
+      wallet.connect().catch((cause: unknown) => {
+        Alert.alert(
+          "Can't reach WalletConnect",
+          cause instanceof Error ? cause.message : RELAY_UNREACHABLE_MESSAGE,
+        );
+      });
       return;
     }
 

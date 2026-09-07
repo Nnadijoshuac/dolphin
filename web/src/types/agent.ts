@@ -277,6 +277,11 @@ export interface Agent {
   } | null;
   /** The canonical "<chainId>:<registry>:<tokenId>" key. Same value as `id`. */
   agentKey: string;
+  /**
+   * How this agent is used. "a2a" is commissioned and paid over an ERC-8183
+   * escrow; "mcp" publishes tools you call directly. Mirrors the mobile type.
+   */
+  protocol: "a2a" | "mcp";
   /** Seed for the client's deterministic avatar when `iconUrl` is null. */
   iconSeed: string;
   iconSource: "publisher" | "cached" | "generated";

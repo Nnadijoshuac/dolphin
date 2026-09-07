@@ -218,6 +218,16 @@ export function toPublicAgent(row: Doc<"agents">) {
     verifiedSkills: row.skills.map((skill) => skill.name),
     tags: row.tags,
     services: [{ name: row.protocol, endpoint: row.endpoint, version: null }],
+    /**
+     * The transport, surfaced as a first-class field rather than left implicit
+     * in `services[0].name`.
+     *
+     * The UI branches on this - an A2A agent is commissioned and paid, an MCP
+     * agent is run - and reaching into an array's first element to decide what
+     * a button says is the kind of coupling that breaks quietly the day an
+     * agent publishes two services.
+     */
+    protocol: row.protocol,
 
     x402Supported: live(row.x402Supported, row.lastVerifiedAt, AGENT_DATA_SOURCES.scan),
     /**

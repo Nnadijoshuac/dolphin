@@ -206,11 +206,28 @@ export default defineSchema({
     // Browse one category, paginated; the [status, categorySlug] prefix also
     // serves the facet counts.
     .index("by_status_category_rank", ["status", "categorySlug", "rank"])
+    /*
+     * Browse by PROTOCOL, optionally narrowed by category.
+     *
+     * One index covers both, because protocol sits ahead of category in the
+     * key: [status, protocol] answers "every agent I can run" and
+     * [status, protocol, categorySlug] answers "yield agents I can run".
+     *
+     * It has to BE an index rather than a filter over a page. Filtering 24 rows
+     * in memory returns three of them for a full page and breaks the cursor -
+     * the same defect that took the reputation sort off the category screen.
+     */
+    .index("by_status_protocol_category_rank", [
+      "status",
+      "protocol",
+      "categorySlug",
+      "rank",
+    ])
     // Server-side search. Replaces shipping the whole catalog to the client and
     // filtering it in JavaScript, which is what both frontends do today.
     .searchIndex("search_text", {
       searchField: "searchText",
-      filterFields: ["status", "categorySlug"],
+      filterFields: ["status", "categorySlug", "protocol"],
     }),
 
   /* =========================================================================

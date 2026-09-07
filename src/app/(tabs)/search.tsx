@@ -21,8 +21,8 @@ import {
   useAgentList,
   useAgentSignals,
   useCategoryFacets,
+  type AgentProtocol,
 } from "@/hooks/use-agents";
-import { sortHireableFirst } from "@/services/hireability";
 import { useAppStore } from "@/store/use-app-store";
 import type { Agent } from "@/types/agent";
 
@@ -79,6 +79,19 @@ export default function SearchScreen() {
 
   const { categories } = useCategoryFacets();
 
+  /*
+   * THE KIND FILTER, and it is named in user language deliberately.
+   *
+   * The underlying field is `protocol` - "a2a" or "mcp" - which is the right
+   * thing for an index to be keyed on and the wrong thing to put in front of
+   * someone who has never heard of either. What a user is choosing between is
+   * work they COMMISSION and pay for, and tools they RUN for free. So the chips
+   * say "Hire" and "View", the protocol is the subtitle, and project-scope.md's
+   * zero-knowledge-user requirement survives contact with the protocol layer.
+   */
+  const [kind, setKind] = useState<AgentProtocol | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+
   /**
    * Distribute categories across at most 2 lines, each scrolling independently.
    * When items fill line 1 (2 items across the viewport), they flow to line 2.
@@ -99,11 +112,23 @@ export default function SearchScreen() {
    */
   const { agents, status, isLoading, loadMore, isEmpty } = useAgentList({
     search: deferredQuery,
+    protocol: kind ?? undefined,
   });
 
-  // Relevance decides the order, then hireability breaks it: two equally
-  // relevant agents are not equally useful if only one can be hired.
-  const results = sortHireableFirst(agents);
+  /*
+   * Rendered in the BACKEND'S order, not re-sorted here.
+   *
+   * This was `sortHireableFirst(agents)`, which partitioned on
+   * `assessHireability` - so every MCP agent, 26 of the 28 live ones, sank to
+   * the bottom of every list for failing a test that does not apply to it.
+   *
+   * It was also a client-side re-sort of a PAGINATED page, which is the same
+   * defect that took the reputation sort off the category screen: a cursor is a
+   * position in an index, so reordering a page means page two is ordered
+   * independently of page one, and a reader sees one agent twice and never sees
+   * another. The backend's stored `rank` is the ordering.
+   */
+  const results = agents;
   const signals = useAgentSignals(agents);
 
   const recentSearches = useAppStore((state) => state.recentSearches);
@@ -194,8 +219,106 @@ export default function SearchScreen() {
               Cancel
             </Text>
           </PressableScale>
-        ) : null}
+        ) : (
+          <PressableScale
+            accessibilityHint="Show only agents you hire, or only agents you run"
+            accessibilityLabel={
+              kind === null
+                ? "Filter by kind"
+                : `Filter by kind, ${kind === "a2a" ? "Hire" : "View"} selected`
+            }
+            accessibilityRole="button"
+            accessibilityState={{ expanded: filterOpen, selected: kind !== null }}
+            onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setFilterOpen((open) => !open);
+            }}
+            containerStyle={{
+              alignItems: "center",
+              justifyContent: "center",
+              height: 42,
+              width: 42,
+              borderRadius: 9999,
+              // Filled while a filter is ON, so the control itself says the
+              // list is narrowed - otherwise a user who forgets reads a short
+              // list as an empty catalog.
+              backgroundColor: kind ? colors.gold : colors.surface,
+              borderColor: kind ? colors.goldBorder : colors.line,
+              borderWidth: 1.5,
+              ...shadows.subtle,
+            }}
+          >
+            <CategoryGlyph
+              color={kind ? colors.ink : "#8C8E88"}
+              name="filter"
+              size={17}
+            />
+          </PressableScale>
+        )}
       </View>
+
+      {/*
+        * The kind chips. Shown on tap rather than always, because two chips
+        * permanently under the search bar is chrome a user has to read past on
+        * every visit for a choice most of them will never make.
+        *
+        * Each says what you DO with the agent and names the protocol
+        * underneath - the protocol is real, checkable information for the
+        * people who want it, and meaningless noise as a headline.
+        */}
+      {filterOpen ? (
+        <View
+          className="px-4 pb-2.5 flex-row gap-2"
+          style={{ backgroundColor: colors.canvas, zIndex: 19 }}
+        >
+          {([
+            { value: null, title: "All", sub: "Everything verified" },
+            { value: "a2a" as const, title: "Hire", sub: "Paid work · A2A" },
+            { value: "mcp" as const, title: "View", sub: "Free tools · MCP" },
+          ]).map((option) => {
+            const selected = kind === option.value;
+            return (
+              <PressableScale
+                key={option.title}
+                accessibilityLabel={`${option.title}, ${option.sub}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setKind(option.value);
+                }}
+                style={{ flex: 1 }}
+                containerStyle={{
+                  paddingVertical: 9,
+                  paddingHorizontal: 12,
+                  borderRadius: 14,
+                  backgroundColor: selected ? colors.gold : colors.surface,
+                  borderColor: selected ? colors.goldBorder : colors.line,
+                  borderWidth: 1,
+                  ...(selected ? shadows.goldGlow : shadows.subtle),
+                }}
+              >
+                <Text
+                  className="text-[13px]"
+                  style={{
+                    color: selected ? colors.ink : colors.muted,
+                    fontWeight: selected ? "700" : "600",
+                  }}
+                >
+                  {option.title}
+                </Text>
+                <Text
+                  className="text-[10.5px] mt-0.5 font-medium"
+                  numberOfLines={1}
+                  style={{ color: selected ? colors.ink : "#9A9C96" }}
+                >
+                  {option.sub}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+      ) : null}
 
       <ScrollView
         className="flex-1"

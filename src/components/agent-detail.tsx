@@ -828,6 +828,48 @@ export function AgentDetail({
               {priceText}
             </Text>
           </>
+        ) : agent.protocol === "mcp" ? (
+          /*
+             AN MCP AGENT HAS NOT FAILED ANYTHING.
+
+             This branch used to render "Not hireable yet" for every agent that
+             `assessHireability` refused, and that check asks whether an agent
+             publishes an A2A endpoint and a wallet - a fair question for an
+             agent you COMMISSION, and the wrong question entirely for one you
+             RUN. 26 of the 28 live agents are MCP, so the page was telling the
+             overwhelming majority of a real, working catalog that it was
+             broken.
+
+             An MCP agent publishes tools and answers immediately, for free.
+             What it lacks is a price, because there is nothing to buy. Saying
+             so plainly is both true and better news than the copy it replaces.
+          */
+          <Card style={{ backgroundColor: colors.surfaceSubtle }}>
+            <View className="flex-row items-start gap-3">
+              <View className="mt-0.5">
+                <CategoryGlyph color={colors.muted} name="info" size={17} />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
+                  Free to use
+                </Text>
+                <Text
+                  className="mt-1.5 text-[12px] leading-[18px]"
+                  style={{ color: colors.muted }}
+                >
+                  This agent publishes tools you call directly rather than work you
+                  commission, so there is nothing to pay and no escrow involved.
+                  Dolphin has verified its server answers.
+                </Text>
+                <Text
+                  className="mt-2 text-[12px] leading-[18px]"
+                  style={{ color: colors.muted }}
+                >
+                  Running its tools from inside Dolphin is not wired up yet.
+                </Text>
+              </View>
+            </View>
+          </Card>
         ) : (
           <Card style={{ backgroundColor: colors.surfaceSubtle }}>
             <View className="flex-row items-start gap-3">

@@ -7,7 +7,6 @@ import {
   summariseSignals,
   type AgentSignals,
 } from "@/hooks/use-agent-signals";
-import { assessHireability } from "@/services/hireability";
 import type { Agent } from "@/types/agent";
 
 type AgentRowProps = {
@@ -31,16 +30,20 @@ type AgentRowProps = {
  */
 export function AgentRow({ agent, onPress, subtitle, signals }: AgentRowProps) {
   /*
-   * The pill says what the row can actually do.
+   * The pill says WHICH KIND OF THING this is, not whether it passed a gate.
    *
-   * Every row used to say "View", which is true and useless, and the list gave
-   * no hint that most of these agents cannot be hired at all - a user found
-   * that out by opening one. Measured 2026-09-06: of 31 listed agents, 15
-   * publish a callable endpoint and 9 return a real price. Saying "Hire" only
-   * where a hire is possible is the cheapest honest signal available, and costs
-   * no extra chrome.
+   * It used to be `assessHireability(agent).hireable`, which is a fair question
+   * for an A2A agent and the wrong question entirely for an MCP one. Measured
+   * 2026-09-07: 26 of the 28 live agents are MCP, so that check labelled the
+   * overwhelming majority "View" - the word this codebase had already called
+   * "true and useless" - as though they had failed something.
+   *
+   * They had not. An MCP agent publishes tools you call directly and free; an
+   * A2A agent is commissioned and paid over an ERC-8183 escrow. Two products,
+   * two verbs. Branching on `protocol` says which one a row is, which is the
+   * thing a browsing user actually needs to know before they tap.
    */
-  const hireable = assessHireability(agent).hireable;
+  const isHire = agent.protocol === "a2a";
   /*
    * Dolphin's OWN record of this agent, not 8004scan's feedback count.
    *
@@ -99,17 +102,17 @@ export function AgentRow({ agent, onPress, subtitle, signals }: AgentRowProps) {
         <View
           className="items-center justify-center px-3.5 py-1.5"
           style={{
-            borderColor: hireable ? colors.goldBorder : colors.line,
-            backgroundColor: hireable ? colors.goldSoft : colors.surfaceSubtle,
+            borderColor: isHire ? colors.goldBorder : colors.line,
+            backgroundColor: isHire ? colors.goldSoft : colors.surfaceSubtle,
             borderWidth: 1,
             borderRadius: 9999,
           }}
         >
           <Text
             className="text-[12px] font-bold"
-            style={{ color: hireable ? colors.goldDark : colors.muted }}
+            style={{ color: isHire ? colors.goldDark : colors.muted }}
           >
-            {hireable ? "Hire" : "View"}
+            {isHire ? "Hire" : "View"}
           </Text>
         </View>
       </View>

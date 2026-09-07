@@ -16,7 +16,6 @@ import { StatePanel } from "@/components/state-panel";
 import { categoryLabel, categoryVisual } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
 import { useAgentList, useCategoryFacets } from "@/hooks/use-agents";
-import { sortHireableFirst } from "@/services/hireability";
 
 /**
  * ONE CATEGORY, PAGINATED.
@@ -61,9 +60,20 @@ export default function CategoryDetailRoute() {
     enabled: categorySlug.length > 0,
   });
 
-  // Hireable first, as a stable partition, so the backend's ranking survives
-  // inside each half.
-  const sortedAgents = sortHireableFirst(agents);
+  /*
+   * Rendered in the BACKEND'S order, not re-sorted here.
+   *
+   * This was `sortHireableFirst(agents)`, which partitioned on
+   * `assessHireability` - so every MCP agent, 26 of the 28 live ones, sank to
+   * the bottom of every list for failing a test that does not apply to it.
+   *
+   * It was also a client-side re-sort of a PAGINATED page, which is the same
+   * defect that took the reputation sort off the category screen: a cursor is a
+   * position in an index, so reordering a page means page two is ordered
+   * independently of page one, and a reader sees one agent twice and never sees
+   * another. The backend's stored `rank` is the ordering.
+   */
+  const sortedAgents = agents;
 
   return (
     <SafeAreaView

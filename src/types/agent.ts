@@ -269,6 +269,16 @@ export interface Agent {
   } | null;
   /** The canonical "<chainId>:<registry>:<tokenId>" key. Same value as `id`. */
   agentKey: string;
+  /**
+   * How this agent is used, and the two are different products.
+   *
+   * "a2a" — commissioned: ask for a quote, pay through an ERC-8183 escrow.
+   * "mcp" — run: it publishes tools you call directly, free and immediately.
+   *
+   * The row pill, the filter and the detail page all branch on this. An MCP
+   * agent is NOT "an agent that failed to be hireable".
+   */
+  protocol: "a2a" | "mcp";
   /** Seed for the client's deterministic avatar when `iconUrl` is null. */
   iconSeed: string;
   iconSource: "publisher" | "cached" | "generated";

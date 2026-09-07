@@ -6,6 +6,7 @@ import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import ArrowUpRight01Icon from "@hugeicons/core-free-icons/ArrowUpRight01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
+import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
 import Compass01Icon from "@hugeicons/core-free-icons/Compass01Icon";
 import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
 import GridViewIcon from "@hugeicons/core-free-icons/GridViewIcon";
@@ -70,6 +71,7 @@ export type GlyphName =
   | "copy"
   | "sparkle"
   | "layers"
+  | "filter"
   | "info"
   | "chevron-right"
   | "chevron-left"
@@ -103,6 +105,7 @@ const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
   copy: Copy01Icon,
   sparkle: SparklesIcon,
   layers: Layers01Icon,
+  filter: FilterHorizontalIcon,
   info: InformationCircleIcon,
   "chevron-right": ArrowRight01Icon,
   "chevron-left": ArrowLeft01Icon,

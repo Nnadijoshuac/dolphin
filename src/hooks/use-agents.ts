@@ -43,9 +43,18 @@ import type { Agent } from "@/types/agent";
 /** How many agents a page holds. One screen of rows plus a little runway. */
 const PAGE_SIZE = 24;
 
+/**
+ * How an agent is used. Named in user language at the UI layer ("Hire" /
+ * "View"); the wire value is the protocol, because that is what the index is
+ * keyed on and what the record actually stores.
+ */
+export type AgentProtocol = "a2a" | "mcp";
+
 export interface UseAgentListOptions {
   /** An open category slug. Undefined browses everything. */
   category?: string;
+  /** Undefined shows both kinds. */
+  protocol?: AgentProtocol;
   /** When set, searches server-side instead of browsing. */
   search?: string;
   enabled?: boolean;
@@ -75,13 +84,17 @@ export function useAgentList(options: UseAgentListOptions = {}): AgentListResult
 
   const browse = usePaginatedQuery(
     api.agents.list,
-    enabled && !isSearching ? { category: options.category } : "skip",
+    enabled && !isSearching
+      ? { category: options.category, protocol: options.protocol }
+      : "skip",
     { initialNumItems: PAGE_SIZE },
   );
 
   const found = usePaginatedQuery(
     api.agents.search,
-    enabled && isSearching ? { text: search, category: options.category } : "skip",
+    enabled && isSearching
+      ? { text: search, category: options.category, protocol: options.protocol }
+      : "skip",
     { initialNumItems: PAGE_SIZE },
   );
 

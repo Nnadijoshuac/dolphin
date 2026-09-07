@@ -67,22 +67,40 @@ import { coerceAgentKey } from "./model/agent";
 export const list = query({
   args: {
     category: v.optional(v.string()),
+    /**
+     * "a2a" or "mcp" - two genuinely different products sharing one registry.
+     * An A2A agent is commissioned and paid over an ERC-8183 escrow; an MCP
+     * agent publishes tools you call. The UI names them in user language; this
+     * takes the protocol.
+     */
+    protocol: v.optional(v.union(v.literal("a2a"), v.literal("mcp"))),
     paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, { category, paginationOpts }) => {
-    const page = category
+  handler: async (ctx, { category, protocol, paginationOpts }) => {
+    // Three index paths, every one a range read. See the schema note on
+    // by_status_protocol_category_rank for why this is not a post-filter.
+    const page = protocol
       ? await ctx.db
           .query("agents")
-          .withIndex("by_status_category_rank", (q) =>
-            q.eq("status", "live").eq("categorySlug", category),
-          )
+          .withIndex("by_status_protocol_category_rank", (q) => {
+            const base = q.eq("status", "live").eq("protocol", protocol);
+            return category ? base.eq("categorySlug", category) : base;
+          })
           .order("desc")
           .paginate(paginationOpts)
-      : await ctx.db
-          .query("agents")
-          .withIndex("by_status_rank", (q) => q.eq("status", "live"))
-          .order("desc")
-          .paginate(paginationOpts);
+      : category
+        ? await ctx.db
+            .query("agents")
+            .withIndex("by_status_category_rank", (q) =>
+              q.eq("status", "live").eq("categorySlug", category),
+            )
+            .order("desc")
+            .paginate(paginationOpts)
+        : await ctx.db
+            .query("agents")
+            .withIndex("by_status_rank", (q) => q.eq("status", "live"))
+            .order("desc")
+            .paginate(paginationOpts);
 
     return { ...page, page: page.page.map(toPublicAgent) };
   },
@@ -105,25 +123,50 @@ export const search = query({
   args: {
     text: v.string(),
     category: v.optional(v.string()),
+    protocol: v.optional(v.union(v.literal("a2a"), v.literal("mcp"))),
     paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, { text, category, paginationOpts }) => {
+  handler: async (ctx, { text, category, protocol, paginationOpts }) => {
     const trimmed = text.trim();
     if (trimmed.length === 0) {
-      // An empty search is a browse, not a search over an empty string.
-      const page = await ctx.db
-        .query("agents")
-        .withIndex("by_status_rank", (q) => q.eq("status", "live"))
-        .order("desc")
-        .paginate(paginationOpts);
+      /*
+       * An empty search is a browse, and it MUST honour the same filters.
+       * Delegating to the same index paths as `list` is what stops clearing the
+       * search box from silently widening the set a user is looking at while
+       * their filter chip still says otherwise.
+       */
+      const page = protocol
+        ? await ctx.db
+            .query("agents")
+            .withIndex("by_status_protocol_category_rank", (q) => {
+              const base = q.eq("status", "live").eq("protocol", protocol);
+              return category ? base.eq("categorySlug", category) : base;
+            })
+            .order("desc")
+            .paginate(paginationOpts)
+        : category
+          ? await ctx.db
+              .query("agents")
+              .withIndex("by_status_category_rank", (q) =>
+                q.eq("status", "live").eq("categorySlug", category),
+              )
+              .order("desc")
+              .paginate(paginationOpts)
+          : await ctx.db
+              .query("agents")
+              .withIndex("by_status_rank", (q) => q.eq("status", "live"))
+              .order("desc")
+              .paginate(paginationOpts);
       return { ...page, page: page.page.map(toPublicAgent) };
     }
 
     const page = await ctx.db
       .query("agents")
       .withSearchIndex("search_text", (q) => {
-        const base = q.search("searchText", trimmed).eq("status", "live");
-        return category ? base.eq("categorySlug", category) : base;
+        let base = q.search("searchText", trimmed).eq("status", "live");
+        if (category) base = base.eq("categorySlug", category);
+        if (protocol) base = base.eq("protocol", protocol);
+        return base;
       })
       .paginate(paginationOpts);
 

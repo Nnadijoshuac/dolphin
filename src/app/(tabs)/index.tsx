@@ -24,7 +24,6 @@ import {
   useAgentSignals,
   useCategoryFacets,
 } from "@/hooks/use-agents";
-import { sortHireableFirst } from "@/services/hireability";
 import type { Agent } from "@/types/agent";
 
 /**
@@ -91,10 +90,20 @@ export default function DiscoverScreen() {
   // One query for the whole page, keyed to the rows actually on it.
   const signals = useAgentSignals(agents);
 
-  // Hireable first. A user browsing should meet the agents they can actually
-  // buy from before the ones they cannot. A stable partition, so the backend's
-  // own ranking survives inside each half.
-  const rows = sortHireableFirst(agents);
+  /*
+   * Rendered in the BACKEND'S order, not re-sorted here.
+   *
+   * This was `sortHireableFirst(agents)`, which partitioned on
+   * `assessHireability` - so every MCP agent, 26 of the 28 live ones, sank to
+   * the bottom of every list for failing a test that does not apply to it.
+   *
+   * It was also a client-side re-sort of a PAGINATED page, which is the same
+   * defect that took the reputation sort off the category screen: a cursor is a
+   * position in an index, so reordering a page means page two is ordered
+   * independently of page one, and a reader sees one agent twice and never sees
+   * another. The backend's stored `rank` is the ordering.
+   */
+  const rows = agents;
 
   const handleAgentPress = (agent: Agent) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

@@ -61,29 +61,39 @@ export function McpUseButton({ agent }: { agent: Agent }) {
   const toolCount = agent.skills.length;
 
   return (
-    <View>
-      {/* The tag, not a sentence. "Free to use" is the fact a reader needs
-          before they decide, and it fits in two words. */}
-      <View className="mb-3 flex-row items-center gap-2">
-        <View
-          className="flex-row items-center gap-1.5 rounded-full px-3 py-1.5"
-          style={{ backgroundColor: colors.mint }}
-        >
-          <CategoryGlyph color={colors.mintInk} name="check" size={12} strokeWidth={2.6} />
-          <Text className="text-[12px] font-bold" style={{ color: colors.mintInk }}>
-            Free to use
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderColor: colors.line,
+        borderRadius: radii.large,
+        borderWidth: 1,
+        padding: 16,
+        ...shadows.subtle,
+      }}
+    >
+      <View className="flex-row items-center justify-between mb-3.5">
+        <View>
+          <Text className="text-[11px] font-bold uppercase tracking-wider text-muted">
+            Integration
+          </Text>
+          <Text className="text-[18px] font-black text-ink mt-0.5">
+            Free to Connect
           </Text>
         </View>
-        {toolCount > 0 ? (
-          <Text className="text-[12px]" style={{ color: colors.muted }}>
-            {toolCount} {toolCount === 1 ? "tool" : "tools"}
+        <View
+          className="flex-row items-center gap-1.5 px-3 py-1 rounded-full"
+          style={{ backgroundColor: colors.lilac }}
+        >
+          <CategoryGlyph color={colors.lilacInk} name="layers" size={12} strokeWidth={2.4} />
+          <Text className="text-[11.5px] font-bold" style={{ color: colors.lilacInk }}>
+            {toolCount > 0 ? `${toolCount} MCP ${toolCount === 1 ? "Tool" : "Tools"}` : "MCP Server"}
           </Text>
-        ) : null}
+        </View>
       </View>
 
       <PressableScale
         accessibilityHint="Copies this agent's MCP endpoint to your clipboard"
-        accessibilityLabel={copied ? "Link copied" : "Use this agent"}
+        accessibilityLabel={copied ? "Endpoint copied" : "Use MCP Agent"}
         accessibilityRole="button"
         onPress={() => void handleUse()}
         containerStyle={{
@@ -100,39 +110,51 @@ export function McpUseButton({ agent }: { agent: Agent }) {
         <CategoryGlyph
           color={copied ? colors.mintInk : colors.ink}
           name={copied ? "check" : "copy"}
-          size={17}
+          size={16}
           strokeWidth={2.4}
         />
         <Text
-          className="text-[15px] font-bold tracking-[-0.2px]"
+          className="text-[16px] font-bold tracking-[-0.2px]"
           style={{ color: copied ? colors.mintInk : colors.ink }}
         >
-          {copied ? "Link copied" : "Use"}
+          {copied ? "Endpoint Copied" : "Copy MCP Endpoint"}
         </Text>
       </PressableScale>
 
       <Text
-        className="mt-2.5 text-center text-[12px]"
+        className="mt-2.5 text-center text-[11.5px]"
         style={{ color: colors.muted }}
       >
         {copied
-          ? "Paste it into Claude Desktop, Cursor, or your own agent."
-          : "Copies this agent's link for your AI client."}
+          ? "Ready to paste into Claude Desktop, Cursor, or Cline"
+          : "Paste directly into Claude Desktop, Cursor, Cline, or your AI client"}
       </Text>
 
-      {/* The evidence, quiet. Readable if wanted, never competing with the
-          button above it. */}
+      {/* The verified endpoint box */}
+      <View
+        className="mt-3.5 flex-row items-center justify-between px-3 py-2 rounded-xl"
+        style={{
+          backgroundColor: colors.surfaceSubtle,
+          borderColor: colors.lineLight,
+          borderWidth: 1,
+        }}
+      >
+        <Text
+          className="text-[11px] font-mono flex-1 mr-2"
+          ellipsizeMode="middle"
+          numberOfLines={1}
+          style={{ color: colors.muted }}
+        >
+          {endpoint}
+        </Text>
+        <CategoryGlyph color={colors.faint} name="copy" size={12} strokeWidth={2} />
+      </View>
+
       <Text
-        className="mt-4 text-[11px] leading-[16px]"
-        ellipsizeMode="middle"
-        numberOfLines={1}
+        className="mt-2 text-center text-[10.5px] leading-[15px]"
         style={{ color: colors.faint }}
       >
-        {endpoint}
-      </Text>
-      <Text className="mt-1 text-[11px] leading-[16px]" style={{ color: colors.faint }}>
-        Dolphin confirmed this server answers and lists its tools. It has not
-        reviewed what those tools do.
+        Dolphin confirmed this server answers and lists tools · Verified live
       </Text>
     </View>
   );

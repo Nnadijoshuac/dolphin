@@ -491,14 +491,46 @@ export function AgentDetail({
   };
 
   return (
-    <View style={{ paddingHorizontal: GUTTER, paddingTop: 8 }}>
-      {/* ── 1. identity ────────────────────────────────────────────────── */}
-      <View className="flex-row items-center gap-4">
-        <AgentIcon category={agent.category} size={84} uri={agent.iconUrl} />
+    <View style={{ paddingHorizontal: GUTTER, paddingTop: 4 }}>
+      {/* ── 1. identity & badges ───────────────────────────────────────── */}
+      <View className="flex-row items-start gap-4">
+        <View style={{ ...shadows.card }}>
+          <AgentIcon category={agent.category} size={80} uri={agent.iconUrl} />
+        </View>
 
-        <View className="min-w-0 flex-1">
+        <View className="min-w-0 flex-1 pt-0.5">
+          {/* Metadata badges row */}
+          <View className="flex-row items-center flex-wrap gap-1.5 mb-1.5">
+            <View
+              className="rounded-full px-2.5 py-0.5"
+              style={{ backgroundColor: colors.surfaceSubtle }}
+            >
+              <Text className="text-[11px] font-bold text-zinc-600">
+                {categoryLabels[agent.category]}
+              </Text>
+            </View>
+
+            <View
+              className="rounded-full px-2.5 py-0.5"
+              style={{
+                backgroundColor:
+                  agent.protocol === "mcp" ? colors.lilac : colors.goldSoft,
+              }}
+            >
+              <Text
+                className="text-[11px] font-bold"
+                style={{
+                  color:
+                    agent.protocol === "mcp" ? colors.lilacInk : colors.goldDark,
+                }}
+              >
+                {agent.protocol === "mcp" ? "MCP Server" : "A2A Agent"}
+              </Text>
+            </View>
+          </View>
+
           <Text
-            className="text-[22px] font-bold leading-[27px] tracking-[-0.5px]"
+            className="text-[23px] font-black leading-[28px] tracking-[-0.6px]"
             numberOfLines={2}
             style={{ color: colors.ink }}
           >
@@ -521,37 +553,106 @@ export function AgentDetail({
                 strokeWidth={2.4}
               />
             ) : null}
+            <Text className="text-[12px] font-medium text-zinc-400">
+              · #{agent.tokenId}
+            </Text>
           </View>
+        </View>
+      </View>
 
-          {/*
-           * One meta line, and every part of it is a fact this record carries.
-           * It replaces two lines of category-agnostic marketing copy
-           * ("Decentralized Finance · Autonomous Agent") that was identical for
-           * every agent in the directory and therefore told a reader nothing.
-           */}
-          <Text
-            className="mt-1 text-[12px]"
-            numberOfLines={1}
-            style={{ color: colors.muted }}
-          >
-            {categoryLabels[agent.category]} · ERC-8004 #{agent.tokenId}
+      {/* ── Quick Stats Strip ──────────────────────────────────────────── */}
+      <View
+        className="flex-row items-center justify-between mt-5 py-3 px-2 rounded-2xl"
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: colors.line,
+          borderWidth: 1,
+          ...shadows.subtle,
+        }}
+      >
+        <View className="flex-1 items-center">
+          <Text className="text-[10.5px] font-bold uppercase tracking-wider text-muted">
+            Cost
+          </Text>
+          <Text className="text-[15px] font-black text-ink mt-0.5" numberOfLines={1}>
+            {price === null
+              ? "—"
+              : Number(price.amount) === 0
+                ? "Free"
+                : `${price.amount} ${price.token}`}
+          </Text>
+          <Text className="text-[10px] text-zinc-400 mt-0.5">
+            {agent.protocol === "mcp" ? "Free to use" : "Per hire"}
+          </Text>
+        </View>
+
+        <View style={{ width: 1, height: 26, backgroundColor: colors.lineLight }} />
+
+        <View className="flex-1 items-center">
+          <Text className="text-[10.5px] font-bold uppercase tracking-wider text-muted">
+            Protocol
+          </Text>
+          <Text className="text-[15px] font-black text-ink mt-0.5" numberOfLines={1}>
+            {agent.protocol === "mcp" ? "MCP" : "ERC-8183"}
+          </Text>
+          <Text className="text-[10px] text-zinc-400 mt-0.5">
+            {agent.protocol === "mcp" ? "Tool Server" : "A2A Standard"}
+          </Text>
+        </View>
+
+        <View style={{ width: 1, height: 26, backgroundColor: colors.lineLight }} />
+
+        <View className="flex-1 items-center">
+          <Text className="text-[10.5px] font-bold uppercase tracking-wider text-muted">
+            Registry
+          </Text>
+          <View className="flex-row items-center gap-1 mt-0.5">
+            {isRegistered ? (
+              <CategoryGlyph color={colors.mintInk} name="check" size={12} strokeWidth={2.6} />
+            ) : null}
+            <Text className="text-[15px] font-black text-ink" numberOfLines={1}>
+              {isRegistered ? "Verified" : "Listed"}
+            </Text>
+          </View>
+          <Text className="text-[10px] text-zinc-400 mt-0.5">
+            BNB Chain
           </Text>
         </View>
       </View>
 
-      {/* ── 2. the action ──────────────────────────────────────────────── */}
-      {/*
-       * The button is offered only when a hire would actually do something.
-       *
-       * Every agent used to get "Hire — Free", which wrote a database row and
-       * contacted nobody. Hireability is now a property of the agent
-       * (src/services/hireability.ts), mirroring the two conditions
-       * convex/agentPayments.ts's requestQuote refuses on - so this can never
-       * offer a button that the backend would reject.
-       */}
-      <View style={{ marginTop: 22 }}>
+      {/* ── 2. the action (hire / use) ─────────────────────────────────── */}
+      <View style={{ marginTop: 16 }}>
         {hireability.hireable ? (
-          <>
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.line,
+              borderRadius: CARD_RADIUS,
+              borderWidth: 1,
+              padding: 16,
+              ...shadows.subtle,
+            }}
+          >
+            <View className="flex-row items-center justify-between mb-3.5">
+              <View>
+                <Text className="text-[11px] font-bold uppercase tracking-wider text-muted">
+                  Hire Price
+                </Text>
+                <Text className="text-[18px] font-black text-ink mt-0.5">
+                  {priceText}
+                </Text>
+              </View>
+              <View
+                className="flex-row items-center gap-1.5 px-3 py-1 rounded-full"
+                style={{ backgroundColor: colors.mint }}
+              >
+                <CategoryGlyph color={colors.mintInk} name="shield" size={12} strokeWidth={2.4} />
+                <Text className="text-[11.5px] font-bold" style={{ color: colors.mintInk }}>
+                  Escrow Protected
+                </Text>
+              </View>
+            </View>
+
             <PressableScale
               accessibilityLabel={actionLabel}
               accessibilityRole="button"
@@ -563,39 +664,30 @@ export function AgentDetail({
                 alignItems: "center",
                 backgroundColor: colors.gold,
                 borderRadius: radii.pill,
+                flexDirection: "row",
+                gap: 8,
                 height: 52,
                 justifyContent: "center",
                 ...shadows.goldGlow,
               }}
             >
               <Text
-                className="text-[15px] font-bold tracking-[-0.2px]"
+                className="text-[16px] font-bold tracking-[-0.2px]"
                 style={{ color: colors.ink }}
               >
                 {actionLabel}
               </Text>
+              <CategoryGlyph color={colors.ink} name="arrow-right" size={16} strokeWidth={2.4} />
             </PressableScale>
 
             <Text
-              className="mt-2.5 text-center text-[12px]"
+              className="mt-2.5 text-center text-[11.5px]"
               style={{ color: colors.muted }}
             >
-              {priceText}
+              Secured on BNB Chain · Funds released on verified completion
             </Text>
-          </>
+          </View>
         ) : agent.protocol === "mcp" ? (
-          /*
-             AN MCP AGENT HAS NOT FAILED ANYTHING, AND ITS ACTION IS ONE BUTTON.
-
-             This branch was a card explaining the protocol and ending on
-             "Running its tools from inside Dolphin is not wired up yet" - a dead
-             end in front of 26 of the 28 live agents. It then became that card
-             plus an endpoint and a config block, which was accurate and still
-             three things to read before the reader could act.
-
-             What an MCP agent needs is its link. Tap Use, it is on the
-             clipboard. See components/mcp-connect.tsx.
-          */
           <McpUseButton agent={agent} />
         ) : (
           <Card style={{ backgroundColor: colors.surfaceSubtle }}>

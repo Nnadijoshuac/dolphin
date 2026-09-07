@@ -31,7 +31,13 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  query,
+} from "./_generated/server";
 import { buildTags, categorize } from "./lib/categorize";
 import { probeAgent } from "./lib/probe";
 import { computeRank } from "./lib/rank";
@@ -585,15 +591,74 @@ export const reprobe = internalQuery({
       .unique(),
 });
 
+/**
+ * WHY IS AGENT X NOT LISTED — answerable without reading the database.
+ *
+ * The brief's §31 asks for exactly this, and the old pipeline answered it by
+ * storing a written-out sentence on a quarter of a million rows. Here the
+ * sentences already exist on the (bounded) verification rows; this just counts
+ * them by state and failure class and shows a sample of each.
+ *
+ * Bounded by `take` so it cannot grow into Convex's read limit as the candidate
+ * population does - and it says so when it hits the cap rather than reporting a
+ * quietly truncated number as if it were the total.
+ */
+export const report = query({
+  args: { sampleSize: v.optional(v.number()) },
+  handler: async (ctx, { sampleSize }) => {
+    const cap = 4000;
+    const byState: Record<string, number> = {};
+    const byFailure: Record<string, number> = {};
+    const samples: Record<string, { agentKey: string; detail: string }[]> = {};
+    const wanted = sampleSize ?? 3;
+    let scanned = 0;
+
+    for (const state of ["unknown", "live", "unavailable", "invalid"] as const) {
+      const rows = await ctx.db
+        .query("agentVerification")
+        .withIndex("by_state_next_probe", (q) => q.eq("state", state))
+        .take(cap);
+      scanned += rows.length;
+      byState[state] = rows.length;
+
+      for (const row of rows) {
+        const key = row.failureClass ?? "none";
+        byFailure[key] = (byFailure[key] ?? 0) + 1;
+        const bucket = (samples[key] ??= []);
+        if (bucket.length < wanted) {
+          bucket.push({ agentKey: row.agentKey, detail: row.detail });
+        }
+      }
+    }
+
+    return {
+      byState,
+      byFailure,
+      samples,
+      truncated: Object.values(byState).some((n) => n === cap),
+      scanned,
+    };
+  },
+});
+
 export const runBatchNow = action({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args): Promise<{ scheduled: number }> =>
     ctx.runMutation(internal.verification.scheduleBatch, args),
 });
 
-/** Probes one agent immediately, by key. The manual path for testing. */
+/**
+ * Probes one agent immediately, by key. The manual path for testing.
+ *
+ * A BLOCK BODY, not an expression body, and the difference is not style.
+ * `verifyOne` declares `Promise<void>`, but Convex SERIALIZES an action's
+ * return value and `undefined` serializes to `null` - so `runAction` is typed
+ * `Promise<null>`, and returning it straight out of a `Promise<void>` handler
+ * does not typecheck. Awaiting and returning nothing is what this always meant.
+ */
 export const verifyNow = action({
   args: { agentKey: v.string() },
-  handler: async (ctx, { agentKey }): Promise<void> =>
-    ctx.runAction(internal.verification.verifyOne, { agentKey }),
+  handler: async (ctx, { agentKey }): Promise<void> => {
+    await ctx.runAction(internal.verification.verifyOne, { agentKey });
+  },
 });

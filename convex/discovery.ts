@@ -179,12 +179,31 @@ export const run = internalAction({
     } else if (mode === "backfill") {
       /*
        * THE ONE-TIME CATCH-UP over the population that already exists. Walks
-       * `has_a2a=true` (27,742) then `has_mcp=true` (5,474) rather than the
+       * `has_a2a=true` (27,806) then `has_mcp=true` (5,474) rather than the
        * whole registry (307,559) - roughly 330 pages instead of 3,076.
        *
-       * Budgeted per cycle and resumed from a stored offset, because an offset
-       * walk is stable under insertion here: `created_at asc` appends new rows
-       * at the end and never shifts an offset already read.
+       * -------------------------------------------------------------------
+       * NEWEST FIRST, AND THE FIRST RUN IS WHY (measured 2026-09-07)
+       * -------------------------------------------------------------------
+       * This walked `created_at asc` on the reasoning that an ascending offset
+       * walk is stable under insertion: new rows append at the end and never
+       * shift an offset already read. That is true, and it is the wrong end to
+       * start from. The first live run probed 60 of the registry's OLDEST
+       * A2A registrations - token ids 705, 728, 2115 - and found zero live
+       * agents. Oldest-first means walking the dead end of the registry first
+       * and spending days there before reaching anything worth listing.
+       *
+       * Descending is safe for a different reason, and the direction matters:
+       * inserting a record pushes everything to a HIGHER offset, so an offset
+       * walk that has read 0..799 and next reads 800..899 re-sees records it
+       * already judged. It over-reads under insertion; it cannot skip. Since
+       * every write here is an idempotent upsert on agentKey, re-seeing costs
+       * one wasted comparison and nothing else - whereas skipping would lose an
+       * agent silently, which is what ascending protects against and descending
+       * does not need protecting against.
+       *
+       * So: safe in the way that matters, and it front-loads the registrations
+       * most likely to still answer.
        */
       const filter = backfillPhase === "mcp" ? "has_mcp=true" : "has_a2a=true";
       const offsets = Array.from(
@@ -197,7 +216,7 @@ export const run = internalAction({
           if (Date.now() > startedAt + budget) return;
           pages++;
           const count = await fetchFiltered(
-            `is_active=any&${filter}&sort_by=created_at&sort_order=asc` +
+            `is_active=any&${filter}&sort_by=created_at&sort_order=desc` +
               `&limit=${PAGE_SIZE}&offset=${offset}`,
           );
           if (count < PAGE_SIZE) shortPage = true;
@@ -508,4 +527,40 @@ export const runNow = action({
   args: { backfill: v.optional(v.boolean()), budgetMs: v.optional(v.number()) },
   handler: async (ctx, args): Promise<DiscoveryReport> =>
     ctx.runAction(internal.discovery.run, args),
+});
+
+/**
+ * Sends the backfill back to the start of its walk.
+ *
+ * An operator tool, and a needed one: the walk's ORDER is a decision that can
+ * change (it went oldest-first to newest-first on 2026-09-07 after the first
+ * live run found zero live agents among the registry's oldest registrations),
+ * and a stored offset from the old order means nothing under the new one.
+ *
+ * Touches only the cursor. Every candidate already discovered keeps its row and
+ * its probe history, because re-walking is idempotent - the point is to change
+ * where the walk resumes, not to forget what it found.
+ */
+export const resetBackfill = action({
+  args: {},
+  handler: async (ctx): Promise<{ reset: true }> => {
+    await ctx.runMutation(internal.discovery.rewindCursor, {});
+    return { reset: true };
+  },
+});
+
+export const rewindCursor = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const existing = await ctx.db
+      .query("discoveryCursor")
+      .withIndex("by_key", (q) => q.eq("key", CURSOR_KEY))
+      .unique();
+    if (!existing) return;
+    await ctx.db.patch(existing._id, {
+      backfillOffset: 0,
+      backfillPhase: "a2a",
+      backfillCompletedAt: null,
+    });
+  },
 });

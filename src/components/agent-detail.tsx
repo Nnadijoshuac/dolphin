@@ -73,7 +73,7 @@ import type { Agent, AgentCategory, LiveMetric } from "@/types/agent";
 /** The page's single horizontal inset. Set once, at the root, never again. */
 const GUTTER = 20;
 /** The single vertical rhythm between sections. */
-const SECTION_GAP = 30;
+const SECTION_GAP = 24;
 /** The single card radius on this page. */
 const CARD_RADIUS = radii.large;
 
@@ -255,128 +255,115 @@ function Reviews({ agent }: { agent: Agent }) {
 function BackendReviews({ agent }: { agent: Agent }) {
   const reviews = useAgentReviews(agent.tokenId);
 
-  if (reviews === undefined) {
-    return (
-      <StatePanel
-        body="Reading reviews left by wallets that hired this agent."
-        compact
-        state="syncing"
-        title="Loading reviews"
-      />
-    );
-  }
-
-  if (reviews.total === 0) {
-    return (
-      <StatePanel
-        body="Nobody who hired this agent has reviewed it yet. Only wallets that hired it can, which is what will make these worth reading."
-        compact
-        state="empty"
-        title="No reviews yet"
-      />
-    );
+  if (!reviews || reviews.total === 0) {
+    return null;
   }
 
   const { outcomes } = reviews;
 
   return (
-    <View className="gap-3">
-      <Card>
-        <View className="flex-row flex-wrap gap-y-5">
-          <View className="w-1/2 pr-2.5">
-            <Text
-              className="text-[11px] font-bold uppercase tracking-[0.8px]"
-              style={{ color: colors.faint }}
-            >
-              Would hire again
-            </Text>
-            <Text
-              className="mt-1.5 text-[20px] font-bold"
-              style={{ color: colors.ink }}
-            >
-              {reviews.wouldHireAgainRate === null
-                ? `${reviews.wouldHireAgainCount}/${reviews.total}`
-                : `${Math.round(reviews.wouldHireAgainRate * 100)}%`}
-            </Text>
-            <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
-              {reviews.wouldHireAgainRate === null
-                ? "Too few to rate"
-                : `of ${reviews.total} reviews`}
-            </Text>
-          </View>
-          <View className="w-1/2 pl-2.5">
-            <Text
-              className="text-[11px] font-bold uppercase tracking-[0.8px]"
-              style={{ color: colors.faint }}
-            >
-              Did what it said
-            </Text>
-            <Text
-              className="mt-1.5 text-[20px] font-bold"
-              style={{ color: colors.ink }}
-            >
-              {outcomes.yes}
-              <Text className="text-[13px]" style={{ color: colors.muted }}>
-                {` yes · ${outcomes.partially} partly · ${outcomes.no} no`}
+    <Section
+      caption="From wallets that hired this agent, signed in, and kept it for at least a day."
+      title="Reviews"
+    >
+      <View className="gap-3">
+        <Card>
+          <View className="flex-row flex-wrap gap-y-5">
+            <View className="w-1/2 pr-2.5">
+              <Text
+                className="text-[11px] font-bold uppercase tracking-[0.8px]"
+                style={{ color: colors.faint }}
+              >
+                Would hire again
               </Text>
-            </Text>
-          </View>
-        </View>
-
-        {reviews.paidReviews > 0 ? (
-          <View
-            className="mt-4 border-t pt-3"
-            style={{ borderColor: colors.lineLight }}
-          >
-            <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
-              {reviews.paidReviews} of {reviews.total}{" "}
-              {reviews.paidReviews === 1 ? "review is" : "reviews are"} from a hire
-              that paid this agent through an on-chain escrow.
-            </Text>
-          </View>
-        ) : null}
-      </Card>
-
-      {reviews.reviews.map((review) => (
-        <Card key={`${review.walletAddress}-${review.updatedAt}`}>
-          <View className="flex-row items-center justify-between gap-3">
-            <Text
-              className="shrink text-[12px] font-semibold"
-              numberOfLines={1}
-              style={{ color: colors.ink }}
-            >
-              {shortAddress(review.walletAddress)}
-            </Text>
-            <View className="flex-row items-center gap-1.5">
-              {review.paidJobId ? <Pill accent label="Paid hire" /> : null}
-              {review.onChainTxHash ? <Pill accent label="On-chain" /> : null}
+              <Text
+                className="mt-1.5 text-[20px] font-bold"
+                style={{ color: colors.ink }}
+              >
+                {reviews.wouldHireAgainRate === null
+                  ? `${reviews.wouldHireAgainCount}/${reviews.total}`
+                  : `${Math.round(reviews.wouldHireAgainRate * 100)}%`}
+              </Text>
+              <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
+                {reviews.wouldHireAgainRate === null
+                  ? "Too few to rate"
+                  : `of ${reviews.total} reviews`}
+              </Text>
+            </View>
+            <View className="w-1/2 pl-2.5">
+              <Text
+                className="text-[11px] font-bold uppercase tracking-[0.8px]"
+                style={{ color: colors.faint }}
+              >
+                Did what it said
+              </Text>
+              <Text
+                className="mt-1.5 text-[20px] font-bold"
+                style={{ color: colors.ink }}
+              >
+                {outcomes.yes}
+                <Text className="text-[13px]" style={{ color: colors.muted }}>
+                  {` yes · ${outcomes.partially} partly · ${outcomes.no} no`}
+                </Text>
+              </Text>
             </View>
           </View>
 
-          <Text
-            className="mt-2 text-[13px] font-semibold leading-[19px]"
-            style={{ color: colors.ink }}
-          >
-            {review.outcome === "yes"
-              ? "Did what it said"
-              : review.outcome === "partially"
-                ? "Partly did what it said"
-                : "Did not do what it said"}
-            {" · "}
-            {review.wouldHireAgain ? "Would hire again" : "Would not hire again"}
-          </Text>
-
-          {review.comment ? (
-            <Text
-              className="mt-2 text-[13px] leading-[20px]"
-              style={{ color: colors.muted }}
+          {reviews.paidReviews > 0 ? (
+            <View
+              className="mt-4 border-t pt-3"
+              style={{ borderColor: colors.lineLight }}
             >
-              {review.comment}
-            </Text>
+              <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
+                {reviews.paidReviews} of {reviews.total}{" "}
+                {reviews.paidReviews === 1 ? "review is" : "reviews are"} from a hire
+                that paid this agent through an on-chain escrow.
+              </Text>
+            </View>
           ) : null}
         </Card>
-      ))}
-    </View>
+
+        {reviews.reviews.map((review) => (
+          <Card key={`${review.walletAddress}-${review.updatedAt}`}>
+            <View className="flex-row items-center justify-between gap-3">
+              <Text
+                className="shrink text-[12px] font-semibold"
+                numberOfLines={1}
+                style={{ color: colors.ink }}
+              >
+                {shortAddress(review.walletAddress)}
+              </Text>
+              <View className="flex-row items-center gap-1.5">
+                {review.paidJobId ? <Pill accent label="Paid hire" /> : null}
+                {review.onChainTxHash ? <Pill accent label="On-chain" /> : null}
+              </View>
+            </View>
+
+            <Text
+              className="mt-2 text-[13px] font-semibold leading-[19px]"
+              style={{ color: colors.ink }}
+            >
+              {review.outcome === "yes"
+                ? "Did what it said"
+                : review.outcome === "partially"
+                  ? "Partly did what it said"
+                  : "Did not do what it said"}
+              {" · "}
+              {review.wouldHireAgain ? "Would hire again" : "Would not hire again"}
+            </Text>
+
+            {review.comment ? (
+              <Text
+                className="mt-2 text-[13px] leading-[20px]"
+                style={{ color: colors.muted }}
+              >
+                {review.comment}
+              </Text>
+            ) : null}
+          </Card>
+        ))}
+      </View>
+    </Section>
   );
 }
 
@@ -492,10 +479,10 @@ export function AgentDetail({
 
   return (
     <View style={{ paddingHorizontal: GUTTER, paddingTop: 4 }}>
-      {/* ── 1. identity & badges ───────────────────────────────────────── */}
-      <View className="flex-row items-start gap-4">
+      {/* ── 1. identity & value proposition ────────────────────────────── */}
+      <View className="flex-row items-start gap-3.5">
         <View style={{ ...shadows.card }}>
-          <AgentIcon category={agent.category} size={80} uri={agent.iconUrl} />
+          <AgentIcon category={agent.category} size={72} uri={agent.iconUrl} />
         </View>
 
         <View className="min-w-0 flex-1 pt-0.5">
@@ -530,14 +517,14 @@ export function AgentDetail({
           </View>
 
           <Text
-            className="text-[23px] font-black leading-[28px] tracking-[-0.6px]"
+            className="text-[22px] font-black leading-[27px] tracking-[-0.5px]"
             numberOfLines={2}
             style={{ color: colors.ink }}
           >
             {agent.name}
           </Text>
 
-          <View className="mt-1.5 flex-row items-center gap-1.5">
+          <View className="mt-1 flex-row items-center gap-1.5">
             <Text
               className="shrink text-[13px] font-bold"
               numberOfLines={1}
@@ -560,65 +547,15 @@ export function AgentDetail({
         </View>
       </View>
 
-      {/* ── Quick Stats Strip ──────────────────────────────────────────── */}
-      <View
-        className="flex-row items-center justify-between mt-5 py-3 px-2 rounded-2xl"
-        style={{
-          backgroundColor: colors.surface,
-          borderColor: colors.line,
-          borderWidth: 1,
-          ...shadows.subtle,
-        }}
-      >
-        <View className="flex-1 items-center">
-          <Text className="text-[10.5px] font-bold uppercase tracking-wider text-muted">
-            Cost
-          </Text>
-          <Text className="text-[15px] font-black text-ink mt-0.5" numberOfLines={1}>
-            {price === null
-              ? "—"
-              : Number(price.amount) === 0
-                ? "Free"
-                : `${price.amount} ${price.token}`}
-          </Text>
-          <Text className="text-[10px] text-zinc-400 mt-0.5">
-            {agent.protocol === "mcp" ? "Free to use" : "Per hire"}
-          </Text>
-        </View>
-
-        <View style={{ width: 1, height: 26, backgroundColor: colors.lineLight }} />
-
-        <View className="flex-1 items-center">
-          <Text className="text-[10.5px] font-bold uppercase tracking-wider text-muted">
-            Protocol
-          </Text>
-          <Text className="text-[15px] font-black text-ink mt-0.5" numberOfLines={1}>
-            {agent.protocol === "mcp" ? "MCP" : "ERC-8183"}
-          </Text>
-          <Text className="text-[10px] text-zinc-400 mt-0.5">
-            {agent.protocol === "mcp" ? "Tool Server" : "A2A Standard"}
-          </Text>
-        </View>
-
-        <View style={{ width: 1, height: 26, backgroundColor: colors.lineLight }} />
-
-        <View className="flex-1 items-center">
-          <Text className="text-[10.5px] font-bold uppercase tracking-wider text-muted">
-            Registry
-          </Text>
-          <View className="flex-row items-center gap-1 mt-0.5">
-            {isRegistered ? (
-              <CategoryGlyph color={colors.mintInk} name="check" size={12} strokeWidth={2.6} />
-            ) : null}
-            <Text className="text-[15px] font-black text-ink" numberOfLines={1}>
-              {isRegistered ? "Verified" : "Listed"}
-            </Text>
-          </View>
-          <Text className="text-[10px] text-zinc-400 mt-0.5">
-            BNB Chain
-          </Text>
-        </View>
-      </View>
+      {/* Immediate 1-sentence value proposition */}
+      {agent.tagline ? (
+        <Text
+          className="mt-3.5 text-[14.5px] font-medium leading-[21px]"
+          style={{ color: colors.ink }}
+        >
+          {agent.tagline}
+        </Text>
+      ) : null}
 
       {/* ── 2. the action (hire / use) ─────────────────────────────────── */}
       <View style={{ marginTop: 16 }}>
@@ -703,16 +640,10 @@ export function AgentDetail({
                   Not hireable yet
                 </Text>
                 <Text
-                  className="mt-1.5 text-[12px] leading-[18px]"
+                  className="mt-1 text-[12px] leading-[18px]"
                   style={{ color: colors.muted }}
                 >
                   {hireability.reason}
-                </Text>
-                <Text
-                  className="mt-2 text-[12px] leading-[18px]"
-                  style={{ color: colors.muted }}
-                >
-                  {hireability.nextStep}
                 </Text>
               </View>
             </View>
@@ -720,28 +651,10 @@ export function AgentDetail({
         )}
       </View>
 
-      {/* ── 4. about ───────────────────────────────────────────────────── */}
-      <Section title="About this agent">
+      {/* ── 3. overview & capabilities ─────────────────────────────────── */}
+      <Section title="Overview">
         <Text
-          className="text-[14px] font-semibold leading-[21px]"
-          style={{ color: colors.ink }}
-        >
-          {agent.tagline}
-        </Text>
-
-        {/*
-         * The toggle is a nested <Text>, not a control beside the paragraph, so
-         * it flows as the last word of the description and wraps with it: the
-         * ellipsis, a space, then "Show more" on the same line. As a sibling
-         * PressableScale it sat on its own line under the block, which read as a
-         * second element rather than as the end of the sentence it continues.
-         *
-         * Nested Text takes onPress directly on both platforms; suppressHighlighting
-         * stops iOS flashing a grey box over the run, which at this size covers
-         * the tail of the paragraph rather than just the link.
-         */}
-        <Text
-          className="mt-2 text-[14px] leading-[23px]"
+          className="text-[14px] leading-[22px]"
           style={{ color: colors.muted }}
         >
           {displayedDescription}
@@ -762,15 +675,8 @@ export function AgentDetail({
           ) : null}
         </Text>
 
-        {/*
-         * Skills only. The three decorative hashtags that used to lead this row
-         * (#Category, #ERC-8004, #BNBChain) restated the meta line two blocks
-         * above and the registry table below, so the row's real content - what
-         * this agent claims it can do, and whether that claim was verified - was
-         * the part a reader reached last.
-         */}
         {agent.skills.length > 0 ? (
-          <View className="mt-4 flex-row flex-wrap gap-2">
+          <View className="mt-3.5 flex-row flex-wrap gap-2">
             {agent.skills.map((skill) => (
               <Pill
                 accent={skill.evidence === "verified"}
@@ -782,45 +688,8 @@ export function AgentDetail({
         ) : null}
       </Section>
 
-      {/*
-       * ── 5-6. WAS: telemetry, retention, and the track-record chart ──────
-       *
-       * REMOVED 2026-09-07, on the owner's rule: anything that is not
-       * functioning, or that does not help the reader make a clear decision,
-       * must go.
-       *
-       * All three were permanently empty for the overwhelming majority of the
-       * catalog, and empty in three different ways that each cost a reader a
-       * scroll to discover:
-       *
-       *   telemetry     `liveStats` is null for every category with no wired
-       *                 protocol reader, which since categories became open is
-       *                 most of them. An MCP agent has never had one.
-       *   retention     counted from agentHires. An MCP agent cannot BE hired,
-       *                 so 26 of 28 read "No hires yet" forever - which is the
-       *                 exact "reads as a failure" problem the protocol split
-       *                 was introduced to fix.
-       *   track record  needs two observations of a category metric, and there
-       *                 is no reader producing them for most categories.
-       *
-       * Their sources are untouched and still queried nowhere else, so any of
-       * the three is a re-add of one <Section> once something is actually
-       * feeding it. Deleting the section is not deleting the capability.
-       */}
-
-      {/* ── 7. reviews ─────────────────────────────────────────────────── */}
-      {/*
-       * Takes the slot the deleted activity feed used to occupy, and it is the
-       * right occupant: this is the section a reader of a marketplace page
-       * looks for, and until now the page had nothing to put in it but
-       * fabrications (see this file's header).
-       */}
-      <Section
-        caption="From wallets that hired this agent, signed in, and kept it for at least a day. Not star ratings — see what the agent was actually asked to do."
-        title="Reviews"
-      >
-        <Reviews agent={agent} />
-      </Section>
+      {/* ── 4. reviews (only rendered if reviews exist) ────────────────── */}
+      <Reviews agent={agent} />
 
       {/* ── 8. everything technical, folded away ───────────────────────── */}
       {/*

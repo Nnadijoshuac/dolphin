@@ -80,20 +80,15 @@ export default function SearchScreen() {
   const { categories } = useCategoryFacets();
 
   /**
-   * Distribute categories across at most 3 lines.
-   * When items fill line 1 (2 items across the viewport), they flow to line 2,
-   * then line 3. Once line 3 fills, subsequent items cycle back to lines 1, 2, 3
-   * as horizontally scrollable overflow, never exceeding 3 lines vertically.
+   * Distribute categories across at most 2 lines, each scrolling independently.
+   * When items fill line 1 (2 items across the viewport), they flow to line 2.
+   * Any additional items extend line 1 and line 2 as horizontally scrollable overflow.
    */
   const categoryRows = useMemo(() => {
-    const rows: (typeof categories)[] = [[], [], []];
-    const itemsPerViewportRow = 2;
-    categories.forEach((cat, index) => {
-      const indexInPage = index % (3 * itemsPerViewportRow);
-      const rowIndex = Math.floor(indexInPage / itemsPerViewportRow);
-      rows[rowIndex].push(cat);
-    });
-    return rows;
+    if (categories.length === 0) return [];
+    if (categories.length === 1) return [categories];
+    const mid = Math.ceil(categories.length / 2);
+    return [categories.slice(0, mid), categories.slice(mid)];
   }, [categories]);
 
   /*

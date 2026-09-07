@@ -77,7 +77,20 @@ export type WalletSessionValue = Readonly<{
   isSigningIn: boolean;
   /** Last sign-in failure, already phrased for a person. */
   error: string | null;
-  signIn: () => Promise<void>;
+  /**
+   * Signs in, and RETURNS THE TOKEN rather than only storing it.
+   *
+   * Same reason `connect` returns an address (wallet-provider.tsx): a caller
+   * that awaits this and then reads `session.sessionToken` reads its own
+   * closure, which has not re-rendered. Returning the token is what lets one
+   * click connect, sign in and hire in sequence.
+   *
+   * `addressOverride` exists for exactly that chain: immediately after
+   * `connect()` the hook's `wallet.address` is still null, so the address has
+   * to be passed in rather than read. Null means sign-in did not happen; the
+   * reason is in `error`.
+   */
+  signIn: (addressOverride?: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }>;
 
@@ -158,7 +171,7 @@ const unavailableSession: WalletSessionValue = {
   isSignedIn: false,
   isSigningIn: false,
   error: null,
-  signIn: async () => undefined,
+  signIn: async () => null,
   signOut: async () => undefined,
 };
 
@@ -241,32 +254,37 @@ function BackendWalletSession({ children }: PropsWithChildren) {
     }
   }, [connectedAddress, session, sessionAddress, token]);
 
-  const signIn = useCallback(async () => {
-    const address = wallet.address;
-    if (!address) {
-      setError("Connect a wallet before signing in.");
-      return;
-    }
+  const signIn = useCallback(
+    async (addressOverride?: string): Promise<string | null> => {
+      const address = addressOverride ?? wallet.address;
+      if (!address) {
+        setError("Connect a wallet before signing in.");
+        return null;
+      }
 
-    setIsSigningIn(true);
-    setError(null);
-    try {
-      // The backend chooses the message. Signing something this client made up
-      // would prove key control and nothing about what was agreed to.
-      const challenge = await requestNonce({ address });
-      const signature = await wallet.signMessage(challenge.message);
-      const issued = await verifySignature({
-        nonce: challenge.nonce,
-        signature,
-      });
+      setIsSigningIn(true);
+      setError(null);
+      try {
+        // The backend chooses the message. Signing something this client made
+        // up would prove key control and nothing about what was agreed to.
+        const challenge = await requestNonce({ address });
+        const signature = await wallet.signMessage(challenge.message);
+        const issued = await verifySignature({
+          nonce: challenge.nonce,
+          signature,
+        });
 
-      writeStoredToken(issued.token);
-    } catch (cause) {
-      setError(toUserMessage(cause, "Could not complete sign-in."));
-    } finally {
-      setIsSigningIn(false);
-    }
-  }, [requestNonce, verifySignature, wallet]);
+        writeStoredToken(issued.token);
+        return issued.token;
+      } catch (cause) {
+        setError(toUserMessage(cause, "Could not complete sign-in."));
+        return null;
+      } finally {
+        setIsSigningIn(false);
+      }
+    },
+    [requestNonce, verifySignature, wallet],
+  );
 
   const signOut = useCallback(async () => {
     const current = token;

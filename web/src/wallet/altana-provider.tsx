@@ -541,7 +541,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, recordGrant, refreshRecoverability, sessionsUnavailable],
+    [
+      adminSigner,
+      identitySession,
+      recordGrant,
+      refreshRecoverability,
+      sessionsUnavailable,
+    ],
   );
 
   const revokeSession = useCallback(
@@ -579,7 +585,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, markRevoked, sessionsUnavailable],
+    [adminSigner, identitySession, markRevoked, sessionsUnavailable],
   );
 
   const registerWallet = useCallback(async (): Promise<void> => {

@@ -186,7 +186,20 @@ export interface WalletState {
    * no way out of the loop.
    */
   canUseQr: boolean;
-  connect: (preferredType?: "injected" | "walletConnect") => Promise<void>;
+  /**
+   * Connects, and RETURNS THE ADDRESS rather than only setting state.
+   *
+   * The return value is what lets one click do more than one thing. A caller
+   * that awaits `connect()` and then reads `wallet.address` reads the value
+   * from its own closure, which is still the pre-connection one - React has not
+   * re-rendered yet. Handing the address back is what allows "Hire" to connect
+   * and then immediately sign in and hire, instead of making the user click
+   * three times through three states.
+   *
+   * Null means it did not connect. The reason is already in `failure`, so a
+   * caller should simply stop rather than raise a second error over it.
+   */
+  connect: (preferredType?: "injected" | "walletConnect") => Promise<string | null>;
   disconnect: () => Promise<void>;
   /**
    * Signs a plain-text message with the connected account (EIP-191), returning
@@ -246,7 +259,7 @@ export function useWallet(): WalletState {
   );
 
   const connect = useCallback(
-    async (preferredType?: "injected" | "walletConnect") => {
+    async (preferredType?: "injected" | "walletConnect"): Promise<string | null> => {
       setFailure(null);
       setRelayBlocked(false);
 
@@ -277,7 +290,7 @@ export function useWallet(): WalletState {
 
       if (!target) {
         setFailure("no-wallet");
-        return;
+        return null;
       }
 
       /*
@@ -302,11 +315,12 @@ export function useWallet(): WalletState {
       if (target.id === "walletConnect" && !(await isRelayReachable())) {
         setRelayBlocked(true);
         setFailure("relay-unreachable");
-        return;
+        return null;
       }
 
       try {
-        await connectAsync({ connector: target });
+        const result = await connectAsync({ connector: target });
+        return result.accounts[0] ?? null;
       } catch (cause) {
         const kind = classifyConnectError(cause);
 
@@ -344,19 +358,20 @@ export function useWallet(): WalletState {
           if (!(await isRelayReachable())) {
             setRelayBlocked(true);
             setFailure(kind);
-            return;
+            return null;
           }
 
           try {
-            await connectAsync({ connector: wcConn });
-            return;
+            const result = await connectAsync({ connector: wcConn });
+            return result.accounts[0] ?? null;
           } catch (wcCause) {
             setFailure(classifyConnectError(wcCause));
-            return;
+            return null;
           }
         }
 
         setFailure(kind);
+        return null;
       }
     },
     [connectAsync, available],

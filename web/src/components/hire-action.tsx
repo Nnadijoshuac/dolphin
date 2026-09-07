@@ -13,27 +13,60 @@ import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent } from "@/types/agent";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { canNegotiate } from "@/wallet/erc8183-policy";
-import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
+import { useWallet } from "@/wallet/wallet-provider";
+import { useWalletSession } from "@/wallet/wallet-session";
 
-function shortAddress(value: string | null) {
-  if (!value) return "Not connected";
-  return `${value.slice(0, 8)}…${value.slice(-6)}`;
-}
+/**
+ * Hiring an agent, as ONE action.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS REPLACED (2026-09-07)
+ * ---------------------------------------------------------------------------
+ * Hiring a free agent used to take three separate clicks on three separate
+ * buttons, each of which replaced the last: "Connect Wallet", then (once
+ * sign-in existed) "Sign in", then "Hire read-only agent". Every one of those
+ * is a precondition of the same single intent - the user pressed a button that
+ * said Hire and was answered with another button.
+ *
+ * Now the button says what it does and does all of it: connect if not
+ * connected, sign in if not signed in, then record the hire. The wallet's own
+ * prompts still appear - a connection and a signature are the wallet's to
+ * approve, not ours to skip - but Dolphin asks for nothing extra in between.
+ *
+ * PAYING IS HIRING, on the paid path. There used to be a second click after the
+ * escrow settled ("Hire paid agent"), which existed only because the payment
+ * step and the hire step were built as two flows and bolted together. The
+ * mobile app removed that on 2026-09-06 for the same reason; this is the
+ * website catching up. Money moving is the strongest possible statement of
+ * intent, and asking someone to confirm it afterwards implies it might not have
+ * counted.
+ *
+ * WHAT WAS REMOVED FROM THE PANEL, and why it is not a loss: a four-row table
+ * of Dolphin price / Hire access / Required transactions / Browser wallet, and
+ * a five-branch notice paragraph. Of those, only the price bears on the
+ * decision, and it stays. The rest is disclosure that already appears under
+ * "What hiring this does" further up the same page - it was being repeated
+ * next to the button, where it competed with the two things a person actually
+ * reads: the price, and what the button will do.
+ */
 
 export function HireAction({ agent }: { agent: Agent }) {
   const wallet = useWallet();
+  const session = useWalletSession();
   const hire = useMutation(agentHiresApi.agentHires.hireReadOnlyAgent);
   const hiredAgents = useHiredAgents(wallet.address);
+
   const [state, setState] = useState<
     | { kind: "idle" }
     | { kind: "hiring" }
     | { kind: "done"; id: string }
     | { kind: "error"; message: string }
   >({ kind: "idle" });
+
   /**
    * The verified ERC-8183 job that paid for this hire, once PaymentAction has
-   * one. Held here rather than read back from Convex so the hire can be
-   * completed in the same interaction the payment finished in.
+   * one. Held here rather than read back from Convex so the hire completes in
+   * the same interaction the payment finished in.
    */
   const [paidJobId, setPaidJobId] = useState<string | null>(null);
 
@@ -43,9 +76,6 @@ export function HireAction({ agent }: { agent: Agent }) {
     price.status === "live" || price.status === "stale" ? price.value : null;
   const priceIsFree = priceModel !== null && Number(priceModel.amount) === 0;
   const priceRequiresPayment = priceModel !== null && !priceIsFree;
-  // A paid agent is hireable once, and only once, its payment is settled and
-  // verified. Before that the button stays disabled - it is not a refusal of
-  // the agent, it is the payment step not being done yet.
   const paymentOutstanding = priceRequiresPayment && paidJobId === null;
   const alreadyHired =
     hiredAgents?.some((record) => record.tokenId === agent.tokenId) ?? false;
@@ -54,18 +84,47 @@ export function HireAction({ agent }: { agent: Agent }) {
   const showPaymentStep =
     !showMyAgents && (priceRequiresPayment || canNegotiate(agent.services));
 
-  async function onHire() {
-    if (!wallet.address || !priceModel) return;
-    if (priceRequiresPayment && paidJobId === null) return;
-
+  /**
+   * The whole hire, from whatever state the user is currently in.
+   *
+   * Each precondition is satisfied in place and its result used directly,
+   * rather than being written to state and picked up on a later render. That is
+   * not a style choice: immediately after `connect()` this component's
+   * `wallet.address` is still null and after `signIn()` its
+   * `session.sessionToken` is still null, because neither has re-rendered yet.
+   * Passing the values along is what makes a single click possible at all.
+   *
+   * A null from either step means the user declined or it failed. Both already
+   * put a reason on screen (`wallet.failure`, `session.error`), so this returns
+   * quietly instead of stacking a second message on top of the real one.
+   */
+  async function runHire(jobId: string | null) {
     setState({ kind: "hiring" });
     try {
+      let address = wallet.address;
+      if (!address) {
+        address = await wallet.connect();
+        if (!address) {
+          setState({ kind: "idle" });
+          return;
+        }
+      }
+
+      let token = session.sessionToken;
+      if (!token) {
+        token = await session.signIn(address);
+        if (!token) {
+          setState({ kind: "idle" });
+          return;
+        }
+      }
+
       const id = await hire({
         tokenId: agent.tokenId,
         category: agent.category,
-        walletAddress: wallet.address,
+        sessionToken: token,
         priceModel,
-        paymentJobId: paidJobId,
+        paymentJobId: jobId,
       });
       setState({ kind: "done", id: String(id) });
     } catch (cause) {
@@ -76,31 +135,41 @@ export function HireAction({ agent }: { agent: Agent }) {
     }
   }
 
-  let noticeTitle = "Read-only hire";
-  let noticeBody =
-    "This creates a Dolphin hire record. It does not grant an agent permission to spend from either wallet.";
+  const busy = state.kind === "hiring" || wallet.isConnecting || session.isSigningIn;
 
-  if (showMyAgents) {
-    noticeTitle = "Already in My agents";
-    noticeBody = "This connected address already has a hire record for this agent.";
-  } else if (!wallet.isConnected) {
-    noticeTitle = "Connect an address to continue";
-    noticeBody =
-      "The browser wallet supplies the public address attached to the hire record. This step does not request spending permission.";
-  } else if (priceModel === null) {
-    noticeTitle = "Price policy unavailable";
-    noticeBody =
-      "Dolphin will not assume a price while the catalog value is unresolved.";
-  } else if (paymentOutstanding) {
-    noticeTitle = "Payment required first";
-    noticeBody = `This agent publishes a price of ${priceModel.amount} ${priceModel.token}. Settle it in the payment step below — Dolphin verifies the escrow on-chain before it will record a paid hire.`;
-  } else if (priceRequiresPayment) {
-    noticeTitle = "Paid — ready to hire";
-    noticeBody = `Escrow job #${paidJobId} is funded and was verified on-chain. Hiring records it against this address.`;
-  } else if (state.kind === "error") {
-    noticeTitle = "Hire failed";
-    noticeBody = state.message;
-  }
+  /**
+   * One label, describing the whole action rather than the next step of it.
+   *
+   * It deliberately does NOT read "Connect wallet" when disconnected. The
+   * button hires; connecting is something it does on the way, and naming the
+   * first sub-step is what made this feel like a process in the first place.
+   */
+  const label = (() => {
+    if (state.kind === "hiring") {
+      if (wallet.isConnecting) return "Check your wallet…";
+      if (session.isSigningIn) return "Sign the message…";
+      return "Hiring…";
+    }
+    if (priceModel === null) return "Price unavailable";
+    if (paymentOutstanding) return "Pay to hire";
+    return "Hire agent";
+  })();
+
+  /**
+   * One line under the button, and only when there is something to say. The
+   * five-branch notice this replaced explained the state the user was already
+   * looking at; what is left is the two cases they cannot see for themselves.
+   */
+  const note = (() => {
+    if (state.kind === "error") return state.message;
+    if (priceModel === null) {
+      return "Dolphin will not assume a price while this agent's catalog value is unresolved, so it cannot record a hire yet.";
+    }
+    if (paymentOutstanding) {
+      return `This agent charges ${priceModel.amount} ${priceModel.token}. Settle it below — Dolphin verifies the escrow on-chain, and the hire is recorded the moment it does.`;
+    }
+    return null;
+  })();
 
   return (
     <div className="surface-raised p-5 sm:p-6">
@@ -128,44 +197,17 @@ export function HireAction({ agent }: { agent: Agent }) {
 
       <p className="mt-4 text-sm leading-6 text-muted">{access.reason}</p>
 
-      <dl className="mt-6 border-t border-line text-xs">
-        <div className="flex items-start justify-between gap-4 border-b border-line py-3">
-          <dt className="text-muted">Dolphin price</dt>
-          <dd className="text-right font-medium text-ink">
-            {priceModel === null
-              ? "Not resolved"
-              : priceIsFree
-                ? `0 ${priceModel.token}`
-                : `${priceModel.amount} ${priceModel.token}`}
-          </dd>
-        </div>
-        <div className="flex items-start justify-between gap-4 border-b border-line py-3">
-          <dt className="text-muted">Hire access</dt>
-          <dd className="text-right font-medium text-ink">Read-only record</dd>
-        </div>
-        <div className="flex items-start justify-between gap-4 border-b border-line py-3">
-          <dt className="text-muted">Required transactions</dt>
-          <dd className="text-right font-medium text-ink">{access.minimumTransactions}</dd>
-        </div>
-        <div className="flex items-start justify-between gap-4 border-b border-line py-3">
-          <dt className="text-muted">Browser wallet</dt>
-          <dd className="break-all text-right font-mono font-medium text-ink-soft">
-            {shortAddress(wallet.address)}
-          </dd>
-        </div>
-      </dl>
-
-      <div className="mt-5 border-l-2 border-accent pl-4">
-        <p className="text-xs font-semibold text-ink">{noticeTitle}</p>
-        <p className="mt-1 text-xs leading-5 text-muted">{noticeBody}</p>
-        {state.kind === "done" ? (
-          <p className="mt-2 font-mono text-[0.68rem] text-success">
-            Hire record #{state.id}
-          </p>
-        ) : null}
+      {/* The one fact that bears on the decision. */}
+      <div className="mt-5 flex items-baseline justify-between gap-4 border-y border-line py-3">
+        <span className="text-xs text-muted">Price</span>
+        <span className="text-sm font-semibold text-ink">
+          {priceModel === null
+            ? "Not resolved"
+            : `${priceModel.amount} ${priceModel.token}`}
+        </span>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-5">
         {showMyAgents ? (
           <Link
             className="interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-paper px-5 text-sm font-semibold text-ink no-underline hover:bg-canvas"
@@ -174,29 +216,49 @@ export function HireAction({ agent }: { agent: Agent }) {
             Manage in My agents
             <CategoryGlyph color="currentColor" name="arrow-right" size={16} strokeWidth={2} />
           </Link>
-        ) : !wallet.isConnected ? (
-          <WalletConnectButton connectLabel="Connect wallet to hire" />
         ) : (
           <button
+            aria-busy={busy}
             className="interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-paper-muted disabled:text-faint"
-            disabled={state.kind === "hiring" || priceModel === null || paymentOutstanding}
-            onClick={() => void onHire()}
+            disabled={busy || priceModel === null || paymentOutstanding}
+            onClick={() => void runHire(paidJobId)}
             type="button"
           >
-            {state.kind === "hiring"
-              ? "Adding agent…"
-              : priceRequiresPayment
-                ? "Hire paid agent"
-                : "Hire read-only agent"}
+            {label}
           </button>
         )}
+        {state.kind === "done" ? (
+          <p className="mt-3 font-mono text-[0.68rem] text-success">
+            Hire record #{state.id}
+          </p>
+        ) : null}
+        {note ? (
+          <p
+            className={`mt-3 text-xs leading-5 ${
+              state.kind === "error" ? "text-danger" : "text-muted"
+            }`}
+            role={state.kind === "error" ? "alert" : "status"}
+          >
+            {note}
+          </p>
+        ) : null}
+        {/*
+         * Sign-in is not its own button any more, but its failures still have
+         * to be readable - a declined signature otherwise looks like a button
+         * that did nothing. Wallet connection failures render themselves inside
+         * WalletConnectButton elsewhere on the page.
+         */}
+        {session.error && state.kind !== "error" ? (
+          <p className="mt-3 text-xs leading-5 text-danger" role="alert">
+            {session.error}
+          </p>
+        ) : null}
       </div>
 
-      {/* The payment step, deliberately its own step above the authorization
-          one. Offered when the catalog carries a real price OR when the agent
-          publishes an endpoint that can be asked for one - see the decision
-          note in erc8183-policy.ts for why the second condition is not a way
-          of inventing a price but the opposite of one. */}
+      {/* The payment step. Offered when the catalog carries a real price OR
+          when the agent publishes an endpoint that can be asked for one - see
+          the decision note in erc8183-policy.ts for why the second condition is
+          not a way of inventing a price but the opposite of one. */}
       {showPaymentStep ? (
         <div className="mt-7 border-t border-line pt-6">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
@@ -204,7 +266,15 @@ export function HireAction({ agent }: { agent: Agent }) {
           </p>
           <PaymentAction
             agent={agent}
-            onPaid={(job) => setPaidJobId(job.jobId)}
+            /*
+             * Paying IS hiring. The hire is recorded here, off the settled
+             * escrow, instead of behind a second button the user had to find
+             * after their money had already moved.
+             */
+            onPaid={(job) => {
+              setPaidJobId(job.jobId);
+              void runHire(job.jobId);
+            }}
             priceAmount={priceModel?.amount ?? null}
             priceToken={priceModel?.token ?? null}
           />

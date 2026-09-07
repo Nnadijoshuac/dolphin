@@ -1,26 +1,27 @@
 import { Image } from "expo-image";
 import React from "react";
 import { View, Text, ScrollView, useWindowDimensions, StyleSheet } from "react-native";
+import { useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
 import { PressableScale } from "./pressable-scale";
 import type { Agent } from "@/types/agent";
 
 interface AdvertProps {
-  agent?: Agent;
-  onPress: (agent: Agent) => void;
+  onPress: () => void;
   imageSource: any;
   title: string;
   subtitle: string;
   categoryLabel: string;
 }
 
-const AdvertCard = ({ agent, onPress, imageSource, title, subtitle, categoryLabel }: AdvertProps) => {
+const AdvertCard = ({ onPress, imageSource, title, subtitle, categoryLabel }: AdvertProps) => {
   const { width } = useWindowDimensions();
   const cardWidth = width * 0.9;
 
   return (
     <View style={{ width: cardWidth, paddingLeft: 16 }}>
       <PressableScale
-        onPress={() => agent && onPress(agent)}
+        onPress={onPress}
         containerStyle={{
           borderRadius: 16,
           overflow: "hidden",
@@ -71,12 +72,22 @@ const promoImages = {
 };
 
 export const AdvertCarousel = ({ agents, onAgentPress }: AdvertCarouselProps) => {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const cardWidth = width * 0.9;
 
   const promos = [
     {
-      id: "promo-1",
+      id: "promo-health",
+      imageSource: promoImages.health,
+      title: "Brain on BNB",
+      subtitle: "Venus Health Factor Monitor: 24/7 liquidation protection.",
+      categoryLabel: "Featured Agent",
+      targetCategory: "health-factor",
+      targetTokenId: "302257",
+    },
+    {
+      id: "promo-rebalancing",
       imageSource: promoImages.rebalancing,
       title: "Automate LP Management",
       subtitle: "Agents that reset your liquidity range 24/7.",
@@ -84,20 +95,12 @@ export const AdvertCarousel = ({ agents, onAgentPress }: AdvertCarouselProps) =>
       targetCategory: "rebalancing",
     },
     {
-      id: "promo-2",
+      id: "promo-yield",
       imageSource: promoImages.yield,
       title: "Maximize Staking Yields",
       subtitle: "Discover the most profitable vault strategies.",
       categoryLabel: "Top Yield Agents",
       targetCategory: "yield",
-    },
-    {
-      id: "promo-3",
-      imageSource: promoImages.health,
-      title: "Never Get Liquidated",
-      subtitle: "Health factor monitors that act before it's too late.",
-      categoryLabel: "Essential Security",
-      targetCategory: "health-factor",
     },
   ];
 
@@ -111,13 +114,33 @@ export const AdvertCarousel = ({ agents, onAgentPress }: AdvertCarouselProps) =>
         contentContainerStyle={{ paddingRight: 16 }}
       >
         {promos.map((promo) => {
-          const targetAgent = agents.find(a => a.category === promo.targetCategory) || agents[0];
-          
+          const targetAgent = agents.find(
+            (a) =>
+              (promo.targetTokenId && a.tokenId === promo.targetTokenId) ||
+              a.category === promo.targetCategory
+          );
+
+          const handlePress = () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            if (targetAgent) {
+              onAgentPress(targetAgent);
+            } else if (promo.targetTokenId) {
+              router.push({
+                pathname: "/agent/[id]",
+                params: { id: promo.targetTokenId },
+              });
+            } else if (promo.targetCategory) {
+              router.push({
+                pathname: "/category/[slug]",
+                params: { slug: promo.targetCategory },
+              });
+            }
+          };
+
           return (
             <AdvertCard
               key={promo.id}
-              agent={targetAgent}
-              onPress={onAgentPress}
+              onPress={handlePress}
               imageSource={promo.imageSource}
               title={promo.title}
               subtitle={promo.subtitle}

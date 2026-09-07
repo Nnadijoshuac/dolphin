@@ -66,10 +66,6 @@ import { getAddress } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
 import { WagmiProvider, useSignMessage, useSwitchChain, useWriteContract } from "wagmi";
 
-import {
-  RELAY_UNREACHABLE_MESSAGE,
-  isRelayReachable,
-} from "./relay-reachability";
 import type {
   WalletConnectButtonProps,
   WalletContextValue,
@@ -273,30 +269,30 @@ function ReownWalletBridge({ children }: PropsWithChildren) {
       chainId: chainId ?? null,
       unavailableReason: null,
       /**
-       * Opens AppKit's connect sheet - but only once the relay behind it has
-       * been shown to be reachable.
+       * Opens AppKit's connect sheet. Unconditionally.
        *
-       * WHY THE CHECK IS HERE RATHER THAN LEFT TO THE LIBRARY. Every wallet
-       * connection is brokered by a WebSocket to relay.walletconnect.org. When
-       * a network blocks it, AppKit does not fail: it opens the sheet, queues
-       * the session proposal, and waits out a sixty-second publish timeout
-       * before logging an empty error object against `core/relayer/publisher`.
-       * The user watches a spinner for a minute and learns nothing. That has
-       * cost this project two debugging sessions already
-       * (Agent/SESSION-LOG-2026-09-05-wallet-connect-and-ui.md §1).
+       * ---------------------------------------------------------------------
+       * A REACHABILITY PROBE USED TO GATE THIS, AND IT WAS A MISTAKE (2026-09-07)
+       * ---------------------------------------------------------------------
+       * For a few hours this first GET'd relay.walletconnect.org/health and
+       * refused to open the sheet when that failed, on the theory that a
+       * blocked relay is better named early than waited out for sixty seconds.
        *
-       * The probe costs one round trip (~250ms warm) and is memoised on
-       * success, so a working network pays it once per app session.
+       * On a real device it failed while the relay was perfectly reachable -
+       * confirmed by the user connecting over mobile data and getting the
+       * refusal anyway - so the app would not open the sheet at all. That is
+       * strictly worse than the slow failure it was meant to improve on: a
+       * hang can still be waited out or retried, a refusal cannot.
        *
-       * THROWS rather than returning quietly. `connect` has exactly one caller
-       * - WalletConnectButton, below - which turns this into an alert. A silent
-       * return would be indistinguishable from a tap that did nothing, which is
-       * the failure being fixed.
+       * The lesson generalises past the one bad probe. A reachability check is
+       * a HEURISTIC: an ad blocker, a captive portal, a proxy that dislikes an
+       * unknown host, a transient DNS miss, or a timeout tuned on a desktop
+       * will all make it say "unreachable" about a network that works. Letting
+       * a heuristic veto the user's primary action means every false negative
+       * becomes a total outage. Diagnose beside an action, never in front of
+       * it.
        */
       connect: async () => {
-        if (!(await isRelayReachable())) {
-          throw new Error(RELAY_UNREACHABLE_MESSAGE);
-        }
         open();
       },
       disconnect: async () => {
@@ -475,22 +471,7 @@ export function WalletConnectButton({
     }
 
     if (!wallet.isConnected) {
-      /*
-       * Connecting can now fail BEFORE any sheet appears - the relay check in
-       * `connect` throws when this network cannot reach WalletConnect. That has
-       * to be said out loud: a tap that opens nothing and says nothing is the
-       * exact experience this whole path exists to remove.
-       *
-       * Only the message is shown, never the error. Everything reaching here is
-       * Dolphin's own copy (RELAY_UNREACHABLE_MESSAGE); a library error would
-       * be caught by AppKit inside its own sheet, not by this.
-       */
-      wallet.connect().catch((cause: unknown) => {
-        Alert.alert(
-          "Can't reach WalletConnect",
-          cause instanceof Error ? cause.message : RELAY_UNREACHABLE_MESSAGE,
-        );
-      });
+      void wallet.connect();
       return;
     }
 

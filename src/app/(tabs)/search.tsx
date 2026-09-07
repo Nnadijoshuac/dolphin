@@ -290,9 +290,9 @@ export default function SearchScreen() {
               </View>
             ) : null}
 
-            {/* Every category the catalog actually holds, with real counts. */}
+            {/* Category pills */}
             <View>
-              <Text className="text-[14px] font-bold pb-2.5" style={{ color: colors.ink }}>
+              <Text className="text-[14px] font-bold pb-3" style={{ color: colors.ink }}>
                 Explore categories
               </Text>
               {categories.length === 0 ? (
@@ -302,11 +302,11 @@ export default function SearchScreen() {
                   title="Building the catalog"
                 />
               ) : (
-                <View className="flex-row flex-wrap gap-2">
+                <View className="flex-row flex-wrap gap-2.5">
                   {categories.map((facet) => (
                     <PressableScale
                       key={facet.slug}
-                      accessibilityLabel={`${facet.label}, ${facet.count} agents`}
+                      accessibilityLabel={facet.label}
                       accessibilityRole="button"
                       onPress={() => {
                         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -316,41 +316,23 @@ export default function SearchScreen() {
                         });
                       }}
                       containerStyle={{
-                        flexDirection: "row",
                         alignItems: "center",
-                        gap: 6,
+                        justifyContent: "center",
                         backgroundColor: colors.surface,
                         borderRadius: 9999,
                         borderWidth: 1,
                         borderColor: colors.line,
-                        paddingVertical: 7,
-                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        paddingHorizontal: 16,
                         ...shadows.subtle,
                       }}
                     >
-                      <CategoryGlyph
-                        color={colors.ink}
-                        name={facet.slug}
-                        size={14}
-                        strokeWidth={2}
-                      />
                       <Text
-                        className="text-[13px] font-semibold"
+                        className="text-[13px] font-semibold tracking-tight"
                         style={{ color: colors.ink }}
                       >
                         {facet.label}
                       </Text>
-                      <View
-                        className="rounded-full px-1.5 py-0.5"
-                        style={{ backgroundColor: colors.surfaceSubtle }}
-                      >
-                        <Text
-                          className="text-[11px] font-bold"
-                          style={{ color: colors.muted }}
-                        >
-                          {facet.count}
-                        </Text>
-                      </View>
                     </PressableScale>
                   ))}
                 </View>

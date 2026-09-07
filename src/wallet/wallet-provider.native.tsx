@@ -66,6 +66,10 @@ import { getAddress } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
 import { WagmiProvider, useSignMessage, useSwitchChain, useWriteContract } from "wagmi";
 
+import {
+  RELAY_UNREACHABLE_MESSAGE,
+  isRelayReachable,
+} from "./relay-reachability";
 import type {
   WalletConnectButtonProps,
   WalletContextValue,
@@ -269,28 +273,36 @@ function ReownWalletBridge({ children }: PropsWithChildren) {
       chainId: chainId ?? null,
       unavailableReason: null,
       /**
-       * Opens AppKit's connect sheet. Unconditionally.
+       * Opens AppKit's connect sheet, after checking whether the relay behind
+       * it is reachable - but WITHOUT letting that check stop anything.
        *
        * ---------------------------------------------------------------------
-       * A REACHABILITY PROBE USED TO GATE THIS, AND IT WAS A MISTAKE (2026-09-07)
+       * WHY A CHECK AT ALL
        * ---------------------------------------------------------------------
-       * For a few hours this first GET'd relay.walletconnect.org/health and
-       * refused to open the sheet when that failed, on the theory that a
-       * blocked relay is better named early than waited out for sixty seconds.
+       * Every wallet connection is brokered by a WebSocket to
+       * relay.walletconnect.org. When a network blocks it, AppKit does not
+       * fail: it opens the sheet, queues the session proposal, and waits out a
+       * sixty-second publish timeout before logging an empty error object
+       * against `core/relayer/publisher`. The user watches a spinner for a
+       * minute and learns nothing. That has now cost this project three
+       * debugging sessions, and the cause was the same network block each time
+       * (a router refusing DNS for exactly these hostnames).
        *
-       * On a real device it failed while the relay was perfectly reachable -
-       * confirmed by the user connecting over mobile data and getting the
-       * refusal anyway - so the app would not open the sheet at all. That is
-       * strictly worse than the slow failure it was meant to improve on: a
-       * hang can still be waited out or retried, a refusal cannot.
+       * ---------------------------------------------------------------------
+       * WHY IT ONLY WARNS
+       * ---------------------------------------------------------------------
+       * It gated this for a few hours and that was wrong: a reachability probe
+       * is a heuristic, and a heuristic that vetoes the user's primary action
+       * turns every false negative into an outage. So `connect` resolves to
+       * `false` when the relay looks unreachable and the caller decides what to
+       * do - it shows what was found and still offers to go ahead. See
+       * relay-reachability.ts, which carries the full history including the
+       * time this probe was deleted for correctly reporting a real block.
        *
-       * The lesson generalises past the one bad probe. A reachability check is
-       * a HEURISTIC: an ad blocker, a captive portal, a proxy that dislikes an
-       * unknown host, a transient DNS miss, or a timeout tuned on a desktop
-       * will all make it say "unreachable" about a network that works. Letting
-       * a heuristic veto the user's primary action means every false negative
-       * becomes a total outage. Diagnose beside an action, never in front of
-       * it.
+       * The check itself lives in WalletConnectButton rather than here, so that
+       * `connect` stays what its type says it is - "open the sheet" - and the
+       * decision about what to show a person stays in the component that can
+       * show it.
        */
       connect: async () => {
         open();
@@ -471,7 +483,25 @@ export function WalletConnectButton({
     }
 
     if (!wallet.isConnected) {
-      void wallet.connect();
+      /*
+       * Check the relay, say what was found, and still offer to go ahead.
+       *
+       * The warning is worth showing because when this fires it is almost
+       * always true and nothing else in the app will ever say so: AppKit's own
+       * failure mode is a sheet that spins for sixty seconds and then logs an
+       * empty error object. The "Try anyway" is there because the check is a
+       * heuristic and must never be the last word - see relay-reachability.ts.
+       */
+      void isRelayReachable().then((reachable) => {
+        if (reachable) {
+          void wallet.connect();
+          return;
+        }
+        Alert.alert("Can't reach WalletConnect", RELAY_UNREACHABLE_MESSAGE, [
+          { text: "Try anyway", onPress: () => void wallet.connect() },
+          { text: "OK", style: "cancel" },
+        ]);
+      });
       return;
     }
 

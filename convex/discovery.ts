@@ -45,7 +45,7 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery, action, query } from "./_generated/server";
-import { screenAgent, SCREEN_RULES, type ScreenRule } from "./lib/screen";
+import { screenAgent, SCREEN_RULES } from "./lib/screen";
 import {
   PAGE_SIZE,
   REQUEST_CONCURRENCY,

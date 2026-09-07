@@ -140,13 +140,30 @@ export const run = internalAction({
      * own liveness call. Excluding on it would drop agents whose publisher never
      * set the flag.
      */
-    const fetchFiltered = async (params: string): Promise<number> => {
+    /*
+     * NULL ON FAILURE, A NUMBER ON SUCCESS - and the distinction is the whole
+     * point (fixed 2026-09-07, after it happened).
+     *
+     * This returned 0 when a page failed, which the backfill's end-of-data test
+     * (`count < PAGE_SIZE`) cannot tell apart from a genuinely short last page.
+     * 8004scan returns an intermittent HTTP 500 at ~10.5s, and a run where all
+     * eight concurrent pages hit it reported "8 pages, 0 records" and then
+     * marked the whole backfill COMPLETE - at 7,095 records of a 27,838-record
+     * slice. The pipeline believed it had walked everything and stopped looking,
+     * which is the worst possible failure for a discovery system: silent, and it
+     * looks like success.
+     *
+     * A short page is now only a short page when the fetch actually SUCCEEDED.
+     * A failure leaves the offset where it is, so the next cycle retries the
+     * same range.
+     */
+    const fetchFiltered = async (params: string): Promise<number | null> => {
       try {
         return collect(await withRetry(() => fetchAgentPage(params)));
       } catch (cause) {
         if (cause instanceof ScanError && cause.retryable) filterFailed = true;
         note(cause);
-        return 0;
+        return null;
       }
     };
 
@@ -174,7 +191,8 @@ export const run = internalAction({
           `is_active=any&created_after=${encodeURIComponent(since)}` +
             `&sort_by=created_at&sort_order=asc&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`,
         );
-        if (count < PAGE_SIZE) break;
+        // A failed page stops this cycle without claiming there is no more data.
+        if (count === null || count < PAGE_SIZE) break;
       }
     } else if (mode === "backfill") {
       /*
@@ -211,6 +229,7 @@ export const run = internalAction({
         (_, i) => backfillOffset + i * PAGE_SIZE,
       );
       let shortPage = false;
+      let pageFailed = false;
       await withConcurrency(
         offsets.map((offset) => async () => {
           if (Date.now() > startedAt + budget) return;
@@ -219,14 +238,23 @@ export const run = internalAction({
             `is_active=any&${filter}&sort_by=created_at&sort_order=desc` +
               `&limit=${PAGE_SIZE}&offset=${offset}`,
           );
-          if (count < PAGE_SIZE) shortPage = true;
+          // ONLY a successful short page means end-of-data. See fetchFiltered.
+          if (count !== null && count < PAGE_SIZE) shortPage = true;
+          if (count === null) pageFailed = true;
         }),
         REQUEST_CONCURRENCY,
         note,
       );
-      backfillOffset += offsets.length * PAGE_SIZE;
+      /*
+       * The offset only advances over ground actually covered. If any page in
+       * this batch failed, the range is re-walked next cycle rather than
+       * skipped - a failed read must never look like a completed one.
+       */
+      if (!pageFailed) backfillOffset += offsets.length * PAGE_SIZE;
 
-      if (shortPage) {
+      // Completion requires a clean pass. A batch with any failed page cannot
+      // conclude anything about where the data ends.
+      if (shortPage && !pageFailed) {
         // Walked off the end of this filter. Move to the next phase, or finish.
         if (backfillPhase === "a2a") {
           backfillPhase = "mcp";
@@ -250,7 +278,7 @@ export const run = internalAction({
           `is_active=any&sort_by=created_at&sort_order=desc` +
             `&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`,
         );
-        if (count < PAGE_SIZE) break;
+        if (count === null || count < PAGE_SIZE) break;
       }
     }
 

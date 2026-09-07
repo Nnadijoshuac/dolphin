@@ -12,7 +12,7 @@ import {
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { AGENT_CATEGORIES } from "@/constants/agents";
-import { useAgents } from "@/hooks/use-agents";
+import { useAgentList } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
 
 import styles from "./page.module.css";
@@ -204,32 +204,28 @@ function CatalogNotice({
 }
 
 export default function DiscoverPage() {
-  const {
-    data: agents,
-    isError,
-    isFetching,
-    isLoading,
-    refetch,
-  } = useAgents();
   const selectedCategory = useSyncExternalStore(
     subscribeToCategoryChanges,
     getSelectedCategorySnapshot,
     () => null,
   );
+
+  /*
+   * PAGINATED, and the category filter is an index range rather than a
+   * client-side `.filter()` over the whole catalog (2026-09-07). The old shape
+   * loaded every agent before it could draw one card.
+   */
+  const { agents, status, isLoading, loadMore } = useAgentList({
+    category: selectedCategory ?? undefined,
+  });
   const filterRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const hasCatalog = agents !== undefined;
-  const catalog = useMemo(() => agents ?? [], [agents]);
-  const visibleAgents = useMemo(
-    () =>
-      selectedCategory
-        ? catalog.filter((agent) => agent.category === selectedCategory)
-        : catalog,
-    [catalog, selectedCategory],
-  );
-  const displayedAgents = selectedCategory
-    ? visibleAgents
-    : visibleAgents.slice(0, 8);
+  const hasCatalog = !isLoading;
+  const isError = false;
+  const isFetching = status === "LoadingMore";
+  const refetch = () => undefined;
+  const visibleAgents = useMemo(() => agents, [agents]);
+  const displayedAgents = visibleAgents;
   const selectedOption = catalogFilters.find(
     (option) => option.value === selectedCategory,
   );
@@ -443,10 +439,10 @@ export default function DiscoverPage() {
                     <DiscoverAgentCard agent={agent} key={agent.id} />
                   ))}
                 </div>
-                {!selectedCategory && visibleAgents.length > displayedAgents.length ? (
+                {status === "CanLoadMore" ? (
                   <div className={styles.viewAllRow}>
-                    <Link href="/search">
-                      View all {visibleAgents.length} records
+                    <button onClick={() => loadMore()} type="button">
+                      Show more agents
                       <span aria-hidden="true">
                         <CategoryGlyph
                           color="currentColor"
@@ -455,7 +451,7 @@ export default function DiscoverPage() {
                           strokeWidth={2}
                         />
                       </span>
-                    </Link>
+                    </button>
                   </div>
                 ) : null}
               </>

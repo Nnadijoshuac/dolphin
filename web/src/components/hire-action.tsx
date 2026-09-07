@@ -78,7 +78,7 @@ export function HireAction({ agent }: { agent: Agent }) {
   const priceRequiresPayment = priceModel !== null && !priceIsFree;
   const paymentOutstanding = priceRequiresPayment && paidJobId === null;
   const alreadyHired =
-    hiredAgents?.some((record) => record.tokenId === agent.tokenId) ?? false;
+    hiredAgents?.some((record) => record.agentKey === agent.agentKey) ?? false;
   const showMyAgents = alreadyHired || state.kind === "done";
   // Offered for a real catalog price, or for an agent Dolphin could ask.
   const showPaymentStep =
@@ -120,8 +120,7 @@ export function HireAction({ agent }: { agent: Agent }) {
       }
 
       const id = await hire({
-        tokenId: agent.tokenId,
-        category: agent.category,
+        agentKey: agent.agentKey,
         sessionToken: token,
         priceModel,
         paymentJobId: jobId,
@@ -288,7 +287,7 @@ export function HireAction({ agent }: { agent: Agent }) {
        * renders nothing at all when there is no paid job for this agent, so the
        * free-hire path is untouched.
        */}
-      <JobDeliveryStatus tokenId={agent.tokenId} />
+      <JobDeliveryStatus agentKey={agent.agentKey} />
 
       {/*
        * The session-grant step used to sit here, gated now by

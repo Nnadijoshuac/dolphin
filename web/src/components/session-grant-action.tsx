@@ -55,7 +55,7 @@ export function SessionGrantAction({ agent }: { agent: Agent }) {
     // Skipped outright while the feature is gated off, so a hidden component
     // does not keep a live Convex subscription open for a panel nobody sees.
     FEATURE_SESSION_EXECUTION && altana.address
-      ? { tokenId: agent.tokenId, altanaWalletAddress: altana.address }
+      ? { agentKey: agent.agentKey, altanaWalletAddress: altana.address }
       : "skip",
   );
 
@@ -218,7 +218,7 @@ export function SessionGrantAction({ agent }: { agent: Agent }) {
           setState({ kind: "granting" });
           void altana
             .grantSession({
-              tokenId: agent.tokenId,
+              agentKey: agent.agentKey,
               agentName: agent.name,
               category: agent.category,
               spendCapWei,

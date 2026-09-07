@@ -36,7 +36,7 @@ import { toUserMessage } from "@/wallet/wallet-errors";
  * "no permissions" box under every card would be noise rather than
  * information.
  */
-export function HireSessionRow({ tokenId }: { tokenId: string }) {
+export function HireSessionRow({ agentKey }: { agentKey: string }) {
   const altana = useAltanaWallet();
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +45,7 @@ export function HireSessionRow({ tokenId }: { tokenId: string }) {
     // Skipped while the feature is gated off, so a component that renders
     // nothing does not hold an open Convex subscription.
     FEATURE_SESSION_EXECUTION && altana.address
-      ? { tokenId, altanaWalletAddress: altana.address }
+      ? { agentKey, altanaWalletAddress: altana.address }
       : "skip",
   );
 

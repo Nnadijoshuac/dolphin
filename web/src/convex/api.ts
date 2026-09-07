@@ -2,7 +2,6 @@ import { anyApi } from "convex/server";
 
 import type {
   Agent,
-  AgentCategory,
   AgentLiveStats,
   AgentPriceModel,
 } from "@/types/agent";
@@ -53,18 +52,87 @@ type Action<Args, Result> = {
 
 export const api = anyApi as unknown as {
   agents: {
-    /** convex/agents.ts -> listAgents */
-    listAgents: Query<Record<string, never>, Agent[]>;
-    /** convex/agents.ts -> getAgent */
-    getAgent: Query<{ reference: string }, Agent | null>;
+    /**
+     * convex/agents.ts -> list. PAGINATED (2026-09-07).
+     *
+     * Replaces `listAgents`, which took no arguments and returned the entire
+     * catalog. There is no unpaginated read any more, deliberately: a Convex
+     * query has a 1-second execution budget, and the old one did a
+     * file-storage lookup per agent inside it.
+     */
+    list: Query<
+      { category?: string; paginationOpts: PaginationOptions },
+      PaginationResult<Agent>
+    >;
+    /** convex/agents.ts -> search. A Convex search index, relevance-ordered. */
+    search: Query<
+      { text: string; category?: string; paginationOpts: PaginationOptions },
+      PaginationResult<Agent>
+    >;
+    /** convex/agents.ts -> get. Accepts an agentKey or a bare tokenId. */
+    get: Query<{ reference: string }, Agent | null>;
+    /** convex/agents.ts -> getMany. Bounded point lookups, for known keys. */
+    getMany: Query<{ references: string[] }, Agent[]>;
+    /** convex/agents.ts -> signals. Batched; never one query per rendered row. */
+    signals: Query<
+      { agentKeys: string[] },
+      {
+        agentKey: string;
+        hires: number;
+        activeHires: number;
+        paidHires: number;
+        reviews: number;
+        wouldHireAgain: number;
+        wouldHireAgainRate: number | null;
+        deliveredCount: number;
+      }[]
+    >;
+  };
+  facets: {
+    /** convex/facets.ts -> list. The browse chips, computed from the catalog. */
+    list: Query<
+      Record<string, never>,
+      {
+        categories: { slug: string; label: string; count: number }[];
+        totalLive: number;
+        updatedAt: string | null;
+      }
+    >;
   };
 };
 
+/** Convex's own cursor-pagination shapes, mirrored so this file stays standalone. */
+export interface PaginationOptions {
+  numItems: number;
+  cursor: string | null;
+}
+
+export interface PaginationResult<T> {
+  page: T[];
+  isDone: boolean;
+  continueCursor: string;
+}
+
+/**
+ * The categories that have a wired protocol reader.
+ *
+ * `AgentCategory` is an open string as of 2026-09-07, but live stats are read
+ * by hand-written code against a specific contract, so the set with any is
+ * finite and the Convex validator behind these queries is a closed union.
+ * Mirrors statsCategoryFor in convex/lib/statsCategory.ts.
+ */
+export type StatsCategory =
+  | "monitoring"
+  | "rebalancing"
+  | "grid-trading"
+  | "health-factor"
+  | "yield"
+  | "trading";
+
 /** One agentLiveStats row - convex/categoryStats.ts's cache table. */
 export interface AgentCategoryStatsRow {
-  chainId: number;
-  tokenId: string;
-  category: AgentCategory;
+  agentKey: string;
+  category: StatsCategory;
   agentWallet: string | null;
   stats: AgentLiveStats;
   checkedAt: string;
@@ -79,12 +147,12 @@ export const categoryStatsApi = anyApi as unknown as {
   categoryStats: {
     /** convex/categoryStats.ts -> getAgentCategoryStats */
     getAgentCategoryStats: Query<
-      { tokenId: string; category: AgentCategory },
+      { agentKey: string; category: StatsCategory },
       AgentCategoryStatsRow | null
     >;
     /** convex/categoryStats.ts -> refreshAgentCategoryStats */
     refreshAgentCategoryStats: Action<
-      { tokenId: string; category: AgentCategory; agentWallet: string | null },
+      { agentKey: string; category: StatsCategory; agentWallet: string | null },
       unknown
     >;
   };
@@ -153,8 +221,7 @@ export const agentHiresApi = anyApi as unknown as {
   agentHires: {
     hireReadOnlyAgent: Mutation<
       {
-        tokenId: string;
-        category: AgentCategory;
+        agentKey: string;
         sessionToken: string;
         priceModel: AgentPriceModel | null;
         paymentJobId?: string | null;
@@ -166,7 +233,7 @@ export const agentHiresApi = anyApi as unknown as {
      * is on-chain and Convex has no authority over it - so a cancelled paid
      * hire keeps its paymentJobId.
      */
-    cancelHire: Mutation<{ tokenId: string; sessionToken: string }, null>;
+    cancelHire: Mutation<{ agentKey: string; sessionToken: string }, null>;
     /**
      * Reading a hire list is not an authenticated write and deliberately still
      * takes a plain address: who someone has hired is not a secret from anyone
@@ -175,11 +242,11 @@ export const agentHiresApi = anyApi as unknown as {
     getHiredAgentsForWallet: Query<
       { walletAddress: string },
       {
-        tokenId: string;
-        category: AgentCategory;
+        agentKey: string;
         walletAddress: string;
         status: "active" | "cancelled";
         hiredAt: string;
+        paymentJobId: string | null;
       }[]
     >;
   };
@@ -201,9 +268,8 @@ export const agentHiresApi = anyApi as unknown as {
  * around on the client.
  */
 export type AgentSessionRow = {
-  tokenId: string;
+  agentKey: string;
   agentName: string;
-  category: AgentCategory;
   altanaWalletAddress: string;
   hirerWalletAddress: string | null;
   sessionPublicKey: string;
@@ -223,9 +289,8 @@ export const agentSessionsApi = anyApi as unknown as {
       {
         /** Added 2026-09-06 with authentication - see walletAuthApi above. */
         sessionToken: string;
-        tokenId: string;
+        agentKey: string;
         agentName: string;
-        category: AgentCategory;
         altanaWalletAddress: string;
         hirerWalletAddress: string | null;
         sessionPublicKey: string;
@@ -246,7 +311,7 @@ export const agentSessionsApi = anyApi as unknown as {
       AgentSessionRow[]
     >;
     getActiveSessionForAgent: Query<
-      { tokenId: string; altanaWalletAddress: string },
+      { agentKey: string; altanaWalletAddress: string },
       AgentSessionRow | null
     >;
   };
@@ -295,9 +360,8 @@ export type AgentQuote = {
 };
 
 export type AgentJobRow = {
-  tokenId: string;
+  agentKey: string;
   agentName: string;
-  category: AgentCategory;
   altanaWalletAddress: string;
   hirerWalletAddress: string | null;
   providerAddress: string;
@@ -316,17 +380,16 @@ export type AgentJobRow = {
 export const agentPaymentsApi = anyApi as unknown as {
   agentPayments: {
     requestQuote: Action<
-      { tokenId: string; taskDescription: string; serviceId?: string },
+      { agentKey: string; taskDescription: string; serviceId?: string },
       AgentQuote
     >;
     notifyJobFunded: Action<
-      { tokenId: string; jobId: string },
+      { agentKey: string; jobId: string },
       { accepted: boolean; detail: string }
     >;
     recordJobPayment: Action<
       {
-        tokenId: string;
-        category: AgentCategory;
+        agentKey: string;
         altanaWalletAddress: string;
         hirerWalletAddress: string | null;
         escrowContract: string;
@@ -339,7 +402,7 @@ export const agentPaymentsApi = anyApi as unknown as {
       { recordId: string; jobStatus: string; budgetRaw: string }
     >;
     getJobsForAgent: Query<
-      { tokenId: string; altanaWalletAddress: string },
+      { agentKey: string; altanaWalletAddress: string },
       AgentJobRow[]
     >;
     getJobsForAltanaWallet: Query<{ altanaWalletAddress: string }, AgentJobRow[]>;

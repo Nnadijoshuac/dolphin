@@ -97,9 +97,15 @@ function syncingLiveStats(stats: AgentLiveStats): AgentLiveStats {
   ) as AgentLiveStats;
 }
 
+/**
+ * Renders nothing for a category with no wired protocol reader - which, since
+ * categories became open strings on 2026-09-07, is most of them.
+ */
 function LiveStats({ agent }: { agent: Agent }) {
+  if (!agent.hasLiveStats) return null;
+
   if (!convexClient) {
-    return <LiveStatsView stats={agent.liveStats} />;
+    return agent.liveStats ? <LiveStatsView stats={agent.liveStats} /> : null;
   }
 
   return <BackendLiveStats agent={agent} />;
@@ -107,10 +113,11 @@ function LiveStats({ agent }: { agent: Agent }) {
 
 function BackendLiveStats({ agent }: { agent: Agent }) {
   const cached = useAgentCategoryStats(
-    agent.tokenId,
+    agent.agentKey,
     agent.category,
     agent.agentWallet,
   );
+  if (!agent.liveStats) return null;
   const stats = cached?.stats ?? syncingLiveStats(agent.liveStats);
 
   return <LiveStatsView stats={stats} />;

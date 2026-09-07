@@ -53,7 +53,7 @@ function formatDeadline(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
-export function JobDeliveryStatus({ tokenId }: { tokenId: string }) {
+export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
   const wallet = useAltanaWallet();
 
   // Paid jobs are keyed by the Dolphin Wallet that funded them, so with no
@@ -61,7 +61,7 @@ export function JobDeliveryStatus({ tokenId }: { tokenId: string }) {
   const jobs = useConvexQuery(
     agentPaymentsApi.agentPayments.getJobsForAgent,
     wallet.address && convexClient !== null
-      ? { tokenId, altanaWalletAddress: wallet.address }
+      ? { agentKey, altanaWalletAddress: wallet.address }
       : "skip",
   ) as AgentJobRow[] | undefined;
 

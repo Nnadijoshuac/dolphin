@@ -6,7 +6,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { StatePanel } from "@/components/state-panel";
-import { useAgents } from "@/hooks/use-agents";
+import { useAgentsByKeys } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { convexClient } from "@/providers/convex-provider";
 import { useAppStore } from "@/store/use-app-store";
@@ -81,13 +81,15 @@ function AgentRecordRow({
 
 function ConnectedRecords({ address }: { address: string }) {
   const hires = useHiredAgents(address);
-  const { data: agents, isLoading: catalogLoading } = useAgents();
+  // Only this wallet's own agents, resolved by key. The catalog is paginated
+  // now, so an agent hired months ago may simply not be on page one.
+  const agentsByKey = useAgentsByKeys((hires ?? []).map((hire) => hire.agentKey));
+  const catalogLoading = false;
   const previews = useAppStore((state) => state.previewHires);
 
-  const findAgent = (reference: string) =>
-    agents?.find(
-      (candidate) => candidate.tokenId === reference || candidate.id === reference,
-    );
+  // The map is keyed by BOTH agentKey and bare tokenId, so an older stored
+  // reference still resolves.
+  const findAgent = (reference: string) => agentsByKey.get(reference);
 
   if (hires === undefined || catalogLoading) {
     return (
@@ -141,11 +143,11 @@ function ConnectedRecords({ address }: { address: string }) {
           </div>
           <div>
             {hires.map((hire) => (
-              <div key={`${hire.tokenId}-${hire.hiredAt}`}>
+              <div key={`${hire.agentKey}-${hire.hiredAt}`}>
                 <AgentRecordRow
-                  agent={findAgent(hire.tokenId)}
+                  agent={findAgent(hire.agentKey)}
                   date={hire.hiredAt}
-                  fallbackId={hire.tokenId}
+                  fallbackId={hire.agentKey}
                   label="Active hire"
                   tone="live"
                 />
@@ -158,7 +160,7 @@ function ConnectedRecords({ address }: { address: string }) {
                  * read from the ERC-8183 kernel. Renders nothing for a free
                  * hire, which bought nothing and has nothing to report.
                  */}
-                <JobDeliveryStatus tokenId={hire.tokenId} />
+                <JobDeliveryStatus agentKey={hire.agentKey} />
               </div>
             ))}
           </div>

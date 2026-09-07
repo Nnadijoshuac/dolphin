@@ -1,14 +1,13 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useState } from "react";
 
 import { AgentCard } from "@/components/agent-card";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { StatePanel } from "@/components/state-panel";
 import { AGENT_CATEGORIES } from "@/constants/agents";
-import { useAgents } from "@/hooks/use-agents";
-import { searchAgentsLocally } from "@/services/agents-api";
+import { useAgentList } from "@/hooks/use-agents";
 import { useAppStore } from "@/store/use-app-store";
 import type { AgentCategory } from "@/types/agent";
 
@@ -37,7 +36,7 @@ function SearchContent() {
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory | "all">(
     isAgentCategory(initialCategory) ? initialCategory : "all",
   );
-  const { data: agents, isError, isLoading } = useAgents();
+
 
   const recentSearches = useAppStore((state) => state.recentSearches);
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
@@ -80,18 +79,24 @@ function SearchContent() {
   }
 
   const normalizedQuery = query.trim();
-  const searchResults = useMemo(() => {
-    if (!agents) return [];
 
-    const categoryResults =
-      selectedCategory === "all"
-        ? agents
-        : agents.filter((agent) => agent.category === selectedCategory);
-
-    return normalizedQuery
-      ? searchAgentsLocally(categoryResults, normalizedQuery)
-      : categoryResults;
-  }, [agents, normalizedQuery, selectedCategory]);
+  /*
+   * SERVER-SIDE (2026-09-07). This used to hold the entire catalog and run
+   * `searchAgentsLocally` over it - a substring scan across every field of
+   * every agent, in the browser, on every keystroke. It is now a Convex search
+   * index, paginated and relevance-ordered, which is what makes a catalog of
+   * thousands searchable rather than merely downloadable.
+   */
+  const {
+    agents: searchResults,
+    status,
+    isLoading,
+    loadMore,
+  } = useAgentList({
+    search: normalizedQuery,
+    category: selectedCategory === "all" ? undefined : selectedCategory,
+  });
+  const isError = false;
 
   const syncSearchUrl = (
     nextQuery: string,
@@ -313,6 +318,18 @@ function SearchContent() {
             {searchResults.map((agent) => (
               <AgentCard agent={agent} key={agent.id} />
             ))}
+            {status === "CanLoadMore" ? (
+              <button
+                className="mt-6 w-full border border-line py-3 text-sm font-semibold text-ink"
+                onClick={() => loadMore()}
+                type="button"
+              >
+                Show more results
+              </button>
+            ) : null}
+            {status === "LoadingMore" ? (
+              <p className="mt-6 text-center text-sm text-faint">Loading more…</p>
+            ) : null}
           </div>
         )}
       </section>

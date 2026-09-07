@@ -36,39 +36,38 @@ function metricPreview<T>(
   };
 }
 
-function getMetricPreview(agent: Agent): MetricPreview {
-  switch (agent.liveStats.category) {
+/**
+ * The one headline metric a card shows, or null when the category has none.
+ *
+ * Switches on `liveStats.category` - the CLOSED discriminant of the stats union
+ * - rather than on `agent.category`, which is an open string as of 2026-09-07.
+ * The two are different questions: an agent's drawer can be anything, while a
+ * live metric only exists where a protocol reader was written for it.
+ *
+ * Null is now a real, common answer. A `research` or `security` agent has no
+ * protocol holding a number about it, so the card shows no metric strip rather
+ * than an empty one implying a feed that has gone quiet.
+ */
+function getMetricPreview(agent: Agent): MetricPreview | null {
+  const stats = agent.liveStats;
+  if (!stats) return null;
+
+  switch (stats.category) {
     case "rebalancing":
     case "grid-trading":
-      return metricPreview(
-        "Current P&L",
-        agent.liveStats.currentPnl,
-        (value) => value,
-      );
+      return metricPreview("Current P&L", stats.currentPnl, (value) => value);
     case "health-factor":
-      return metricPreview(
-        "Health factor",
-        agent.liveStats.averageHealthFactor,
-        (value) => value.toFixed(2),
+      return metricPreview("Health factor", stats.averageHealthFactor, (value) =>
+        value.toFixed(2),
       );
     case "yield":
-      return metricPreview(
-        "Current APY",
-        agent.liveStats.currentApy,
-        (value) => `${value.toFixed(2)}%`,
-      );
+      return metricPreview("Current APY", stats.currentApy, (value) => `${value.toFixed(2)}%`);
     case "monitoring":
-      return metricPreview(
-        "Alert frequency",
-        agent.liveStats.alertFrequency,
-        (value) => value,
-      );
+      return metricPreview("Alert frequency", stats.alertFrequency, (value) => value);
     case "trading":
-      return metricPreview(
-        "Realized P&L",
-        agent.liveStats.realizedPnl,
-        (value) => value,
-      );
+      return metricPreview("Realized P&L", stats.realizedPnl, (value) => value);
+    default:
+      return null;
   }
 }
 
@@ -96,7 +95,7 @@ export function AgentCard({ agent, className = "" }: AgentCardProps) {
     AGENT_CATEGORIES.find((category) => category.slug === agent.category)?.label ??
     "Monitoring";
   const preview = getMetricPreview(agent);
-  const checkedAt = formatCheckedAt(preview.asOf);
+  const checkedAt = preview ? formatCheckedAt(preview.asOf) : null;
   const displayPublisher = agent.publisher?.startsWith("0x")
     ? `${agent.publisher.slice(0, 6)}…${agent.publisher.slice(-4)}`
     : agent.publisher || "Publisher not listed";
@@ -127,18 +126,29 @@ export function AgentCard({ agent, className = "" }: AgentCardProps) {
         </div>
 
         <div className="border-t border-line pt-4 sm:border-l sm:border-t-0 sm:py-1 sm:pl-5">
-          <div className="flex items-center justify-between gap-3 sm:block">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-              {preview.label}
+          {preview ? (
+            <>
+              <div className="flex items-center justify-between gap-3 sm:block">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
+                  {preview.label}
+                </p>
+                <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
+                  {preview.value ?? statusLabels[preview.status]}
+                </p>
+              </div>
+              <p className="mt-1 truncate text-[0.69rem] text-faint" title={preview.source}>
+                {preview.source}
+                {checkedAt ? ` · ${checkedAt}` : ""}
+              </p>
+            </>
+          ) : (
+            /* No protocol reader exists for this category, so there is no
+               metric to show. Saying nothing is more honest than an empty
+               cell implying a feed that has gone quiet. */
+            <p className="text-[0.69rem] text-faint">
+              No live protocol metric for this category
             </p>
-            <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
-              {preview.value ?? statusLabels[preview.status]}
-            </p>
-          </div>
-          <p className="mt-1 truncate text-[0.69rem] text-faint" title={preview.source}>
-            {preview.source}
-            {checkedAt ? ` · ${checkedAt}` : ""}
-          </p>
+          )}
         </div>
 
         <span

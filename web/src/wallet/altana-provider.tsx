@@ -153,7 +153,7 @@ export type AltanaWalletStatus =
   | "connected";
 
 export type GrantSessionInput = {
-  tokenId: string;
+  agentKey: string;
   agentName: string;
   category: AgentCategory;
   spendCapWei: bigint;
@@ -163,7 +163,7 @@ export type GrantSessionInput = {
 };
 
 export type PayForAgentInput = {
-  tokenId: string;
+  agentKey: string;
   category: AgentCategory;
   /** The already-negotiated quote. Never re-derived on the client. */
   quote: AgentQuote;
@@ -513,9 +513,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         // happened - exactly the shape AGENTS.md §5 rules out.
         await recordGrant({
           sessionToken: requireSessionToken(identitySession),
-          tokenId: input.tokenId,
+          agentKey: input.agentKey,
           agentName: input.agentName,
-          category: input.category,
           altanaWalletAddress: wallet.address,
           hirerWalletAddress: input.hirerWalletAddress,
           sessionPublicKey: granted.publicKey,
@@ -727,8 +726,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         // principle as recordSessionGrant, one notch stricter because this one
         // is about money.
         const verified = await recordPayment({
-          tokenId: input.tokenId,
-          category: input.category,
+          agentKey: input.agentKey,
           altanaWalletAddress: wallet.address,
           hirerWalletAddress: input.hirerWalletAddress,
           escrowContract: quote.verifyingContract,
@@ -748,7 +746,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         let sellerReply = "";
         try {
           const notified = await notifyFunded({
-            tokenId: input.tokenId,
+            agentKey: input.agentKey,
             jobId: funded.jobId.toString(),
           });
           sellerAccepted = notified.accepted;

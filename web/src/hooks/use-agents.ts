@@ -1,32 +1,39 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { usePaginatedQuery, useQuery } from "convex/react";
 
-import { AGENT_DATA_SOURCES, AGENT_QUERY_TIMINGS } from "@/constants/agents";
+import { AGENT_DATA_SOURCES } from "@/constants/agents";
 import { api } from "@/convex/api";
 import { convexClient } from "@/providers/convex-provider";
-import { searchAgentsLocally } from "@/services/agents-api";
 import { verifyAgentRegistration } from "@/services/chain";
-import type { Agent, AgentCategory } from "@/types/agent";
+import { useQuery as useReactQuery } from "@tanstack/react-query";
+import type { Agent } from "@/types/agent";
 
-export const agentQueryKeys = {
-  all: ["agents"] as const,
-  list: () => [...agentQueryKeys.all, "list", "bsc"] as const,
-  detail: (reference: string, verifyOnChain: boolean) =>
-    [
-      ...agentQueryKeys.all,
-      "detail",
-      "bsc",
-      reference,
-      { verifyOnChain },
-    ] as const,
-};
+/**
+ * THE CATALOG, PAGE BY PAGE.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS STOPPED BEING ONE QUERY (2026-09-07)
+ * ---------------------------------------------------------------------------
+ * `useAgents()` called `listAgents` with no arguments, received the ENTIRE
+ * catalog, and handed it to pages that filtered by category and searched over
+ * it in JavaScript. That shape has no version that scales - a Convex query has
+ * a one-second execution budget, and the backend query behind it performed one
+ * file-storage lookup per agent inside it. It had already thrown for every
+ * caller once, on 2026-09-02, against Convex's read-per-execution limit.
+ *
+ * ---------------------------------------------------------------------------
+ * TANSTACK QUERY LEAVES THE LIST PATH
+ * ---------------------------------------------------------------------------
+ * `usePaginatedQuery` is a Convex SUBSCRIPTION: already live, already cached,
+ * already invalidated by the server when a row changes. Wrapping it in a
+ * polling cache would give the page two sources of truth and a staleTime
+ * fighting the subscription. TanStack still owns the on-chain registry read
+ * below, which is a real fetch with no subscription behind it.
+ */
 
-export interface UseAgentOptions {
-  enabled?: boolean;
-  verifyOnChain?: boolean;
-}
+const PAGE_SIZE = 24;
 
 export class AgentsUnavailableError extends Error {
   constructor(message: string) {
@@ -37,6 +44,101 @@ export class AgentsUnavailableError extends Error {
 
 const NO_BACKEND =
   "NEXT_PUBLIC_CONVEX_URL is not configured, so the agent catalog cannot be read.";
+
+export interface UseAgentListOptions {
+  category?: string;
+  search?: string;
+  enabled?: boolean;
+}
+
+export function useAgentList(options: UseAgentListOptions = {}) {
+  const search = options.search?.trim() ?? "";
+  const isSearching = search.length > 0;
+  const enabled = options.enabled !== false && convexClient !== null;
+
+  const browse = usePaginatedQuery(
+    api.agents.list,
+    enabled && !isSearching ? { category: options.category } : "skip",
+    { initialNumItems: PAGE_SIZE },
+  );
+
+  const found = usePaginatedQuery(
+    api.agents.search,
+    enabled && isSearching ? { text: search, category: options.category } : "skip",
+    { initialNumItems: PAGE_SIZE },
+  );
+
+  const active = isSearching ? found : browse;
+
+  return {
+    agents: (active.results ?? []) as unknown as Agent[],
+    status: active.status,
+    isLoading: active.status === "LoadingFirstPage",
+    loadMore: () => active.loadMore(PAGE_SIZE),
+    isEmpty: active.status !== "LoadingFirstPage" && (active.results?.length ?? 0) === 0,
+  };
+}
+
+/**
+ * The browse chips, from the catalog rather than a hardcoded list.
+ *
+ * `categorySlug` is an open string on the backend, so which categories exist is
+ * a property of the data. One with no agents in it does not appear.
+ */
+export function useCategoryFacets() {
+  const data = useQuery(api.facets.list, convexClient ? {} : "skip");
+  return {
+    categories: data?.categories ?? [],
+    totalLive: data?.totalLive ?? 0,
+    isLoading: data === undefined,
+  };
+}
+
+/** Several specific agents by key, for pages that already know which they need. */
+export function useAgentsByKeys(references: readonly string[]): Map<string, Agent> {
+  const keys = useMemo(
+    () => [...new Set(references.filter((r) => r && r.length > 0))].sort(),
+    [references],
+  );
+
+  const rows = useQuery(
+    api.agents.getMany,
+    convexClient && keys.length > 0 ? { references: keys } : "skip",
+  );
+
+  return useMemo(() => {
+    const map = new Map<string, Agent>();
+    for (const row of (rows ?? []) as unknown as Agent[]) {
+      map.set(row.agentKey, row);
+      map.set(row.tokenId, row);
+    }
+    return map;
+  }, [rows]);
+}
+
+/** Hire and review signals for the agents currently on the page. */
+export function useAgentSignals(agents: readonly Agent[]) {
+  const agentKeys = useMemo(
+    () => [...new Set(agents.map((agent) => agent.id))].sort(),
+    [agents],
+  );
+
+  const rows = useQuery(
+    api.agents.signals,
+    convexClient && agentKeys.length > 0 ? { agentKeys } : "skip",
+  );
+
+  return useMemo(() => {
+    const map = new Map<string, (typeof rows extends undefined ? never : NonNullable<typeof rows>)[number]>();
+    for (const row of rows ?? []) map.set(row.agentKey, row);
+    return map;
+  }, [rows]);
+}
+
+export interface UseAgentOptions {
+  enabled?: boolean;
+  verifyOnChain?: boolean;
+}
 
 function withRegistryVerification(
   agent: Agent,
@@ -57,45 +159,19 @@ function withRegistryVerification(
     agentWallet,
     registryVerification,
     sourceLabels: [
-      ...agent.sourceLabels.filter(
-        ({ id }) => id !== AGENT_DATA_SOURCES.registry.id,
-      ),
+      ...agent.sourceLabels.filter(({ id }) => id !== AGENT_DATA_SOURCES.registry.id),
       AGENT_DATA_SOURCES.registry,
     ],
   };
 }
 
 /**
- * The agent catalog, straight from convex/agents.ts's `listAgents`.
+ * One agent, plus the site's own first-hand on-chain registry read.
  *
- * This site deliberately does NOT fetch 8004scan, curate an editorial list,
- * assign categories, apply a price policy, or merge/dedupe anything. All of
- * that is decided once in convex/lib/agentCatalog.ts and read identically here
- * and in the mobile app, so the two surfaces cannot drift. Before 2026-08-29
- * this file had its own copy of all of it, and had already drifted a category
- * taxonomy behind.
- */
-async function fetchAgentCatalog(): Promise<Agent[]> {
-  if (!convexClient) {
-    throw new AgentsUnavailableError(NO_BACKEND);
-  }
-
-  return convexClient.query(api.agents.listAgents, {});
-}
-
-export function useAgents() {
-  return useQuery({
-    queryKey: agentQueryKeys.list(),
-    queryFn: fetchAgentCatalog,
-    staleTime: AGENT_QUERY_TIMINGS.listStaleTimeMs,
-    gcTime: AGENT_QUERY_TIMINGS.garbageCollectionTimeMs,
-  });
-}
-
-/**
- * One agent from the same catalog, plus a live on-chain ERC-8004 registry read
- * (services/chain.ts) - the site's own first-hand check on what the indexer
- * claims, exactly as the mobile app does it.
+ * The Convex record is a live subscription; the chain read is a one-shot fetch,
+ * so it keeps its TanStack query. The registry check stays client-side
+ * deliberately - it is the site's OWN verification of what an indexer claims,
+ * and routing it through the backend would make it second-hand.
  */
 export function useAgent(
   reference: string | null | undefined,
@@ -103,37 +179,35 @@ export function useAgent(
 ) {
   const normalizedReference = reference?.trim() ?? "";
   const verifyOnChain = options.verifyOnChain ?? true;
+  const enabled =
+    normalizedReference.length > 0 && (options.enabled === undefined || options.enabled);
 
-  return useQuery({
-    queryKey: agentQueryKeys.detail(normalizedReference, verifyOnChain),
-    enabled:
-      normalizedReference.length > 0 &&
-      (options.enabled === undefined || options.enabled),
-    queryFn: async () => {
-      if (!convexClient) {
-        throw new AgentsUnavailableError(NO_BACKEND);
-      }
+  const row = useQuery(
+    api.agents.get,
+    convexClient && enabled ? { reference: normalizedReference } : "skip",
+  );
 
-      const agent = await convexClient.query(api.agents.getAgent, {
-        reference: normalizedReference,
-      });
-
-      if (!agent) {
-        throw new AgentsUnavailableError(
-          "This agent is not in Dolphin's explicitly classified BSC discovery set.",
-        );
-      }
-
-      if (!verifyOnChain) {
-        return agent;
-      }
-
-      const registryVerification = await verifyAgentRegistration(agent.tokenId);
-      return withRegistryVerification(agent, registryVerification);
-    },
-    staleTime: AGENT_QUERY_TIMINGS.detailStaleTimeMs,
-    gcTime: AGENT_QUERY_TIMINGS.garbageCollectionTimeMs,
+  const verification = useReactQuery({
+    queryKey: ["agent-registry", normalizedReference],
+    enabled: enabled && verifyOnChain && Boolean(row),
+    queryFn: () => verifyAgentRegistration((row as Agent).tokenId),
+    staleTime: 10 * 60 * 1000,
   });
+
+  const agent = useMemo(() => {
+    if (!row) return undefined;
+    const base = row as unknown as Agent;
+    return verification.data ? withRegistryVerification(base, verification.data) : base;
+  }, [row, verification.data]);
+
+  return {
+    data: agent,
+    isLoading: convexClient !== null && enabled && row === undefined,
+    isError: !convexClient && enabled,
+    error: !convexClient && enabled ? new AgentsUnavailableError(NO_BACKEND) : null,
+    /** Distinguishes "still loading" from "the backend says there is no such agent". */
+    notFound: row === null,
+  };
 }
 
 export function useAgentDetail(
@@ -141,24 +215,4 @@ export function useAgentDetail(
   options: UseAgentOptions = {},
 ) {
   return useAgent(reference, options);
-}
-
-export function useAgentsByCategory(category: AgentCategory) {
-  const query = useAgents();
-  const data = useMemo(
-    () => query.data?.filter((agent) => agent.category === category),
-    [category, query.data],
-  );
-
-  return { ...query, data };
-}
-
-export function useSearchAgents(queryText: string) {
-  const query = useAgents();
-  const data = useMemo(
-    () => searchAgentsLocally(query.data ?? [], queryText),
-    [query.data, queryText],
-  );
-
-  return { ...query, data };
 }

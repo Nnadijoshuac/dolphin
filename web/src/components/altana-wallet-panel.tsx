@@ -71,7 +71,7 @@ function SessionRow({
             className={`wallet-session-dot ${isExpiringSoon ? "wallet-session-dot--warn" : "wallet-session-dot--ok"}`}
           />
           <span className="wallet-session-row__name">{session.agentName}</span>
-          <span className="wallet-session-row__id">#{session.tokenId}</span>
+          <span className="wallet-session-row__id">#{session.agentKey}</span>
         </div>
         <button
           className="wallet-revoke-btn interactive"
@@ -659,7 +659,7 @@ function ConnectedWallet() {
                     <p className="wallet-past-sessions__name">{session.agentName}</p>
                     <p className="wallet-past-sessions__meta">
                       {formatBnb(BigInt(session.spendCapWei))} BNB / {session.spendPeriod}
-                      {" · "}#{session.tokenId}
+                      {" · "}#{session.agentKey}
                     </p>
                   </div>
                   <span className="wallet-past-sessions__status">{session.status}</span>

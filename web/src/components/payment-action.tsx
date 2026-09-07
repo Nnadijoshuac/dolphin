@@ -73,7 +73,7 @@ export function PaymentAction({
 
   const paidJobs = useConvexQuery(
     agentPaymentsApi.agentPayments.getJobsForAgent,
-    altana.address ? { tokenId: agent.tokenId, altanaWalletAddress: altana.address } : "skip",
+    altana.address ? { agentKey: agent.agentKey, altanaWalletAddress: altana.address } : "skip",
   );
   const alreadyPaid = paidJobs?.[0] ?? null;
 
@@ -139,7 +139,7 @@ export function PaymentAction({
   async function onGetQuote() {
     setPhase({ kind: "quoting" });
     try {
-      const quote = await requestQuote({ tokenId: agent.tokenId, taskDescription: task });
+      const quote = await requestQuote({ agentKey: agent.agentKey, taskDescription: task });
       // The balance is read only once there is a quote, because only the quote
       // says which token to read. There is deliberately no token list here.
       let balanceRaw: bigint | null = null;
@@ -162,7 +162,7 @@ export function PaymentAction({
     setPhase({ kind: "paying", quote });
     try {
       const job = await altana.payForAgent({
-        tokenId: agent.tokenId,
+        agentKey: agent.agentKey,
         category: agent.category,
         quote,
         hirerWalletAddress: hirer.address,

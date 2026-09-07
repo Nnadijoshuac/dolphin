@@ -1,7 +1,8 @@
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   RefreshControl,
   ScrollView,
   Text,
@@ -16,66 +17,93 @@ import { AppHeader } from "@/components/app-header";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
-import { AGENT_CATEGORIES } from "@/constants/agents";
+import { categoryLabel } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
-import { useAgents } from "@/hooks/use-agents";
-import { useCatalogSignals } from "@/hooks/use-agent-signals";
+import {
+  useAgentList,
+  useAgentSignals,
+  useCategoryFacets,
+} from "@/hooks/use-agents";
 import { sortHireableFirst } from "@/services/hireability";
-import type { Agent, AgentCategory } from "@/types/agent";
+import type { Agent } from "@/types/agent";
 
-const categoryLabels: Record<AgentCategory, string> = {
-  monitoring: "Monitoring",
-  rebalancing: "Rebalancing",
-  "grid-trading": "Grid trading",
-  "health-factor": "Health factor",
-  yield: "Yield",
-  trading: "Trading",
-};
-
+/**
+ * DISCOVER.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT CHANGED HERE, AND WHY IT HAD TO (2026-09-07)
+ * ---------------------------------------------------------------------------
+ * This screen used to call `useAgents()`, receive THE ENTIRE CATALOG, and then
+ * filter it into five hardcoded category columns in JavaScript. It rendered one
+ * horizontally-paged ScrollView per category, each holding every matching agent,
+ * all mounted at once.
+ *
+ * Two things made that untenable and both are now fixed:
+ *
+ *   The list was unpaginated. Every agent had to load before one row could
+ *   draw, and the backend query behind it did a file-storage lookup per agent
+ *   inside a 1-second budget. It had already failed once in production.
+ *
+ *   The categories were a hardcoded list of five. The backend now stores an
+ *   open category slug, so the chips are read from `useCategoryFacets` - a
+ *   category with agents in it appears, one without does not. That also ends
+ *   the failure where `trading` was a visible chip leading to an empty list for
+ *   two days.
+ *
+ * The horizontal pager is gone with it. Paging five independent paginated lists
+ * side by side would hold five live subscriptions and five cursors for four
+ * columns nobody is looking at. The chip row now SELECTS, and one list is
+ * mounted - which is also what makes "load more" mean something.
+ */
 export default function DiscoverScreen() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
-  const [activeCategory, setActiveCategory] = useState<AgentCategory>("rebalancing");
-  const mainScrollRef = useRef<ScrollView>(null);
   const tabsScrollRef = useRef<ScrollView>(null);
-  const horizontalScrollRef = useRef<ScrollView>(null);
   const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
-  const { data: agents, isLoading, isError, refetch, isRefetching } = useAgents();
-  // One query for the whole screen, not one per row.
-  const signals = useCatalogSignals();
-  const [heroBottom, setHeroBottom] = useState(320);
 
-  const scrollTabIntoView = (slug: AgentCategory) => {
-    const layout = tabLayouts.current[slug];
-    if (layout && tabsScrollRef.current) {
-      const targetX = Math.max(0, layout.x - screenWidth / 2 + layout.width / 2);
-      tabsScrollRef.current.scrollTo({
-        x: targetX,
-        animated: true,
-      });
+  const { categories, isLoading: facetsLoading } = useCategoryFacets();
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  // The first chip is selected once the facets arrive. Deliberately not a
+  // hardcoded default: "rebalancing" used to be selected on mount whether or
+  // not any rebalancing agent existed.
+  useEffect(() => {
+    if (activeCategory === null && categories.length > 0) {
+      setActiveCategory(categories[0].slug);
     }
-  };
+  }, [activeCategory, categories]);
+
+  const { agents, status, isLoading, loadMore, isEmpty } = useAgentList({
+    category: activeCategory ?? undefined,
+    enabled: activeCategory !== null || (!facetsLoading && categories.length === 0),
+  });
+
+  // One query for the whole page, keyed to the rows actually on it.
+  const signals = useAgentSignals(agents);
+
+  // Hireable first. A user browsing should meet the agents they can actually
+  // buy from before the ones they cannot. A stable partition, so the backend's
+  // own ranking survives inside each half.
+  const rows = sortHireableFirst(agents);
 
   const handleAgentPress = (agent: Agent) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({
-      pathname: "/agent/[id]",
-      params: { id: agent.tokenId },
-    });
+    router.push({ pathname: "/agent/[id]", params: { id: agent.tokenId } });
   };
 
-  const handleSelectCategory = (slug: AgentCategory) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setActiveCategory(slug);
-
-    const index = AGENT_CATEGORIES.findIndex((c) => c.slug === slug);
-    if (index !== -1) {
-      horizontalScrollRef.current?.scrollTo({
-        x: index * screenWidth,
+  const scrollTabIntoView = (slug: string) => {
+    const layout = tabLayouts.current[slug];
+    if (layout && tabsScrollRef.current) {
+      tabsScrollRef.current.scrollTo({
+        x: Math.max(0, layout.x - screenWidth / 2 + layout.width / 2),
         animated: true,
       });
     }
+  };
 
+  const handleSelectCategory = (slug: string) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveCategory(slug);
     scrollTabIntoView(slug);
   };
 
@@ -86,34 +114,37 @@ export default function DiscoverScreen() {
       style={{ backgroundColor: colors.canvas }}
     >
       <ScrollView
-        ref={mainScrollRef}
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 120 }}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetching}
+            refreshing={false}
             onRefresh={() => {
+              // Convex queries are live subscriptions, so there is nothing to
+              // refetch - the list is already current. The control stays for
+              // the gesture, which users expect, and gives haptic feedback.
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              void refetch();
             }}
             tintColor={colors.goldDark}
           />
         }
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const nearBottom =
+            layoutMeasurement.height + contentOffset.y >= contentSize.height - 600;
+          if (nearBottom && status === "CanLoadMore") loadMore();
+        }}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[3]}
       >
-        {/* Child 0: Top Dolphin Header */}
         <View>
           <AppHeader />
         </View>
 
-        {/* Child 1: Discover Title Bar */}
         <View
           className="flex-row items-center justify-between px-4 pb-2.5 pt-1"
-          style={{
-            backgroundColor: colors.canvas,
-          }}
+          style={{ backgroundColor: colors.canvas }}
         >
           <Text
             className="text-[30px] font-black tracking-[-1px]"
@@ -123,7 +154,7 @@ export default function DiscoverScreen() {
           </Text>
 
           <PressableScale
-            accessibilityLabel="View categories"
+            accessibilityLabel="Search agents"
             accessibilityRole="button"
             onPress={() => router.push("/(tabs)/search")}
             containerStyle={{
@@ -142,22 +173,14 @@ export default function DiscoverScreen() {
           </PressableScale>
         </View>
 
-        {/* Child 2: Advert Carousel Hero */}
-        <View
-          onLayout={(e) => {
-            setHeroBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height);
-          }}
-        >
-          <AdvertCarousel agents={agents ?? []} onAgentPress={handleAgentPress} />
+        <View>
+          <AdvertCarousel agents={rows} onAgentPress={handleAgentPress} />
         </View>
 
-        {/* Child 3: Sticky Luxury Gold Category Navigation Tabs */}
+        {/* Sticky category chips, read from the catalog rather than hardcoded. */}
         <View
           className="py-2.5"
-          style={{
-            backgroundColor: colors.canvas,
-            zIndex: 30,
-          }}
+          style={{ backgroundColor: colors.canvas, zIndex: 30 }}
         >
           <ScrollView
             ref={tabsScrollRef}
@@ -165,23 +188,23 @@ export default function DiscoverScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
           >
-            {AGENT_CATEGORIES.map((cat) => {
-              const isActive = activeCategory === cat.slug;
+            {categories.map((facet) => {
+              const isActive = activeCategory === facet.slug;
               return (
                 <View
-                  key={cat.slug}
+                  key={facet.slug}
                   onLayout={(e) => {
-                    tabLayouts.current[cat.slug] = {
+                    tabLayouts.current[facet.slug] = {
                       x: e.nativeEvent.layout.x,
                       width: e.nativeEvent.layout.width,
                     };
                   }}
                 >
                   <PressableScale
-                    accessibilityLabel={cat.label}
+                    accessibilityLabel={`${facet.label}, ${facet.count} agents`}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: isActive }}
-                    onPress={() => handleSelectCategory(cat.slug)}
+                    onPress={() => handleSelectCategory(facet.slug)}
                     containerStyle={{
                       paddingVertical: 7,
                       paddingHorizontal: 16,
@@ -196,7 +219,7 @@ export default function DiscoverScreen() {
                   >
                     <View className="flex-row items-center gap-1.5">
                       {isActive ? (
-                        <CategoryGlyph color={colors.ink} name={cat.slug} size={13} />
+                        <CategoryGlyph color={colors.ink} name={facet.slug} size={13} />
                       ) : null}
                       <Text
                         className="text-[13px]"
@@ -205,7 +228,7 @@ export default function DiscoverScreen() {
                           fontWeight: isActive ? "700" : "500",
                         }}
                       >
-                        {cat.label}
+                        {facet.label}
                       </Text>
                     </View>
                   </PressableScale>
@@ -215,74 +238,75 @@ export default function DiscoverScreen() {
           </ScrollView>
         </View>
 
-        {/* Child 4: Horizontal Swipeable Category Lists Carousel */}
-        <ScrollView
-          ref={horizontalScrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={(e) => {
-            const nextIndex = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
-            if (nextIndex >= 0 && nextIndex < AGENT_CATEGORIES.length) {
-              const nextCategory = AGENT_CATEGORIES[nextIndex].slug;
-              if (nextCategory !== activeCategory) {
-                setActiveCategory(nextCategory);
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                scrollTabIntoView(nextCategory);
-              }
-            }
-          }}
-          scrollEventThrottle={16}
-        >
-          {AGENT_CATEGORIES.map((cat) => {
-            // Hireable first. A user browsing a category should meet the agents
-            // they can actually buy from before the ones they cannot.
-            const categoryAgents = sortHireableFirst(
-              agents?.filter((agent) => agent.category === cat.slug) ?? [],
-            );
-            return (
-              <View key={cat.slug} style={{ width: screenWidth }} className="px-4 pt-3">
-                {isLoading ? (
-                  <View className="py-8">
-                    <StatePanel
-                      body="Fetching 8004scan-indexed BSC agent records..."
-                      state="syncing"
-                      title="Loading Agents"
-                    />
-                  </View>
-                ) : isError ? (
-                  <View className="py-8">
-                    <StatePanel
-                      body="Unable to connect to registry API. Please check your network connection."
-                      state="unavailable"
-                      title="Sync Failed"
-                    />
-                  </View>
-                ) : categoryAgents.length === 0 ? (
-                  <View className="py-8">
-                    <StatePanel
-                      body="No agents found in this category. Check back soon."
-                      state="unavailable"
-                      title="No Agents Found"
-                    />
-                  </View>
-                ) : (
-                  <View className="gap-3">
-                    {categoryAgents.map((agent) => (
-                      <AgentRow
-                        key={agent.id}
-                        agent={agent}
-                        onPress={() => handleAgentPress(agent)}
-                        signals={signals.get(agent.tokenId)}
-                        subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
-                      />
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </ScrollView>
+        <View className="px-4 pt-3">
+          {isLoading || (facetsLoading && categories.length === 0) ? (
+            <View className="py-8">
+              <StatePanel
+                body="Reading the agents Dolphin has verified on BNB Chain."
+                state="syncing"
+                title="Loading agents"
+              />
+            </View>
+          ) : categories.length === 0 ? (
+            <View className="py-8">
+              <StatePanel
+                body="No agent has passed verification yet. Discovery runs every half hour and an agent is listed once its own endpoint answers."
+                state="unavailable"
+                title="Catalog is empty"
+              />
+            </View>
+          ) : isEmpty ? (
+            <View className="py-8">
+              <StatePanel
+                body={`No agent in ${categoryLabel(activeCategory ?? "")} is answering right now. Try another category.`}
+                state="unavailable"
+                title="Nothing here yet"
+              />
+            </View>
+          ) : (
+            <View className="gap-3">
+              {rows.map((agent) => (
+                <AgentRow
+                  key={agent.id}
+                  agent={agent}
+                  onPress={() => handleAgentPress(agent)}
+                  signals={signals.get(agent.id)}
+                  subtitle={`${categoryLabel(agent.category)} · ${agent.tagline}`}
+                />
+              ))}
+
+              {status === "LoadingMore" ? (
+                <View className="items-center py-6">
+                  <ActivityIndicator color={colors.goldDark} />
+                </View>
+              ) : null}
+
+              {status === "CanLoadMore" ? (
+                <PressableScale
+                  accessibilityLabel="Load more agents"
+                  accessibilityRole="button"
+                  onPress={() => loadMore()}
+                  containerStyle={{
+                    alignItems: "center",
+                    backgroundColor: colors.surface,
+                    borderColor: colors.line,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    marginTop: 4,
+                    paddingVertical: 14,
+                  }}
+                >
+                  <Text
+                    className="text-[14px] font-semibold"
+                    style={{ color: colors.ink }}
+                  >
+                    Show more
+                  </Text>
+                </PressableScale>
+              ) : null}
+            </View>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

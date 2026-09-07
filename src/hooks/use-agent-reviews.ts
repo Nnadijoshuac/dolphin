@@ -32,7 +32,7 @@ export type ReviewOutcome = "yes" | "partially" | "no";
 export function useAgentReviews(tokenId: string | null | undefined) {
   return useQuery(
     api.agentReviews.getAgentReviews,
-    tokenId ? { tokenId } : "skip",
+    tokenId ? { agentKey: tokenId } : "skip",
   );
 }
 
@@ -49,7 +49,7 @@ export function useReviewEligibility(tokenId: string | null | undefined) {
 
   return useQuery(
     api.agentReviews.getReviewEligibility,
-    tokenId ? { tokenId, sessionToken: session.sessionToken } : "skip",
+    tokenId ? { agentKey: tokenId, sessionToken: session.sessionToken } : "skip",
   );
 }
 
@@ -73,7 +73,7 @@ export function usePublishReviewOnChain() {
   const wallet = useWallet();
 
   return async (input: {
-    tokenId: string;
+    agentKey: string;
     outcome: ReviewOutcome;
     wouldHireAgain: boolean;
   }) => {
@@ -85,7 +85,7 @@ export function usePublishReviewOnChain() {
       abi: REPUTATION_REGISTRY_ABI,
       functionName: "giveFeedback",
       args: [
-        BigInt(input.tokenId),
+        BigInt(input.agentKey),
         BigInt(feedbackValueFor(input.outcome, input.wouldHireAgain)),
         FEEDBACK_VALUE_DECIMALS,
         tags.tag1,
@@ -99,7 +99,7 @@ export function usePublishReviewOnChain() {
 
     // The hash alone proves nothing - the backend re-reads it before the review
     // is allowed to claim it was published.
-    await attest({ sessionToken, tokenId: input.tokenId, transactionHash });
+    await attest({ sessionToken, agentKey: input.agentKey, transactionHash });
     return transactionHash;
   };
 }
@@ -109,7 +109,7 @@ export function useSubmitReview() {
   const session = useWalletSession();
 
   return async (input: {
-    tokenId: string;
+    agentKey: string;
     outcome: ReviewOutcome;
     wouldHireAgain: boolean;
     comment: string | null;

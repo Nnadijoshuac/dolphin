@@ -373,7 +373,7 @@ const AAVE_V3_POOL: AllowedContract = {
 };
 
 export const CATEGORY_SESSION_POLICY: Readonly<
-  Record<AgentCategory, CategorySessionPolicy>
+  Record<string, CategorySessionPolicy>
 > = {
   "health-factor": {
     kind: "scoped-session",
@@ -432,8 +432,33 @@ export const CATEGORY_SESSION_POLICY: Readonly<
   },
 };
 
+/**
+ * An unknown category gets READ-ONLY, and that direction is the whole point.
+ *
+ * `AgentCategory` became an open string in the 2026-09-07 rebuild, so this
+ * lookup is partial at runtime while still typechecking. The failure to avoid
+ * is not a missing label — it is granting a scoped on-chain session, with a
+ * spend cap and a contract allowlist, to a category nobody has written a policy
+ * for. Every entry above names the specific contract a user would be
+ * authorizing and why; a category with no entry has no such contract named, so
+ * there is nothing honest to put in an allowlist and no way to describe the
+ * grant in the UI.
+ *
+ * Failing closed here means a new category's agents can be hired and read from
+ * but cannot be handed authority until somebody writes the policy. That is the
+ * correct default for the one mechanism in Dolphin that gives away control.
+ */
+const UNKNOWN_CATEGORY_POLICY: CategorySessionPolicy = {
+  kind: "read-only",
+  reason:
+    "Dolphin has not written a session policy for this category, so it cannot name the " +
+    "contracts an agent here would be authorized to call or bound what a session could do. " +
+    "Until it can, agents in this category are read-only — which is a limit on Dolphin, not " +
+    "a judgement about the agent.",
+};
+
 export function sessionPolicyFor(category: AgentCategory): CategorySessionPolicy {
-  return CATEGORY_SESSION_POLICY[category];
+  return CATEGORY_SESSION_POLICY[category] ?? UNKNOWN_CATEGORY_POLICY;
 }
 
 /* ---------------------------------------------------------------------------

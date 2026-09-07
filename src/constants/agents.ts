@@ -72,6 +72,89 @@ export const AGENT_CATEGORIES: readonly {
   },
 ];
 
+/* ---------------------------------------------------------------------------
+ * OPEN CATEGORIES: total lookups, so an unknown slug can never render blank.
+ * ---------------------------------------------------------------------------
+ * `AgentCategory` is a free string as of the 2026-09-07 rebuild (see
+ * src/types/agent.ts for why). That makes every `Record<AgentCategory, T>`
+ * lookup partial at runtime while still typechecking, because
+ * `noUncheckedIndexedAccess` is off in this project — so a `research` agent
+ * would have silently rendered `undefined` as its category label.
+ *
+ * Every category lookup in the app goes through the three functions below, and
+ * each one is total by construction. Nothing should index a category map
+ * directly again.
+ * ------------------------------------------------------------------------ */
+
+const CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  monitoring: "Monitoring",
+  rebalancing: "Rebalancing",
+  "grid-trading": "Grid trading",
+  "health-factor": "Health factor",
+  yield: "Yield",
+  trading: "Trading",
+  research: "Research",
+  development: "Development",
+  security: "Security",
+  payments: "Payments",
+  content: "Content",
+  automation: "Automation",
+  general: "General",
+};
+
+/**
+ * A human label for any slug, known or not.
+ *
+ * The fallback title-cases the slug, so a category the registry invents next
+ * week reads as "Data Pipelines" rather than as nothing at all. This mirrors
+ * `categoryLabel` in convex/lib/categorize.ts — the same manual-mirror rule
+ * AGENTS.md §9 already applies to the Convex validators.
+ */
+export function categoryLabel(slug: string): string {
+  const known = CATEGORY_LABELS[slug];
+  if (known) return known;
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+export interface CategoryVisual {
+  /** Tint behind an icon or chip. */
+  background: string;
+  /** Foreground for a glyph drawn on that tint. */
+  foreground: string;
+  /** One short line of plain-language copy for a browse chip. */
+  subtitle: string;
+}
+
+const CATEGORY_VISUALS: Readonly<Record<string, CategoryVisual>> = {
+  monitoring: { background: "#F5F3EC", foreground: "#8A7B4F", subtitle: "Watch wallets" },
+  rebalancing: { background: "#EAF1FB", foreground: "#3C6FB4", subtitle: "LP ranges" },
+  "grid-trading": { background: "#FAF5E6", foreground: "#B08A2E", subtitle: "Price ladders" },
+  "health-factor": { background: "#F9F3F0", foreground: "#B0663C", subtitle: "Borrow risk" },
+  yield: { background: "#F0F7F2", foreground: "#3F8A5C", subtitle: "Find yield" },
+  trading: { background: "#F4F0FA", foreground: "#7B5CB8", subtitle: "Trade markets" },
+  research: { background: "#EFF4F6", foreground: "#48727F", subtitle: "Dig into data" },
+  development: { background: "#F1F1F6", foreground: "#5B5B86", subtitle: "Build and review" },
+  security: { background: "#FBF0F0", foreground: "#A64B4B", subtitle: "Spot risk" },
+  payments: { background: "#EFF6F3", foreground: "#3E8375", subtitle: "Move money" },
+  content: { background: "#FAF2F5", foreground: "#A65778", subtitle: "Write and make" },
+  automation: { background: "#F2F5EE", foreground: "#6B8449", subtitle: "Run workflows" },
+};
+
+/** Neutral, and deliberately not one of the branded tints. */
+const DEFAULT_VISUAL: CategoryVisual = {
+  background: "#F3F3F1",
+  foreground: "#6C6C6C",
+  subtitle: "Other agents",
+};
+
+export function categoryVisual(slug: string): CategoryVisual {
+  return CATEGORY_VISUALS[slug] ?? DEFAULT_VISUAL;
+}
+
 const configured8004ScanBaseUrl = process.env.EXPO_PUBLIC_8004SCAN_API_BASE_URL?.trim();
 
 export const AGENTS_API = {

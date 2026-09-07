@@ -1,46 +1,24 @@
-import { useQuery } from "convex/react";
-import { useMemo } from "react";
-
-import { api } from "../../convex/_generated/api";
-import { convexClient } from "@/providers/convex-provider";
-
 /**
- * Hire counts and review outcomes for the whole catalog, in one read.
+ * Hire counts and review outcomes, and the one line a list row shows.
  *
- * One query for every row on a screen, not one per row. The per-row version
- * looks fine at thirty agents and is a thundering herd at three hundred - and
- * the catalog is drawn from a registry of nearly 300,000.
+ * ---------------------------------------------------------------------------
+ * `useCatalogSignals` IS GONE, AND WHY
+ * ---------------------------------------------------------------------------
+ * It fetched signals for the WHOLE catalog in one query - correct while the
+ * catalog was the whole of what a screen rendered, and wrong the moment the list
+ * became paginated. The backend query behind it read every row of `agentHires`
+ * and `agentReviews` and bucketed them in memory: a full scan of two growing
+ * tables to answer a question about the 24 agents actually on screen.
  *
- * See convex/agentSignals.ts for what each number means and why a rate is
- * withheld below five reviews.
+ * `useAgentSignals(agents)` in src/hooks/use-agents.ts replaces it and takes the
+ * keys it needs. The summariser below is unchanged and still lives here, because
+ * it is presentation logic that several components share.
  */
-export type AgentSignals = {
-  hires: number;
-  activeHires: number;
-  paidHires: number;
-  reviews: number;
-  wouldHireAgain: number;
-  wouldHireAgainRate: number | null;
-  deliveredCount: number;
-};
 
-export function useCatalogSignals(): Map<string, AgentSignals> {
-  // Skipped rather than crashing when no backend is configured, matching every
-  // other Convex-backed hook in the app.
-  const rows = useQuery(
-    api.agentSignals.getCatalogSignals,
-    convexClient ? {} : "skip",
-  );
+export type { AgentSignals } from "@/hooks/use-agents";
+export { useAgentSignals } from "@/hooks/use-agents";
 
-  return useMemo(() => {
-    const map = new Map<string, AgentSignals>();
-    for (const row of rows ?? []) {
-      const { tokenId, ...signals } = row;
-      map.set(tokenId, signals);
-    }
-    return map;
-  }, [rows]);
-}
+import type { AgentSignals } from "@/hooks/use-agents";
 
 /**
  * The one-line summary a list row shows, or null when there is nothing honest

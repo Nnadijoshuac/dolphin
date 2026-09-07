@@ -73,7 +73,7 @@ export const JOB_DEADLINE_SECONDS = 1800;
  * `{address}` is substituted with the user's own Dolphin Wallet, because every
  * one of these questions is only answerable about a specific account.
  */
-const TASK_TEMPLATES: Readonly<Record<AgentCategory, string>> = {
+const TASK_TEMPLATES: Readonly<Record<string, string>> = {
   "health-factor":
     "Report the current health factor for {address} on BNB Chain, the collateral drawdown that would liquidate it, and the minimum repayment that would restore a safe position.",
   rebalancing:
@@ -88,11 +88,27 @@ const TASK_TEMPLATES: Readonly<Record<AgentCategory, string>> = {
     "State the trades you would place for {address} on BNB Chain right now, with the entry, the exit, the invalidation level and the size, and cost each one against the venue that would actually fill it.",
 };
 
+/**
+ * The generic ask, for any category with no hand-written template.
+ *
+ * REQUIRED as of the 2026-09-07 rebuild, not defensive padding. `AgentCategory`
+ * is an open string now, so `TASK_TEMPLATES[category]` is a partial lookup that
+ * still typechecks - and returning undefined here would have thrown on
+ * `.replace` and broken the hire flow outright for every agent in a category
+ * nobody wrote copy for.
+ *
+ * It is phrased to be answerable by any seller: it asks what the agent would do
+ * and what it would cost, which is exactly what a negotiate call is for.
+ */
+const GENERIC_TASK_TEMPLATE =
+  "Describe the service you would perform for {address} on BNB Chain, what you " +
+  "would deliver, and quote a price for it.";
+
 export function defaultTaskDescription(
   category: AgentCategory,
   walletAddress: string | null,
 ): string {
-  return TASK_TEMPLATES[category].replace(
+  return (TASK_TEMPLATES[category] ?? GENERIC_TASK_TEMPLATE).replace(
     "{address}",
     walletAddress ?? "the address I will provide",
   );

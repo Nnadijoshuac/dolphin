@@ -78,7 +78,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function JobDeliveryCard({ tokenId }: { tokenId: string }) {
+export function JobDeliveryCard({ agentKey }: { agentKey: string }) {
   const altana = useAltanaWallet();
 
   // Paid jobs are keyed by the Dolphin Wallet that funded them, so with no
@@ -86,7 +86,7 @@ export function JobDeliveryCard({ tokenId }: { tokenId: string }) {
   const jobs = useConvexQuery(
     api.agentPayments.getJobsForAgent,
     altana.address
-      ? { tokenId, altanaWalletAddress: altana.address }
+      ? { agentKey, altanaWalletAddress: altana.address }
       : "skip",
   ) as AgentJobRow[] | undefined;
 

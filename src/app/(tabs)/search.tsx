@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useState } from "react";
 import {
+  ActivityIndicator,
   Keyboard,
   ScrollView,
   Text,
@@ -14,127 +15,79 @@ import { AgentRow } from "@/components/agent-row";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
-import { AGENT_CATEGORIES } from "@/constants/agents";
+import { categoryLabel, categoryVisual } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
-import { useAgents } from "@/hooks/use-agents";
-import { searchAgentsLocally } from "@/services/agents-api";
-import { useCatalogSignals } from "@/hooks/use-agent-signals";
+import {
+  useAgentList,
+  useAgentSignals,
+  useCategoryFacets,
+} from "@/hooks/use-agents";
 import { sortHireableFirst } from "@/services/hireability";
 import { useAppStore } from "@/store/use-app-store";
-import type { Agent, AgentCategory } from "@/types/agent";
+import type { Agent } from "@/types/agent";
 
-const categoryBgColors: Record<AgentCategory, string> = {
-  monitoring: "#F5F3EC",
-  rebalancing: "#EAF1FB",
-  "grid-trading": "#FAF5E6",
-  "health-factor": "#F9F3F0",
-  yield: "#F0F7F2",
-  trading: "#F4F0FA",
-};
-
-const categorySubtitles: Record<AgentCategory, string> = {
-  monitoring: "Watch wallets",
-  rebalancing: "LP ranges",
-  "grid-trading": "Price ladders",
-  "health-factor": "Borrow risk",
-  yield: "Find yield",
-  trading: "Trade markets",
-};
-
-const categoryLabels: Record<AgentCategory, string> = {
-  monitoring: "Monitoring",
-  rebalancing: "Rebalancing",
-  "grid-trading": "Grid trading",
-  "health-factor": "Health factor",
-  yield: "Yield",
-  trading: "Trading",
-};
-
+/**
+ * SEARCH.
+ *
+ * ---------------------------------------------------------------------------
+ * SEARCH MOVED TO THE SERVER (2026-09-07)
+ * ---------------------------------------------------------------------------
+ * This screen used to call `useAgents()` for the ENTIRE catalog and run
+ * `searchAgentsLocally` over it on every keystroke - a substring scan across
+ * every agent's name, publisher, category, tagline, description and skills, on
+ * the device, in a `useMemo`.
+ *
+ * It worked because the catalog was 25 agents. It is now a Convex search index
+ * (`agents.search`), which is paginated and relevance-ordered, and it is what
+ * makes a catalog of thousands searchable at all rather than only loadable.
+ *
+ * The "Explore Categories" grid is likewise read from `useCategoryFacets` and
+ * carries real counts, rather than iterating a hardcoded list of five and
+ * counting a client-side array.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT WAS DELIBERATELY DROPPED
+ * ---------------------------------------------------------------------------
+ * "Suggested for you" is gone. Both of its bases depended on holding the whole
+ * catalog in memory: the history basis re-ran the local search over every agent
+ * once per remembered term, and the fallback sorted every agent in every
+ * category by feedback count to take the top one. Neither survives pagination,
+ * and reimplementing them would mean new backend queries that nothing has asked
+ * for. Recent searches - which is the genuinely personal half - is unchanged.
+ */
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const { data: allAgents } = useAgents();
-  const signals = useCatalogSignals();
+
+  /*
+   * Deferred so a fast typist does not open a Convex subscription per keystroke.
+   * React keeps rendering the typed value in the input while the query lags a
+   * frame behind it, which is exactly the tradeoff a search box wants.
+   */
+  const deferredQuery = useDeferredValue(query.trim());
+
+  const { categories } = useCategoryFacets();
+
+  const { agents, status, isLoading, loadMore, isEmpty } = useAgentList({
+    search: deferredQuery,
+    enabled: deferredQuery.length > 0,
+  });
+
+  // Relevance decides the order, then hireability breaks it: two equally
+  // relevant agents are not equally useful if only one can be hired.
+  const results = sortHireableFirst(agents);
+  const signals = useAgentSignals(agents);
 
   const recentSearches = useAppStore((state) => state.recentSearches);
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
   const removeRecentSearch = useAppStore((state) => state.removeRecentSearch);
   const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
 
-  const searchResults = useMemo(() => {
-    if (!allAgents || !query.trim()) return [];
-    // Relevance decides the order, then hireability breaks it: two equally
-    // relevant agents are not equally useful if only one can be hired.
-    return sortHireableFirst(searchAgentsLocally(allAgents, query));
-  }, [allAgents, query]);
-
-  /**
-   * "Suggested for you" is derived from real signals, never a hand-picked list.
-   * It used to be `allAgents.slice(0, 4)` - the first four rows the backend
-   * happened to return, presented as a recommendation.
-   *
-   * With search history it is genuinely personal: agents matching what was
-   * actually searched, most recent term first.
-   *
-   * With no history there is nothing personal to go on, so it falls back to the
-   * most-reviewed agent in each category. feedbackCount is the only honest
-   * ranking signal this catalog currently carries - it is live for all 25
-   * agents - whereas reputationScore is unavailable for 9 of them and exactly
-   * 0 for every one of the rest, so ordering by it would be ordering by noise.
-   * The heading says which of the two bases produced the list, so the screen
-   * never implies a personalisation it did not do.
-   */
-  const suggested = useMemo(() => {
-    if (!allAgents || allAgents.length === 0) {
-      return { agents: [] as Agent[], basis: "category" as const };
-    }
-
-    if (recentSearches.length > 0) {
-      const seen = new Set<string>();
-      const matches: Agent[] = [];
-
-      for (const term of recentSearches) {
-        for (const agent of searchAgentsLocally(allAgents, term)) {
-          if (!seen.has(agent.id)) {
-            seen.add(agent.id);
-            matches.push(agent);
-          }
-        }
-      }
-
-      if (matches.length > 0) {
-        return { agents: matches.slice(0, 6), basis: "history" as const };
-      }
-    }
-
-    // Only "live" and "stale" carry a value; the other statuses are null.
-    const feedbackOf = (agent: Agent) =>
-      agent.feedbackCount.status === "live" ||
-      agent.feedbackCount.status === "stale"
-        ? agent.feedbackCount.value
-        : 0;
-
-    const topPerCategory = AGENT_CATEGORIES.flatMap((cat) => {
-      const inCategory = allAgents
-        .filter((agent) => agent.category === cat.slug)
-        .sort((a, b) => feedbackOf(b) - feedbackOf(a));
-
-      return inCategory.length > 0 ? [inCategory[0]] : [];
-    });
-
-    return { agents: topPerCategory, basis: "category" as const };
-  }, [allAgents, recentSearches]);
-
   const handleAgentPress = (agent: Agent) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (query.trim()) {
-      addRecentSearch(query.trim());
-    }
-    router.push({
-      pathname: "/agent/[id]",
-      params: { id: agent.tokenId },
-    });
+    if (query.trim()) addRecentSearch(query.trim());
+    router.push({ pathname: "/agent/[id]", params: { id: agent.tokenId } });
   };
 
   const handleTagPress = (tag: string) => {
@@ -143,19 +96,17 @@ export default function SearchScreen() {
     addRecentSearch(tag);
   };
 
+  const isSearching = query.trim().length > 0;
+
   return (
     <SafeAreaView
       className="flex-1"
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      {/* Sleek Compact Search Bar */}
       <View
         className="px-4 pt-1.5 pb-2.5"
-        style={{
-          backgroundColor: colors.canvas,
-          zIndex: 20,
-        }}
+        style={{ backgroundColor: colors.canvas, zIndex: 20 }}
       >
         <View
           className="flex-row items-center rounded-full bg-white px-3.5 h-[42px]"
@@ -216,43 +167,61 @@ export default function SearchScreen() {
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 110 }}
         keyboardShouldPersistTaps="handled"
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const nearBottom =
+            layoutMeasurement.height + contentOffset.y >= contentSize.height - 600;
+          if (nearBottom && status === "CanLoadMore") loadMore();
+        }}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
-        {query.trim().length > 0 ? (
-          /* Live Results */
+        {isSearching ? (
           <View className="px-4 pt-1">
             <View className="pb-2.5">
               <Text className="text-[12px] font-bold uppercase tracking-wider text-zinc-500">
-                {searchResults.length} {searchResults.length === 1 ? "Agent found" : "Agents found"}
+                {isLoading
+                  ? "Searching"
+                  : `${results.length}${status === "CanLoadMore" ? "+" : ""} ${
+                      results.length === 1 ? "agent found" : "agents found"
+                    }`}
               </Text>
             </View>
 
-            {searchResults.length > 0 ? (
-              <View className="gap-2">
-                {searchResults.map((agent) => (
-                  <AgentRow
-                    key={agent.id}
-                    agent={agent}
-                    onPress={() => handleAgentPress(agent)}
-                    signals={signals.get(agent.tokenId)}
-                    subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
-                  />
-                ))}
+            {isLoading ? (
+              <View className="items-center py-10">
+                <ActivityIndicator color={colors.goldDark} />
               </View>
-            ) : (
+            ) : isEmpty ? (
               <View className="pt-8">
                 <StatePanel
-                  body={`No agents found matching "${query}". Try searching by category, protocol, or skill.`}
+                  body={`No verified agent matches "${query}". Try a capability, a protocol, or a publisher name.`}
                   state="unavailable"
                   title="No results found"
                 />
               </View>
+            ) : (
+              <View className="gap-2">
+                {results.map((agent) => (
+                  <AgentRow
+                    key={agent.id}
+                    agent={agent}
+                    onPress={() => handleAgentPress(agent)}
+                    signals={signals.get(agent.id)}
+                    subtitle={`${categoryLabel(agent.category)} · ${agent.tagline}`}
+                  />
+                ))}
+
+                {status === "LoadingMore" ? (
+                  <View className="items-center py-6">
+                    <ActivityIndicator color={colors.goldDark} />
+                  </View>
+                ) : null}
+              </View>
             )}
           </View>
         ) : (
-          /* Seamless Discovery Home */
           <View className="px-4 pt-1 gap-5">
-            {/* Recent Searches */}
             {recentSearches.length > 0 ? (
               <View>
                 <View className="flex-row items-center justify-between pb-2">
@@ -266,28 +235,19 @@ export default function SearchScreen() {
                       hitSlop={8}
                       onPress={() => clearRecentSearches()}
                     >
-                      <Text className="text-[11px] font-bold text-zinc-400">
-                        Clear all
-                      </Text>
+                      <Text className="text-[11px] font-bold text-zinc-400">Clear all</Text>
                     </PressableScale>
                   ) : null}
                 </View>
 
                 <View className="gap-1">
                   {recentSearches.slice(0, 4).map((item) => (
-                    <View
-                      key={item}
-                      className="flex-row items-center justify-between py-2"
-                    >
+                    <View key={item} className="flex-row items-center justify-between py-2">
                       <PressableScale
                         accessibilityLabel={`Search ${item}`}
                         accessibilityRole="button"
                         style={{ flex: 1 }}
-                        containerStyle={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 10,
-                        }}
+                        containerStyle={{ flexDirection: "row", alignItems: "center", gap: 10 }}
                         onPress={() => handleTagPress(item)}
                       >
                         <CategoryGlyph color="#8C8E88" name="clock" size={15} />
@@ -315,120 +275,72 @@ export default function SearchScreen() {
               </View>
             ) : null}
 
-            {/* Explore Categories - every category, not a hardcoded four */}
+            {/* Every category the catalog actually holds, with real counts. */}
             <View>
               <Text className="text-[14px] font-bold pb-2.5" style={{ color: colors.ink }}>
-                Explore Categories
+                Explore categories
               </Text>
-              <View className="flex-row flex-wrap gap-2.5">
-                {AGENT_CATEGORIES.map((cat) => {
-                  const count =
-                    allAgents?.filter((agent) => agent.category === cat.slug)
-                      .length ?? 0;
-
-                  return (
-                    <PressableScale
-                      key={cat.slug}
-                      accessibilityLabel={cat.label}
-                      accessibilityRole="button"
-                      onPress={() => handleTagPress(cat.label)}
-                      style={{ flexBasis: "47%", flexGrow: 1 }}
-                      containerStyle={{
-                        alignItems: "center",
-                        backgroundColor: categoryBgColors[cat.slug] ?? "#F5F3EC",
-                        borderRadius: 16,
-                        flexDirection: "row",
-                        gap: 12,
-                        paddingHorizontal: 16,
-                        paddingVertical: 16,
-                      }}
-                    >
-                      <View className="h-10 w-10 items-center justify-center">
-                        <CategoryGlyph
-                          color={colors.ink}
-                          name={cat.slug}
-                          size={24}
-                          strokeWidth={2}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Text
-                          className="text-[14px] font-bold"
-                          numberOfLines={1}
-                          style={{ color: colors.ink }}
-                        >
-                          {cat.label}
-                        </Text>
-                        <Text
-                          className="text-[12px] text-zinc-600 mt-0.5 font-medium"
-                          numberOfLines={1}
-                        >
-                          {allAgents
-                            ? `${count} ${count === 1 ? "agent" : "agents"}`
-                            : categorySubtitles[cat.slug]}
-                        </Text>
-                      </View>
-                    </PressableScale>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Suggested for you - derived, and it says which signal it used */}
-            {suggested.agents.length > 0 ? (
-              <View>
-                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                  Suggested for you
-                </Text>
-                <Text className="text-[11.5px] font-medium text-zinc-500 pt-0.5 pb-2.5">
-                  {suggested.basis === "history"
-                    ? "Based on what you have searched for"
-                    : "Most-reviewed agent in each category"}
-                </Text>
-                <View className="gap-2.5">
-                  {suggested.agents.map((agent) => (
-                    <AgentRow
-                      key={agent.id}
-                      agent={agent}
-                      onPress={() => handleAgentPress(agent)}
-                      signals={signals.get(agent.tokenId)}
-                      subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
-                    />
-                  ))}
-                </View>
-              </View>
-            ) : null}
-
-            {/* The whole catalog, not a slice of it */}
-            {allAgents === undefined ? (
-              <View className="pb-4">
+              {categories.length === 0 ? (
                 <StatePanel
-                  body="Fetching 8004scan-indexed BSC agent records..."
+                  body="No agent has passed verification yet. Discovery runs every half hour."
                   state="syncing"
-                  title="Loading agents"
+                  title="Building the catalog"
                 />
-              </View>
-            ) : allAgents.length > 0 ? (
-              <View className="pb-4">
-                <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                  All agents
-                </Text>
-                <Text className="text-[11.5px] font-medium text-zinc-500 pt-0.5 pb-2.5">
-                  {allAgents.length} on BNB Chain
-                </Text>
-                <View className="gap-2.5">
-                  {sortHireableFirst(allAgents).map((agent) => (
-                    <AgentRow
-                      key={agent.id}
-                      agent={agent}
-                      onPress={() => handleAgentPress(agent)}
-                      signals={signals.get(agent.tokenId)}
-                      subtitle={`${categoryLabels[agent.category]} · ${agent.tagline}`}
-                    />
-                  ))}
+              ) : (
+                <View className="flex-row flex-wrap gap-2.5">
+                  {categories.map((facet) => {
+                    const visual = categoryVisual(facet.slug);
+                    return (
+                      <PressableScale
+                        key={facet.slug}
+                        accessibilityLabel={`${facet.label}, ${facet.count} agents`}
+                        accessibilityRole="button"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/category/[slug]",
+                            params: { slug: facet.slug },
+                          })
+                        }
+                        style={{ flexBasis: "47%", flexGrow: 1 }}
+                        containerStyle={{
+                          alignItems: "center",
+                          backgroundColor: visual.background,
+                          borderRadius: 16,
+                          flexDirection: "row",
+                          gap: 12,
+                          paddingHorizontal: 16,
+                          paddingVertical: 16,
+                        }}
+                      >
+                        <View className="h-10 w-10 items-center justify-center">
+                          <CategoryGlyph
+                            color={colors.ink}
+                            name={facet.slug}
+                            size={24}
+                            strokeWidth={2}
+                          />
+                        </View>
+                        <View className="flex-1">
+                          <Text
+                            className="text-[14px] font-bold"
+                            numberOfLines={1}
+                            style={{ color: colors.ink }}
+                          >
+                            {facet.label}
+                          </Text>
+                          <Text
+                            className="text-[12px] text-zinc-600 mt-0.5 font-medium"
+                            numberOfLines={1}
+                          >
+                            {facet.count} {facet.count === 1 ? "agent" : "agents"}
+                          </Text>
+                        </View>
+                      </PressableScale>
+                    );
+                  })}
                 </View>
-              </View>
-            ) : null}
+              )}
+            </View>
           </View>
         )}
       </ScrollView>

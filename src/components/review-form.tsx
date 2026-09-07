@@ -50,15 +50,15 @@ const OUTCOMES: readonly { value: ReviewOutcome; label: string }[] = [
 
 const COMMENT_MAX_LENGTH = 280;
 
-export function ReviewForm({ tokenId }: { tokenId: string }) {
+export function ReviewForm({ agentKey }: { agentKey: string }) {
   // Same guard as every other Convex-backed component: the hooks throw without
   // a provider, and a build with no EXPO_PUBLIC_CONVEX_URL has none.
   if (!convexClient) return null;
-  return <BackendReviewForm tokenId={tokenId} />;
+  return <BackendReviewForm agentKey={agentKey} />;
 }
 
-function BackendReviewForm({ tokenId }: { tokenId: string }) {
-  const eligibility = useReviewEligibility(tokenId);
+function BackendReviewForm({ agentKey }: { agentKey: string }) {
+  const eligibility = useReviewEligibility(agentKey);
   const submitReview = useSubmitReview();
 
   const existing = eligibility?.existing ?? null;
@@ -122,7 +122,7 @@ function BackendReviewForm({ tokenId }: { tokenId: string }) {
     setError(null);
     try {
       await submitReview({
-        tokenId,
+        agentKey,
         outcome: selectedOutcome,
         wouldHireAgain: selectedWouldHireAgain,
         comment: commentValue.trim().length > 0 ? commentValue.trim() : null,
@@ -245,7 +245,7 @@ function BackendReviewForm({ tokenId }: { tokenId: string }) {
         <PublishOnChain
           existingTxHash={existing.onChainTxHash}
           outcome={existing.outcome}
-          tokenId={tokenId}
+          agentKey={agentKey}
           wouldHireAgain={existing.wouldHireAgain}
         />
       ) : null}
@@ -272,12 +272,12 @@ function BackendReviewForm({ tokenId }: { tokenId: string }) {
  * (services/reputation-registry.ts).
  */
 function PublishOnChain({
-  tokenId,
+  agentKey,
   outcome,
   wouldHireAgain,
   existingTxHash,
 }: {
-  tokenId: string;
+  agentKey: string;
   outcome: ReviewOutcome;
   wouldHireAgain: boolean;
   existingTxHash: string | null;
@@ -320,7 +320,7 @@ function PublishOnChain({
     setStatus("publishing");
     setError(null);
     try {
-      await publish({ tokenId, outcome, wouldHireAgain });
+      await publish({ agentKey, outcome, wouldHireAgain });
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (cause) {
       setError(toUserMessage(cause, "Could not publish this review on-chain."));

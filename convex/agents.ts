@@ -181,6 +181,38 @@ export const get = query({
   },
 });
 
+/**
+ * Several specific agents, by key or bare tokenId.
+ *
+ * FOR SCREENS THAT ALREADY KNOW WHICH AGENTS THEY NEED - My Agents renders the
+ * wallet's hires, and the activity feed renders the agents behind a set of
+ * escrow jobs. Both used to call `listAgents` for the whole catalog and then
+ * `.find()` through it, which was the only way to look an agent up when the
+ * only read was "give me everything". Under pagination that no longer works at
+ * all: the agent a user hired may not be on page one.
+ *
+ * Bounded point lookups on `by_key`, capped, and NOT gated on status - the same
+ * reasoning as `get`. A hire whose agent has since gone unavailable must still
+ * render, or the user's own list develops holes.
+ */
+export const getMany = query({
+  args: { references: v.array(v.string()) },
+  handler: async (ctx, { references }) => {
+    const keys = [...new Set(references.map(coerceAgentKey).filter((k): k is string => k !== null))]
+      .slice(0, 100);
+
+    const rows = [];
+    for (const agentKey of keys) {
+      const row = await ctx.db
+        .query("agents")
+        .withIndex("by_key", (q) => q.eq("agentKey", agentKey))
+        .unique();
+      if (row) rows.push(toPublicAgent(row));
+    }
+    return rows;
+  },
+});
+
 /* ---------------------------------------------------------------------------
  * SIGNALS
  * ------------------------------------------------------------------------ */

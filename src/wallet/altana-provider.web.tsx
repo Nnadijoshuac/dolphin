@@ -390,9 +390,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           // recording one now requires proof of who is doing it - the mutation
           // no longer takes anyone's word for hirerWalletAddress.
           sessionToken: requireSessionToken(walletSession),
-          tokenId: input.tokenId,
+          agentKey: input.agentKey,
           agentName: input.agentName,
-          category: input.category,
           altanaWalletAddress: current.address,
           hirerWalletAddress: input.hirerWalletAddress,
           sessionPublicKey: granted.publicKey,
@@ -583,8 +582,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         // not take this result's word for it - recordJobPayment reads the job
         // back off the kernel itself and refuses if anything disagrees.
         const verified = await recordPayment({
-          tokenId: input.tokenId,
-          category: input.category,
+          agentKey: input.agentKey,
           altanaWalletAddress: current.address,
           hirerWalletAddress: input.hirerWalletAddress,
           escrowContract: quote.verifyingContract,
@@ -602,7 +600,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         let sellerReply = "";
         try {
           const notified = await notifyFunded({
-            tokenId: input.tokenId,
+            agentKey: input.agentKey,
             jobId: funded.jobId.toString(),
           });
           sellerAccepted = notified.accepted;

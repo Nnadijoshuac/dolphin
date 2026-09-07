@@ -1,12 +1,50 @@
 import type { Address } from "viem";
 
-export type AgentCategory =
-  | "monitoring"
-  | "rebalancing"
-  | "grid-trading"
-  | "health-factor"
-  | "yield"
-  | "trading";
+/**
+ * A category slug. OPEN, not a union — this is the client half of the
+ * 2026-09-07 backend rebuild.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY IT STOPPED BEING A UNION
+ * ---------------------------------------------------------------------------
+ * It was `"monitoring" | "rebalancing" | ... | "trading"`, mirrored by hand into
+ * a Convex validator, a scorer, a classifier and the website's own copy. The
+ * cost of that was measured rather than theoretical: adding `trading` on
+ * 2026-09-03 meant a schema change, a scoring-ruleset version bump and a
+ * re-judge of a 258,000-row ledger, and the category still rendered empty for
+ * two days because a SEPARATE hardcoded vocabulary decided what the discovery
+ * API was even asked for. Meanwhile 5,921 agents had been thrown away by a
+ * classifier whose only complaint was that they did not fit these six words.
+ *
+ * The marketplace has to be able to carry a research agent, a security agent,
+ * or something nobody has named yet, so the backend stores a free string and
+ * the browse chips are read from the data (`useCategoryFacets`).
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS MEANS FOR CODE THAT USED TO SWITCH ON IT
+ * ---------------------------------------------------------------------------
+ * `Record<AgentCategory, T>` no longer type-errors on a missing key, so an
+ * unknown slug would silently index to `undefined` at runtime. Never index a
+ * category map directly. Use the helpers in `@/constants/agents`
+ * (`categoryLabel`, `categoryVisual`) and the `?? fallback` patterns in
+ * `src/wallet/*-policy.ts`, all of which are total by construction.
+ */
+export type AgentCategory = string;
+
+/**
+ * The categories Dolphin has copy, colours and (sometimes) a protocol reader
+ * for. Not a constraint — a well-known subset of an open set, used for defaults.
+ */
+export const KNOWN_AGENT_CATEGORIES = [
+  "monitoring",
+  "rebalancing",
+  "grid-trading",
+  "health-factor",
+  "yield",
+  "trading",
+] as const;
+
+export type KnownAgentCategory = (typeof KNOWN_AGENT_CATEGORIES)[number];
 
 export type LiveMetricStatus =
   | "syncing"
@@ -203,10 +241,49 @@ export interface Agent {
   reputationScore: LiveMetric<number>;
   feedbackCount: LiveMetric<number>;
   endpointStatus: LiveMetric<AgentEndpointStatus>;
-  liveStats: AgentLiveStats;
+  /**
+   * NULL for a category with no wired protocol reader — which, now that
+   * categories are open, is most of them. `research`, `security` and anything
+   * the registry invents have no protocol holding a number about them, and the
+   * detail page renders no live-metric panel rather than an empty one.
+   */
+  liveStats: AgentLiveStats | null;
+  /** Whether a live-metric panel exists for this category at all. */
+  hasLiveStats: boolean;
   performanceSeries: AgentPerformancePoint[];
   recentActivity: AgentActivity[];
   priceModel: LiveMetric<AgentPriceModel>;
+  /**
+   * The agent's own quoted price, read from a signed quote at verification time
+   * and checked against its registered on-chain wallet. NULL means it published
+   * no headline price — which is not the same as free, and not the same as
+   * unhireable: the hire flow requests a live quote at checkout.
+   */
+  pricing: {
+    amountRaw: string;
+    token: string;
+    tokenSymbol: string;
+    tokenDecimals: number;
+    display: string | null;
+    escrowContract: string | null;
+  } | null;
+  /** The canonical "<chainId>:<registry>:<tokenId>" key. Same value as `id`. */
+  agentKey: string;
+  /** Seed for the client's deterministic avatar when `iconUrl` is null. */
+  iconSeed: string;
+  iconSource: "publisher" | "cached" | "generated";
+  tags: string[];
+  /** Hand-vetted. Boosts ordering; never exempts an agent from verification. */
+  curated: boolean;
+  /**
+   * Dolphin's own verdict. "live" means we called this agent's endpoint and it
+   * offered work for sale; "degraded" means it has failed recently but not
+   * enough times to be delisted; "unavailable" means it is delisted and only
+   * reachable by direct link.
+   */
+  status: "live" | "degraded" | "unavailable";
+  verifiedAt: string;
+  publishedAt: string;
   registryVerification: RegistryVerification;
   sourceLabels: DataSourceLabel[];
   recordStatus: "indexed" | "editorial-fallback";

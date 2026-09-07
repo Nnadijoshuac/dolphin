@@ -15,7 +15,7 @@ export type AltanaWalletStatus =
 
 /** A granted session as Convex holds it. No key material - see convex/agentSessions.ts. */
 export type AltanaSession = Readonly<{
-  tokenId: string;
+  agentKey: string;
   agentName: string;
   category: AgentCategory;
   altanaWalletAddress: string;
@@ -64,7 +64,7 @@ export type AgentQuote = Readonly<{
 
 /** A paid ERC-8183 job, after Dolphin read it back off the chain. */
 export type AgentJobRow = Readonly<{
-  tokenId: string;
+  agentKey: string;
   agentName: string;
   category: AgentCategory;
   altanaWalletAddress: string;
@@ -83,7 +83,7 @@ export type AgentJobRow = Readonly<{
 }>;
 
 export type PayForAgentInput = Readonly<{
-  tokenId: string;
+  agentKey: string;
   category: AgentCategory;
   quote: AgentQuote;
   hirerWalletAddress: string | null;
@@ -108,7 +108,7 @@ export type TokenHolding = Readonly<{
 }>;
 
 export type GrantSessionInput = Readonly<{
-  tokenId: string;
+  agentKey: string;
   agentName: string;
   category: AgentCategory;
   spendCapWei: bigint;

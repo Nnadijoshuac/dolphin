@@ -1,5 +1,5 @@
-import { useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   Text,
   View,
@@ -13,32 +13,57 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { SectionHeading } from "@/components/section-heading";
 import { StatePanel } from "@/components/state-panel";
-import { AGENT_CATEGORIES } from "@/constants/agents";
+import { categoryLabel, categoryVisual } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
-import { useAgentsByCategory } from "@/hooks/use-agents";
-import type { AgentCategory } from "@/types/agent";
+import { useAgentList, useCategoryFacets } from "@/hooks/use-agents";
+import { sortHireableFirst } from "@/services/hireability";
 
+/**
+ * ONE CATEGORY, PAGINATED.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT CHANGED (2026-09-07)
+ * ---------------------------------------------------------------------------
+ * `useAgentsByCategory` fetched the whole catalog and filtered it in memory. It
+ * is now `useAgentList({ category })`, an index range on
+ * `by_status_category_rank` - cost is the page size, not the catalog size.
+ *
+ * The slug is no longer cast to a closed union with a "rebalancing" default.
+ * Categories are open strings now, so an unrecognised slug is a real
+ * possibility, and silently redirecting one to a different category would show
+ * a user agents they did not ask for. It renders its own honest empty state.
+ *
+ * ---------------------------------------------------------------------------
+ * THE REPUTATION SORT IS GONE, AND THAT IS A CORRECTNESS FIX
+ * ---------------------------------------------------------------------------
+ * It sorted the agents currently in memory by reputation. Under pagination that
+ * means every "Show more" reshuffles the list under the reader, and page two is
+ * sorted independently of page one - so an agent can appear twice and another
+ * never appear at all.
+ *
+ * A cursor is a position in an index, so the ordering has to BE the index. The
+ * backend's `rank` is that stored, indexed field. Re-adding a user-chosen sort
+ * means adding an index for it, not sorting a page - which is a real feature
+ * with a real cost, not something to fake locally.
+ */
 export default function CategoryDetailRoute() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
-  const categorySlug = (slug as AgentCategory) || "rebalancing";
-  
-  const categoryInfo =
-    AGENT_CATEGORIES.find((c) => c.slug === categorySlug) ??
-    AGENT_CATEGORIES[0];
+  const categorySlug = (slug ?? "").trim();
 
-  const { data: agents, isLoading, isError } = useAgentsByCategory(categorySlug);
+  const { categories } = useCategoryFacets();
+  const facet = categories.find((c) => c.slug === categorySlug);
+  const label = facet?.label ?? categoryLabel(categorySlug);
+  const visual = categoryVisual(categorySlug);
 
-  const [sortBy, setSortBy] = useState<"featured" | "reputation">("featured");
-
-  const sortedAgents = [...(agents ?? [])].sort((a, b) => {
-    if (sortBy === "reputation") {
-      const aRep = a.reputationScore.status === "live" ? a.reputationScore.value : 0;
-      const bRep = b.reputationScore.status === "live" ? b.reputationScore.value : 0;
-      return bRep - aRep;
-    }
-    return 0;
+  const { agents, status, isLoading, loadMore, isEmpty } = useAgentList({
+    category: categorySlug,
+    enabled: categorySlug.length > 0,
   });
+
+  // Hireable first, as a stable partition, so the backend's ranking survives
+  // inside each half.
+  const sortedAgents = sortHireableFirst(agents);
 
   return (
     <SafeAreaView
@@ -46,7 +71,6 @@ export default function CategoryDetailRoute() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
-      {/* Navigation Header */}
       <View
         className="flex-row items-center justify-between px-6 pt-2 pb-3 border-b"
         style={{ borderColor: colors.line }}
@@ -80,7 +104,7 @@ export default function CategoryDetailRoute() {
           numberOfLines={1}
           style={{ color: colors.ink }}
         >
-          {categoryInfo.label}
+          {label}
         </Text>
 
         <View className="h-9 w-9" />
@@ -89,98 +113,44 @@ export default function CategoryDetailRoute() {
       <ScrollView
         className="flex-1 px-6"
         contentContainerStyle={{ paddingBottom: 60 }}
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const nearBottom =
+            layoutMeasurement.height + contentOffset.y >= contentSize.height - 600;
+          if (nearBottom && status === "CanLoadMore") loadMore();
+        }}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
-        {/* Category Header Banner */}
         <View className="mt-5 p-5 rounded-2xl bg-slate-900" style={{ ...shadows.card }}>
           <View className="flex-row items-center gap-3">
             <View className="h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
               <CategoryGlyph color="#FFFFFF" name={categorySlug} size={24} />
             </View>
             <View className="flex-1">
-              <Text className="text-[22px] font-extrabold text-white">
-                {categoryInfo.label}
-              </Text>
+              <Text className="text-[22px] font-extrabold text-white">{label}</Text>
               <Text className="mt-1 text-[13px] text-slate-300">
-                {categoryInfo.description}
+                {facet
+                  ? `${facet.count} verified ${facet.count === 1 ? "agent" : "agents"} · ${visual.subtitle}`
+                  : visual.subtitle}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Filter / Sort bar */}
-        <View className="mt-6 flex-row items-center justify-between">
-          <SectionHeading title={`All ${categoryInfo.label} Agents`} />
-
-          <View className="flex-row items-center gap-2">
-            <PressableScale
-              accessibilityLabel="Sort by featured"
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSortBy("featured");
-              }}
-              containerStyle={{
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 14,
-                backgroundColor: sortBy === "featured" ? colors.ink : colors.surface,
-                borderWidth: 1,
-                borderColor: sortBy === "featured" ? colors.ink : colors.line,
-              }}
-            >
-              <Text
-                className="text-[12px] font-bold"
-                style={{ color: sortBy === "featured" ? "#FFFFFF" : colors.muted }}
-              >
-                Featured
-              </Text>
-            </PressableScale>
-
-            <PressableScale
-              accessibilityLabel="Sort by reputation"
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSortBy("reputation");
-              }}
-              containerStyle={{
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 14,
-                backgroundColor: sortBy === "reputation" ? colors.ink : colors.surface,
-                borderWidth: 1,
-                borderColor: sortBy === "reputation" ? colors.ink : colors.line,
-              }}
-            >
-              <Text
-                className="text-[12px] font-bold"
-                style={{ color: sortBy === "reputation" ? "#FFFFFF" : colors.muted }}
-              >
-                Reputation
-              </Text>
-            </PressableScale>
-          </View>
+        <View className="mt-6">
+          <SectionHeading title={`All ${label} agents`} />
         </View>
 
-        {/* Agent List */}
         {isLoading ? (
           <View className="py-12">
             <StatePanel
-              body="Loading category listings from BSC..."
+              body="Reading the agents Dolphin has verified in this category."
               state="syncing"
               title="Loading"
             />
           </View>
-        ) : isError ? (
-          <View className="py-12">
-            <StatePanel
-              body="Failed to fetch agents for this category."
-              state="unavailable"
-              title="Error"
-            />
-          </View>
-        ) : sortedAgents.length > 0 ? (
+        ) : !isEmpty ? (
           <View className="mt-3 gap-4">
             {sortedAgents.map((agent) => (
               <AgentCard
@@ -195,13 +165,43 @@ export default function CategoryDetailRoute() {
                 }}
               />
             ))}
+
+            {status === "LoadingMore" ? (
+              <View className="items-center py-6">
+                <ActivityIndicator color={colors.goldDark} />
+              </View>
+            ) : null}
+
+            {status === "CanLoadMore" ? (
+              <PressableScale
+                accessibilityLabel="Load more agents"
+                accessibilityRole="button"
+                onPress={() => loadMore()}
+                containerStyle={{
+                  alignItems: "center",
+                  backgroundColor: colors.surface,
+                  borderColor: colors.line,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  paddingVertical: 14,
+                }}
+              >
+                <Text className="text-[14px] font-semibold" style={{ color: colors.ink }}>
+                  Show more
+                </Text>
+              </PressableScale>
+            ) : null}
           </View>
         ) : (
           <View className="py-12">
             <StatePanel
-              body="No registered agents found in this category yet."
+              body={
+                facet
+                  ? "No agent in this category is answering its endpoint right now. One is relisted automatically as soon as a probe succeeds."
+                  : `Dolphin has no category called "${categorySlug}". Categories come from the catalog itself, so this one either holds no verified agents or does not exist.`
+              }
               state="unavailable"
-              title="No Agents"
+              title="Nothing here yet"
             />
           </View>
         )}

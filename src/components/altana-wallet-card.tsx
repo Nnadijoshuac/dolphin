@@ -127,7 +127,7 @@ function SessionRow({
         {session.agentName}
       </Text>
       <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
-        Agent #{session.tokenId} · {session.category}
+        {session.agentKey} · {session.category}
       </Text>
 
       <View

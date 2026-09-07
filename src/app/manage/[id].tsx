@@ -70,13 +70,13 @@ export default function ManageAgentRoute() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const hiredAgents = useHiredAgents(wallet.address);
   const realHire = hiredAgents?.find(
-    (hire) => hire.tokenId === id || hire.tokenId === agent?.tokenId,
+    (hire) => hire.agentKey === id || hire.agentKey === agent?.tokenId,
   );
 
   const jobs = useQuery(
     api.agentPayments.getJobsForAgent,
     altana.address
-      ? { tokenId: agent?.tokenId ?? id, altanaWalletAddress: altana.address }
+      ? { agentKey: agent?.tokenId ?? id, altanaWalletAddress: altana.address }
       : "skip",
   );
 
@@ -111,7 +111,7 @@ export default function ManageAgentRoute() {
           onPress: () => {
             setIsCancelling(true);
             setCancelError(null);
-            void cancelHire(target.tokenId)
+            void cancelHire(target.agentKey)
               .then(() => {
                 void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 router.replace("/(tabs)/my-agents");
@@ -168,9 +168,9 @@ export default function ManageAgentRoute() {
     AGENT_CATEGORIES.find((c) => c.slug === category)?.label ?? category;
 
   const isReal = Boolean(realHire);
-  const targetId = agent?.tokenId ?? (realHire?.tokenId ?? preview?.agentId ?? id);
+  const targetId = agent?.tokenId ?? (realHire?.agentKey ?? preview?.agentId ?? id);
   const displayName =
-    agent?.name ?? (realHire ? `Agent #${realHire.tokenId}` : `Agent #${preview?.agentId}`);
+    agent?.name ?? (realHire ? `Agent #${realHire.agentKey}` : `Agent #${preview?.agentId}`);
   const dateText = realHire
     ? `Hired ${formatActivityDate(realHire.hiredAt)}`
     : `Saved ${formatActivityDate(preview!.savedAt)}`;
@@ -290,7 +290,7 @@ export default function ManageAgentRoute() {
   // 3. Own hire or saved preview event
   if (realHire) {
     activities.push({
-      id: `hire-${realHire.tokenId}`,
+      id: `hire-${realHire.agentKey}`,
       title: "Agent hired",
       detail: realHire.paymentJobId
         ? "Paid hire · ERC-8183 escrow"
@@ -499,7 +499,7 @@ export default function ManageAgentRoute() {
             >
               Your review
             </Text>
-            <ReviewForm tokenId={realHire.tokenId} />
+            <ReviewForm agentKey={realHire.agentKey} />
           </View>
         ) : null}
 

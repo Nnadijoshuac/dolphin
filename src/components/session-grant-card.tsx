@@ -59,7 +59,7 @@ export function SessionGrantCard({ agent }: { agent: Agent }) {
   const [isGranting, setIsGranting] = useState(false);
 
   const existing = (altana.sessions ?? []).find(
-    (s) => s.tokenId === agent.tokenId && s.status === "active",
+    (s) => s.agentKey === agent.agentKey && s.status === "active",
   );
 
   // See the banner at the top of this file. Placed after every hook, so this
@@ -331,7 +331,7 @@ export function SessionGrantCard({ agent }: { agent: Agent }) {
           setIsGranting(true);
           void altana
             .grantSession({
-              tokenId: agent.tokenId,
+              agentKey: agent.agentKey,
               agentName: agent.name,
               category: agent.category,
               spendCapWei,

@@ -41,7 +41,7 @@ export function useHireReadOnlyAgent() {
      * server-chosen message verified. See src/wallet/wallet-session.tsx.
      */
     const sessionToken = requireSessionToken(session);
-    return hire({ tokenId, category, sessionToken, priceModel, paymentJobId });
+    return hire({ agentKey: tokenId, sessionToken, priceModel, paymentJobId });
   };
 }
 
@@ -60,7 +60,7 @@ export function useCancelHire() {
 
   return async (tokenId: string) => {
     const sessionToken = requireSessionToken(session);
-    return cancel({ tokenId, sessionToken });
+    return cancel({ agentKey: tokenId, sessionToken });
   };
 }
 

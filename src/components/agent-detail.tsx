@@ -231,9 +231,20 @@ function Pill({ label, accent = false }: { label: string; accent?: boolean }) {
 
 /* ─────────────── live stats ─────────────── */
 
+/**
+ * Renders nothing for a category with no wired protocol reader.
+ *
+ * `liveStats` is nullable as of the 2026-09-07 rebuild because categories are
+ * open strings now: `research`, `security` and anything the registry invents
+ * have no protocol holding a number about them. An empty four-cell grid reading
+ * "Not reported" four times is worse than no panel - it implies a feed exists
+ * and is silent, when in truth none was ever wired.
+ */
 function LiveStats({ agent }: { agent: Agent }) {
+  if (!agent.hasLiveStats) return null;
+
   if (!convexClient) {
-    return <LiveStatsView stats={agent.liveStats} />;
+    return agent.liveStats ? <LiveStatsView stats={agent.liveStats} /> : null;
   }
 
   return <BackendLiveStats agent={agent} />;
@@ -246,6 +257,7 @@ function BackendLiveStats({ agent }: { agent: Agent }) {
     agent.agentWallet,
   );
   const stats = cached?.stats ?? syncingLiveStats(agent.category);
+  if (!stats) return null;
 
   return <LiveStatsView stats={stats} />;
 }

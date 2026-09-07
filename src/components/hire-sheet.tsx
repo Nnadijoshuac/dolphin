@@ -95,7 +95,7 @@ export function HireSheet({
     setError(null);
     try {
       const quote = (await requestQuote({
-        tokenId: agent.tokenId,
+        agentKey: agent.agentKey,
         taskDescription: task,
       })) as AgentQuote;
 
@@ -121,7 +121,7 @@ export function HireSheet({
     setError(null);
     try {
       const job = await altana.payForAgent({
-        tokenId: agent.tokenId,
+        agentKey: agent.agentKey,
         category: agent.category,
         quote,
         hirerWalletAddress: wallet.address,

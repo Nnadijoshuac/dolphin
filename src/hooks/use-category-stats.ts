@@ -9,6 +9,52 @@ import type { AgentCategory } from "@/types/agent";
 const REFRESH_INTERVAL_MS = 60_000;
 
 /**
+ * The categories that have a wired protocol reader.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS NARROWING EXISTS
+ * ---------------------------------------------------------------------------
+ * `AgentCategory` is an open string as of the 2026-09-07 rebuild, but live
+ * stats are read by hand-written code against a specific contract - Venus's
+ * comptroller, PancakeSwap V3's position manager, Aave's pool - so the set that
+ * has any is finite and the Convex validator behind these queries is a closed
+ * union.
+ *
+ * That is not an inconsistency, it is two different questions: "what drawer is
+ * this agent in" must be open, "which reader do we run" is closed by fact. A
+ * category with no reader returns null here, the hooks skip, and the detail
+ * page shows no live-metric panel - which is the honest answer rather than a
+ * permanently empty one.
+ *
+ * Mirrors statsCategoryFor in convex/lib/statsCategory.ts, by hand, the same
+ * rule AGENTS.md §9 applies to the Convex validators.
+ */
+type StatsCategory =
+  | "monitoring"
+  | "rebalancing"
+  | "grid-trading"
+  | "health-factor"
+  | "yield"
+  | "trading";
+
+const WIRED_STATS_CATEGORIES: ReadonlySet<string> = new Set<StatsCategory>([
+  "monitoring",
+  "rebalancing",
+  "grid-trading",
+  "health-factor",
+  "yield",
+  "trading",
+]);
+
+export function statsCategoryFor(
+  category: AgentCategory | null | undefined,
+): StatsCategory | null {
+  return category && WIRED_STATS_CATEGORIES.has(category)
+    ? (category as StatsCategory)
+    : null;
+}
+
+/**
  * Backend-aggregated live stats for one agent's category (Venus health
  * factor, PancakeSwap V3 positions, Aave TVL - see convex/protocols/).
  * Returns undefined until the Convex client has data, null if nothing has
@@ -28,10 +74,13 @@ export function useAgentCategoryStats(
   category: AgentCategory | null | undefined,
   agentWallet: string | null,
 ) {
-  const isEnabled = Boolean(tokenId && category);
+  const statsCategory = statsCategoryFor(category);
+  const isEnabled = Boolean(tokenId && statsCategory);
   const cached = useQuery(
     api.categoryStats.getAgentCategoryStats,
-    isEnabled ? { tokenId: tokenId as string, category: category as AgentCategory } : "skip",
+    isEnabled && statsCategory
+      ? { agentKey: tokenId as string, category: statsCategory }
+      : "skip",
   );
   const refresh = useAction(api.categoryStats.refreshAgentCategoryStats);
   const isFocused = useIsFocused();
@@ -58,7 +107,7 @@ export function useAgentCategoryStats(
    * focus costs one cheap cached response rather than a chain read.
    */
   useEffect(() => {
-    if (!tokenId || !category || !isFocused) {
+    if (!tokenId || !statsCategory || !isFocused) {
       return undefined;
     }
 
@@ -78,7 +127,9 @@ export function useAgentCategoryStats(
        * would be reporting a transport problem as a data problem, which is the
        * same mistake use-job-delivery.ts documents refusing to make.
        */
-      void refresh({ tokenId, category, agentWallet }).catch(() => undefined);
+      void refresh({ agentKey: tokenId, category: statsCategory, agentWallet }).catch(
+        () => undefined,
+      );
     };
 
     tick();
@@ -91,7 +142,7 @@ export function useAgentCategoryStats(
       clearInterval(interval);
       appStateSubscription.remove();
     };
-  }, [tokenId, category, agentWallet, refresh, isFocused]);
+  }, [tokenId, statsCategory, agentWallet, refresh, isFocused]);
 
   return cached;
 }
@@ -114,11 +165,10 @@ export function useAgentStatsHistory(
   tokenId: string | null | undefined,
   category: AgentCategory | null | undefined,
 ) {
+  const statsCategory = statsCategoryFor(category);
   return useQuery(
     api.categoryStats.getAgentStatsHistory,
-    tokenId && category
-      ? { tokenId, category }
-      : "skip",
+    tokenId && statsCategory ? { agentKey: tokenId, category: statsCategory } : "skip",
   );
 }
 
@@ -133,6 +183,6 @@ export function useAgentStatsHistory(
 export function useAgentRetention(tokenId: string | null | undefined) {
   return useQuery(
     api.agentRetention.getAgentRetention,
-    tokenId ? { tokenId } : "skip",
+    tokenId ? { agentKey: tokenId } : "skip",
   );
 }

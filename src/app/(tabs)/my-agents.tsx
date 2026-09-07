@@ -10,8 +10,7 @@ import { PressableScale } from "@/components/pressable-scale";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
 import { colors, radii, shadows } from "@/constants/theme";
-import { EDITORIAL_AGENTS } from "@/data/editorial-agents";
-import { useAgents } from "@/hooks/use-agents";
+import { useAgentsByKeys } from "@/hooks/use-agents";
 import { JobDeliveryCard } from "@/components/job-delivery-card";
 import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import { useAppStore } from "@/store/use-app-store";
@@ -21,18 +20,22 @@ import { useWallet } from "@/wallet/wallet-provider";
 export default function MyAgentsScreen() {
   const router = useRouter();
   const wallet = useWallet();
-  const { data: indexedAgents } = useAgents();
-  const previewHires = useAppStore((state) => state.previewHires);
+  // Only this wallet's own agents, resolved by key. The catalog is paginated
+  // now, so an agent someone hired months ago may not be on page one - and the
+  // hardcoded EDITORIAL_AGENTS fallback this replaced could show an agent whose
+  // endpoint had since died as though it were fine.
   const hiredAgents = useHiredAgents(wallet.address);
+  const previewHires = useAppStore((state) => state.previewHires);
+  const agentsByKey = useAgentsByKeys([
+    ...(hiredAgents ?? []).map((hire) => hire.agentKey),
+    ...previewHires.map((preview) => preview.agentId),
+  ]);
   const hasHires = Boolean(hiredAgents && hiredAgents.length > 0);
   const hasPreviews = previewHires.length > 0;
 
-  const findAgent = (tokenId: string) =>
-    indexedAgents?.find(
-      (candidate) => candidate.tokenId === tokenId || candidate.id === tokenId,
-    ) ?? EDITORIAL_AGENTS.find(
-      (candidate) => candidate.tokenId === tokenId || candidate.id === tokenId,
-    );
+  // The map is keyed by BOTH agentKey and bare tokenId, so an older stored
+  // reference still resolves.
+  const findAgent = (reference: string) => agentsByKey.get(reference);
 
   const handleManage = (agentId: string) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -87,18 +90,18 @@ export default function MyAgentsScreen() {
                   {hiredAgents?.map((hire) => (
                     <View key={hire._id}>
                       <AgentListCard
-                        agent={findAgent(hire.tokenId)}
+                        agent={findAgent(hire.agentKey)}
                         badgeLabel="Hired"
                         badgeTone="live"
                         dateLabel="Hired"
                         dateValue={hire.hiredAt}
-                        fallbackAgentId={hire.tokenId}
-                        onPress={() => handleManage(hire.tokenId)}
+                        fallbackAgentId={hire.agentKey}
+                        onPress={() => handleManage(hire.agentKey)}
                       />
                       {/* What the hire actually bought, read back off the
                           ERC-8183 kernel. Renders nothing for a free hire,
                           which bought nothing and has nothing to report. */}
-                      <JobDeliveryCard tokenId={hire.tokenId} />
+                      <JobDeliveryCard agentKey={hire.agentKey} />
                     </View>
                   ))}
                 </View>

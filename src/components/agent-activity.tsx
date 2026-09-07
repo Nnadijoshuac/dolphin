@@ -7,7 +7,7 @@ import { api } from "../../convex/_generated/api";
 import { AgentIcon } from "@/components/agent-icon";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
-import { useAgents } from "@/hooks/use-agents";
+import { useAgentsByKeys } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hire-read-only-agent";
 import type { AgentCategory } from "@/types/agent";
 import { useAltanaWallet } from "@/wallet/altana-provider";
@@ -72,7 +72,8 @@ function formatDate(iso: string): string | null {
 type ActivityItem = {
   key: string;
   title: string;
-  category: AgentCategory;
+  /** Null while the catalog row has not resolved, or for an agent that is gone. */
+  category: AgentCategory | null;
   /**
    * The agent's own icon, resolved from the catalog by token id. Null when the
    * catalog has not loaded or does not carry this agent, in which case AgentIcon
@@ -108,7 +109,7 @@ function ActivityRow({
       className="flex-row items-center gap-3.5 px-1"
       style={{ paddingVertical: 10 }}
     >
-      <AgentIcon category={item.category} size={48} uri={item.iconUrl} />
+      <AgentIcon category={item.category ?? "general"} size={48} uri={item.iconUrl} />
 
       <View className="flex-1">
         <Text
@@ -178,9 +179,14 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
    * renders as soon as its record arrives whether or not the catalog has - the
    * icon is the only thing that waits on it.
    */
-  const { data: catalog } = useAgents();
-  const agentFor = (tokenId: string) =>
-    catalog?.find((agent) => agent.tokenId === tokenId) ?? null;
+  // Only the agents this feed actually names, not the whole catalog. The
+  // catalog is paginated now, so an agent a user hired may not be on page one -
+  // and reading every agent to resolve a handful of icons never made sense.
+  const catalog = useAgentsByKeys([
+    ...(jobs ?? []).map((job) => job.agentKey),
+    ...(hires ?? []).map((hire) => hire.agentKey),
+  ]);
+  const agentFor = (agentKey: string) => catalog.get(agentKey) ?? null;
 
   const items: ActivityItem[] = [];
 
@@ -199,8 +205,11 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
       // a payment, so it names the agent as it was named when the money moved.
       // Only the icon is resolved live, because the row never stored one.
       title: job.agentName,
-      category: job.category,
-      iconUrl: agentFor(job.tokenId)?.iconUrl ?? null,
+      // The job row no longer denormalises a category, and it should not: a
+      // category is a property of the agent that can change, while this row is
+      // a receipt. Read live from the catalog when it is there.
+      category: agentFor(job.agentKey)?.category ?? null,
+      iconUrl: agentFor(job.agentKey)?.iconUrl ?? null,
       detail: [`Paid · ${job.jobStatus.toLowerCase()}`, date].filter(Boolean).join(" · "),
       amount,
       sortAt: Date.parse(job.verifiedAt) || 0,
@@ -215,23 +224,23 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
 
   for (const hire of hires ?? []) {
     const date = formatDate(hire.hiredAt);
-    const agent = agentFor(hire.tokenId);
+    const agent = agentFor(hire.agentKey);
     items.push({
-      key: `hire-${hire.tokenId}`,
+      key: `hire-${hire.agentKey}`,
       // A hire row carries no denormalised name, so it used to show the token
       // id - resolving one was a second network read for a label. The catalog
       // is now read anyway for the icon, so the name comes with it for free.
       // It falls back to the id rather than to nothing when the catalog has not
       // arrived or does not carry this agent.
-      title: agent?.name ?? `Agent #${hire.tokenId}`,
-      category: hire.category,
+      title: agent?.name ?? `Agent ${hire.agentKey}`,
+      category: agent?.category ?? null,
       iconUrl: agent?.iconUrl ?? null,
       detail: ["Hired · no payment", date].filter(Boolean).join(" · "),
       amount: null,
       sortAt: Date.parse(hire.hiredAt) || 0,
       onPress: () => {
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push({ pathname: "/manage/[id]", params: { id: hire.tokenId } });
+        router.push({ pathname: "/manage/[id]", params: { id: hire.agentKey } });
       },
     });
   }

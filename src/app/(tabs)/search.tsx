@@ -120,38 +120,28 @@ export default function SearchScreen() {
       style={{ backgroundColor: colors.canvas }}
     >
       <View
-        className="px-4 pt-1.5 pb-2.5"
+        className="px-4 pt-1.5 pb-2.5 flex-row items-center gap-2.5"
         style={{ backgroundColor: colors.canvas, zIndex: 20 }}
       >
         <View
-          className="flex-row items-center rounded-full bg-white px-3.5 h-[42px]"
+          className="flex-1 flex-row items-center rounded-full bg-white px-3.5 h-[42px]"
           style={{
             borderColor: isFocused ? colors.gold : colors.line,
             borderWidth: 1.5,
             ...shadows.subtle,
           }}
         >
-          {isFocused && query.length > 0 ? (
-            <PressableScale
-              accessibilityLabel="Dismiss search focus"
-              accessibilityRole="button"
-              onPress={() => {
-                Keyboard.dismiss();
-                setIsFocused(false);
-              }}
-              containerStyle={{ marginRight: 6, padding: 2 }}
-            >
-              <CategoryGlyph color={colors.ink} name="arrow-right" size={16} strokeWidth={2.2} />
-            </PressableScale>
-          ) : (
-            <CategoryGlyph color={isFocused ? colors.ink : "#8C8E88"} name="search" size={16} />
-          )}
+          <CategoryGlyph color={isFocused ? colors.ink : "#8C8E88"} name="search" size={16} />
 
           <TextInput
             autoCapitalize="none"
             autoCorrect={false}
             className="ml-2.5 flex-1 text-[14px] font-medium h-full"
-            onBlur={() => setIsFocused(false)}
+            onBlur={() => {
+              setTimeout(() => {
+                setIsFocused(false);
+              }, 150);
+            }}
             onChangeText={setQuery}
             onFocus={() => setIsFocused(true)}
             onSubmitEditing={() => {
@@ -176,6 +166,23 @@ export default function SearchScreen() {
             </PressableScale>
           ) : null}
         </View>
+
+        {isFocused || isSearching ? (
+          <PressableScale
+            accessibilityLabel="Cancel search"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => {
+              Keyboard.dismiss();
+              setQuery("");
+              setIsFocused(false);
+            }}
+          >
+            <Text className="text-[14px] font-semibold" style={{ color: colors.ink }}>
+              Cancel
+            </Text>
+          </PressableScale>
+        ) : null}
       </View>
 
       <ScrollView
@@ -235,8 +242,8 @@ export default function SearchScreen() {
               </View>
             )}
           </View>
-        ) : (
-          <View className="px-4 pt-1 gap-5">
+        ) : isFocused ? (
+          <View className="px-4 pt-1">
             {recentSearches.length > 0 ? (
               <View>
                 <View className="flex-row items-center justify-between pb-2">
@@ -256,7 +263,7 @@ export default function SearchScreen() {
                 </View>
 
                 <View className="gap-1">
-                  {recentSearches.slice(0, 4).map((item) => (
+                  {recentSearches.slice(0, 6).map((item) => (
                     <View key={item} className="flex-row items-center justify-between py-2">
                       <PressableScale
                         accessibilityLabel={`Search ${item}`}
@@ -288,7 +295,17 @@ export default function SearchScreen() {
                   ))}
                 </View>
               </View>
-            ) : null}
+            ) : (
+              <View className="items-center justify-center pt-14 px-6">
+                <CategoryGlyph color="#8C8E88" name="search" size={24} />
+                <Text className="text-[13.5px] font-medium text-zinc-400 text-center mt-2.5">
+                  Search by agent name, capability, or protocol
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View className="px-4 pt-1 gap-5">
 
             {/* Category pills */}
             <View>

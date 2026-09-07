@@ -15,7 +15,7 @@ import { AgentRow } from "@/components/agent-row";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
-import { categoryLabel, categoryVisual } from "@/constants/agents";
+import { categoryLabel } from "@/constants/agents";
 import { colors, shadows } from "@/constants/theme";
 import {
   useAgentList,
@@ -302,57 +302,57 @@ export default function SearchScreen() {
                   title="Building the catalog"
                 />
               ) : (
-                <View className="flex-row flex-wrap gap-2.5">
-                  {categories.map((facet) => {
-                    const visual = categoryVisual(facet.slug);
-                    return (
-                      <PressableScale
-                        key={facet.slug}
-                        accessibilityLabel={`${facet.label}, ${facet.count} agents`}
-                        accessibilityRole="button"
-                        onPress={() =>
-                          router.push({
-                            pathname: "/category/[slug]",
-                            params: { slug: facet.slug },
-                          })
-                        }
-                        style={{ flexBasis: "47%", flexGrow: 1 }}
-                        containerStyle={{
-                          alignItems: "center",
-                          backgroundColor: visual.background,
-                          borderRadius: 16,
-                          flexDirection: "row",
-                          gap: 12,
-                          paddingHorizontal: 16,
-                          paddingVertical: 16,
-                        }}
+                <View className="flex-row flex-wrap gap-2">
+                  {categories.map((facet) => (
+                    <PressableScale
+                      key={facet.slug}
+                      accessibilityLabel={`${facet.label}, ${facet.count} agents`}
+                      accessibilityRole="button"
+                      onPress={() => {
+                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push({
+                          pathname: "/category/[slug]",
+                          params: { slug: facet.slug },
+                        });
+                      }}
+                      containerStyle={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                        backgroundColor: colors.surface,
+                        borderRadius: 9999,
+                        borderWidth: 1,
+                        borderColor: colors.line,
+                        paddingVertical: 7,
+                        paddingHorizontal: 12,
+                        ...shadows.subtle,
+                      }}
+                    >
+                      <CategoryGlyph
+                        color={colors.ink}
+                        name={facet.slug}
+                        size={14}
+                        strokeWidth={2}
+                      />
+                      <Text
+                        className="text-[13px] font-semibold"
+                        style={{ color: colors.ink }}
                       >
-                        <View className="h-10 w-10 items-center justify-center">
-                          <CategoryGlyph
-                            color={colors.ink}
-                            name={facet.slug}
-                            size={24}
-                            strokeWidth={2}
-                          />
-                        </View>
-                        <View className="flex-1">
-                          <Text
-                            className="text-[14px] font-bold"
-                            numberOfLines={1}
-                            style={{ color: colors.ink }}
-                          >
-                            {facet.label}
-                          </Text>
-                          <Text
-                            className="text-[12px] text-zinc-600 mt-0.5 font-medium"
-                            numberOfLines={1}
-                          >
-                            {facet.count} {facet.count === 1 ? "agent" : "agents"}
-                          </Text>
-                        </View>
-                      </PressableScale>
-                    );
-                  })}
+                        {facet.label}
+                      </Text>
+                      <View
+                        className="rounded-full px-1.5 py-0.5"
+                        style={{ backgroundColor: colors.surfaceSubtle }}
+                      >
+                        <Text
+                          className="text-[11px] font-bold"
+                          style={{ color: colors.muted }}
+                        >
+                          {facet.count}
+                        </Text>
+                      </View>
+                    </PressableScale>
+                  ))}
                 </View>
               )}
             </View>

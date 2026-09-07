@@ -67,7 +67,27 @@ export const agentLiveStatsValidator = v.union(
   tradingStatsValidator,
 );
 
-export const agentCategoryValidator = v.union(
+/**
+ * THE CLOSED SET, and it is closed for a reason that has nothing to do with
+ * taxonomy.
+ *
+ * `agents.categorySlug` is an open `v.string()` so the marketplace can carry
+ * categories nobody has thought of yet. This validator is a DIFFERENT question:
+ * "which protocol reader do we run for this agent's headline metric". The set
+ * of integrations that exist - Venus, PancakeSwap V3, Aave - really is finite,
+ * because each one is hand-written code against a specific contract.
+ *
+ * A catalog category with no wired reader maps to null through
+ * `statsCategoryFor` in convex/lib/statsCategory.ts and renders as unavailable,
+ * which is the same honest answer convex/protocols/unavailable.ts already gives
+ * for grid-trading and trading.
+ *
+ * Renamed from `agentCategoryValidator` in the 2026-09-07 rebuild so the two
+ * concepts cannot be confused at a call site again - the old name was used both
+ * as "what drawer is this agent in" and as "which reader do we run", and those
+ * had to diverge.
+ */
+export const statsCategoryValidator = v.union(
   v.literal("monitoring"),
   v.literal("rebalancing"),
   v.literal("grid-trading"),

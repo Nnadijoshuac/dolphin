@@ -1,6 +1,7 @@
 import { getAddress } from "viem";
 
 import { BSC_CHAIN_ID } from "./bscClient";
+import { MAX_JSON_BYTES, safeFetch } from "./safeFetch";
 
 /**
  * ERC-8183 quote handling — the seller-facing half of a paid hire.
@@ -406,13 +407,29 @@ export async function resolveA2AEndpoint(
   if (!/\.json($|\?)/i.test(raw)) return raw;
 
   try {
-    const response = await fetch(raw, {
+    /*
+     * Through safeFetch, not a bare fetch (2026-09-07).
+     *
+     * `raw` is a publisher-controlled URL that ultimately derives from an
+     * on-chain record, and this call is on the HIRE path - it is how a quote
+     * finds the door to knock on. It previously used `fetch` directly with
+     * default redirect following, so a card URL that 302'd to a private or
+     * link-local address was followed without a second look, and the response
+     * was read with no size cap.
+     *
+     * See convex/lib/safeFetch.ts. Behaviour is otherwise unchanged: this
+     * function still FALLS BACK to the heuristic on any failure rather than
+     * throwing, so it can only ever find more endpoints than before, never
+     * fewer.
+     */
+    const response = await safeFetch(raw, {
       headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
+      timeoutMs,
+      maxBytes: MAX_JSON_BYTES,
     });
     if (!response.ok) return heuristic;
 
-    const card = (await response.json()) as { url?: unknown };
+    const card = JSON.parse(response.text) as { url?: unknown };
     if (typeof card?.url !== "string" || card.url.trim().length === 0) {
       return heuristic;
     }

@@ -5,6 +5,7 @@ import { ConvexClientProvider } from "@/providers/convex-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { AltanaWalletProvider } from "@/wallet/altana-provider";
 import { WalletProvider } from "@/wallet/wallet-provider";
+import { WalletSessionProvider } from "@/wallet/wallet-session";
 
 /**
  * Order matters. Wallet is outermost because nothing above it depends on the
@@ -26,13 +27,24 @@ import { WalletProvider } from "@/wallet/wallet-provider";
  * for exactly that, project-scope.md §3), and Convex for its session grants,
  * which are backend-owned so the wallet screen and a hire record cannot end up
  * telling two different stories about the same authority.
+ *
+ * WalletSessionProvider's position is forced from both sides, exactly as in the
+ * mobile app's src/providers/app-providers.tsx: it asks WalletProvider for a
+ * signature and asks Convex to verify it, so both must already be mounted above
+ * it. It is what turns a connected address into a proven one - which is the
+ * only kind the backend will accept a write from.
+ *
+ * AltanaWalletProvider sits inside it because its grant and revoke writes are
+ * authenticated too.
  */
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <WalletProvider>
       <QueryProvider>
         <ConvexClientProvider>
-          <AltanaWalletProvider>{children}</AltanaWalletProvider>
+          <WalletSessionProvider>
+            <AltanaWalletProvider>{children}</AltanaWalletProvider>
+          </WalletSessionProvider>
         </ConvexClientProvider>
       </QueryProvider>
     </WalletProvider>

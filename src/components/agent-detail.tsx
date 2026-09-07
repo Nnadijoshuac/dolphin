@@ -5,6 +5,7 @@ import * as Haptics from "expo-haptics";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { McpConnect } from "@/components/mcp-connect";
 import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
 import { PressableScale } from "@/components/pressable-scale";
@@ -861,12 +862,20 @@ export function AgentDetail({
                   commission, so there is nothing to pay and no escrow involved.
                   Dolphin has verified its server answers.
                 </Text>
-                <Text
-                  className="mt-2 text-[12px] leading-[18px]"
-                  style={{ color: colors.muted }}
-                >
-                  Running its tools from inside Dolphin is not wired up yet.
-                </Text>
+                {/*
+                    This ended on "Running its tools from inside Dolphin is not
+                    wired up yet" - a dead end in front of 26 of the 28 live
+                    agents, printed directly on top of the answer.
+
+                    Nobody hires an MCP server; they connect to it. Dolphin is a
+                    platform for discovering agents, and for this kind of agent
+                    discovery ends when the reader has the endpoint. It already
+                    holds one the probe proved answers, plus the tools it
+                    actually listed, so handing both over IS the feature -
+                    building a tool-runner in the app would reproduce what the
+                    reader's own client already does well.
+                */}
+                <McpConnect agent={agent} />
               </View>
             </View>
           </Card>

@@ -39,7 +39,22 @@ function RootNavigator() {
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar hidden={false} style={splashVisible ? "dark" : "light"} />
+      {/*
+       * `style` is the CONTENT colour, not the mode - the naming trips everyone.
+       * "dark" means dark icons and clock, which is what a light-mode app needs;
+       * "light" paints them white.
+       *
+       * This read `splashVisible ? "dark" : "light"`, so the moment the splash
+       * finished the icons turned white on a #FBF9F4 canvas and effectively
+       * disappeared. Dolphin is light-mode throughout - app.json pins
+       * userInterfaceStyle "light", the splash is #F6F4EE, the canvas is
+       * #FBF9F4, and BOTH expo-status-bar entries in app.json already say
+       * "dark". Only this component disagreed with all of it.
+       *
+       * No condition, because there is nothing to switch between: the splash and
+       * the app are the same cream family, so one value is correct for both.
+       */}
+      <StatusBar hidden={false} style="dark" />
       <View
         accessibilityElementsHidden={splashVisible}
         importantForAccessibility={splashVisible ? "no-hide-descendants" : "auto"}

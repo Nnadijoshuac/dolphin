@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -78,6 +78,23 @@ export default function SearchScreen() {
   const deferredQuery = useDeferredValue(query.trim());
 
   const { categories } = useCategoryFacets();
+
+  /**
+   * Distribute categories across at most 3 lines.
+   * When items fill line 1 (2 items across the viewport), they flow to line 2,
+   * then line 3. Once line 3 fills, subsequent items cycle back to lines 1, 2, 3
+   * as horizontally scrollable overflow, never exceeding 3 lines vertically.
+   */
+  const categoryRows = useMemo(() => {
+    const rows: (typeof categories)[] = [[], [], []];
+    const itemsPerViewportRow = 2;
+    categories.forEach((cat, index) => {
+      const indexInPage = index % (3 * itemsPerViewportRow);
+      const rowIndex = Math.floor(indexInPage / itemsPerViewportRow);
+      rows[rowIndex].push(cat);
+    });
+    return rows;
+  }, [categories]);
 
   /*
    * NOT gated on there being a query. An empty `search` routes to `agents.list`
@@ -307,7 +324,7 @@ export default function SearchScreen() {
         ) : (
           <View className="px-4 pt-1 gap-5">
 
-            {/* Category pills */}
+            {/* Category pills - at most 3 lines, horizontally scrollable */}
             <View>
               <Text className="text-[14px] font-bold pb-3" style={{ color: colors.ink }}>
                 Explore categories
@@ -319,40 +336,53 @@ export default function SearchScreen() {
                   title="Building the catalog"
                 />
               ) : (
-                <View className="flex-row flex-wrap gap-2.5">
-                  {categories.map((facet) => (
-                    <PressableScale
-                      key={facet.slug}
-                      accessibilityLabel={facet.label}
-                      accessibilityRole="button"
-                      onPress={() => {
-                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        router.push({
-                          pathname: "/category/[slug]",
-                          params: { slug: facet.slug },
-                        });
-                      }}
-                      containerStyle={{
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: colors.surface,
-                        borderRadius: 9999,
-                        borderWidth: 1,
-                        borderColor: colors.line,
-                        paddingVertical: 8,
-                        paddingHorizontal: 16,
-                        ...shadows.subtle,
-                      }}
-                    >
-                      <Text
-                        className="text-[13px] font-semibold tracking-tight"
-                        style={{ color: colors.ink }}
-                      >
-                        {facet.label}
-                      </Text>
-                    </PressableScale>
-                  ))}
-                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  className="-mx-4"
+                  contentContainerStyle={{ paddingHorizontal: 16 }}
+                >
+                  <View style={{ gap: 8 }}>
+                    {categoryRows.map((rowItems, rowIndex) =>
+                      rowItems.length > 0 ? (
+                        <View key={rowIndex} className="flex-row gap-2.5">
+                          {rowItems.map((facet) => (
+                            <PressableScale
+                              key={facet.slug}
+                              accessibilityLabel={facet.label}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                router.push({
+                                  pathname: "/category/[slug]",
+                                  params: { slug: facet.slug },
+                                });
+                              }}
+                              containerStyle={{
+                                alignItems: "center",
+                                justifyContent: "center",
+                                backgroundColor: colors.surface,
+                                borderRadius: 9999,
+                                borderWidth: 1,
+                                borderColor: colors.line,
+                                paddingVertical: 8,
+                                paddingHorizontal: 16,
+                                ...shadows.subtle,
+                              }}
+                            >
+                              <Text
+                                className="text-[13px] font-semibold tracking-tight"
+                                style={{ color: colors.ink }}
+                              >
+                                {facet.label}
+                              </Text>
+                            </PressableScale>
+                          ))}
+                        </View>
+                      ) : null
+                    )}
+                  </View>
+                </ScrollView>
               )}
             </View>
 

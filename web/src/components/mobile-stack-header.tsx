@@ -18,8 +18,12 @@ export function MobileStackHeader({ title, fallback = "/", share = false }: { ti
   return (
     <header className="mobile-only mobile-stack-header">
       <button className="mobile-circle" type="button" aria-label="Go back" onClick={() => window.history.length > 1 ? router.back() : router.push(fallback)}><CategoryGlyph name="chevron-left" size={20} /></button>
-      <p>{title}</p>
-      {share && <button className="mobile-circle" type="button" aria-label="Share agent" onClick={() => void sharePage()}><CategoryGlyph name="share" size={18} /></button>}
+      <p className={share ? "" : "text-center"}>{title}</p>
+      {share ? (
+        <button className="mobile-circle" type="button" aria-label="Share" onClick={() => void sharePage()}><CategoryGlyph name="share" size={18} /></button>
+      ) : (
+        <div aria-hidden="true" className="w-10 shrink-0" />
+      )}
       <span className="sr-only" role="status">{message}</span>
     </header>
   );

@@ -7,7 +7,7 @@ export const metadata = { title: "Account" };
 
 export default function AccountPage() {
   return <>
-    <MobileStackHeader title="Account details" fallback="/wallet" />
+    <MobileStackHeader title="Account" fallback="/wallet" />
     <div className="site-frame page-shell mobile-account-page">
       <AltanaWalletPanel />
       <IdentityWalletSection />

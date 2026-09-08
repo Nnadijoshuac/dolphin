@@ -188,6 +188,16 @@
   .mobile-wallet-actions { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
   .mobile-wallet-actions > * { display: flex; width: 84px; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; text-decoration: none; }
   .mobile-wallet-actions span { display: grid; place-items: center; width: 64px; height: 64px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
+  .mobile-wallet-accounts { display: grid; gap: 12px; margin-top: 24px; }
+  .mobile-account-card { display: block; min-height: 140px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); text-decoration: none; box-shadow: 0 2px 8px #1112140a; }
+  .mobile-account-card header { display: flex; align-items: center; gap: 10px; }
+  .mobile-account-card__icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 18px; background: var(--paper-muted); }
+  .mobile-account-card header > div { flex: 1; min-width: 0; }
+  .mobile-account-card h2 { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .mobile-account-card p { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .mobile-account-card > strong { display: block; margin-top: 16px; font-size: 24px; font-weight: 700; letter-spacing: -.6px; color: var(--ink); overflow-wrap: anywhere; }
+  .mobile-account-card > p { margin-top: 3px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .mobile-account-card:active { transform: scale(0.985); }
   .mobile-dolphin-account { display: block; min-height: 168px; margin-top: 28px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); text-decoration: none; }
   .mobile-dolphin-account header { display: flex; align-items: center; gap: 10px; }
   .mobile-dolphin-account header > span { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 12px; background: var(--paper-muted); }

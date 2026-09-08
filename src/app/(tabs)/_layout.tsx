@@ -1,12 +1,11 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Keyboard, Platform, StyleSheet, Text, View } from "react-native";
+import { Keyboard, Platform, StyleSheet, View } from "react-native";
 import { Redirect } from "expo-router";
 // SDK 57: expo-router forked the React Navigation packages it wraps, so
 // @react-navigation/bottom-tabs is no longer installed. Both the Tabs
 // navigator and its tab-bar prop types now come from expo-router/js-tabs -
 // the root `Tabs` export is deprecated in favour of this subpath.
 import { Tabs, type BottomTabBarProps } from "expo-router/js-tabs";
-import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
@@ -16,7 +15,9 @@ import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
 import { useAppStore } from "@/store/use-app-store";
 
-function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+import Svg, { Path } from "react-native-svg";
+
+function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -58,6 +59,85 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
 
   const bottomOffset = insets.bottom > 0 ? insets.bottom + 8 : 20;
 
+  const renderTab = (routeIndex: number) => {
+    const route = state.routes[routeIndex];
+    if (!route) return null;
+    const { options } = descriptors[route.key];
+    const isFocused = state.index === routeIndex;
+    const label =
+      options.tabBarLabel !== undefined
+        ? options.tabBarLabel
+        : options.title !== undefined
+        ? options.title
+        : route.name;
+
+    const onPress = () => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const event = navigation.emit({
+        type: "tabPress",
+        target: route.key,
+        canPreventDefault: true,
+      });
+      if (!isFocused && !event.defaultPrevented) {
+        navigation.navigate(route.name);
+      }
+    };
+
+    const glyphName =
+      route.name === "index"
+        ? "discover"
+        : route.name === "search"
+        ? "search"
+        : route.name === "my-agents"
+        ? "agents"
+        : "wallet";
+
+    return (
+      <PressableScale
+        key={route.key}
+        accessibilityLabel={options.tabBarAccessibilityLabel || String(label)}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: isFocused }}
+        onPress={onPress}
+        containerStyle={{ alignItems: "center", justifyContent: "center" }}
+      >
+        <View
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            backgroundColor: isFocused ? "#FFFFFF" : "transparent",
+            alignItems: "center",
+            justifyContent: "center",
+            ...(isFocused
+              ? {
+                  shadowColor: "#000000",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 10,
+                  elevation: 6,
+                }
+              : {}),
+          }}
+        >
+          {route.name === "dolphin" ? (
+            <BrandMark
+              color={isFocused ? "#141416" : "#FFFFFF"}
+              size={26}
+            />
+          ) : (
+            <CategoryGlyph
+              color={isFocused ? "#141416" : "#FFFFFF"}
+              name={glyphName as any}
+              size={21}
+              strokeWidth={isFocused ? 2.3 : 1.9}
+            />
+          )}
+        </View>
+      </PressableScale>
+    );
+  };
+
   return (
     <View
       pointerEvents="box-none"
@@ -72,198 +152,76 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
     >
       <View
         style={{
+          position: "relative",
+          width: 350,
+          height: 64,
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-around",
-          width: "86%",
-          maxWidth: 345,
-          height: 62,
-          backgroundColor:
-            Platform.OS === "ios"
-              ? "rgba(255, 255, 255, 0.45)"
-              : "rgba(255, 255, 255, 0.94)",
-          borderRadius: 31,
-          borderWidth: 1.2,
-          borderColor:
-            Platform.OS === "ios"
-              ? "rgba(255, 255, 255, 0.75)"
-              : "rgba(17, 18, 20, 0.08)",
-          shadowColor: "#111215",
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.16,
-          shadowRadius: 20,
-          elevation: 12,
-          paddingHorizontal: 6,
-          overflow: "hidden",
+          justifyContent: "space-between",
+          shadowColor: "#000000",
+          shadowOffset: { width: 0, height: 12 },
+          shadowOpacity: 0.32,
+          shadowRadius: 28,
+          elevation: 14,
         }}
       >
-        <BlurView
-          intensity={95}
+        {/* The 3-lobed metaball SVG background */}
+        <Svg
+          height={64}
           style={StyleSheet.absoluteFill}
-          tint={Platform.OS === "ios" ? "systemThinMaterialLight" : "systemChromeMaterialLight"}
-        />
+          viewBox="0 0 350 64"
+          width={350}
+        >
+          <Path
+            d="M 30,2 L 122,2 C 134,2 138,15 146,15 C 154,15 162,0 175,0 C 188,0 196,15 204,15 C 212,15 216,2 228,2 L 320,2 A 30 30 0 0 1 320,62 L 228,62 C 216,62 212,49 204,49 C 196,49 188,64 175,64 C 162,64 154,49 146,49 C 138,49 134,62 122,62 L 30,62 A 30 30 0 0 1 30,2 Z"
+            fill="#16171A"
+          />
+        </Svg>
 
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const isFocused = state.index === index;
-
-          /*
-           * Dolphin is not a peer tab - it is the primary action, and it is
-           * drawn as a raised orb OUTSIDE this container. See the note where
-           * that orb is rendered for why it cannot live in here.
-           *
-           * A flex:1 spacer still reserves its slot, so the four real tabs
-           * distribute around it exactly as they would around a fifth item.
-           */
-          if (route.name === "dolphin") {
-            return <View key={route.key} style={{ flex: 1 }} pointerEvents="none" />;
-          }
-
-          const label =
-            options.tabBarLabel !== undefined
-              ? options.tabBarLabel
-              : options.title !== undefined
-              ? options.title
-              : route.name;
-
-          const onPress = () => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            const event = navigation.emit({
-              type: "tabPress",
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
-          };
-
-          const color = isFocused ? colors.goldDark : "#8C8E88";
-          const glyphName =
-            route.name === "index"
-              ? "discover"
-              : route.name === "search"
-              ? "search"
-              : route.name === "my-agents"
-              ? "agents"
-              : "wallet";
-
-          return (
-            <PressableScale
-              key={route.key}
-              accessibilityLabel={options.tabBarAccessibilityLabel || String(label)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isFocused }}
-              onPress={onPress}
-              style={{ flex: 1, alignItems: "center", justifyContent: "center", height: "100%" }}
-              containerStyle={{ alignItems: "center", justifyContent: "center" }}
-            >
-              <CategoryGlyph color={color} name={glyphName as any} size={21} strokeWidth={isFocused ? 2.2 : 1.8} />
-              <Text
-                style={{
-                  color,
-                  fontSize: 10,
-                  fontWeight: isFocused ? "800" : "600",
-                  marginTop: 2,
-                }}
-              >
-                {String(label)}
-              </Text>
-            </PressableScale>
-          );
-        })}
-      </View>
-
-      {/*
-        THE DOLPHIN ORB.
-        ---------------------------------------------------------------------
-        Rendered here, as a sibling of the island rather than a child of it,
-        and this is not a stylistic choice: the island sets
-        `overflow: "hidden"` with `borderRadius: 31` to keep the BlurView from
-        bleeding past its corners, so anything drawn inside it that breaks the
-        baseline is CLIPPED. An orb that rises above the bar has to escape that
-        container, and the outer wrapper - which is `pointerEvents="box-none"`
-        and has no overflow rule - is where it can.
-
-        It is deliberately not styled like the other four. Dolphin is the
-        product's primary action, not a fifth section, and a peer-styled tab
-        would say the opposite.
-      */}
-      <DolphinOrb state={state} navigation={navigation} />
-    </View>
-  );
-}
-
-/**
- * The raised centre action. Positioned over the island's middle slot, which the
- * spacer above reserves for it.
- */
-function DolphinOrb({
-  state,
-  navigation,
-}: Pick<BottomTabBarProps, "state" | "navigation">) {
-  const index = state.routes.findIndex((route) => route.name === "dolphin");
-  if (index < 0) return null;
-
-  const isFocused = state.index === index;
-  const route = state.routes[index];
-
-  const onPress = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const event = navigation.emit({
-      type: "tabPress",
-      target: route.key,
-      canPreventDefault: true,
-    });
-    if (!isFocused && !event.defaultPrevented) {
-      navigation.navigate(route.name);
-    }
-  };
-
-  return (
-    <View
-      pointerEvents="box-none"
-      style={{
-        position: "absolute",
-        // Lifts the orb so it overlaps the island's top edge rather than
-        // sitting on it. The island is 62 tall; 58 puts roughly a third of the
-        // orb above the bar.
-        bottom: 14,
-        left: 0,
-        right: 0,
-        alignItems: "center",
-      }}
-    >
-      <PressableScale
-        accessibilityLabel="Dolphin"
-        accessibilityRole="tab"
-        accessibilityState={{ selected: isFocused }}
-        onPress={onPress}
-        containerStyle={{ alignItems: "center", justifyContent: "center" }}
-      >
+        {/* Left Lobe: Discover (0) & Search (1) */}
         <View
           style={{
-            width: 58,
-            height: 58,
-            borderRadius: 29,
-            backgroundColor: isFocused ? colors.goldHover : colors.gold,
+            width: 140,
+            height: "100%",
+            flexDirection: "row",
             alignItems: "center",
-            justifyContent: "center",
-            borderWidth: 3,
-            // Matches the island's own translucency so the orb reads as part
-            // of the same object rather than floating in front of it.
-            borderColor: Platform.OS === "ios" ? "rgba(255,255,255,0.85)" : "#FFFFFF",
-            shadowColor: colors.goldDark,
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: 0.35,
-            shadowRadius: 12,
-            elevation: 14,
+            justifyContent: "space-between",
+            paddingLeft: 8,
+            paddingRight: 14,
           }}
         >
-          <BrandMark size={30} color={colors.ink} />
+          {renderTab(0)}
+          {renderTab(1)}
         </View>
-      </PressableScale>
+
+        {/* Center Lobe: Dolphin (2) */}
+        <View
+          style={{
+            width: 64,
+            height: "100%",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {renderTab(2)}
+        </View>
+
+        {/* Right Lobe: My Agents (3) & Wallet (4) */}
+        <View
+          style={{
+            width: 140,
+            height: "100%",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingLeft: 14,
+            paddingRight: 8,
+          }}
+        >
+          {renderTab(3)}
+          {renderTab(4)}
+        </View>
+      </View>
     </View>
   );
 }
@@ -290,7 +248,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      tabBar={(props) => <FloatingIslandTabBar {...props} />}
+      tabBar={(props) => <SculptedTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.canvas },

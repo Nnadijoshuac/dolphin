@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
 import { AgentCard } from "@/components/agent-card";
+import { MobileAgentRow } from "@/components/mobile-agent-row";
 import {
   CatalogUnavailable,
   useBackendStatus,
@@ -24,6 +25,8 @@ import {
 } from "@/hooks/use-debounced-value";
 import { track } from "@/lib/analytics";
 import { useAppStore } from "@/store/use-app-store";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { categoryLabel } from "@/constants/agents";
 import type { AgentCategory } from "@/types/agent";
 
 /**
@@ -47,6 +50,8 @@ function readCategoryParam(value: string | null): AgentCategory | "all" {
 }
 
 function SearchContent() {
+  const isMobile = useMobileLayout();
+  const [isFocused, setIsFocused] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category");
@@ -71,6 +76,9 @@ function SearchContent() {
   const isKindFiltered = selectedProtocol !== "all";
 
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
+  const recentSearches = useAppStore((state) => state.recentSearches);
+  const removeRecentSearch = useAppStore((state) => state.removeRecentSearch);
+  const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
 
   /*
    * Re-sync from the URL when the URL itself changes — during render, not in an
@@ -186,8 +194,8 @@ function SearchContent() {
   };
 
   return (
-    <div className="site-frame page-shell" style={{ paddingBlockStart: 0 }}>
-      <section aria-label="Agent search" className="pt-6 sm:pt-8">
+    <div className="mobile-search-page site-frame page-shell" style={{ paddingBlockStart: 0 }}>
+      <section aria-label="Agent search" className="mobile-search-controls pt-6 sm:pt-8">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -199,7 +207,7 @@ function SearchContent() {
           <label className="sr-only" htmlFor="agent-search">
             Search agents
           </label>
-          <div className="flex items-center gap-4">
+          <div className="mobile-search-field flex items-center gap-4">
             <CategoryGlyph color="#6c6d64" name="search" size={24} strokeWidth={2} />
             <input
               autoComplete="off"
@@ -207,20 +215,25 @@ function SearchContent() {
               id="agent-search"
               name="q"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Try Venus, rebalancing, or yield…"
+              onFocus={() => setIsFocused(true)}
+              onBlur={(event) => {
+                if (!(event.relatedTarget instanceof Element) || !event.relatedTarget.closest(".mobile-search-history")) setIsFocused(false);
+              }}
+              placeholder={isMobile ? "Search agents, skills, publishers" : "Try Venus, rebalancing, or yield…"}
               type="search"
               value={query}
             />
             {query ? (
               <button
-                className="interactive shrink-0 text-sm font-semibold text-muted underline-offset-4 hover:text-ink hover:underline"
+                aria-label="Clear search text"
+                className="mobile-search-clear interactive shrink-0 text-sm font-semibold text-muted underline-offset-4 hover:text-ink hover:underline"
                 onClick={() => {
                   setQuery("");
                   syncSearchUrl("", selectedCategory);
                 }}
                 type="button"
               >
-                Clear
+                {isMobile ? <CategoryGlyph name="close" color="currentColor" size={14} /> : "Clear"}
               </button>
             ) : null}
 
@@ -253,7 +266,7 @@ function SearchContent() {
           </div>
         </form>
 
-        <div className="no-scrollbar mt-7 flex gap-1 overflow-x-auto border-b border-line" role="group" aria-label="Filter by category">
+        <div className="mobile-category-rail no-scrollbar mt-7 flex gap-1 overflow-x-auto border-b border-line" role="group" aria-label="Filter by category">
           <button
             aria-pressed={selectedCategory === "all"}
             className={`interactive relative shrink-0 px-4 pb-3 text-sm font-medium ${
@@ -319,15 +332,36 @@ function SearchContent() {
         </div>
       </section>
 
-      <section aria-labelledby="results-heading" className="pt-8 sm:pt-12" id="search-results">
-        <div className="flex flex-col gap-3 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
+      {isMobile && isKindFiltered ? (
+        <button className="mobile-active-filter" type="button" onClick={() => setSelectedProtocol("all")} aria-label={`Remove ${selectedProtocol === "a2a" ? "Hire" : "Tools"} filter`}>
+          {selectedProtocol === "a2a" ? "Hire · A2A" : "Tools · MCP"}<CategoryGlyph name="close" color="currentColor" size={10} />
+        </button>
+      ) : null}
+
+      {isMobile && isFocused && !normalizedQuery ? (
+        <section aria-label="Recent searches" className="mobile-search-history">
+          {recentSearches.length > 0 ? <>
+            <header><h2>Recent searches</h2><button type="button" onClick={clearRecentSearches}>Clear all</button></header>
+            {recentSearches.slice(0, 6).map((recent) => (
+              <div className="mobile-history-row" key={recent}>
+                <button type="button" onClick={() => { setQuery(recent); addRecentSearch(recent); syncSearchUrl(recent, selectedCategory); }}>
+                  <CategoryGlyph name="clock" color="var(--muted)" size={15} /><span className="truncate">{recent}</span>
+                </button>
+                <button aria-label={`Remove ${recent}`} type="button" onClick={() => removeRecentSearch(recent)}><CategoryGlyph name="close" color="var(--muted)" size={14} /></button>
+              </div>
+            ))}
+          </> : <p className="px-6 pt-14 text-center text-sm text-muted">Search by agent name, capability, or protocol</p>}
+        </section>
+      ) : <section aria-labelledby="results-heading" className="mobile-search-results pt-8 sm:pt-12" id="search-results">
+        <div className="mobile-results-header flex flex-col gap-3 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="eyebrow">Results</p>
             <h2 className="section-title mt-3" id="results-heading">
-              {normalizedQuery ? `Matching “${normalizedQuery}”` : "Agent catalog"}
+              {normalizedQuery ? `Matching “${normalizedQuery}”` : isMobile ? selectedCategory === "all" ? "All agents" : categoryLabel(selectedCategory) : "Agent catalog"}
             </h2>
+            {isMobile && !normalizedQuery ? <p className="mobile-results-subtitle">{selectedProtocol === "a2a" ? "Hireable tasks · Escrow backed" : selectedProtocol === "mcp" ? "Free direct tools · MCP endpoints" : "Verified live on BNB Chain"}</p> : null}
           </div>
-          {!isLoading && !isUnavailable ? (
+          {!isLoading && !isUnavailable && (!isMobile || normalizedQuery) ? (
             /*
              * "N records" only when the list is EXHAUSTED - i.e. when N really
              * is the number of matches. Otherwise "N+ loaded", because this
@@ -371,8 +405,10 @@ function SearchContent() {
             />
           </div>
         ) : (
-          <div>
-            {searchResults.map((agent) => (
+          <div className={isMobile ? "mobile-result-list" : undefined}>
+            {searchResults.map((agent) => isMobile ? (
+              <MobileAgentRow agent={agent} key={agent.agentKey} signals={signals.get(agent.agentKey)} onOpen={() => { if (normalizedQuery) addRecentSearch(normalizedQuery); }} />
+            ) : (
               <AgentCard
                 agent={agent}
                 key={agent.id}
@@ -394,7 +430,7 @@ function SearchContent() {
             ) : null}
           </div>
         )}
-      </section>
+      </section>}
 
       <FilterModal
         isOpen={filterModalOpen}

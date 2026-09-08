@@ -187,7 +187,7 @@ function SearchContent() {
 
   return (
     <div className="site-frame page-shell" style={{ paddingBlockStart: 0 }}>
-      <section aria-label="Agent search" className="border-y border-line py-6 sm:py-8">
+      <section aria-label="Agent search" className="pt-6 sm:pt-8">
         <form
           onSubmit={(event) => {
             event.preventDefault();

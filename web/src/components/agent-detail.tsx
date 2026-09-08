@@ -8,6 +8,8 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { HireAction } from "@/components/hire-action";
 import { McpUseAction } from "@/components/mcp-use-action";
 import { MetricCell } from "@/components/metric-cell";
+import { MobileAgentDetail } from "@/components/mobile-agent-detail";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { PerformancePanel } from "@/components/performance-panel";
 import { TrackRecord } from "@/components/track-record";
 import { useAgentCategoryStats } from "@/hooks/use-category-stats";
@@ -336,6 +338,7 @@ function TechnicalDetailsAccordion({
 }
 
 export function AgentDetail({ agent }: { agent: Agent }) {
+  const isMobile = useMobileLayout();
   const registryStatus = agent.registryVerification.registered;
   const isRegistryVerified =
     (registryStatus.status === "live" || registryStatus.status === "stale") &&
@@ -344,6 +347,8 @@ export function AgentDetail({ agent }: { agent: Agent }) {
   const publisherDisplay = agent.publisher?.startsWith("0x")
     ? shortAddress(agent.publisher)
     : agent.publisher || "Unlisted publisher";
+
+  if (isMobile) return <MobileAgentDetail agent={agent} registry={<TechnicalDetailsAccordion agent={agent} isRegistryVerified={Boolean(isRegistryVerified)} />} />;
 
   return (
     <div className="site-frame pb-16 pt-6 sm:pb-24 sm:pt-8">

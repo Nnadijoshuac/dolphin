@@ -777,3 +777,40 @@
     transform: none;
   }
 }
+
+@media (max-width: 767px) {
+  .heroSection, .desktopCards { display: none; }
+  .catalogSection { padding: 0 16px; }
+  .catalogLayout { display: block; }
+  .catalogAside {
+    position: sticky; top: 0; z-index: 30; display: block;
+    margin-inline: -16px; padding: 10px 0; background: var(--canvas);
+  }
+  .catalogAside > :not(.filterScroller) { display: none; }
+  .catalogAside > .catalogHeading {
+    display: block; position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .filterScroller {
+    flex-wrap: nowrap; overflow-x: auto; margin: 0; gap: 8px;
+    padding: 0 16px 2px; scrollbar-width: none;
+  }
+  .filterScroller::-webkit-scrollbar { display: none; }
+  .filterChip {
+    flex: 0 0 auto; min-height: 34px; padding: 7px 16px;
+    font-size: 13px; line-height: 18px; box-shadow: 0 2px 8px #1112140a;
+  }
+  .filterChipActive, .filterChipActive:hover {
+    border-color: #f3e3a6; background: #f5b300; color: #111214;
+    font-weight: 700; box-shadow: 0 4px 14px #f5b30040;
+  }
+  .filterChipCount { display: none; }
+  .catalogPanel { padding-top: 12px; }
+  .mobileRows { display: grid; gap: 12px; }
+  .skeletonCard { min-height: 76px; border: 0; background: none; padding: 10px 4px; box-shadow: none; }
+  .skeletonCard > :not(:first-child) { display: none; }
+  .catalogNotice { min-height: 0; border-radius: 24px; padding: 20px; }
+  .viewAllRow { margin-top: 16px; padding: 0; border: 0; }
+  .viewAllRow button { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); font-size: 14px; font-weight: 600; }
+  .viewAllRow button span { display: none; }
+}

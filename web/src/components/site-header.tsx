@@ -131,34 +131,59 @@ export function SiteHeader() {
         </header>
       ) : null}
 
-      {isTabPage ? <nav
-        aria-label="Mobile navigation"
-        className="mobile-tab-bar"
-        ref={mobileNav}
-      >
-        <div className="mobile-tab-island">
-          {navigation.map((item) => {
-            const isActive = isActiveRoute(pathname, item.path);
+      {isTabPage ? (
+        <nav
+          aria-label="Mobile navigation"
+          className="mobile-tab-bar"
+          ref={mobileNav}
+        >
+          <div className="mobile-tab-bar-container">
+            <div className="mobile-tab-island">
+              {navigation.map((item) => {
+                if (item.path === "/dolphin") {
+                  return (
+                    <div
+                      aria-hidden="true"
+                      className="mobile-tab-spacer"
+                      key="dolphin-spacer"
+                    />
+                  );
+                }
+                const isActive = isActiveRoute(pathname, item.path);
 
-            return (
-              <Link
-                aria-current={isActive ? "page" : undefined}
-                className="mobile-tab-link"
-                href={item.path}
-                key={item.path}
-              >
-                <CategoryGlyph
-                  color="currentColor"
-                  name={item.icon}
-                  size={21}
-                  strokeWidth={isActive ? 2.2 : 1.8}
-                />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav> : null}
+                return (
+                  <Link
+                    aria-current={isActive ? "page" : undefined}
+                    className="mobile-tab-link"
+                    href={item.path}
+                    key={item.path}
+                  >
+                    <CategoryGlyph
+                      color="currentColor"
+                      name={item.icon}
+                      size={21}
+                      strokeWidth={isActive ? 2.2 : 1.8}
+                    />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <Link
+              aria-current={isActiveRoute(pathname, "/dolphin") ? "page" : undefined}
+              aria-label="Dolphin AI"
+              className={`mobile-dolphin-orb ${
+                isActiveRoute(pathname, "/dolphin")
+                  ? "mobile-dolphin-orb--active"
+                  : ""
+              }`}
+              href="/dolphin"
+            >
+              <BrandMark size={30} />
+            </Link>
+          </div>
+        </nav>
+      ) : null}
       {pathname.startsWith("/manage/") && <MobileStackHeader title="Manage agent" fallback="/my-agents" />}
     </>
   );

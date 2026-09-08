@@ -54,21 +54,44 @@
     justify-content: center; pointer-events: none;
   }
   .mobile-tab-bar[data-keyboard-open] { display: none; }
-  .mobile-tab-island {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-    width: 86%; max-width: 345px; height: 62px; padding-inline: 6px;
-    border: 1.2px solid #ffffffbf; border-radius: 31px;
-    background: #fffffff0; box-shadow: 0 8px 20px #11121529;
-    -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
-    pointer-events: auto;
+  .mobile-tab-bar-container {
+    position: relative; display: flex; justify-content: center; align-items: center;
+    width: 86%; max-width: 345px; pointer-events: none;
   }
+  .mobile-tab-island {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    width: 100%; height: 62px; padding-inline: 6px;
+    border: 1.2px solid rgba(255, 255, 255, 0.75); border-radius: 31px;
+    background: rgba(255, 255, 255, 0.94); box-shadow: 0 8px 20px rgba(17, 18, 21, 0.16);
+    -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+    pointer-events: auto; overflow: hidden;
+  }
+  .mobile-tab-spacer { pointer-events: none; }
   .mobile-tab-link {
     display: flex; min-width: 0; flex-direction: column; gap: 2px;
     align-items: center; justify-content: center; border-radius: 25px;
-    color: #6e706b; font-size: 10px; font-weight: 600; text-decoration: none;
+    color: #8C8E88; font-size: 10px; font-weight: 600; text-decoration: none;
   }
-  .mobile-tab-link[aria-current="page"] { color: #946b00; font-weight: 800; }
+  .mobile-tab-link[aria-current="page"] { color: #B86B00; font-weight: 800; }
   .mobile-tab-link:active { transform: scale(.96); }
+
+  .mobile-dolphin-orb {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    width: 58px; height: 58px; border-radius: 29px;
+    background: #F5A623; border: 3px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 6px 12px rgba(184, 107, 0, 0.35);
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto; text-decoration: none;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+    z-index: 52;
+  }
+  .mobile-dolphin-orb:hover,
+  .mobile-dolphin-orb--active {
+    background: #E09612;
+  }
+  .mobile-dolphin-orb:active {
+    transform: translateX(-50%) scale(0.95);
+  }
 
   .mobile-agent-row {
     display: flex; align-items: center; gap: 16px; min-width: 0;

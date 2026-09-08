@@ -9,6 +9,7 @@ import { StatePanel } from "@/components/state-panel";
 import { categoryLabel } from "@/constants/agents";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { convexClient } from "@/providers/convex-provider";
 import type { Agent } from "@/types/agent";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
@@ -20,6 +21,17 @@ function formatDate(value: string) {
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(value));
+}
+
+function MobileEmptyAgents() {
+  return (
+    <div className="mobile-empty-agents">
+      <span className="mobile-empty-agents__icon"><CategoryGlyph name="agents" size={28} /></span>
+      <h2>No agents yet</h2>
+      <p>Review an agent’s identity, data availability, authorization model, and payment readiness before hiring.</p>
+      <Link className="mobile-pearl" href="/search">Browse agent catalog <CategoryGlyph name="arrow-right" size={18} /></Link>
+    </div>
+  );
 }
 
 function AgentRecordRow({
@@ -39,7 +51,7 @@ function AgentRecordRow({
 
   return (
     <Link
-      className="interactive group block border-t border-line py-5 no-underline first:border-t-0 sm:py-6"
+      className="mobile-hire-record interactive group block border-t border-line py-5 no-underline first:border-t-0 sm:py-6"
       /*
        * /manage, not /agent. This said "Manage" and pointed at the PUBLIC
        * record, which then offered "Manage in My agents" pointing back here -
@@ -47,7 +59,7 @@ function AgentRecordRow({
        * management anywhere between them. /manage/[id] is the screen that
        * actually manages a hire, including ending it.
        */
-      href={`/manage/${agent?.tokenId ?? fallbackId}`}
+      href={`/manage/${encodeURIComponent(agent?.agentKey ?? fallbackId)}`}
     >
       <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-5">
         <div className="flex items-start gap-4 sm:contents">
@@ -87,6 +99,7 @@ function AgentRecordRow({
 }
 
 function ConnectedRecords({ address }: { address: string }) {
+  const isMobile = useMobileLayout();
   const hires = useHiredAgents(address);
   // Only this wallet's own agents, resolved by key. The catalog is paginated
   // now, so an agent hired months ago may simply not be on page one.
@@ -108,6 +121,7 @@ function ConnectedRecords({ address }: { address: string }) {
   }
 
   if (hires.length === 0) {
+    if (isMobile) return <MobileEmptyAgents />;
     return (
       <div className="grid gap-6 border-y border-line py-8 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="flex gap-4">
@@ -192,11 +206,14 @@ function ConnectedRecords({ address }: { address: string }) {
 
 export function MyAgentsClient() {
   const wallet = useWallet();
+  const isMobile = useMobileLayout();
 
   return (
-    <div className="site-frame page-shell" style={{ paddingBlockStart: "clamp(1.5rem, 4vw, 3rem)" }}>
+    <div className="mobile-my-agents site-frame page-shell" style={{ paddingBlockStart: "clamp(1.5rem, 4vw, 3rem)" }}>
+      <header className="mobile-only mobile-page-heading"><h1>My Agents</h1><p>Your hired agents</p></header>
       <div>
         {!wallet.isConnected || !wallet.address ? (
+          isMobile ? <MobileEmptyAgents /> :
           <div className="grid gap-7 border-y border-line py-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
             <div>
               <h2 className="text-2xl font-semibold tracking-[-0.04em] text-ink">

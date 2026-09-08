@@ -133,6 +133,19 @@ jobs:
       - name: Check Convex API declarations match the backend
         run: npm run check:convex-api
 
+      # SECOND, because a typecheck that passes here can still be answering the
+      # wrong question. next.config.ts pins Turbopack's workspace root to web/,
+      # which constrains bundling but not TYPE resolution: with a dependency
+      # whose declarations are missing, TypeScript walks up and reads the Expo
+      # app's copy out of the repository root's node_modules. On 2026-09-08
+      # `tsc --noEmit` and `next build` both passed locally on a machine that
+      # had both projects installed, and Vercel - which installs only web/ -
+      # failed with 26 TS7016 errors. This runs tsc --traceResolution and fails
+      # if anything under web/src resolves outside web/, which is the general
+      # form of that bug rather than the one instance of it.
+      - name: Check project isolation
+        run: npm run check:isolation
+
       # Typecheck separately from the build so a type error is reported as a
       # type error, rather than as a generic build failure 60 seconds later.
       - name: Typecheck

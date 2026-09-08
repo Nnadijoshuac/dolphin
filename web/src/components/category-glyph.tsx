@@ -69,6 +69,29 @@ import type { AgentCategory } from "@/types/agent";
  *
  * Each per-icon file default-exports the icon's element array, hence the
  * default imports.
+ *
+ * ===========================================================================
+ * `@hugeicons/core-free-icons` IS PINNED TO EXACTLY 4.3.0. DO NOT RANGE IT.
+ * ===========================================================================
+ * 4.3.2 — the current latest — ships FOUR declaration files. 4.3.0 ships 6,029,
+ * one per icon. The runtime JS is present in both; only the types were dropped,
+ * which appears to be an upstream packaging regression rather than an intent.
+ *
+ * With 4.3.2 installed, every import above is an untyped module. On a developer
+ * machine that is invisible, because TypeScript walks up and finds the Expo
+ * app's copy of the same package in the repository root's node_modules — so
+ * `tsc --noEmit` and `next build` both pass locally while reading types from a
+ * project this one is required to build without. Vercel installs only web/, and
+ * on 2026-09-08 it failed with 26 TS7016 errors on this exact file.
+ *
+ * Two things now hold that line, and both are needed:
+ *   - the exact pin in package.json, so the types are actually here;
+ *   - `npm run check:isolation`, which fails when anything under web/src
+ *     resolves outside web/ — the general form of the bug, not just this
+ *     instance of it.
+ *
+ * Before bumping this dependency, check that the new version still ships
+ * `dist/types/<Icon>.d.ts`, and run `npm run check:isolation`.
  */
 export type GlyphName =
   | AgentCategory

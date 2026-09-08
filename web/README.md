@@ -79,7 +79,8 @@ npm run dev
 | `npm run test` | Vitest, once |
 | `npm run test:watch` | Vitest, watching |
 | `npm run check:convex-api` | Verifies `src/convex/api.ts` still matches the real backend (see below) |
-| `npm run verify` | All four of the above, in the order CI runs them |
+| `npm run check:isolation` | Verifies nothing in `src/` resolves a module from outside `web/` (see below) |
+| `npm run verify` | All of the above, in the order CI runs them |
 
 `npm run typecheck` runs `next typegen` first on purpose: Next 16 generates the
 global route types (`PageProps`, `LayoutProps`) into `.next/types`, which is not
@@ -114,6 +115,39 @@ It is a name-level check by design — it cannot see a `v.string()` that became 
 found a real one on its first run: `agents.list` and `agents.search` have taken
 an `a2a`/`mcp` `protocol` filter since the backend rebuild, and the website had
 never declared it, so the filter could not be offered at all.
+
+### This project must build without the Expo app installed
+
+`next.config.ts` pins Turbopack's workspace root to `web/`, which enforces that
+for bundling. Nothing enforced it for **type resolution**, and on 2026-09-08
+that shipped a red deploy:
+
+`@hugeicons/core-free-icons@4.3.2` ships four declaration files where `4.3.0`
+ships 6,029. With the broken version installed in `web/`, TypeScript did what
+Node resolution does — walked up, found the Expo app's copy at the repository
+root, and used its types. `tsc --noEmit` passed. `next build` passed. Vercel,
+which installs only `web/`, failed with 26 `TS7016` errors.
+
+The local pass was not a bug in the checker. It was a correct answer to the
+wrong question: *"does this compile on a machine that also has the mobile app
+installed?"* Nobody deploys that machine.
+
+**`npm run check:isolation` asks the right question.** It runs
+`tsc --traceResolution` and fails if any module imported by `web/src` resolves
+outside `web/`. It is scoped to our own source deliberately — third-party
+`.d.ts` files do import upward, and `skipLibCheck: true` covers those, which is
+why Vercel never complained about them.
+
+Two consequences to respect:
+
+- **`@hugeicons/core-free-icons` is pinned to exactly `4.3.0`.** Do not put a
+  range on it. Before bumping, confirm the new version still ships
+  `dist/types/<Icon>.d.ts`.
+- **`tsconfig.json` sets `typeRoots: ["./node_modules/@types"]`.** Without it,
+  TypeScript automatically includes every `@types` package in every parent
+  `node_modules` — so this project was compiling against the Expo app's
+  `@types/react`, `@types/hammerjs`, `@types/yargs` and the rest of its Jest
+  type surface.
 
 ### Data honesty
 

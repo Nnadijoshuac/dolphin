@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:convex-api": "node scripts/check-convex-api.mjs",
-    "verify": "npm run check:convex-api && npm run typecheck && npm run lint && npm run test"
+    "verify": "npm run check:convex-api && npm run check:isolation && npm run typecheck && npm run lint && npm run test",
+    "check:isolation": "node scripts/check-project-isolation.mjs"
   },
   "dependencies": {
     "@altananetwork/sdk": "0.8.0",

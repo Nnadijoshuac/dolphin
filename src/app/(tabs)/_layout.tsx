@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { Keyboard, Platform, StyleSheet, Text, View } from "react-native";
 import { Redirect } from "expo-router";
 // SDK 57: expo-router forked the React Navigation packages it wraps, so
 // @react-navigation/bottom-tabs is no longer installed. Both the Tabs
@@ -17,6 +17,44 @@ import { useAppStore } from "@/store/use-app-store";
 
 function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const onShow = () => setKeyboardVisible(true);
+    const onHide = () => setKeyboardVisible(false);
+
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      onShow
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      onHide
+    );
+
+    const didShowSub =
+      Platform.OS === "ios"
+        ? Keyboard.addListener("keyboardDidShow", onShow)
+        : null;
+    const didHideSub =
+      Platform.OS === "ios"
+        ? Keyboard.addListener("keyboardDidHide", onHide)
+        : null;
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      didShowSub?.remove();
+      didHideSub?.remove();
+    };
+  }, []);
+
+  const currentOptions = descriptors[state.routes[state.index].key]?.options;
+  const tabBarStyle = StyleSheet.flatten(currentOptions?.tabBarStyle) as { display?: string } | undefined;
+  if (isKeyboardVisible || tabBarStyle?.display === "none") {
+    return null;
+  }
+
   const bottomOffset = insets.bottom > 0 ? insets.bottom + 8 : 20;
 
   return (

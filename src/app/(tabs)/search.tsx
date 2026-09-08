@@ -239,6 +239,7 @@ export default function SearchScreen() {
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 110 }}
+        keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         onScroll={({ nativeEvent }) => {
           const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;

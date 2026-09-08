@@ -73,6 +73,7 @@ export default function SearchScreen() {
   const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   const isKindFiltered = kind !== null;
+  const hasActiveFilters = isKindFiltered || selectedCategory !== null;
 
   /*
    * Server-side paginated list. Handles both browse and text search, with both
@@ -418,12 +419,12 @@ export default function SearchScreen() {
               ) : isEmpty ? (
                 <StatePanel
                   body={
-                    activeFilterCount > 0
+                    hasActiveFilters
                       ? "No verified agent matches the selected filters. Try broadening your selection or resetting filters."
                       : "No agent has passed verification yet. An agent is listed once its own endpoint answers, and discovery runs every half hour."
                   }
                   state="unavailable"
-                  title={activeFilterCount > 0 ? "No matching agents" : "Catalog is empty"}
+                  title={hasActiveFilters ? "No matching agents" : "Catalog is empty"}
                 />
               ) : (
                 <View className="gap-2.5">

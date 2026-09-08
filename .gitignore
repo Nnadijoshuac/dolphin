@@ -43,7 +43,29 @@ example
 # scratch. Kept on disk for coding agents to read, out of the repo because it is
 # session history rather than source. AGENTS.md and CLAUDE.md deliberately stay
 # at the root so they still auto-load.
-Agent/
+#
+# THE LEADING SLASH IS LOAD-BEARING. DO NOT REMOVE IT. (2026-09-08)
+#
+# This was `Agent/`, unanchored, which git matches against a directory of that
+# name at ANY depth. On a case-insensitive filesystem - which is every Windows
+# and default macOS checkout, and `git config core.ignorecase` is true here -
+# that also matches `agent/`. This repository has two of those:
+#
+#     src/app/agent/           the Expo app's agent detail route
+#     web/src/app/agent/       the website's, plus its client half and OG image
+#
+# So every NEW file under either route was silently untracked. `git add -A`
+# reported nothing, `git status` showed nothing, the local build passed because
+# the files were on disk - and the Vercel build failed on
+# `Can't resolve '@/app/agent/[id]/agent-detail-client'`, because that file had
+# never left this machine. Two files were lost this way before it was found.
+# `src/app/agent/[id].tsx` and `web/src/app/agent/[id]/page.tsx` survived only
+# because they were already tracked, and ignore rules do not apply to files git
+# is already following.
+#
+# `/Agent/` is anchored to this file's directory, so it matches the working
+# context at the repository root and nothing nested.
+/Agent/
 
 # Installed agent skills, and the lockfile the installer writes beside them.
 # `npx skills add` drops a vendored copy of a third-party skill here (and mirrors

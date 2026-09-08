@@ -3,11 +3,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -184,53 +186,102 @@ export default function DolphinScreen() {
           ) : null}
         </ScrollView>
 
+        {/*
+          THE COMPOSER IS AN ISLAND.
+          -------------------------------------------------------------------
+          Same object language as the tab bar in app/(tabs)/_layout.tsx: a
+          translucent, blurred, hairline-bordered capsule that floats clear of
+          the screen edges with a soft shadow under it, rather than a bar welded
+          to the bottom of the viewport.
+
+          Two things this has to get right that the tab island does not:
+
+          It GROWS. A chat composer takes multi-line input, so the capsule's
+          radius is a fixed 26 rather than half its height - a pill that grows
+          to 120pt tall would turn into a lozenge with 60pt ends.
+
+          It STACKS. The tab island is still on screen underneath when the
+          keyboard is closed, so this sits above it; when the keyboard opens the
+          tab island removes itself (it listens for keyboardWillShow) and
+          KeyboardAvoidingView slides this down into the space it left. The two
+          offsets below are that pair of positions.
+        */}
         <View
+          pointerEvents="box-none"
           style={{
-            flexDirection: "row",
-            alignItems: "flex-end",
-            gap: 10,
-            paddingHorizontal: 20,
+            paddingHorizontal: 16,
             paddingTop: 8,
-            // Clears the floating island, which hides itself on keyboard show.
-            paddingBottom: 96,
+            paddingBottom: 92,
           }}
         >
-          <TextInput
-            multiline
-            onChangeText={setDraft}
-            placeholder="Ask about an agent, a position, a yield…"
-            placeholderTextColor="#9A9C96"
+          <View
             style={{
-              flex: 1,
-              maxHeight: 120,
-              minHeight: 46,
-              borderWidth: 1,
-              borderColor: colors.goldBorder,
-              backgroundColor: "#FFFFFF",
-              borderRadius: 23,
-              paddingHorizontal: 16,
-              paddingTop: 13,
-              paddingBottom: 13,
-              fontSize: 15,
-              color: colors.ink,
-            }}
-            value={draft}
-          />
-          <PressableScale
-            accessibilityLabel="Send"
-            onPress={() => submit(draft)}
-            containerStyle={{
-              width: 46,
-              height: 46,
-              borderRadius: 23,
-              alignItems: "center",
-              justifyContent: "center",
+              flexDirection: "row",
+              alignItems: "flex-end",
+              gap: 8,
+              paddingHorizontal: 8,
+              paddingVertical: 8,
+              borderRadius: 26,
+              borderWidth: 1.2,
+              borderColor:
+                Platform.OS === "ios"
+                  ? "rgba(255, 255, 255, 0.75)"
+                  : "rgba(17, 18, 20, 0.08)",
               backgroundColor:
-                draft.trim().length > 0 && !isSending ? colors.gold : colors.goldBorder,
+                Platform.OS === "ios"
+                  ? "rgba(255, 255, 255, 0.55)"
+                  : "rgba(255, 255, 255, 0.96)",
+              shadowColor: "#111215",
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.16,
+              shadowRadius: 20,
+              elevation: 12,
+              overflow: "hidden",
             }}
           >
-            <Text style={{ fontSize: 18, color: colors.ink }}>↑</Text>
-          </PressableScale>
+            <BlurView
+              intensity={95}
+              style={StyleSheet.absoluteFill}
+              tint={
+                Platform.OS === "ios"
+                  ? "systemThinMaterialLight"
+                  : "systemChromeMaterialLight"
+              }
+            />
+
+            <TextInput
+              multiline
+              onChangeText={setDraft}
+              placeholder="Ask about an agent, a position, a yield…"
+              placeholderTextColor="#9A9C96"
+              style={{
+                flex: 1,
+                maxHeight: 120,
+                minHeight: 38,
+                paddingHorizontal: 10,
+                paddingTop: 9,
+                paddingBottom: 9,
+                fontSize: 15,
+                color: colors.ink,
+              }}
+              value={draft}
+            />
+            <PressableScale
+              accessibilityLabel="Send"
+              onPress={() => submit(draft)}
+              containerStyle={{
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor:
+                  draft.trim().length > 0 && !isSending ? colors.gold : colors.goldBorder,
+              }}
+            >
+              <Text style={{ fontSize: 17, fontWeight: "700", color: colors.ink }}>↑</Text>
+            </PressableScale>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

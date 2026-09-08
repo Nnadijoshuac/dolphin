@@ -177,9 +177,14 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
   const isEmpty = turns.length === 0;
 
   return (
-    <div className="flex h-[calc(100dvh-4rem)] flex-col">
+    <div className="relative flex h-[calc(100dvh-4rem)] flex-col">
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[46rem] px-5 pb-6 pt-8">
+        {/*
+          `pb-36` is the composer island's landing space. The island is
+          positioned over this scroll area rather than beside it, so without
+          that padding the last turn ends up underneath it and unreadable.
+        */}
+        <div className="mx-auto w-full max-w-[46rem] px-5 pb-36 pt-8">
           {isEmpty ? (
             <div className="pt-[6vh]">
               <div className="mb-6 flex items-center gap-3">
@@ -234,9 +239,21 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
         </div>
       </div>
 
-      <div className="border-t border-line bg-paper">
-        <div className="mx-auto w-full max-w-[46rem] px-5 py-4">
-          <div className="flex w-full flex-col items-end rounded-2xl border border-line bg-paper-strong p-2 focus-within:border-line-strong focus-within:ring-1 focus-within:ring-line-strong">
+      {/*
+        THE COMPOSER IS AN ISLAND.
+        ---------------------------------------------------------------------
+        Same object language as the app's floating tab bar: a capsule that sits
+        clear of the edges with a soft shadow under it, rather than a bar welded
+        to the bottom of the viewport by a full-bleed border.
+
+        `pointer-events-none` on the wrapper with `pointer-events-auto` on the
+        island itself is what lets the transcript keep scrolling in the gutter
+        either side of it - an island floating over content should not capture
+        clicks in the water around it.
+      */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+        <div className="mx-auto w-full max-w-[46rem] px-4 pb-5 pt-2">
+          <div className="pointer-events-auto flex w-full flex-col items-end rounded-3xl border border-line bg-paper-strong/90 p-2 shadow-[0_8px_28px_rgba(17,18,20,0.12)] backdrop-blur-xl transition-shadow focus-within:border-line-strong focus-within:shadow-[0_10px_34px_rgba(17,18,20,0.17)]">
             <textarea
               className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2 py-1.5 text-[0.92rem] leading-relaxed text-ink outline-none placeholder:text-faint-mark"
               onChange={(event) => {
@@ -278,7 +295,7 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
             </button>
           </div>
 
-          <p className="mt-2 text-center text-[0.68rem] text-faint">
+          <p className="pointer-events-auto mt-2 text-center text-[0.68rem] text-faint">
             {isSending ? (
               <>Consulting agents — this can take up to a minute.</>
             ) : isEmpty ? (

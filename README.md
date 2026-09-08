@@ -42,11 +42,11 @@ That gap is the whole product.
 > Dolphin resolves an agent's endpoint, speaks its protocol, and asks what work it can do.
 > Identity gets an agent discovered. A working service gets it listed.
 
-| Available in the recorded deployment | Where the boundary is |
+| Recorded capabilities | Where the boundary is |
 | :--- | :--- |
 | Discovery, protocol verification, browse and search | The backfill covers a fraction of the registry. |
 | Wallet sign-in and read-only hire records | A subscription record does not imply execution. |
-| A2A quote negotiation against live sellers | Paid hiring has not been exercised end to end in this deployment. |
+| A2A quote negotiation verified against independent live sellers | Paid hiring has not been exercised end to end in this deployment. |
 | Browser passkey wallet creation and recovery | Native ceremonies remain unobserved; session execution is gated off. |
 
 **Read the evidence and remaining gaps in [What works today](#x-what-is-true-and-what-is-not-yet).**
@@ -76,8 +76,9 @@ That gap is the whole product.
 ## 01 · The gap
 
 ERC-8004 gives an agent an on-chain identity: a token, an owner, a wallet, and a
-`tokenURI` pointing at whatever the publisher wants to say about itself. Registration establishes an identity; it does not establish availability
-or prove the agent can do useful work.
+`tokenURI` pointing at whatever the publisher wants to say about itself.
+Registration establishes an identity; it does not establish availability or
+prove the agent can do useful work.
 
 Measured against BSC mainnet on 2026-09-07:
 
@@ -124,8 +125,10 @@ quote. Everything else in this repository is downstream of that sentence:
   a number with no live source renders as *unavailable with a stated reason* —
   never as a plausible-looking figure.
 
-The last one is a hard project constraint ([the data integrity rule](AGENTS.md#5-data-integrity-rule-project-specific)), enforced in the type
-system on both clients and in the backend's own `unavailableMetricValue()`.
+The last one is a hard project constraint, defined in
+[the data integrity rule](AGENTS.md#5-data-integrity-rule-project-specific) and
+enforced in the type system on both clients and in the backend's own
+`unavailableMetricValue()`.
 
 ---
 
@@ -211,16 +214,16 @@ GET /agents?chain_id=56&created_after=<cursor>&sort_by=created_at&sort_order=asc
 ```
 
 A timestamp high-water mark limits the incremental walk to recent
-registrations — about 28 per cycle in the recorded steady state. A separate budgeted
-backfill walks the `has_a2a=true` and `has_mcp=true` slices to catch up on the
-~33,000 identities that already publish an endpoint. Both retry, and both fall
+registrations — about 28 per cycle in the recorded steady state. A separate
+budgeted backfill walks the `has_a2a=true` and `has_mcp=true` slices to catch up
+on registrations that already publish an endpoint. Both retry, and both fall
 back to an unfiltered walk if 8004scan's own filters time out, which they
 measurably do at ~10.5 s under load. Retries and overlapping runs are handled idempotently.
 
 </details>
 
 <details>
-<summary><strong>2 · The cheap screen — pure string work, no network, **no rows**</strong></summary>
+<summary><strong>2 · The cheap screen — pure string work, no network, no rows</strong></summary>
 
 `lib/screen.ts` throws away registrations that are not services at all: empty
 descriptions, numeric noise, repeated tokens, collectible series, campaign
@@ -529,8 +532,9 @@ over the cap, and calls after expiry. **That enforcement has not been observed
 end to end in this repository.** The testnet proof and its funding prerequisite
 are recorded in [What works today](#x-what-is-true-and-what-is-not-yet).
 
-**Designed category scopes, while granting remains gated off.** Granting spend authority to an agent that
-only delivers information would imply a capability it does not have:
+**Designed category scopes, while granting remains gated off.** Granting spend
+authority to an agent that only delivers information would imply a capability
+it does not have:
 
 | Category | Scope defined? | Allowlisted contract | Why |
 |---|---|---|---|
@@ -545,8 +549,8 @@ independently against the protocol's own deployments file, for its live-stats
 reads. This feature introduced no new contract address, deliberately: an
 allowlist is the one place a wrong address becomes real authority over real
 money. A consequence worth knowing — these allowlists are narrower than a full
-strategy would need, and a call outside them is rejected on-chain. That is the
-guardrail working.
+strategy would need. A call outside them is expected to be rejected by the
+documented contract behavior.
 
 `calls` is never omitted. Altana reads an omitted or empty `calls` as *"any
 contract"*, so `buildSessionPermissions` throws rather than emit permissions

@@ -612,3 +612,76 @@ export const agentPaymentsApi = anyApi as unknown as {
     getJobsForAltanaWallet: Query<{ altanaWalletAddress: string }, AgentJobRow[]>;
   };
 };
+
+/** One call the Dolphin agent made to one marketplace agent. */
+export type DolphinToolCall = {
+  id: string;
+  messageId: string;
+  agentKey: string;
+  agentName: string;
+  toolName: string;
+  resultText: string | null;
+  isError: boolean;
+  transportError: string | null;
+  latencyMs: number | null;
+  calledAt: number;
+};
+
+export type DolphinMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  status: "thinking" | "consulting" | "complete" | "error";
+  errorReason: string | null;
+  model: string | null;
+  createdAt: number;
+  completedAt: number | null;
+};
+
+/**
+ * convex/dolphin.ts. The in-app agent that consults marketplace agents.
+ *
+ * Declared here in the SAME change as the backend, which is the rule this file
+ * exists to enforce and the one that was broken on 2026-09-06 - see
+ * web/scripts/check-convex-api.mjs for what that cost.
+ *
+ * TWO THINGS THE UI MUST HONOUR, because they are correctness rather than
+ * presentation:
+ *
+ * `toolCalls` is the record of what actually RAN, written by the executor
+ * before and after each call - it is not the model's account of its own
+ * sources. Render these, never a source list parsed out of the prose. The model
+ * is small and free and will claim to have consulted an agent it never called.
+ *
+ * `completedAt` is when the answer was produced, and a reused answer keeps its
+ * ORIGINAL value. Show it. Live metrics restated as current when they were read
+ * an hour ago is the fabricated-liveness failure of AGENTS.md §5 wearing a
+ * cache as a disguise.
+ */
+export const dolphinApi = anyApi as unknown as {
+  dolphin: {
+    createConversation: Mutation<
+      { seedAgentKey?: string; sessionToken?: string },
+      { conversationKey: string }
+    >;
+    getConversation: Query<
+      { conversationKey: string },
+      {
+        conversation: {
+          conversationKey: string;
+          title: string;
+          seedAgentKey: string | null;
+          createdAt: number;
+        };
+        messages: DolphinMessage[];
+        toolCalls: DolphinToolCall[];
+      } | null
+    >;
+    /**
+     * Long-running by design: it opens MCP sessions against third-party servers
+     * and calls their tools. Progress is NOT in this return value - subscribe to
+     * `getConversation` and watch the message status and tool-call rows land.
+     */
+    ask: Action<{ conversationKey: string; text: string }, { messageId: string }>;
+  };
+};

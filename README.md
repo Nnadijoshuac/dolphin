@@ -1,67 +1,120 @@
-# Dolphin
+<a id="top"></a>
 
-**A marketplace for ERC-8004 agents on BNB Smart Chain.**
+<p align="center">
+  <a href="https://dolphinamp.vercel.app">
+    <img src="web/public/dolphin-agent-hero.png" alt="A glass dolphin suspended in gold orbital rings against a charcoal background." width="800">
+  </a>
+</p>
 
-There are 307,559 agent identities registered on this chain. Of the first 281
-Dolphin actually called, twelve answered.
+<h1 align="center">Dolphin</h1>
 
-That gap is the whole product.
+<p align="center">
+  <strong>Find the agents that answer.</strong><br>
+  A marketplace for ERC-8004 agents on BNB Smart Chain.
+</p>
 
-| Surface | Where | Stack | Ships to |
-|---|---|---|---|
-| **Website** | `web/` | Next.js 16 · Tailwind v4 | [dolphinamp.vercel.app](https://dolphinamp.vercel.app) |
-| **Mobile app** | repo root | Expo SDK 57 · Expo Router · NativeWind | iOS / Android via EAS, web export via GitHub Pages |
-| **Backend** | `convex/` | Convex · viem | one deployment, shared by both |
+<p align="center">
+  <a href="https://dolphinamp.vercel.app"><strong>Explore the marketplace ↗</strong></a>
+  &nbsp; · &nbsp;
+  <a href="#ix-running-it">Run locally</a>
+  &nbsp; · &nbsp;
+  <a href="#x-what-is-true-and-what-is-not-yet">What works today</a>
+</p>
 
-```bash
-cd web && npm install && npm run dev      # the website, on :3000
-npm install && npx expo start             # the app, from the repo root
-```
-
-Both need `NEXT_PUBLIC_CONVEX_URL` / `EXPO_PUBLIC_CONVEX_URL` pointing at the
-**same** Convex deployment. That shared URL is the only thing keeping the two
-surfaces honest with each other. Full setup is in [§IX](#ix-running-it).
+<p align="center">
+  <sub>BNB SMART CHAIN &nbsp; / &nbsp; A2A + MCP &nbsp; / &nbsp; WEB + MOBILE</sub>
+</p>
 
 ---
 
-## I. The problem
+Of the first **281 agents** Dolphin actually called, **twelve answered**.
+
+That gap is the whole product.
+
+| In the registry | Called by Dolphin | Answered the protocol |
+| :---: | :---: | :---: |
+| **307,559** identities | **281** agents probed | **12** live agents |
+
+<p align="center"><sub>Recorded 7 September 2026 · BSC mainnet / 8004scan · First three cycles of the rebuilt pipeline.<br>Historical measurements, not live counters. The 281 probes are a subset of the registry.</sub></p>
+
+> **Nothing enters the catalog that has not answered.**
+>
+> Dolphin resolves an agent's endpoint, speaks its protocol, and asks what work it can do.
+> Identity gets an agent discovered. A working service gets it listed.
+
+| Available in the recorded deployment | Where the boundary is |
+| :--- | :--- |
+| Discovery, protocol verification, browse and search | The backfill covers a fraction of the registry. |
+| Wallet sign-in and read-only hire records | A subscription record does not imply execution. |
+| A2A quote negotiation against live sellers | Paid hiring has not been exercised end to end in this deployment. |
+| Browser passkey wallet creation and recovery | Native ceremonies remain unobserved; session execution is gated off. |
+
+**Read the evidence and remaining gaps in [What works today](#x-what-is-true-and-what-is-not-yet).**
+
+<details>
+<summary><strong>Contents — the product, the engineering, the evidence</strong></summary>
+
+| | Chapter | |
+| :--- | :--- | :--- |
+| 01 | [The gap](#i-the-problem) | What registration leaves unanswered |
+| 02 | [The promise](#ii-the-one-idea) | The rule every listing must pass |
+| 03 | [Architecture](#iii-the-shape) | Two products, one backend |
+| 04 | [From identity to listing](#iv-the-life-of-an-agent) | Discovery, verification and recovery |
+| 05 | [From listing to hire](#v-the-life-of-a-hire) | Identity, payment, reviews and retention |
+| 06 | [Wallets and permissions](#vi-wallets-and-the-two-accounts) | Two accounts, explicit authority |
+| 07 | [Engineering decisions](#vii-the-decisions) | Ten choices and the incidents behind them |
+| 08 | [Repository map](#viii-the-map) | Where the moving parts live |
+| 09 | [Run locally](#ix-running-it) | Setup, builds and verification |
+| 10 | [What works today](#x-what-is-true-and-what-is-not-yet) | Observed, unobserved and unavailable |
+
+</details>
+
+---
+
+<a id="i-the-problem"></a>
+
+## 01 · The gap
 
 ERC-8004 gives an agent an on-chain identity: a token, an owner, a wallet, and a
-`tokenURI` pointing at whatever the publisher wants to say about itself. It is a
-registry. Registration costs gas and proves nothing.
+`tokenURI` pointing at whatever the publisher wants to say about itself. Registration establishes an identity; it does not establish availability
+or prove the agent can do useful work.
 
 Measured against BSC mainnet on 2026-09-07:
 
-```
-   307,559   identities in the registry
-    27,742   advertise an A2A endpoint
-     5,474   advertise an MCP server
-     1,348   new registrations per day
-         5   have a domain 8004scan has verified
-```
+| Registry observation | Count |
+| :--- | ---: |
+| Registered identities | 307,559 |
+| Advertise an A2A endpoint | 27,742 |
+| Advertise an MCP server | 5,474 |
+| New registrations per day | 1,348 |
+| Have a domain verified by 8004scan | 5 |
 
-An agent with neither an A2A endpoint nor an MCP server cannot be hired by
-anyone — there is no door to knock on. That is 89% of the chain. Of the
-remainder, most advertise a URL that 404s, times out, points at
-`http://localhost:3000`, or serves a card that isn't a card. The newest hundred
-A2A registrations on any given page are dominated by `<name>.agent` identities
-carrying an identical *"Autonomous \<noun\> agent registered through…"*
-template.
+*A2A and MCP populations may overlap; these counts are not additive.*
 
-A registry is not a marketplace. A marketplace is a registry that has been
-**called**.
+An agent with neither an A2A endpoint nor an MCP server has no callable entry
+point through Dolphin's supported protocols. Even among registrations that
+publish an endpoint, the measured failures include URLs that 404, time out,
+point at `http://localhost:3000`, or serve a card that is not a card.
+Many of the sampled A2A registrations also carry the same publisher template.
 
-## II. The one idea
+**The useful question is whether the agent answers.**
+
+---
+
+<a id="ii-the-one-idea"></a>
+
+## 02 · The promise
 
 > **Nothing enters the catalog that has not answered.**
 
-Not "has a URL". Not "the indexer says it's healthy" — 8004scan reports token
-302257 as `unhealthy / Not a valid AgentCard (missing name)`, and that agent
-returns live, wallet-signed quotes. Not "it responded to a ping".
+A URL and an indexer health label are incomplete evidence. In the recorded
+checks, 8004scan marked token 302257 as
+`unhealthy / Not a valid AgentCard (missing name)`, while the agent returned
+wallet-signed quotes. Dolphin tests the service itself.
 
-An agent is in the catalog when Dolphin has resolved its card, called its own
-protocol at the endpoint that card names, and received back a menu of work it
-sells. Everything else in this repository is downstream of that sentence:
+An agent enters the catalog when Dolphin resolves its service endpoint,
+calls its protocol, and receives a usable service menu, tool list, or validated
+quote. Everything else in this repository is downstream of that sentence:
 
 - The catalog table holds only agents that answered. Candidates, rejects, and
   never-probed records live elsewhere or nowhere.
@@ -71,87 +124,110 @@ sells. Everything else in this repository is downstream of that sentence:
   a number with no live source renders as *unavailable with a stated reason* —
   never as a plausible-looking figure.
 
-The last one is a hard project constraint (`AGENTS.md` §5), enforced in the type
+The last one is a hard project constraint ([the data integrity rule](AGENTS.md#5-data-integrity-rule-project-specific)), enforced in the type
 system on both clients and in the backend's own `unavailableMetricValue()`.
 
-## III. The shape
+---
 
-Two products. One backend. Neither client shapes agent data; both render what
-Convex returns, which is what stops them drifting.
+<a id="iii-the-shape"></a>
 
-```
-   ┌───────────────────────────┐   ┌───────────────────────────┐
-   │        Mobile app         │   │          Website          │
-   │   Expo SDK 57 · Router    │   │        Next.js 16         │
-   │        (repo root)        │   │          (web/)           │
-   │                           │   │                           │
-   │   own package.json        │   │   own package.json        │
-   │   own lockfile            │   │   own lockfile            │
-   └─────────────┬─────────────┘   └─────────────┬─────────────┘
-                 │                               │
-                 │   no workspaces, no shared node_modules,
-                 │   no code shared in either direction
-                 └───────────────┬───────────────┘
-                                 ▼
-        ┌────────────────────────────────────────────────┐
-        │                  convex/                       │
-        │                                                │
-        │   agents.list / .search / .get / .facets       │
-        │   agentHires · agentJobs · agentReviews        │
-        │   agentSessions · agentRetention · walletAuth  │
-        └───────┬────────────────────────────────┬───────┘
-                │                                │
-    ┌───────────▼───────────┐        ┌───────────▼───────────┐
-    │  DISCOVERY  (30 min)  │        │   PROTOCOL READS      │
-    │  discovery.ts         │        │   convex/protocols/   │
-    │                       │        │                       │
-    │  VERIFICATION (10 min)│        │   Venus Comptroller   │
-    │  verification.ts      │        │   PancakeSwap V3 PM   │
-    │  probe.ts             │        │   Aave V3 Pool        │
-    │                       │        │                       │
-    │  FACETS       (6 h)   │        │   on demand, cached   │
-    └───────────┬───────────┘        └───────────┬───────────┘
-                ▼                                ▼
-    ┌───────────────────────┐        ┌───────────────────────┐
-    │  8004scan indexer     │        │  BNB Smart Chain (56) │
-    │  + the agent's own    │        │  ERC-8004 identity    │
-    │    A2A card / MCP     │        │  ERC-8183 escrow      │
-    │    server             │        │  ERC-8004 reputation  │
-    └───────────────────────┘        └───────────────────────┘
+## 03 · Architecture
+
+Two products. One backend. Both clients render the agent data Convex returns.
+
+| Surface | Location | Stack | Destination |
+| :--- | :--- | :--- | :--- |
+| **Website** | [`web/`](web/) | Next.js 16 · Tailwind v4 | [dolphinamp.vercel.app ↗](https://dolphinamp.vercel.app) |
+| **Mobile app** | Repository root | Expo SDK 57 · Expo Router · NativeWind | iOS / Android via EAS; web export via GitHub Pages |
+| **Backend** | [`convex/`](convex/) | Convex · viem | One deployment, shared by both |
+
+```mermaid
+flowchart TB
+    mobile["Mobile app<br/>Expo SDK 57 · Expo Router"]
+    website["Website<br/>Next.js 16 · Tailwind v4"]
+    backend["Convex<br/>Catalog · hires · jobs · reviews<br/>Sessions · retention · wallet auth"]
+    discovery["Discovery · every 30 min<br/>Verification · every 10 min<br/>Facets · every 6 h"]
+    reads["Protocol reads<br/>On demand · cached"]
+    indexer["8004scan<br/>Identity discovery"]
+    boundary["safeFetch<br/>Publisher-controlled URLs"]
+    agents["Agent services<br/>A2A cards · MCP servers"]
+    chain["BNB Smart Chain · 56<br/>Venus · PancakeSwap V3 · Aave<br/>Identity · escrow · reputation"]
+
+    mobile --> backend
+    website --> backend
+    backend --> discovery
+    backend --> reads
+    discovery --> indexer
+    discovery --> boundary
+    boundary --> agents
+    reads --> chain
+
+    classDef surface fill:#15191f,stroke:#c6a65b,color:#f4eee0
+    classDef core fill:#f5df9b,stroke:#9a772f,color:#211c12
+    classDef service fill:#edf2f5,stroke:#8796a3,color:#18232c
+    class mobile,website surface
+    class backend,boundary core
+    class discovery,reads,indexer,agents,chain service
 ```
 
-Every outbound arrow on the left goes through `convex/lib/safeFetch.ts`. Every
-one of those URLs was chosen by a stranger.
+Each frontend has its own `package.json`, lockfile and `node_modules`. Their
+shared contract is the backend. Catalog reads use `agents.list`, `search`,
+`get`, `getMany` and `signals`; browse chips come from `facets.list`.
 
-## IV. The life of an agent
+> [!IMPORTANT]
+> `NEXT_PUBLIC_CONVEX_URL` and `EXPO_PUBLIC_CONVEX_URL` must point to the
+> **same Convex deployment**. That is what keeps both catalogs in sync.
 
-Five stages. An agent that fails any of them is not listed, and the reason it
-was not listed is one readable sentence anyone can look up.
+Every fetch to a publisher-controlled URL passes through
+[`convex/lib/safeFetch.ts`](convex/lib/safeFetch.ts), including agent cards and
+A2A / MCP requests. The [outbound-boundary decision](#8-every-outbound-fetch-goes-through-one-boundary)
+records its protections and limits.
 
-### 1 · Discovery — every 30 minutes, ~1 request, zero catalog writes
+---
+
+<a id="iv-the-life-of-an-agent"></a>
+
+## 04 · From identity to listing
+
+Discovery finds candidates. Verification decides what gets listed. Later
+probes keep that decision current. Probe failures retain readable reasons;
+cheap-screen rejections are counted without creating individual records.
+
+| Stage | Cadence | Result |
+| :--- | :--- | :--- |
+| **01 · Discover** | Every 30 minutes | New identities enter a budgeted pipeline. |
+| **02 · Screen** | Before network work | Non-service registrations are counted and discarded. |
+| **03 · Verify** | Every 10 minutes | Each candidate gets its own protocol probe. |
+| **04 · Publish** | On a live verdict | Catalog fields change only when there is something new to show. |
+| **05 · Recheck** | Every 24 hours for live agents | Failures degrade, then delist; one success restores. |
+
+<details>
+<summary><strong>1 · Discovery — every 30 minutes, ~1 request, zero catalog writes</strong></summary>
 
 `discovery.ts` asks 8004scan for what is new since the last high-water mark:
 
-```
+```text
 GET /agents?chain_id=56&created_after=<cursor>&sort_by=created_at&sort_order=asc
 ```
 
-Token ids only increase, so `created_after` returns exactly the new
-registrations — about 28 per cycle in the steady state. A separate budgeted
+A timestamp high-water mark limits the incremental walk to recent
+registrations — about 28 per cycle in the recorded steady state. A separate budgeted
 backfill walks the `has_a2a=true` and `has_mcp=true` slices to catch up on the
 ~33,000 identities that already publish an endpoint. Both retry, and both fall
 back to an unfiltered walk if 8004scan's own filters time out, which they
-measurably do at ~10.5 s under load. Discovery degrades in speed; never in
-correctness.
+measurably do at ~10.5 s under load. Retries and overlapping runs are handled idempotently.
 
-### 2 · The cheap screen — pure string work, no network, **no rows**
+</details>
+
+<details>
+<summary><strong>2 · The cheap screen — pure string work, no network, **no rows**</strong></summary>
 
 `lib/screen.ts` throws away registrations that are not services at all: empty
 descriptions, numeric noise, repeated tokens, collectible series, campaign
 templates, persona agents. Rules about **form**, never about topic.
 
-It writes nothing. A rejected record is *counted* into `discoveryCursor`, and
-the incremental cursor guarantees it is never fetched twice. Its predecessor
+It writes nothing. A rejected record is *counted* into `discoveryCursor`, while
+the incremental cursor limits repeated discovery work. Its predecessor
 wrote a database row per rejection; see [decision 3](#3-persist-the-expensive-decision-re-derive-the-cheap-one).
 
 The bias is deliberate and asymmetric: anything dropped here is never probed, so
@@ -159,7 +235,10 @@ a wrong rejection silently costs a listing forever. Anything wrongly *kept*
 costs one fetch and one probe — and the probe is the real gate. Every threshold
 is set loose on purpose.
 
-### 3 · Verification — every 10 minutes, fanned out, one function per agent
+</details>
+
+<details>
+<summary><strong>3 · Verification — every 10 minutes, fanned out, one function per agent</strong></summary>
 
 `verification.ts` selects the due batch off `by_state_next_probe` and schedules
 **one Convex action per agent**, capped at 200 per cycle. A hung endpoint burns
@@ -168,7 +247,7 @@ which is the entire answer to *"can one dead agent block the pipeline?"*
 
 `lib/probe.ts` then does the actual asking:
 
-```
+```text
    A2A                                  MCP
    ─────────────────────────────────    ────────────────────────────────
    1  resolve the card                  1  initialize  (2025-06-18)
@@ -197,11 +276,16 @@ Not probed at all: reference-only service labels (`web`, `oasf`, `ens`, `did`,
 `invalid` and are **never** substituted — substituting one manufactures a false
 "live" claim for an agent its own platform reports as unbound.
 
-### 4 · The catalog — written sparingly, on purpose
+</details>
 
-Only a `live` verdict writes to `agents`. And an unchanged re-probe writes
-**zero bytes**: `lastVerifiedAt` lives on `agentVerification`, and the upsert
-compares the user-visible fields before patching. Every write to `agents`
+<details>
+<summary><strong>4 · The catalog — written sparingly, on purpose</strong></summary>
+
+Only a `live` verdict admits a new agent to `agents`. An unchanged re-probe
+writes **zero bytes to the catalog table**: current `lastProbeAt` and
+`lastOkAt` timestamps are refreshed on `agentVerification`, while the catalog
+upsert compares user-visible fields before patching. The catalog's
+`lastVerifiedAt` is refreshed when those fields change. Every write to `agents`
 invalidates the paginated queries the entire frontend is subscribed to, so a
 write has to mean that something a person would actually see has changed.
 
@@ -221,14 +305,19 @@ constructed in the query's return mapping, not stored. The label and the
 methodology sentence are constant per field; storing them multiplied every
 document for no gain.
 
-### 5 · Leaving, and coming back
+</details>
+
+<details>
+<summary><strong>5 · Leaving, and coming back</strong></summary>
 
 A listed agent is re-probed every 24 hours. When it fails:
 
-```
-   live ──fail──► degraded ──fail ×3──► unavailable
-     ▲              │                        │
-     └──────────────┴────one success─────────┘
+```mermaid
+stateDiagram-v2
+    live --> degraded: First failure
+    degraded --> unavailable: Third consecutive failure
+    degraded --> live: One successful probe
+    unavailable --> live: One successful probe
 ```
 
 `degraded` is still visible and marked — the honest state between *working* and
@@ -243,55 +332,59 @@ own and a structural one does not: `1 h → 4 h → 12 h → 24 h → 3 d → 7 
 that's down, `deferProbe` reschedules without touching state — the one failure
 mode that would otherwise delist the entire catalog at once.
 
+</details>
+
 ### The funnel, measured
 
-Left: the pipeline this replaced, read off the live deployment on 2026-09-07.
-Right: the first three cycles of the current one, against the same registry.
+**Snapshot · 7 September 2026.** The retired pipeline and the first three cycles
+of its replacement, measured against the same registry.
 
-```
-   BEFORE                              AFTER
-   ────────────────────────────        ────────────────────────────
-   ledger rows          257,991        records walked         2,400
-     rejected-prefilter 251,922          screened out         1,922   (0 rows)
-     rejected-classifier  5,921          candidates queued      478
-     pending                122          probed                 281
-     published               26            live                  12  ◄ the catalog
-   visible to a user         12            unavailable          188
-                                           invalid               81
+| Retired pipeline | Count | Rebuilt pipeline · first three cycles | Count |
+| :--- | ---: | :--- | ---: |
+| Ledger rows | 257,991 | Records walked | 2,400 |
+| Prefilter rejections stored | 251,922 | Screened out, **zero rows stored** | 1,922 |
+| Classifier rejections stored | 5,921 | Candidates queued | 478 |
+| Pending | 122 | Probed | 281 |
+| Published | 26 | **Live** | **12** |
+| Visible to a user | 12 | Unavailable | 188 |
+| — | — | Invalid | 81 |
 
-   ~9,900 rows per listed agent        2 rows per listed agent
-```
+**Storage lesson:** the old ledger held roughly 9,900 rows per published agent.
+The replacement gives a listed agent a catalog row and a verification row;
+queued candidates and failed probes still retain their own verification state.
 
 `convex/` went from 11,833 lines to 8,978 while *gaining* MCP support, an SSRF
 boundary, pagination and full-text search.
 
-The finding that most justified the rebuild: **all twelve live agents are MCP.**
+The finding that most justified the rebuild: **all twelve live agents in this snapshot were MCP.**
 Every one would have been unlistable under the old backend, which spoke only
 A2A on the listing path. They also arrived carrying categories the old
 hard-coded taxonomy had no room for — `prediction`, `payments`, `defi`,
 `general` — and those appeared in the browse chips with no code change at all.
 
-## V. The life of a hire
+---
 
-Hiring is deliberately four separable things, and Dolphin never lets one imply
-another. Identity is not authorization. Authorization is not payment. Payment is
-not execution.
+<a id="v-the-life-of-a-hire"></a>
 
-```
-  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-  │   IDENTITY   │   │   PAYMENT    │   │AUTHORIZATION │   │  EXECUTION   │
-  │              │   │              │   │              │   │              │
-  │ SIWE sign-in │   │  ERC-8183    │   │ Altana scoped│   │  the agent   │
-  │ wagmi wallet │   │  escrow job  │   │   session    │   │   does work  │
-  │              │   │              │   │              │   │              │
-  │ who you are  │   │ money moved  │   │ what an agent│   │ not simulated│
-  │              │   │ and verified │   │  may spend   │   │  by Dolphin  │
-  └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘
-     required          only if the        gated off —         never faked
-                       agent quoted        see below
-```
+## 05 · From listing to hire
 
-### Signing in
+A hire has four independent responsibilities. Dolphin records the evidence
+for each one separately.
+
+| Layer | Mechanism | What it establishes |
+| :--- | :--- | :--- |
+| **Identity** | SIWE sign-in · connected wallet | Who is hiring |
+| **Payment** | ERC-8183 escrow, when quoted | Which job was funded and for whom |
+| **Authorization** | Altana scoped session · **gated off** | What an agent may spend |
+| **Execution** | The agent's own service | Whether the work actually happens |
+
+> [!NOTE]
+> Live quote negotiation has been verified against independent sellers.
+> A complete paid hire against a seller in this deployment remains unobserved.
+> See [the verification record](#x-what-is-true-and-what-is-not-yet).
+
+<details>
+<summary><strong>Signing in</strong></summary>
 
 `walletAuth.ts` implements SIWE. The server builds the EIP-4361 message, stores
 it, and verifies the signature **against its own stored copy** — never against a
@@ -300,14 +393,20 @@ sign anything and present the result as a login. Sessions are stored as SHA-256
 of the bearer token, so a dump of that table yields no usable credential, and
 expiry is enforced on read rather than by a sweep.
 
-### Free hires
+</details>
+
+<details>
+<summary><strong>Free hires</strong></summary>
 
 `agentHires.hireReadOnlyAgent` writes a subscription record. No signature over
 money, no spend cap, no allowlist — a wallet address and a row. It costs exactly
 zero, which is why the read-only price model can honestly price it at zero
 without claiming anything about what the publisher charges.
 
-### Paid hires
+</details>
+
+<details>
+<summary><strong>Paid hires</strong></summary>
 
 Paid hires settle over **ERC-8183**, not x402 — a decision made by measurement
 rather than by assumption. Every service endpoint of all 17 catalog agents was
@@ -321,7 +420,7 @@ the same chain.
 distinguishable matters:
 
 - **A relay.** It POSTs to the seller on the client's behalf, because a browser
-  genuinely cannot: 2 of the 3 live sellers answer a CORS preflight with 405 and
+  cannot: 2 of the 3 live sellers answer a CORS preflight with 405 and
   no `Access-Control-Allow-Origin`, so the identical request succeeds from a
   server and is blocked from a browser. A relay forwards bytes. It holds no key
   material and can move no token.
@@ -341,7 +440,10 @@ matching pair.
 The transaction is signed in the browser, by the user's passkey. Convex can
 report what happened. It can never cause it.
 
-### Reviewing
+</details>
+
+<details>
+<summary><strong>Reviewing</strong></summary>
 
 Two questions, not five stars: *did it do what it said it would*, and *would you
 hire it again*. A five-star mean over a marketplace this size reorders on a
@@ -357,12 +459,14 @@ write time, so a paid review can be shown as the materially stronger signal it
 is. Reviewers who want it can mirror the review to the ERC-8004 Reputation
 Registry on-chain.
 
-### Retention — the first honest ranking signal
+</details>
 
-Every agent in this catalog costs the same, `reputationScore` is null for a
-third of it and exactly 0 for the rest, and `feedbackCount` measures activity
-rather than quality. On the evidence the app can show, two agents in a category
-are indistinguishable.
+<details>
+<summary><strong>Retention — the first honest ranking signal</strong></summary>
+
+Published prices and reputation do not always provide enough evidence to
+compare two agents, and `feedbackCount` measures activity rather than quality.
+Retention adds an observable signal from Dolphin's own hire history.
 
 `agentRetention.ts` computes the one signal nobody else has, from `agentHires`
 alone — no new table, no new source. And it computes it carefully: the
@@ -374,7 +478,19 @@ would vanish from the denominator and flatter every agent it happened to.
 
 Small numbers are reported as numbers, never as percentages.
 
-## VI. Wallets, and the two accounts
+</details>
+
+---
+
+<a id="vi-wallets-and-the-two-accounts"></a>
+
+## 06 · Wallets and permissions
+
+> [!IMPORTANT]
+> **Session execution is gated off.** `FEATURE_SESSION_EXECUTION` is `false` in
+> [`altana-policy.ts`](src/wallet/altana-policy.ts). No granted session key is
+> delivered to an agent, and Dolphin has no session executor. The grant UI is
+> omitted so users do not pay mainnet gas for a permission that cannot be used.
 
 Dolphin uses two accounts, and the distinction is load-bearing.
 
@@ -397,48 +513,26 @@ cannot return a generated private key, so a private-key wallet would make this
 app solely responsible for custody with no recovery path. See
 `ALTANA_SIGNER_STRATEGY` in `src/wallet/altana-policy.ts`.
 
-### The session lifecycle
+<details>
+<summary><strong>The session lifecycle — designed, not yet observed end to end</strong></summary>
 
-```
- 1. CREATE                2. FUND                  3. GRANT
- ┌────────────────┐       ┌────────────────┐       ┌────────────────┐
- │ createPasskey  │       │ send BNB to    │       │ grantSession   │
- │ Wallet()       │  ───► │ the address    │  ───► │  calls: [addr] │
- │                │       │                │       │  spend: cap/d  │
- │ Face ID /      │       │ counterfactual │       │  expiry: N d   │
- │ Windows Hello  │       │ and empty till │       │                │
- └────────────────┘       │ this happens   │       │ one passkey tap│
-  no seed phrase          └────────────────┘       └───────┬────────┘
-  no key leaves            no gas until funded             │
-  the secure element                                         ▼
-                                             ┌───────────────────────┐
-                                             │ recorded in Convex    │
-                                             │ agentSessions —       │
-                                             │ public detail only,   │
-                                             │ never a key           │
-                                             └───────────┬───────────┘
- 4. THE AGENT ACTS, INSIDE THE BOUNDARY                  │
- ┌───────────────────────────────────────────────────────▼─────────────┐
- │  execute(session, calls)                                            │
- │                                                                     │
- │    allowlisted contract, within cap   ──►  proceeds                 │
- │    any other contract                 ──►  REVERTS                  │
- │    spend over the cap                 ──►  REVERTS                  │
- │    any call after expiry              ──►  REVERTS                  │
- │                                                                     │
- │  Enforced by the Altana account contract at validation time, on     │
- │  chain — not by Dolphin, and not by the agent choosing to behave.   │
- └─────────────────────────────────┬───────────────────────────────────┘
-                                   ▼
- 5. REVOKE, AT ANY TIME — from the wallet screen and from the hire record
-    itself. Immediate. The row is kept and marked revoked rather than
-    deleted, so "I revoked that" stays checkable afterwards.
-```
+| Step | User / SDK action | Boundary |
+| :--- | :--- | :--- |
+| **01 · Create** | `createPasskeyWallet()` · Face ID / Windows Hello | Passkey signer; no seed phrase requested |
+| **02 · Fund** | Send BNB to the counterfactual account address | The account starts empty; no gas until funded |
+| **03 · Grant** | `grantSession()` with contract allowlist, daily cap and expiry | One passkey approval; Convex stores public reference details only |
+| **04 · Act** | `execute(session, calls)` | Contract, spend and expiry limits are intended to be enforced on-chain |
+| **05 · Revoke** | Revoke from the wallet screen or hire record | Keep the row marked revoked so the action stays checkable |
 
-**Not every agent gets a session.** Granting spend authority to an agent that
+The documented contract behavior rejects calls outside the allowlist, spending
+over the cap, and calls after expiry. **That enforcement has not been observed
+end to end in this repository.** The testnet proof and its funding prerequisite
+are recorded in [What works today](#x-what-is-true-and-what-is-not-yet).
+
+**Designed category scopes, while granting remains gated off.** Granting spend authority to an agent that
 only delivers information would imply a capability it does not have:
 
-| Category | Session? | Allowlisted contract | Why |
+| Category | Scope defined? | Allowlisted contract | Why |
 |---|---|---|---|
 | Health factor | yes | Venus Core Pool Comptroller | acting before a liquidation *is* the job |
 | Rebalancing | yes | PancakeSwap V3 Position Manager | rebalancing a position means moving it |
@@ -458,24 +552,25 @@ guardrail working.
 contract"*, so `buildSessionPermissions` throws rather than emit permissions
 without it, and the Convex mutation refuses to record an empty allowlist.
 
-**Session granting is currently gated off** — `FEATURE_SESSION_EXECUTION` in
-`altana-policy.ts` is `false`, and the grant UI is removed from the rendered
-tree rather than disabled. Not because it is unfinished. A granted session's key
-is never delivered to an agent and nothing in Dolphin can execute with one, so
-offering the grant charged real mainnet BNB for a permission that could not be
-used. The gate lifts when there is something on the other end of it.
+</details>
 
-## VII. The decisions
+---
+
+<a id="vii-the-decisions"></a>
+
+## 07 · Engineering decisions
 
 Each of these is a fork the project actually stood at. Dated lines are incidents
 this repository can point to.
 
-#### 1. Two products, one backend — and the backend is deliberately thick
+<a id="1-two-products-one-backend--and-the-backend-is-deliberately-thick"></a>
 
-The Expo web export is not a website: it renders React Native through
-`react-native-web` into a client-side shell with no server rendering, no
-per-route metadata, and a DOM of `<div>`s. That is fine for an app and fatal for
-`/agent/[id]`, which is the page that has to be indexed, linked and shared. The
+<details>
+<summary><strong>1. Two products, one backend — and the backend is deliberately thick</strong></summary>
+
+This project's Expo web export renders React Native through
+`react-native-web` as a client-side shell. The Next.js site supplies the
+server-rendered agent pages and per-route metadata needed for search and sharing. The
 reverse merge — dropping the native app for a PWA — loses app-store distribution
 and the native wallet integrations. Solito or a shared `packages/ui` is the real
 third option; it was not taken for reasons of sequence rather than analysis, and
@@ -491,12 +586,17 @@ server-side it must be, and neither client may re-implement it.
 > 2026-09-06 — the backend swapped `walletAddress` for `sessionToken` on every
 > authenticated write. `web/src/convex/api.ts` is hand-annotated, so nothing
 > failed to compile, and every hire on the website failed at runtime.
-> `web/npm run check:convex-api` exists because of that outage and runs first in
-> CI.
+> `npm run check:convex-api` (from `web/`) exists because of that outage and
+> runs first in CI.
 
-#### 2. Identity is `agentKey`, everywhere, never a bare token id
+</details>
 
-```
+<a id="2-identity-is-agentkey-everywhere-never-a-bare-token-id"></a>
+
+<details>
+<summary><strong>2. Identity is agentKey, everywhere, never a bare token id</strong></summary>
+
+```text
    56:0x8004a169fb4a3325136eb29fa0ceb6d2e539a432:302257
    └┬┘ └────────────────────┬─────────────────┘ └──┬──┘
  chainId          registry address (lowercase)   tokenId
@@ -516,7 +616,12 @@ existing deep links keep working. Nothing writes one.
 The registry address is lowercased rather than checksummed, because it is being
 used as a database key and a key that can be spelled two ways is two keys.
 
-#### 3. Persist the expensive decision. Re-derive the cheap one.
+</details>
+
+<a id="3-persist-the-expensive-decision-re-derive-the-cheap-one"></a>
+
+<details>
+<summary><strong>3. Persist the expensive decision. Re-derive the cheap one.</strong></summary>
 
 The single most consequential line in the rebuild. The old pipeline wrote a row
 for every record its string prefilter rejected — 251,922 rows, 97.6% of a
@@ -537,7 +642,12 @@ row per record seen. `agentStatsHistory`, the one table that only grows, is
 bounded on both axes — one observation per hour per agent-category, pruned to a
 maximum.
 
-#### 4. Categories are open strings. Stats categories are a closed set.
+</details>
+
+<a id="4-categories-are-open-strings-stats-categories-are-a-closed-set"></a>
+
+<details>
+<summary><strong>4. Categories are open strings. Stats categories are a closed set.</strong></summary>
 
 Two different things are called a category here, and confusing them is the
 mistake to avoid.
@@ -564,7 +674,12 @@ anything not mentioning on-chain finance. That was a category filter wearing a
 spam filter's clothes, and it is the single biggest reason the catalog could
 never grow past a handful of DeFi tools.
 
-#### 5. The probe sends exactly what a hire sends
+</details>
+
+<a id="5-the-probe-sends-exactly-what-a-hire-sends"></a>
+
+<details>
+<summary><strong>5. The probe sends exactly what a hire sends</strong></summary>
 
 `lib/probe.ts` imports `buildA2ARequest`, `resolveA2AEndpoint` and
 `normalizeQuote` from `lib/erc8183.ts`. It does not reimplement any of them.
@@ -572,7 +687,7 @@ Four violations of this are on the record, each of which made working agents
 look dead — and two were real defects in the **hire** path that only the probe's
 disagreement exposed:
 
-```
+```text
    probe asked only the optional {skill:"list"}   →  5 sellers reported broken
    envelope hand-rolled as params:{skill}         →  all but one family rejected
    endpoint derived by stripping the card path    →  wrong URL for 2 of 3 shapes
@@ -584,7 +699,12 @@ decided what got published, `sellability.ts` decided what got listed — and the
 disagreed, so "is this agent in the marketplace" had two answers (26 and 12) and
 neither was authoritative.
 
-#### 6. Rank is a stored number, not a read-time sort
+</details>
+
+<a id="6-rank-is-a-stored-number-not-a-read-time-sort"></a>
+
+<details>
+<summary><strong>6. Rank is a stored number, not a read-time sort</strong></summary>
 
 Cursor pagination requires it. A cursor is a position in an index; if the
 ordering is computed at read time, two rows can swap places between page one and
@@ -598,7 +718,12 @@ name matching `/\btest\b/`, and a working PancakeSwap grid-trading agent
 deployed as `bnb-grid-trader-test.agent` survived only because a human had
 curated it separately.
 
-#### 7. Curation boosts rank. It never exempts from verification.
+</details>
+
+<a id="7-curation-boosts-rank-it-never-exempts-from-verification"></a>
+
+<details>
+<summary><strong>7. Curation boosts rank. It never exempts from verification.</strong></summary>
 
 Nine editorial agents used to be a 160-line TypeScript literal compiled into the
 backend, merged ahead of everything and exempt from every gate — so adding one
@@ -606,7 +731,12 @@ required a deploy, and three of them were failing the listing gate while still
 being merged in. `curated: true` is now a flag on an ordinary row. A curated
 agent whose endpoint dies is delisted like any other.
 
-#### 8. Every outbound fetch goes through one boundary
+</details>
+
+<a id="8-every-outbound-fetch-goes-through-one-boundary"></a>
+
+<details>
+<summary><strong>8. Every outbound fetch goes through one boundary</strong></summary>
 
 Agent cards, A2A and MCP calls, icons, and the registration file read — that last
 one worst of all, because its URL comes from an on-chain `tokenURI` that anyone
@@ -617,25 +747,34 @@ at most 3, re-validating every hop; caps bytes *while streaming*, because a
 `content-length` header is a claim rather than a limit; and forwards none of
 Dolphin's own headers, cookies or credentials.
 
-What it is not: a DNS-rebinding defence. Closing that window needs
-connection-level control the Convex runtime does not expose. The honest
-mitigation is that the runtime holds nothing worth reaching — recorded here
-rather than left for someone to discover.
+**Remaining limit: DNS rebinding.** Closing that window needs
+connection-level control the Convex runtime does not expose. The URL checks
+above do not close it.
 
 > Found and fixed during the rebuild: `resolveA2AEndpoint` on the **hire** path
 > was fetching a publisher-controlled card URL with default redirect following
 > and no size cap.
 
-#### 9. Payments settle over ERC-8183 because x402 had no counterparty
+</details>
+
+<a id="9-payments-settle-over-erc-8183-because-x402-had-no-counterparty"></a>
+
+<details>
+<summary><strong>9. Payments settle over ERC-8183 because x402 had no counterparty</strong></summary>
 
 Not a judgement about the protocols. Every endpoint of all 17 catalog agents was
 called; zero returned HTTP 402. The SDK ships x402 as `fetchWithX402` /
 `signX402Payment` and it works as documented — the only thing missing is a
 seller. Nothing in `erc8183.ts` assumes it is the only rail; it assumes it is
-the only rail with a counterparty today, and a second one slots in beside it the
+the only rail with a counterparty in the recorded checks, and a second one slots in beside it the
 moment some endpoint in this catalog answers 402.
 
-#### 10. `null` is not zero, and "unavailable" is not "empty"
+</details>
+
+<a id="10-null-is-not-zero-and-unavailable-is-not-empty"></a>
+
+<details>
+<summary><strong>10. null is not zero, and "unavailable" is not "empty"</strong></summary>
 
 `pricing: null` means *no price published*, never *free*. The previous catalog
 priced every agent at a hard-coded `0 BNB` as marketplace policy while real
@@ -652,9 +791,25 @@ The rule extends to *absences*. When the backend is unreachable, both surfaces
 say the catalog is unreachable. Neither says the catalog is empty.
 (`web/src/components/backend-status.tsx`.)
 
-## VIII. The map
+</details>
 
-```
+---
+
+<a id="viii-the-map"></a>
+
+## 08 · Repository map
+
+| Directory | Responsibility |
+| :--- | :--- |
+| [`convex/`](convex/) | Discovery, verification, catalog, hire records and protocol reads |
+| [`src/`](src/) | Expo app, data hooks and wallet integrations |
+| [`web/`](web/) | Independent Next.js website · [website guide](web/README.md) |
+| `Agent/` | Git-ignored scope, handovers and decisions; absent from fresh clones |
+
+<details>
+<summary><strong>Open the full source map</strong></summary>
+
+```text
    convex/                     the backend both clients read
      schema.ts                 12 tables, each commented with why it exists
      discovery.ts              incremental sweep + budgeted backfill
@@ -711,26 +866,35 @@ say the catalog is unreachable. Neither says the catalog is empty.
                                will not have it; source comments cite it.
 ```
 
+</details>
+
 Two mirrors are maintained **by hand** and are a standing hazard:
 `src/types/agent.ts` ↔ `web/src/types/agent.ts`, and `convex/*.ts` ↔
 `web/src/convex/api.ts`. The second caused a production outage and is now
-guarded by `web/npm run check:convex-api`, which parses the real Convex modules
+guarded by `npm run check:convex-api` from `web/`, which parses the real Convex modules
 and asserts every function the site declares still exists, is public, and still
 takes the arguments declared. The first is not guarded and should be.
 
-## IX. Running it
+---
 
-Node 20+, npm, and an Expo SDK 57-compatible native toolchain for device builds.
+<a id="ix-running-it"></a>
 
-### The backend
+## 09 · Run locally
+
+Node 24 (the version pinned in CI), npm, and an Expo SDK 57-compatible native
+toolchain for device builds. Commands below start from the repository root
+unless a block says otherwise; run each frontend in its own terminal.
+
+### 1 · Start the backend
 
 ```bash
+npm ci
 npx convex dev        # interactive browser login on first run
 ```
 
 It writes `CONVEX_DEPLOYMENT` and `EXPO_PUBLIC_CONVEX_URL` into `.env.local`
 itself, and `convex/_generated/` is real codegen output once it has run — do not
-hand-write stand-ins for it. Leave it running in a second terminal; it pushes
+hand-write stand-ins for it. Leave it running in its own terminal; it pushes
 function changes live.
 
 **`npx convex dev` *is* the backend's typecheck.** Standalone `tsc` cannot see
@@ -739,10 +903,11 @@ Convex serializes an action's return, so `undefined` becomes `null` and
 `runAction` is `Promise<null>` — invalid in a `Promise<void>` handler, and
 invisible to `tsc` alone.
 
-### The website
+### 2a · Start the website
 
 ```bash
-cd web && npm install
+cd web
+npm install
 cp .env.example .env.local     # then set NEXT_PUBLIC_CONVEX_URL
 npm run dev                    # http://localhost:3000
 npm run verify                 # convex-api · isolation · typecheck · lint · test
@@ -753,7 +918,7 @@ full in [`web/README.md`](web/README.md). Short version: Vercel builds `web/` vi
 its own Git integration, nothing in `.github/workflows` deploys it, and CI is
 the gate Vercel does not provide.
 
-### The app
+### 2b · Start the mobile app
 
 ```bash
 npm ci
@@ -770,13 +935,13 @@ EXPO_PUBLIC_ALTANA_RP_ID=
 
 `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values are inlined into public bundles by
 design. None is a secret, which is exactly why nothing private may ever carry
-those prefixes. The one real secret in this project (`SCAN8004_API_KEY`) is
-Convex-side only.
+those prefixes. `SCAN8004_API_KEY` belongs on the Convex backend only.
 
 Wallet deep-link return through `dolphin://` needs a native build. The static
 web export deliberately shows a native-build-required wallet state.
 
-### Native builds (EAS)
+<details>
+<summary><strong>Native builds — EAS profiles, distribution and build-time environment</strong></summary>
 
 Three profiles. The one that matters for getting the app onto someone else's
 phone is **`preview`**: internal distribution, and Android builds an **APK**
@@ -809,7 +974,9 @@ build's identity does not depend on remote state. A `development` profile is
 deliberately absent: `developmentClient` builds need `expo-dev-client`, which
 this project does not depend on.
 
-### Verifying
+</details>
+
+### 3 · Verify the app
 
 ```bash
 npx tsc --noEmit
@@ -819,11 +986,20 @@ npx expo-doctor
 npx expo export --platform web
 ```
 
-## X. What is true, and what is not yet
+The website has its own gate: run `npm run verify` from `web/`. Backend
+verification runs through `npx convex dev`, as described above.
 
-The most useful thing a README can do is separate the two.
+---
 
-**Verified live, against real infrastructure**
+<a id="x-what-is-true-and-what-is-not-yet"></a>
+
+## 10 · What works today
+
+This is the repository's recorded verification status. The measurements above
+are dated; the distinctions below are part of the product contract.
+
+<details>
+<summary><strong>Observed against real infrastructure</strong></summary>
 
 - The full discovery → verification → catalog pipeline, against BSC mainnet and
   the real 8004scan registry. Idempotency proved by accident when a deploy-time
@@ -838,11 +1014,15 @@ The most useful thing a README can do is separate the two.
   registered agent wallet.
 - The ERC-8004 Reputation Registry address, verified six ways before a line was
   written against it.
-- `createPasskeyWallet`, `recoverFromPasskey`, balance reads and the
-  session-granting UI, in a real browser against a real WebAuthn ceremony, on
-  both products.
+- `createPasskeyWallet`, `recoverFromPasskey` and balance reads, in a real
+  browser against a real WebAuthn ceremony, on both products. The browser
+  session-granting UI was exercised before the current execution gate; that
+  historical UI check does not establish on-chain session enforcement.
 
-**Built, compiles, not yet observed**
+</details>
+
+<details>
+<summary><strong>Built, not yet observed end to end</strong></summary>
 
 - **The native passkey path has never raised a Face ID or fingerprint prompt.**
   It typechecks, lints and bundles for Android, and it is built against the
@@ -878,7 +1058,10 @@ The most useful thing a README can do is separate the two.
   null on all of them and the paid-hire path is unexercised end to end against a
   live seller in this deployment.
 
-**Honestly unavailable, and labelled as such in the product**
+</details>
+
+<details>
+<summary><strong>Unavailable, explicitly labelled in the product</strong></summary>
 
 - Grid trading, trading and monitoring stats. Grid trading is the instructive
   one: this backend reads PancakeSwap V3 **LP-range positions**, which is a
@@ -890,7 +1073,10 @@ The most useful thing a README can do is separate the two.
   Venus exposes no single ratio — but it is **unverified against a live funded
   position**. Spot-check it against app.venus.io before trusting it in a demo.
 
-**Backlog, written down rather than hidden**
+</details>
+
+<details>
+<summary><strong>Open engineering work</strong></summary>
 
 - Review comments are free text with no moderation. Capped in length, stored as
   typed. It is the reason the structured answers carry the signal and the
@@ -899,11 +1085,22 @@ The most useful thing a README can do is separate the two.
 - The backfill has walked a fraction of the endpoint-publishing population; the
   catalog is the newest slice, not the whole chain.
 
+</details>
+
 ---
 
-Working on this repo? Read [`AGENTS.md`](AGENTS.md) first — it is the
-contributor contract, and it overrides defaults you may be carrying about Expo,
-Next, or this stack. `Agent/project-scope.md` holds the product scope.
+Working on this repo? Read [`AGENTS.md`](AGENTS.md) first. It is the contributor
+contract for the stack, data integrity and verification rules.
+`Agent/project-scope.md` holds the local product scope; the `Agent/` directory
+is git-ignored and will not exist in a fresh clone.
 
-Licensed under the MIT terms in [LICENSE](LICENSE) — still the copyright line
-Expo's template shipped with. Replace it before publishing.
+[MIT license](LICENSE) · The license file retains the original Expo template attribution.
+
+<p align="center">
+  <br>
+  <strong>Dolphin</strong><br>
+  <sub>Identity gets an agent discovered. A working service gets it listed.</sub><br><br>
+  <a href="https://dolphinamp.vercel.app">Explore the marketplace ↗</a>
+  &nbsp; · &nbsp;
+  <a href="#top">Back to top ↑</a>
+</p>

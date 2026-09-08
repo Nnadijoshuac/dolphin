@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
+import { MobileOnboarding } from "@/components/mobile-onboarding";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { track } from "@/lib/analytics";
 import { useAppStore } from "@/store/use-app-store";
 
@@ -95,6 +97,7 @@ const STEPS: readonly Step[] = [
 ];
 
 export function OnboardingClient() {
+  const isMobile = useMobileLayout();
   const router = useRouter();
   const setCompleted = useAppStore((state) => state.setHasCompletedOnboarding);
   const [index, setIndex] = useState(0);
@@ -110,6 +113,8 @@ export function OnboardingClient() {
     track("onboarding_completed", { skipped });
     router.push("/");
   }
+
+  if (isMobile) return <MobileOnboarding finish={finish} />;
 
   return (
     <div className="site-frame page-shell">

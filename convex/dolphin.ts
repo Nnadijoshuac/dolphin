@@ -64,6 +64,16 @@ import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 /** Hard ceiling on tool calls in one turn. A free tier is a real budget. */
 const MAX_TOOL_CALLS_PER_TURN = 6;
 
+/**
+ * How many times the model may go back for more evidence before it must write.
+ *
+ * Two, because one is measurably too few: the first live run reached an agent
+ * whose tool is a directory of other agents, so round one produced a candidate
+ * list and no answer. Two is enough to follow a pointer once. It is not a
+ * budget for open-ended exploration, which a free tier cannot fund.
+ */
+const MAX_TOOL_ROUNDS = 2;
+
 /** Stored tool output is truncated - a citation, not an archive. */
 const MAX_STORED_RESULT_CHARS = 4_000;
 
@@ -413,32 +423,56 @@ export const ask = action({
       ];
 
       /*
-       * `required` on the first pass. A small model left to its own judgement
-       * answers from its own weights, which is how an unsourced number reaches
-       * a user - the one outcome this product must never produce.
+       * CONSULT, up to MAX_TOOL_ROUNDS times.
+       *
+       * One round is not enough, and this is measured rather than assumed. The
+       * first end-to-end run (2026-09-08) reached a BROKER - an agent whose
+       * tool is itself a directory of other agents - so the single round
+       * returned a list of candidates and no yield figure, and the model
+       * correctly stopped and asked the user which agent to query next. That is
+       * the right instinct and the wrong experience.
+       *
+       * The budget is bounded on both axes because a free tier is a real one:
+       * at most MAX_TOOL_ROUNDS model calls with tools attached, and at most
+       * MAX_TOOL_CALLS_PER_TURN agent calls across all of them combined.
+       *
+       * `required` on the FIRST round only. A small model left to its own
+       * judgement answers from its own weights, which is how an unsourced
+       * number reaches a user - the one outcome this product must never
+       * produce. After evidence is in, `auto` is right: forcing a second call
+       * would make it invent a reason to make one.
        */
-      const first = await chatCompletion({
-        messages,
-        tools: menu.tools,
-        toolChoice: "required",
-      });
+      let callsRemaining = MAX_TOOL_CALLS_PER_TURN;
 
-      messages.push({
-        role: "assistant",
-        content: first.content || null,
-        tool_calls: first.toolCalls,
-      });
+      for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
+        const turn = await chatCompletion({
+          messages,
+          tools: menu.tools,
+          toolChoice: round === 0 ? "required" : "auto",
+        });
 
-      await executeToolCalls(ctx, {
-        conversationId,
-        messageId: assistantId,
-        toolCalls: first.toolCalls.slice(0, MAX_TOOL_CALLS_PER_TURN),
-        menu,
-        messages,
-      });
+        messages.push({
+          role: "assistant",
+          content: turn.content || null,
+          tool_calls: turn.toolCalls,
+        });
 
-      // SYNTHESIZE. No tools this time: the evidence is in, and another round
-      // of calls on a free tier buys less than it costs.
+        if (turn.toolCalls.length === 0) break;
+
+        const batch = turn.toolCalls.slice(0, callsRemaining);
+        callsRemaining -= batch.length;
+
+        await executeToolCalls(ctx, {
+          conversationId,
+          messageId: assistantId,
+          toolCalls: batch,
+          menu,
+          messages,
+        });
+      }
+
+      // SYNTHESIZE. No tools: the evidence is in, and the model must now write
+      // an answer rather than reach for one more call it cannot afford.
       const final = await chatCompletion({ messages });
 
       await ctx.runMutation(internal.dolphin.setMessageStatus, {

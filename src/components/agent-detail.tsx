@@ -13,6 +13,7 @@ import { useAgentReviews } from "@/hooks/use-agent-reviews";
 import { convexClient } from "@/providers/convex-provider";
 import { assessHireability } from "@/services/hireability";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
+import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import type { Agent, AgentCategory, LiveMetric } from "@/types/agent";
 
 /**
@@ -459,17 +460,38 @@ export function AgentDetail({
     agent.priceModel.status === "live" || agent.priceModel.status === "stale"
       ? agent.priceModel.value
       : null;
+
+  const tokenAddress =
+    agent.pricing?.token ||
+    (price?.token?.startsWith("0x") ? price.token : null);
+  const tokenMeta = useTokenMetadata(tokenAddress);
+
   const priceText = (() => {
     if (agent.protocol === "mcp") return "Free to Connect";
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      const decimals = agent.pricing.tokenDecimals;
-      const symbol = agent.pricing.tokenSymbol || agent.pricing.token;
+      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 18;
+      const symbol =
+        agent.pricing.tokenSymbol ||
+        tokenMeta?.symbol ||
+        (agent.pricing.token.startsWith("0x")
+          ? shortAddress(agent.pricing.token)
+          : agent.pricing.token);
       return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
     if (price === null) return "Price not reported yet";
     if (Number(price.amount) === 0) return "Free to hire";
-    return `${price.amount} ${price.token} per hire`;
+
+    const isHexToken = price.token.startsWith("0x");
+    const decimals = tokenMeta?.decimals || (isHexToken ? 18 : 0);
+    const symbol =
+      tokenMeta?.symbol ||
+      (isHexToken ? shortAddress(price.token) : price.token);
+
+    if (decimals > 0) {
+      return `${formatTokenAmount(price.amount, decimals)} ${symbol} per hire`;
+    }
+    return `${price.amount} ${symbol} per hire`;
   })();
 
   const MAX_PREVIEW_LENGTH = 220;

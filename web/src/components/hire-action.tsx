@@ -15,8 +15,14 @@ import type { Agent } from "@/types/agent";
 import { track } from "@/lib/analytics";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { canNegotiate, formatTokenAmount } from "@/wallet/erc8183-policy";
+import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
+
+function shortAddress(value: string | null) {
+  if (!value) return "";
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
 
 /**
  * Hiring an agent, as ONE action.
@@ -77,17 +83,37 @@ export function HireAction({ agent }: { agent: Agent }) {
   const priceModel =
     price.status === "live" || price.status === "stale" ? price.value : null;
 
+  const tokenAddress =
+    agent.pricing?.token ||
+    (priceModel?.token?.startsWith("0x") ? priceModel.token : null);
+  const tokenMeta = useTokenMetadata(tokenAddress);
+
   const priceText = (() => {
     if (agent.protocol === "mcp") return "Free to Connect";
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      const decimals = agent.pricing.tokenDecimals;
-      const symbol = agent.pricing.tokenSymbol || agent.pricing.token;
+      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 18;
+      const symbol =
+        agent.pricing.tokenSymbol ||
+        tokenMeta?.symbol ||
+        (agent.pricing.token.startsWith("0x")
+          ? shortAddress(agent.pricing.token)
+          : agent.pricing.token);
       return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
     if (priceModel === null) return "Price not reported yet";
     if (Number(priceModel.amount) === 0) return "Free to hire";
-    return `${priceModel.amount} ${priceModel.token}`;
+
+    const isHexToken = priceModel.token.startsWith("0x");
+    const decimals = tokenMeta?.decimals || (isHexToken ? 18 : 0);
+    const symbol =
+      tokenMeta?.symbol ||
+      (isHexToken ? shortAddress(priceModel.token) : priceModel.token);
+
+    if (decimals > 0) {
+      return `${formatTokenAmount(priceModel.amount, decimals)} ${symbol}`;
+    }
+    return `${priceModel.amount} ${symbol}`;
   })();
 
   const priceIsFree =

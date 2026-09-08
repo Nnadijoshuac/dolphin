@@ -14,7 +14,13 @@ import {
   fundingHint,
 } from "@/wallet/erc8183-policy";
 import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
+import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
+
+function shortAddress(value: string | null) {
+  if (!value) return "";
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
 
 /**
  * The payment step of a paid hire.
@@ -66,17 +72,35 @@ export function PaymentAction({
   );
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
 
+  const tokenAddress =
+    agent.pricing?.token ||
+    (priceToken?.startsWith("0x") ? priceToken : null);
+  const tokenMeta = useTokenMetadata(tokenAddress);
+
   // Null whenever the catalog has no payable price for this agent.
   // Deliberately not defaulted to "free" or to a raw number.
   const catalogPrice = (() => {
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      const decimals = agent.pricing.tokenDecimals;
-      const symbol = agent.pricing.tokenSymbol || agent.pricing.token;
+      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 18;
+      const symbol =
+        agent.pricing.tokenSymbol ||
+        tokenMeta?.symbol ||
+        (agent.pricing.token.startsWith("0x")
+          ? shortAddress(agent.pricing.token)
+          : agent.pricing.token);
       return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
     if (priceAmount !== null && Number(priceAmount) > 0 && priceToken) {
-      return `${priceAmount} ${priceToken}`;
+      const isHexToken = priceToken.startsWith("0x");
+      const decimals = tokenMeta?.decimals || (isHexToken ? 18 : 0);
+      const symbol =
+        tokenMeta?.symbol ||
+        (isHexToken ? shortAddress(priceToken) : priceToken);
+      if (decimals > 0) {
+        return `${formatTokenAmount(priceAmount, decimals)} ${symbol}`;
+      }
+      return `${priceAmount} ${symbol}`;
     }
     return null;
   })();

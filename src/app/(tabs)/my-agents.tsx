@@ -8,7 +8,6 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { PearlButton, PEARL_LABEL_COLOR } from "@/components/pearl-button";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatusBadge } from "@/components/status-badge";
-import { Surface } from "@/components/surface";
 import { colors, radii, shadows } from "@/constants/theme";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import { JobDeliveryCard } from "@/components/job-delivery-card";
@@ -135,38 +134,44 @@ export default function MyAgentsScreen() {
               ) : null}
             </View>
           ) : (
-            <View className="gap-6 py-8">
-              <Surface>
-                <View className="items-center px-4 py-6">
-                  <View className="mb-4 h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-                    <CategoryGlyph color={colors.ink} name="agents" size={28} />
-                  </View>
-                  <Text className="text-center text-[20px] font-bold" style={{ color: colors.ink }}>
-                    No agents yet
-                  </Text>
-                  <Text className="mt-2 text-center text-[14px] leading-5" style={{ color: colors.inkSecondary }}>
-                    Review an agent’s identity, data availability, authorization model,
-                    and payment readiness before hiring or saving a setup preview.
-                  </Text>
-                  <View className="mt-6 w-full">
-                    <PearlButton
-                      accessibilityLabel="Browse agent catalog"
-                      iconRight={
-                        <CategoryGlyph
-                          color={PEARL_LABEL_COLOR}
-                          name="arrow-right"
-                          size={16}
-                          strokeWidth={2.4}
-                        />
-                      }
-                      label="Browse agent catalog"
-                      onPress={() => router.push("/(tabs)/search")}
-                      size="lg"
-                      style={{ width: "100%" }}
+            <View className="items-center px-4 py-12">
+              <View
+                className="mb-4 h-14 w-14 items-center justify-center rounded-2xl"
+                style={{
+                  backgroundColor: colors.surfaceSubtle,
+                  borderColor: colors.line,
+                  borderWidth: 1,
+                }}
+              >
+                <CategoryGlyph color={colors.ink} name="agents" size={26} />
+              </View>
+              <Text className="text-center text-[20px] font-bold tracking-[-0.3px]" style={{ color: colors.ink }}>
+                No agents yet
+              </Text>
+              <Text
+                className="mt-2 max-w-[320px] text-center text-[13.5px] leading-5"
+                style={{ color: colors.inkSecondary }}
+              >
+                Review an agent’s identity, data availability, authorization model,
+                and payment readiness before hiring or saving a setup preview.
+              </Text>
+              <View className="mt-7 w-full max-w-[320px]">
+                <PearlButton
+                  accessibilityLabel="Browse agent catalog"
+                  iconRight={
+                    <CategoryGlyph
+                      color={PEARL_LABEL_COLOR}
+                      name="arrow-right"
+                      size={16}
+                      strokeWidth={2.4}
                     />
-                  </View>
-                </View>
-              </Surface>
+                  }
+                  label="Browse agent catalog"
+                  onPress={() => router.push("/(tabs)/search")}
+                  size="lg"
+                  style={{ width: "100%" }}
+                />
+              </View>
             </View>
           )}
         </View>

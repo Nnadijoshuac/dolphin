@@ -5,6 +5,7 @@ import * as Haptics from "expo-haptics";
 
 import { api } from "../../convex/_generated/api";
 import { AgentIcon } from "@/components/agent-icon";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
 import { useAgentsByKeys } from "@/hooks/use-agents";
@@ -271,7 +272,7 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
       <View className="mb-3 flex-row items-center justify-between">
         <Text
           className="text-[12px] font-bold uppercase tracking-[1.2px]"
-          style={{ color: colors.muted }}
+          style={{ color: colors.inkSecondary }}
         >
           Agent activity
         </Text>
@@ -284,7 +285,7 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
               router.push("/(tabs)/my-agents");
             }}
           >
-            <Text className="text-[13px] font-bold" style={{ color: colors.goldDark }}>
+            <Text className="text-[13px] font-bold underline" style={{ color: colors.ink }}>
               See all
             </Text>
           </PressableScale>
@@ -306,13 +307,23 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
          * Unboxed like the rows it stands in for: a bordered empty card was the
          * most prominent thing on the page in the state everybody starts in.
          */
-        <View className="px-1 py-2">
-          <Text className="text-[13px] font-bold" style={{ color: colors.ink }}>
+        <View className="items-center px-4 py-8">
+          <View
+            className="mb-3 h-12 w-12 items-center justify-center rounded-2xl"
+            style={{
+              backgroundColor: colors.surfaceSubtle,
+              borderColor: colors.line,
+              borderWidth: 1,
+            }}
+          >
+            <CategoryGlyph color={colors.ink} name="clock" size={20} strokeWidth={2.2} />
+          </View>
+          <Text className="text-center text-[15px] font-bold tracking-[-0.2px]" style={{ color: colors.ink }}>
             {isLoading ? "Checking your activity…" : "No agent activity yet"}
           </Text>
           <Text
-            className="mt-1.5 text-[12px] leading-[18px]"
-            style={{ color: colors.muted }}
+            className="mt-1.5 max-w-[320px] text-center text-[12.5px] leading-[18px]"
+            style={{ color: colors.inkSecondary }}
           >
             {isLoading
               ? "Reading hire and payment records."

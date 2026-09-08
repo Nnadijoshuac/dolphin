@@ -61,17 +61,21 @@ export default function MyAgentsScreen() {
         >
           My Agents
         </Text>
-        <Text className="mt-1 text-[14px]" style={{ color: colors.muted }}>
+        <Text className="mt-1 text-[14px]" style={{ color: colors.inkSecondary }}>
           Hired agents and saved setup previews
         </Text>
       </View>
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 110, paddingTop: 4 }}
+        contentContainerStyle={
+          hasHires || hasPreviews
+            ? { paddingBottom: 110, paddingTop: 4 }
+            : { flexGrow: 1, justifyContent: "center", alignItems: "center", paddingBottom: 60 }
+        }
         showsVerticalScrollIndicator={false}
       >
-        <View className="px-6">
+        <View className="w-full px-6">
           {hasHires || hasPreviews ? (
             <View className="gap-8">
               {hasHires ? (

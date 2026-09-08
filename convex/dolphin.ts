@@ -163,6 +163,13 @@ export const getConversation = query({
         agentKey: call.agentKey,
         agentName: call.agentName,
         toolName: call.toolName,
+        /*
+         * What Dolphin ASKED, shown next to what came back. Worth surfacing:
+         * "it consulted this agent" is a weaker claim than "it asked this
+         * agent exactly this and got exactly that", and the second is the one
+         * a person can check.
+         */
+        argumentsJson: call.argumentsJson,
         resultText: call.resultText,
         isError: call.isError,
         transportError: call.transportError,

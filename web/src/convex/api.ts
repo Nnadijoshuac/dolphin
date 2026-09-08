@@ -620,6 +620,8 @@ export type DolphinToolCall = {
   agentKey: string;
   agentName: string;
   toolName: string;
+  /** What Dolphin asked, JSON. Shown beside what came back. */
+  argumentsJson: string;
   resultText: string | null;
   isError: boolean;
   transportError: string | null;

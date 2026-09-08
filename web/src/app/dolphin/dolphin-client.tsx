@@ -1,27 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 
 import { BrandMark } from "@/components/brand-mark";
+import { DolphinLoader } from "@/components/dolphin-loader";
+import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
 import {
   useDolphinChat,
   useDolphinConversation,
-  type DolphinToolCall,
   type DolphinTurn,
 } from "@/hooks/use-dolphin-conversation";
+import { useWallet } from "@/wallet/wallet-provider";
 
 /**
  * DOLPHIN on the web.
  *
- * See Agent/DOLPHIN-AGENT-SCOPE.md for what this is. The interface deliberately
- * copies the shape of a familiar AI chat - centred column, unbubbled assistant
- * turns, composer pinned at the bottom - so nobody has to learn anything to use
- * it.
+ * See Agent/DOLPHIN-AGENT-SCOPE.md for what this is. The chat shell is
+ * deliberately conventional - two-tone bubbles, avatars, a rounded composer,
+ * Enter to send - so nobody has to learn anything. The part that is not
+ * conventional is components/dolphin-tool-calls.tsx, which is the product.
  *
- * What is NOT generic is the citation block under each answer. That is the
- * product.
+ * `seedAgentKey` arrives as a PROP from the server page rather than being read
+ * here with `useSearchParams`. That is not a style preference: a component
+ * calling `useSearchParams` must sit under a Suspense boundary, and with the
+ * whole screen inside one the prerender emitted an empty body - verified by
+ * serving the build and finding a 200 with a correct <title> and no content at
+ * all. Reading the param on the server keeps the HTML complete.
  */
 
 /**
@@ -63,84 +67,29 @@ function relativeTime(timestamp: number): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-/**
- * One consulted agent.
- *
- * Comes from `dolphinToolCalls`, which the action writes before and after each
- * call - not from anything the model said about its own sources. If the answer
- * text and these rows disagree, these rows are right.
- */
-function Citation({ call }: { call: DolphinToolCall }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const pending = call.latencyMs === null;
-  const failed = call.transportError !== null;
-
+function Avatar({ kind, initials }: { kind: "user" | "assistant"; initials: string }) {
+  if (kind === "assistant") {
+    return (
+      <div className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft ring-1 ring-line">
+        <BrandMark size={17} />
+      </div>
+    );
+  }
   return (
-    <div
-      className={`overflow-hidden rounded-lg border ${
-        failed ? "border-line bg-paper-muted" : "border-line bg-paper-strong"
-      }`}
-    >
-      <button
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-paper-muted"
-        onClick={() => setExpanded((value) => !value)}
-        type="button"
-      >
-        <span
-          aria-hidden
-          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-            pending ? "animate-pulse bg-accent" : failed ? "bg-faint-mark" : "bg-accent"
-          }`}
-        />
-        <span className="min-w-0 flex-1 truncate text-[0.8rem] text-ink">
-          <span className="font-semibold">
-            {pending ? "Consulting" : failed ? "Could not reach" : "Consulted"}{" "}
-            {call.agentName}
-          </span>
-          <span className="text-faint"> · {call.toolName}</span>
-        </span>
-        {call.latencyMs !== null ? (
-          <span className="shrink-0 text-[0.7rem] tabular-nums text-faint">
-            {call.latencyMs}ms
-          </span>
-        ) : null}
-      </button>
-
-      {expanded ? (
-        <div className="space-y-3 border-t border-line px-3 py-3">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-faint">
-            {failed ? "Why it failed" : `What ${call.agentName} returned`}
-          </p>
-          {/*
-            Verbatim, and labelled as the agent's own words. An agent's output is
-            its CLAIM, never an established outcome - a collectFees tool in this
-            catalog once answered `note: "Fees collected"` when nothing had been
-            collected.
-          */}
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md bg-paper-muted p-3 text-[0.7rem] leading-relaxed text-muted">
-            {call.transportError ?? call.resultText ?? "No content returned."}
-          </pre>
-          <Link
-            className="inline-block text-[0.75rem] font-semibold text-accent-ink hover:underline"
-            href={`/agent/${encodeURIComponent(call.agentKey)}`}
-          >
-            View {call.agentName} →
-          </Link>
-        </div>
-      ) : null}
+    <div className="grid size-8 shrink-0 place-items-center rounded-full bg-paper-muted text-[0.65rem] font-semibold uppercase text-muted ring-1 ring-line">
+      {initials}
     </div>
   );
 }
 
-function Turn({ turn }: { turn: DolphinTurn }) {
+function Turn({ turn, initials }: { turn: DolphinTurn; initials: string }) {
   if (turn.role === "user") {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-paper-muted px-4 py-2.5 text-[0.95rem] leading-relaxed text-ink">
+      <div className="flex w-full items-end justify-end gap-2 py-3">
+        <div className="max-w-[80%] overflow-hidden rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5 text-[0.92rem] leading-relaxed text-ink">
           {turn.content}
         </div>
+        <Avatar initials={initials} kind="user" />
       </div>
     );
   }
@@ -148,58 +97,58 @@ function Turn({ turn }: { turn: DolphinTurn }) {
   const working = turn.status === "thinking" || turn.status === "consulting";
 
   return (
-    <div className="space-y-3">
-      {working ? (
-        <p className="flex items-center gap-2 text-[0.85rem] text-muted">
-          <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-          {turn.status === "thinking"
-            ? "Choosing which agents to ask…"
-            : "Consulting agents…"}
-        </p>
-      ) : null}
+    <div className="flex w-full items-start gap-2 py-3">
+      <Avatar initials="AI" kind="assistant" />
 
-      {/* Citations first while working, so progress is the visible thing. */}
-      {turn.toolCalls.length > 0 ? (
-        <div className="space-y-1.5">
-          {turn.toolCalls.map((call) => (
-            <Citation call={call} key={call.id} />
-          ))}
-        </div>
-      ) : null}
+      <div className="min-w-0 max-w-[85%] flex-1 space-y-2">
+        {/*
+          Progress and provenance sit ABOVE the answer, in the order they
+          happened: Dolphin picks who to ask, asks them, then writes. Watching
+          the consulted-agent rows land one by one is the demo.
+        */}
+        {working && turn.toolCalls.length === 0 ? (
+          <DolphinLoader
+            label={
+              turn.status === "thinking"
+                ? "Choosing which agents to ask…"
+                : "Consulting agents…"
+            }
+          />
+        ) : null}
 
-      {turn.status === "error" ? (
-        <p className="rounded-lg border border-line bg-paper-muted px-4 py-3 text-[0.9rem] leading-relaxed text-ink">
-          {turn.errorReason ?? "Dolphin could not answer that."}
-        </p>
-      ) : null}
+        <DolphinToolCalls calls={turn.toolCalls} />
 
-      {turn.content.length > 0 ? (
-        <div className="whitespace-pre-wrap text-[0.95rem] leading-[1.7] text-ink">
-          {turn.content}
-        </div>
-      ) : null}
+        {turn.status === "error" ? (
+          <div className="rounded-2xl rounded-bl-md bg-paper-muted px-4 py-3 text-[0.92rem] leading-relaxed text-ink">
+            {turn.errorReason ?? "Dolphin could not answer that."}
+          </div>
+        ) : null}
 
-      {/*
-        WHEN the answer was produced, always shown. A reused answer keeps its
-        ORIGINAL completedAt, so a cached reply must not read as fresh: live
-        metrics restated as current when they were read an hour ago is the
-        fabricated-liveness failure of AGENTS.md §5 wearing a cache as a
-        disguise.
-      */}
-      {turn.status === "complete" && turn.completedAt !== null ? (
-        <p className="text-[0.7rem] text-faint">
-          Answered {relativeTime(turn.completedAt)}
-          {turn.model ? ` · ${turn.model.split("/").pop()?.replace(":free", "")}` : ""}
-        </p>
-      ) : null}
+        {turn.content.length > 0 ? (
+          <div className="overflow-hidden whitespace-pre-wrap rounded-2xl rounded-bl-md bg-paper-muted px-4 py-3 text-[0.92rem] leading-[1.7] text-ink">
+            {turn.content}
+          </div>
+        ) : null}
+
+        {/*
+          WHEN the answer was produced, always shown. A reused answer keeps its
+          ORIGINAL completedAt, so a cached reply must not read as fresh: live
+          metrics restated as current when they were read an hour ago is the
+          fabricated-liveness failure of AGENTS.md §5 wearing a cache as a
+          disguise.
+        */}
+        {turn.status === "complete" && turn.completedAt !== null ? (
+          <p className="pl-1 text-[0.68rem] text-faint">
+            Answered {relativeTime(turn.completedAt)}
+            {turn.model ? ` · ${turn.model.split("/").pop()?.replace(":free", "")}` : ""}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-export function DolphinClient() {
-  const params = useSearchParams();
-  const seedAgentKey = params.get("agent");
-
+export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null }) {
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -207,6 +156,9 @@ export function DolphinClient() {
   const { conversationKey, send, reset, isSending, sendError } =
     useDolphinChat(seedAgentKey);
   const { turns } = useDolphinConversation(conversationKey);
+  const wallet = useWallet();
+
+  const initials = wallet.address ? wallet.address.slice(2, 4) : "You";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -225,27 +177,28 @@ export function DolphinClient() {
   const isEmpty = turns.length === 0;
 
   return (
-    <div className="flex h-[calc(100dvh-var(--header-height,4rem))] flex-col">
+    <div className="flex h-[calc(100dvh-4rem)] flex-col">
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[46rem] px-5 pb-8 pt-10">
+        <div className="mx-auto w-full max-w-[46rem] px-5 pb-6 pt-8">
           {isEmpty ? (
-            <div className="pt-[8vh]">
-              <div className="mb-7 flex items-center gap-3">
+            <div className="pt-[6vh]">
+              <div className="mb-6 flex items-center gap-3">
                 <BrandMark size={30} />
-                <h1 className="text-[1.65rem] font-semibold tracking-tight text-ink">
+                <h1 className="text-[1.6rem] font-semibold tracking-tight text-ink">
                   Ask the marketplace
                 </h1>
               </div>
-              <p className="mb-9 max-w-[34rem] text-[0.95rem] leading-relaxed text-muted">
+              <p className="mb-8 max-w-[34rem] text-[0.92rem] leading-relaxed text-muted">
                 Dolphin answers by calling the agents listed here and showing you
-                which ones it asked. It never makes a number up — if the agents it
-                can reach do not know, it says so.
+                which ones it asked, what it asked them, and what each one said
+                back. It never makes a number up — if the agents it can reach do
+                not know, it says so.
               </p>
 
               <div className="grid gap-2.5 sm:grid-cols-2">
                 {SUGGESTIONS.map((suggestion) => (
                   <button
-                    className="group rounded-xl border border-line bg-paper-strong p-4 text-left transition-colors hover:border-line-strong hover:bg-paper-muted"
+                    className="rounded-xl border border-line bg-paper-strong p-4 text-left transition-colors hover:border-line-strong hover:bg-paper-muted"
                     key={suggestion.title}
                     onClick={() => submit(suggestion.prompt)}
                     type="button"
@@ -261,9 +214,9 @@ export function DolphinClient() {
               </div>
             </div>
           ) : (
-            <div className="space-y-8">
+            <div>
               {turns.map((turn) => (
-                <Turn key={turn.id} turn={turn} />
+                <Turn initials={initials} key={turn.id} turn={turn} />
               ))}
             </div>
           )}
@@ -274,7 +227,7 @@ export function DolphinClient() {
             was asked.
           */}
           {sendError ? (
-            <p className="mt-6 text-[0.85rem] text-ink">{sendError}</p>
+            <p className="mt-4 text-[0.85rem] text-ink">{sendError}</p>
           ) : null}
 
           <div ref={bottomRef} />
@@ -283,19 +236,20 @@ export function DolphinClient() {
 
       <div className="border-t border-line bg-paper">
         <div className="mx-auto w-full max-w-[46rem] px-5 py-4">
-          <div className="flex items-end gap-2 rounded-2xl border border-line bg-paper-strong px-3 py-2.5 focus-within:border-line-strong">
+          <div className="flex w-full flex-col items-end rounded-2xl border border-line bg-paper-strong p-2 focus-within:border-line-strong focus-within:ring-1 focus-within:ring-line-strong">
             <textarea
-              className="max-h-48 min-h-[1.5rem] flex-1 resize-none bg-transparent py-1 text-[0.95rem] leading-relaxed text-ink outline-none placeholder:text-faint-mark"
+              className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2 py-1.5 text-[0.92rem] leading-relaxed text-ink outline-none placeholder:text-faint-mark"
               onChange={(event) => {
                 setDraft(event.target.value);
                 // Grow with the content, the way a chat composer should.
                 event.target.style.height = "auto";
-                event.target.style.height = `${Math.min(event.target.scrollHeight, 192)}px`;
+                event.target.style.height = `${Math.min(event.target.scrollHeight, 400)}px`;
               }}
               onKeyDown={(event) => {
                 // Enter sends, Shift+Enter makes a newline - the convention
                 // every chat interface shares.
                 if (event.key === "Enter" && !event.shiftKey) {
+                  if (draft.trim().length === 0) return;
                   event.preventDefault();
                   submit(draft);
                 }
@@ -307,7 +261,7 @@ export function DolphinClient() {
             />
             <button
               aria-label="Send"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-ink transition-opacity disabled:opacity-35"
+              className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-accent-ink transition-opacity disabled:opacity-40"
               disabled={draft.trim().length === 0 || isSending}
               onClick={() => submit(draft)}
               type="button"
@@ -318,16 +272,18 @@ export function DolphinClient() {
                   stroke="currentColor"
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth="2.4"
+                  strokeWidth="2.5"
                 />
               </svg>
             </button>
           </div>
 
-          <p className="mt-2 text-center text-[0.7rem] text-faint">
-            {isEmpty && !isSending ? (
-              <>Dolphin calls real agents on BNB Chain. Answers cite what it asked.</>
-            ) : !isSending ? (
+          <p className="mt-2 text-center text-[0.68rem] text-faint">
+            {isSending ? (
+              <>Consulting agents — this can take up to a minute.</>
+            ) : isEmpty ? (
+              <>Dolphin calls real agents on BNB Chain. Every answer cites what it asked.</>
+            ) : (
               <button
                 className="hover:underline"
                 onClick={() => {
@@ -338,8 +294,6 @@ export function DolphinClient() {
               >
                 Start a new conversation
               </button>
-            ) : (
-              <>Consulting agents — this can take up to a minute.</>
             )}
           </p>
         </div>

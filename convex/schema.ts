@@ -697,6 +697,21 @@ export default defineSchema({
     promptHash: v.union(v.string(), v.null()),
     /** Which OpenRouter model answered. Null until one has. */
     model: v.union(v.string(), v.null()),
+    /**
+     * Agents this answer NAMES, resolved against the catalog server-side.
+     *
+     * The point is that an answer mentioning "Grid Trader (token ID 269224)"
+     * should be able to take you to Grid Trader. The resolution happens here
+     * rather than in the client because the client has no catalog to match
+     * against, and it happens against the CATALOG rather than by trusting the
+     * model, so a hallucinated agent name simply resolves to nothing and is
+     * rendered as plain text.
+     *
+     * `label` is the exact substring to linkify. Distinct from the consulted
+     * agents in `dolphinToolCalls`: an agent can be named without being called,
+     * which is exactly what happens when a broker recommends one.
+     */
+    mentions: v.array(v.object({ label: v.string(), agentKey: v.string() })),
     createdAt: v.number(),
     completedAt: v.union(v.number(), v.null()),
   })

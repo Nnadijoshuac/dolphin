@@ -7,7 +7,7 @@ import { colors, radii, shadows } from "@/constants/theme";
 import type { AgentProtocol, CategoryFacet } from "@/hooks/use-agents";
 
 interface CatalogFilterRailProps {
-  onOpenFilterSheet: () => void;
+  onOpenFilterModal: () => void;
   protocol: AgentProtocol | null;
   onSelectProtocol: (protocol: AgentProtocol | null) => void;
   category: string | null;
@@ -19,12 +19,12 @@ interface CatalogFilterRailProps {
 /**
  * CatalogFilterRail
  *
- * A serene, single-row horizontal scroll rail combining a dedicated FilterSheet
+ * A serene, single-row horizontal scroll rail combining a dedicated FilterModal
  * trigger with instant 1-tap pills for Kind and Category. Gives users immediate,
  * calm control over the catalog without jarring page shifts or dual-row clutter.
  */
 export function CatalogFilterRail({
-  onOpenFilterSheet,
+  onOpenFilterModal,
   protocol,
   onSelectProtocol,
   category,
@@ -51,7 +51,7 @@ export function CatalogFilterRail({
         accessibilityRole="button"
         onPress={() => {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onOpenFilterSheet();
+          onOpenFilterModal();
         }}
         containerStyle={{
           flexDirection: "row",

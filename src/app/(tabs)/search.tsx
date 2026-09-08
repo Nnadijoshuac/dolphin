@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentRow } from "@/components/agent-row";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { CatalogFilterRail } from "@/components/catalog-filter-rail";
-import { SmartFilterModal } from "@/components/smart-filter-modal";
+import { FilterModal } from "@/components/filter-modal";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { categoryLabel } from "@/constants/agents";
@@ -225,7 +225,7 @@ export default function SearchScreen() {
           activeFilterCount={activeFilterCount}
           categories={categories}
           category={selectedCategory}
-          onOpenFilterSheet={() => setFilterSheetOpen(true)}
+          onOpenFilterModal={() => setFilterSheetOpen(true)}
           onSelectCategory={(cat) => setSelectedCategory(cat)}
           onSelectProtocol={(proto) => setKind(proto)}
           protocol={kind}
@@ -546,13 +546,9 @@ export default function SearchScreen() {
         )}
       </ScrollView>
 
-      {/* Smart Filter Modal */}
-      <SmartFilterModal
-        categories={categories}
-        category={selectedCategory}
+      {/* Filter Modal */}
+      <FilterModal
         onClose={() => setFilterSheetOpen(false)}
-        onResetAll={handleResetAllFilters}
-        onSelectCategory={(cat) => setSelectedCategory(cat)}
         onSelectProtocol={(proto) => setKind(proto)}
         protocol={kind}
         visible={filterSheetOpen}

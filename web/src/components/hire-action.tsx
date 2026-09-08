@@ -187,7 +187,7 @@ export function HireAction({ agent }: { agent: Agent }) {
           <span
             aria-hidden="true"
             className={`h-2 w-2 rounded-full ${
-              showMyAgents ? "bg-success" : "bg-faint"
+              showMyAgents ? "bg-success" : "bg-faint-mark"
             }`}
           />
           {showMyAgents ? "Hired" : "Not hired"}

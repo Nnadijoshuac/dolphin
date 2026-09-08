@@ -332,7 +332,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                 <span
                   aria-hidden="true"
                   className={`h-2 w-2 rounded-full ${
-                    isRegistryVerified ? "bg-success" : "bg-faint"
+                    isRegistryVerified ? "bg-success" : "bg-faint-mark"
                   }`}
                 />
                 {isRegistryVerified

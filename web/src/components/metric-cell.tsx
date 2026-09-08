@@ -49,7 +49,7 @@ export function MetricCell<T>({ label, metric, format }: MetricCellProps<T>) {
                 ? "bg-success"
                 : metric.status === "stale" || metric.status === "syncing"
                   ? "bg-accent"
-                  : "bg-faint"
+                  : "bg-faint-mark"
             } ${metric.status === "syncing" ? "animate-pulse" : ""}`}
           />
           {metric.status}

@@ -8,8 +8,39 @@
   --paper-muted: #eeede6;
   --ink: #171813;
   --ink-soft: #393a34;
-  --muted: #6c6d64;
-  --faint: #99998f;
+  /*
+   * THE GREY RAMP IS CONTRAST-BOUND, NOT TASTE-BOUND (2026-09-08).
+   *
+   * `--faint` was #99998f, which is 2.58:1 on --canvas. WCAG AA wants 4.5:1 for
+   * normal text and it was carrying real content, not decoration: the publisher
+   * address, the registration date, "Not published", "No public URL", every
+   * eyebrow, and most empty-state body copy. `--muted` at #6c6d64 passed on
+   * --canvas (4.71:1) and quietly FAILED on --paper-muted (4.46:1), which is the
+   * background of the permission-model icons and several panels.
+   *
+   * Both are now measured against all three surfaces this app paints text on -
+   * --canvas #f4f3ed, --paper #fffefa and --paper-muted #eeede6 - and the value
+   * chosen is the lightest that clears 4.5:1 on the WORST of the three:
+   *
+   *   --muted  #5f6058   canvas 5.72   paper 6.30   paper-muted 5.42
+   *   --faint  #6a6b62   canvas 4.85   paper 5.35   paper-muted 4.60
+   *
+   * The consequence is honest and worth stating: the ramp is COMPRESSED. On a
+   * near-white ground there is not room for three accessible tiers of grey plus
+   * --ink-soft, so the step between muted and faint is now small. De-emphasis
+   * below `--muted` has to come from SIZE AND WEIGHT, not from more grey -
+   * anything lighter than --faint is not text, it is a decoration that happens
+   * to be legible to people who do not need it to be.
+   */
+  --muted: #5f6058;
+  --faint: #6a6b62;
+  /*
+   * The old --faint, kept for NON-TEXT marks only: the status dots, which are
+   * 6-8px shapes that always sit beside a text label saying the same thing.
+   * 1.4.11's 3:1 applies to UI components that carry meaning ALONE; these never
+   * do. Never put text in this colour - that is what --faint is for.
+   */
+  --faint-mark: #99998f;
   --line: #deddd4;
   --line-strong: #c9c8bd;
   --accent: #f0b90b;
@@ -38,6 +69,7 @@
   --color-ink-soft: var(--ink-soft);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
+  --color-faint-mark: var(--faint-mark);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-accent: var(--accent);

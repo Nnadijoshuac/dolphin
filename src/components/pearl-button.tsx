@@ -11,6 +11,17 @@ import Animated, {
 
 export type PearlButtonSize = "sm" | "md" | "lg";
 
+/**
+ * The label colour on the pearl, exported so an `icon` passed in from a call
+ * site can match it.
+ *
+ * The pearl is dark, and every other button on these screens is light, so a
+ * glyph tinted with the usual `colors.ink` disappears on it. Exporting the
+ * value rather than repeating the hex is what stops the two drifting the next
+ * time the finish is retuned.
+ */
+export const PEARL_LABEL_COLOR = "#FFE7FF";
+
 export type PearlButtonProps = {
   label: string;
   onPress?: () => void;
@@ -234,7 +245,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   labelText: {
-    color: "#FFE7FF",
+    color: PEARL_LABEL_COLOR,
     fontWeight: "700",
     letterSpacing: -0.2,
   },

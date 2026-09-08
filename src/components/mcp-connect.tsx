@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import * as Haptics from "expo-haptics";
 
 import { CategoryGlyph } from "@/components/category-glyph";
-import { PressableScale } from "@/components/pressable-scale";
+import { PEARL_LABEL_COLOR, PearlButton } from "@/components/pearl-button";
 import { colors, radii, shadows } from "@/constants/theme";
 import type { Agent } from "@/types/agent";
 
@@ -52,9 +51,14 @@ export function McpUseButton({ agent }: { agent: Agent }) {
 
   if (!endpoint) return null;
 
+  /**
+   * No haptic of its own. PearlButton already fires one on press, and the copy
+   * is synchronous, so a success notification landing milliseconds later read
+   * as one stuttered buzz rather than as two pieces of feedback. The tick, the
+   * label and the caption all change together to confirm it.
+   */
   const handleUse = async () => {
     await Clipboard.setStringAsync(endpoint);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setCopied(true);
   };
 
@@ -101,35 +105,36 @@ export function McpUseButton({ agent }: { agent: Agent }) {
         </View>
       </View>
 
-      <PressableScale
+      {/*
+       * The same PearlButton the hire path uses, at the same `lg` size, so the
+       * primary action on an MCP agent and on an A2A agent are one control
+       * rather than two that merely do the same job. This was the last bespoke
+       * primary button on the detail page.
+       *
+       * The icon is tinted to PearlButton's own label colour rather than to
+       * `colors.ink`: the pearl is dark, and the old gold/mint pill was light,
+       * so an ink-coloured glyph would sit almost invisibly on it.
+       *
+       * The copied state no longer changes the button's colour - the pearl has
+       * one finish by design. It is carried by the tick, the label, and the
+       * caption underneath, which all three change together.
+       */}
+      <PearlButton
         accessibilityHint="Copies this agent's MCP endpoint to your clipboard"
-        accessibilityLabel={copied ? "Endpoint copied" : "Use MCP Agent"}
-        accessibilityRole="button"
+        accessibilityLabel={copied ? "Endpoint copied" : "Copy MCP endpoint"}
+        icon={
+          <CategoryGlyph
+            color={PEARL_LABEL_COLOR}
+            name={copied ? "check" : "copy"}
+            size={16}
+            strokeWidth={2.4}
+          />
+        }
+        label={copied ? "Endpoint Copied" : "Copy MCP Endpoint"}
         onPress={() => void handleUse()}
-        containerStyle={{
-          alignItems: "center",
-          backgroundColor: copied ? colors.mint : colors.gold,
-          borderRadius: radii.pill,
-          flexDirection: "row",
-          gap: 8,
-          height: 52,
-          justifyContent: "center",
-          ...(copied ? {} : shadows.goldGlow),
-        }}
-      >
-        <CategoryGlyph
-          color={colors.ink}
-          name={copied ? "check" : "copy"}
-          size={16}
-          strokeWidth={2.4}
-        />
-        <Text
-          className="text-[16px] font-bold tracking-[-0.2px]"
-          style={{ color: colors.ink }}
-        >
-          {copied ? "Endpoint Copied" : "Copy MCP Endpoint"}
-        </Text>
-      </PressableScale>
+        size="lg"
+        style={{ width: "100%" }}
+      />
 
       <Text
         className="mt-2.5 text-center text-[11.5px]"

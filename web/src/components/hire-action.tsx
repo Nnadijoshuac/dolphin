@@ -11,6 +11,7 @@ import { agentHiresApi } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent } from "@/types/agent";
+import { track } from "@/lib/analytics";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { canNegotiate } from "@/wallet/erc8183-policy";
 import { useWallet } from "@/wallet/wallet-provider";
@@ -100,14 +101,21 @@ export function HireAction({ agent }: { agent: Agent }) {
    */
   async function runHire(jobId: string | null) {
     setState({ kind: "hiring" });
+    track("hire_started", {
+      agentKey: agent.agentKey,
+      category: agent.category,
+      requiresPayment: priceRequiresPayment,
+    });
     try {
       let address = wallet.address;
       if (!address) {
         address = await wallet.connect();
         if (!address) {
           setState({ kind: "idle" });
+          track("hire_failed", { agentKey: agent.agentKey, reason: "declined" });
           return;
         }
+        track("wallet_connected", { connector: "identity", surface: "agent" });
       }
 
       let token = session.sessionToken;
@@ -115,8 +123,10 @@ export function HireAction({ agent }: { agent: Agent }) {
         token = await session.signIn(address);
         if (!token) {
           setState({ kind: "idle" });
+          track("hire_failed", { agentKey: agent.agentKey, reason: "declined" });
           return;
         }
+        track("wallet_signed_in", { surface: "agent" });
       }
 
       const id = await hire({
@@ -126,11 +136,17 @@ export function HireAction({ agent }: { agent: Agent }) {
         paymentJobId: jobId,
       });
       setState({ kind: "done", id: String(id) });
+      track("hire_completed", {
+        agentKey: agent.agentKey,
+        category: agent.category,
+        paid: jobId !== null,
+      });
     } catch (cause) {
       setState({
         kind: "error",
         message: toUserMessage(cause, "The hire could not be recorded. Try again."),
       });
+      track("hire_failed", { agentKey: agent.agentKey, reason: "error" });
     }
   }
 
@@ -210,9 +226,9 @@ export function HireAction({ agent }: { agent: Agent }) {
         {showMyAgents ? (
           <Link
             className="interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-paper px-5 text-sm font-semibold text-ink no-underline hover:bg-canvas"
-            href="/my-agents"
+            href={`/manage/${agent.tokenId}`}
           >
-            Manage in My agents
+            Manage this hire
             <CategoryGlyph color="currentColor" name="arrow-right" size={16} strokeWidth={2} />
           </Link>
         ) : (

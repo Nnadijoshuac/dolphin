@@ -10,7 +10,6 @@ import { categoryLabel } from "@/constants/agents";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { convexClient } from "@/providers/convex-provider";
-import { useAppStore } from "@/store/use-app-store";
 import type { Agent } from "@/types/agent";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
@@ -41,7 +40,14 @@ function AgentRecordRow({
   return (
     <Link
       className="interactive group block border-t border-line py-5 no-underline first:border-t-0 sm:py-6"
-      href={`/agent/${agent?.tokenId ?? fallbackId}`}
+      /*
+       * /manage, not /agent. This said "Manage" and pointed at the PUBLIC
+       * record, which then offered "Manage in My agents" pointing back here -
+       * two controls both labelled Manage, pointing at each other, with no
+       * management anywhere between them. /manage/[id] is the screen that
+       * actually manages a hire, including ending it.
+       */
+      href={`/manage/${agent?.tokenId ?? fallbackId}`}
     >
       <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-5">
         <div className="flex items-start gap-4 sm:contents">
@@ -86,7 +92,6 @@ function ConnectedRecords({ address }: { address: string }) {
   // now, so an agent hired months ago may simply not be on page one.
   const agentsByKey = useAgentsByKeys((hires ?? []).map((hire) => hire.agentKey));
   const catalogLoading = false;
-  const previews = useAppStore((state) => state.previewHires);
 
   // The map is keyed by BOTH agentKey and bare tokenId, so an older stored
   // reference still resolves.
@@ -102,7 +107,7 @@ function ConnectedRecords({ address }: { address: string }) {
     );
   }
 
-  if (hires.length === 0 && previews.length === 0) {
+  if (hires.length === 0) {
     return (
       <div className="grid gap-6 border-y border-line py-8 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="flex gap-4">
@@ -168,34 +173,19 @@ function ConnectedRecords({ address }: { address: string }) {
         </section>
       ) : null}
 
-      {previews.length > 0 ? (
-        <section aria-labelledby="previews-heading">
-          <div className="flex items-end justify-between gap-4 border-b border-line pb-5">
-            <div>
-              <p className="eyebrow">This browser only</p>
-              <h2 className="section-title mt-3" id="previews-heading">
-                Device previews
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-muted">
-                No on-chain transaction or backend hire record was created.
-              </p>
-            </div>
-            <span className="text-sm text-muted">{previews.length}</span>
-          </div>
-          <div>
-            {previews.map((preview) => (
-              <AgentRecordRow
-                agent={findAgent(preview.agentId)}
-                date={preview.savedAt}
-                fallbackId={preview.agentId}
-                key={preview.agentId}
-                label="Local preview"
-                tone="preview"
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {/*
+       * THE "DEVICE PREVIEWS" SECTION WAS REMOVED HERE (2026-09-08).
+       *
+       * It rendered `previewHires` from the Zustand store, and nothing in this
+       * entire project ever called `savePreviewHire`. The section could not
+       * appear for any user under any circumstance: dead UI, complete with its
+       * own heading, count and explanatory copy, for a feature that was never
+       * wired up. `hasCompletedOnboarding` was persisted by the same store and
+       * read by nothing, for the same reason - there was no onboarding on the
+       * website at all until /onboarding was added alongside this change.
+       *
+       * The store fields go with it; see store/use-app-store.ts.
+       */}
     </div>
   );
 }

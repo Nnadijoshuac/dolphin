@@ -3,43 +3,38 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-/** A setup saved only on this device; it is never an onchain hire record. */
-export type PreviewHire = Readonly<{
-  agentId: string;
-  savedAt: string;
-  source: "local_preview";
-  isOnChain: false;
-}>;
-
+/**
+ * Per-device UI state. Nothing here is a record of anything.
+ *
+ * ===========================================================================
+ * `previewHires` WAS REMOVED (2026-09-08)
+ * ===========================================================================
+ * The store carried a `PreviewHire` type, three actions to manage them
+ * (`savePreviewHire`, `removePreviewHire`, `clearPreviewHires`), a type guard,
+ * and migration logic - and NOTHING IN THIS PROJECT EVER CALLED
+ * `savePreviewHire`. The array could only ever be empty, which meant the
+ * "Device previews" section on /my-agents that rendered from it - heading,
+ * count, explanatory copy and all - was unreachable UI for a feature that was
+ * never built.
+ *
+ * `hasCompletedOnboarding` is KEPT and is now genuinely used: it was in the
+ * same state (persisted, read by nothing) because the website had no onboarding
+ * at all, which app/onboarding now provides.
+ *
+ * The persisted key is bumped to v2 so a browser holding the old shape drops
+ * the dead array rather than carrying it forever.
+ */
 interface AppState {
   hasCompletedOnboarding: boolean;
-  previewHires: PreviewHire[];
   recentSearches: string[];
   setHasCompletedOnboarding: (isComplete: boolean) => void;
   addRecentSearch: (query: string) => void;
   removeRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
-  savePreviewHire: (agentId: string) => void;
-  removePreviewHire: (agentId: string) => void;
-  clearPreviewHires: () => void;
-}
-
-function isPreviewHire(value: unknown): value is PreviewHire {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<PreviewHire>;
-  return (
-    typeof candidate.agentId === "string" &&
-    typeof candidate.savedAt === "string" &&
-    candidate.source === "local_preview" &&
-    candidate.isOnChain === false
-  );
 }
 
 function migratePersistedState(persistedState: unknown): Partial<AppState> {
   const legacy = (persistedState ?? {}) as Record<string, unknown>;
-  const previews = Array.isArray(legacy.previewHires)
-    ? legacy.previewHires.filter(isPreviewHire)
-    : [];
   const recentSearches = Array.isArray(legacy.recentSearches)
     ? legacy.recentSearches.filter(
         (value): value is string =>
@@ -49,7 +44,6 @@ function migratePersistedState(persistedState: unknown): Partial<AppState> {
 
   return {
     hasCompletedOnboarding: legacy.hasCompletedOnboarding === true,
-    previewHires: previews,
     recentSearches,
   };
 }
@@ -58,7 +52,6 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       hasCompletedOnboarding: false,
-      previewHires: [],
       recentSearches: [],
       setHasCompletedOnboarding: (isComplete) =>
         set({ hasCompletedOnboarding: isComplete }),
@@ -78,38 +71,15 @@ export const useAppStore = create<AppState>()(
         }));
       },
       clearRecentSearches: () => set({ recentSearches: [] }),
-      savePreviewHire: (agentId) => {
-        const normalizedAgentId = agentId.trim();
-        if (!normalizedAgentId) return;
-
-        set((state) => {
-          if (state.previewHires.some((h) => h.agentId === normalizedAgentId)) {
-            return {};
-          }
-          const previewHire: PreviewHire = {
-            agentId: normalizedAgentId,
-            savedAt: new Date().toISOString(),
-            source: "local_preview",
-            isOnChain: false,
-          };
-          return { previewHires: [...state.previewHires, previewHire] };
-        });
-      },
-      removePreviewHire: (agentId) =>
-        set((state) => ({
-          previewHires: state.previewHires.filter((h) => h.agentId !== agentId),
-        })),
-      clearPreviewHires: () => set({ previewHires: [] }),
     }),
     {
-      name: "dolphin-web-app-state-v1",
+      name: "dolphin-web-app-state-v2",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         hasCompletedOnboarding: state.hasCompletedOnboarding,
-        previewHires: state.previewHires,
         recentSearches: state.recentSearches,
       }),
-      version: 1,
+      version: 2,
       migrate: migratePersistedState,
     },
   ),

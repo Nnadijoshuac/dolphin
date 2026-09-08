@@ -14,7 +14,7 @@ import { convexClient } from "@/providers/convex-provider";
 import { assessHireability } from "@/services/hireability";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
-import type { Agent, AgentCategory, LiveMetric } from "@/types/agent";
+import type { Agent, LiveMetric } from "@/types/agent";
 
 /**
  * The agent detail page.
@@ -78,15 +78,6 @@ const GUTTER = 20;
 const SECTION_GAP = 24;
 /** The single card radius on this page. */
 const CARD_RADIUS = radii.large;
-
-const categoryLabels: Record<AgentCategory, string> = {
-  monitoring: "Monitoring",
-  rebalancing: "Rebalancing",
-  "grid-trading": "Grid trading",
-  "health-factor": "Health factor",
-  yield: "Yield",
-  trading: "Trading",
-};
 
 function shortAddress(value: string | null) {
   if (!value) return "Not reported";
@@ -513,37 +504,18 @@ export function AgentDetail({
           <AgentIcon category={agent.category} seed={agent.iconSeed} size={72} uri={agent.iconUrl} />
         </View>
 
+        {/*
+         * No category or protocol badge here.
+         *
+         * They led the page with two pieces of taxonomy - which drawer this
+         * agent browses in, and which transport it speaks - before the reader
+         * had been told what the agent IS. Neither is a reason to hire one, and
+         * the protocol is a detail about how Dolphin talks to it rather than
+         * something the reader chooses on. Both still appear where they answer
+         * a question the reader is actually asking by then: the protocol in the
+         * detail table below, and the category on the cards that got them here.
+         */}
         <View className="min-w-0 flex-1 pt-0.5">
-          {/* Metadata badges row */}
-          <View className="flex-row items-center flex-wrap gap-1.5 mb-1.5">
-            <View
-              className="rounded-full px-2.5 py-0.5"
-              style={{ backgroundColor: colors.surfaceSubtle }}
-            >
-              <Text className="text-[11px] font-bold text-zinc-600">
-                {categoryLabels[agent.category]}
-              </Text>
-            </View>
-
-            <View
-              className="rounded-full px-2.5 py-0.5"
-              style={{
-                backgroundColor:
-                  agent.protocol === "mcp" ? colors.lilac : colors.goldSoft,
-              }}
-            >
-              <Text
-                className="text-[11px] font-bold"
-                style={{
-                  color:
-                    agent.protocol === "mcp" ? colors.lilacInk : colors.goldDark,
-                }}
-              >
-                {agent.protocol === "mcp" ? "MCP Server" : "A2A Agent"}
-              </Text>
-            </View>
-          </View>
-
           <Text
             className="text-[22px] font-black leading-[27px] tracking-[-0.5px]"
             numberOfLines={2}

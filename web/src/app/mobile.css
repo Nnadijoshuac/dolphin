@@ -138,4 +138,83 @@
   .mobile-empty-agents h2 { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
   .mobile-empty-agents p { max-width: 320px; margin-top: 8px; font-size: 13.5px; line-height: 20px; color: var(--ink-soft); }
   .mobile-empty-agents > a { width: 100%; max-width: 320px; margin-top: 28px; }
+
+  .mobile-my-agents.site-frame { padding-top: 0 !important; padding-inline: 20px; }
+  .mobile-my-agents .mobile-page-heading { margin-inline: -20px; }
+  .mobile-hire-record { margin-top: 14px; padding: 16px; border: 1px solid var(--line) !important; border-radius: 24px; background: var(--paper); }
+  .mobile-hire-record h3 { font-size: 17px; }
+  .mobile-hire-record article > span { justify-content: end; border-top: 1px solid var(--line); padding-top: 12px; font-size: 12px; }
+  .mobile-hire-record article > div > div > div { text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+  .mobile-stack-header { display: flex; position: sticky; top: 0; z-index: 30; align-items: center; gap: 12px; padding: 4px 20px 10px; background: var(--canvas); }
+  .mobile-stack-header .mobile-circle { width: 40px; height: 40px; flex-basis: 40px; box-shadow: none; }
+  .mobile-stack-header > p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; letter-spacing: -.2px; }
+  .mobile-account-page { overflow-wrap: anywhere; }
+
+  .mobile-wallet { width: 100%; max-width: 480px; margin-inline: auto; padding: 0 24px; }
+  .mobile-wallet-topbar { display: flex; justify-content: space-between; padding: 4px 0 8px; }
+  .mobile-wallet-topbar .mobile-circle { width: 40px; height: 40px; }
+  .mobile-wallet-total { padding-top: 12px; text-align: center; }
+  .mobile-wallet-total h1 { display: inline-flex; padding: 8px 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .mobile-wallet-amount { font-size: clamp(32px, 10vw, 44px); line-height: 1.2; font-weight: 700; letter-spacing: -1.5px; overflow-wrap: anywhere; }
+  .mobile-wallet-amount > span { margin-left: 8px; font-size: 16px; letter-spacing: 0; color: var(--muted); }
+  .mobile-balance-visibility { margin-top: 12px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; background: var(--paper); }
+  .mobile-wallet-note { margin-top: 6px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .mobile-wallet-connect { margin: 24px 8px 0; }
+  .mobile-wallet-connect > button { min-height: 48px; border-radius: 999px; }
+  .mobile-wallet-actions { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
+  .mobile-wallet-actions > * { display: flex; width: 84px; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; text-decoration: none; }
+  .mobile-wallet-actions span { display: grid; place-items: center; width: 64px; height: 64px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
+  .mobile-dolphin-account { display: block; min-height: 168px; margin-top: 28px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); text-decoration: none; }
+  .mobile-dolphin-account header { display: flex; align-items: center; gap: 10px; }
+  .mobile-dolphin-account header > span { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 12px; background: var(--paper-muted); }
+  .mobile-dolphin-account header > div { flex: 1; min-width: 0; }
+  .mobile-dolphin-account h2 { font-size: 15px; font-weight: 700; }
+  .mobile-dolphin-account p { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .mobile-dolphin-account > strong { display: block; margin-top: 20px; font-size: 26px; font-weight: 700; letter-spacing: -.6px; overflow-wrap: anywhere; }
+  .mobile-dolphin-account > p { margin-top: 3px; }
+  .mobile-wallet-activity { margin-top: 32px; }
+  .mobile-wallet-activity > header { display: flex; align-items: center; justify-content: space-between; }
+  .mobile-wallet-activity h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; }
+  .mobile-wallet-activity > header a { font-size: 12px; }
+  .mobile-activity-empty { padding: 28px 8px; text-align: center; }
+  .mobile-activity-empty > span { display: grid; place-items: center; width: 48px; height: 48px; margin: 0 auto 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper-muted); }
+  .mobile-activity-empty h3 { font-size: 15px; font-weight: 600; }
+  .mobile-activity-empty p { margin-top: 4px; font-size: 12.5px; line-height: 18px; color: var(--muted); }
+  .mobile-activity-row { display: flex; align-items: center; gap: 12px; padding-block: 12px; text-decoration: none; }
+  .mobile-activity-row > div { min-width: 0; flex: 1; }
+  .mobile-activity-row h3 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 15px; font-weight: 600; }
+  .mobile-activity-row p { font-size: 12px; color: var(--muted); }
+  .mobile-activity-row > strong { max-width: 40%; font-size: 14px; overflow-wrap: anywhere; text-align: right; }
+
+  .mobile-agent-detail { padding: 4px 20px 80px; overflow-wrap: anywhere; }
+  .mobile-detail-identity { display: flex; align-items: start; gap: 14px; }
+  .mobile-detail-identity > :first-child { flex: 0 0 72px; }
+  .mobile-detail-identity > div { min-width: 0; padding-top: 2px; }
+  .mobile-detail-identity h1 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 22px; font-weight: 900; line-height: 27px; letter-spacing: -.5px; }
+  .mobile-detail-identity p { margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+  .mobile-detail-identity p > span { font-size: 12px; font-weight: 500; }
+  .mobile-detail-tagline { margin-top: 14px; font-size: 14.5px; font-weight: 500; line-height: 21px; }
+  .mobile-detail-action { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 24px; background: var(--paper); box-shadow: 0 2px 8px #11121405; }
+  .mobile-detail-action > div > p { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--ink-soft); }
+  .mobile-detail-action h2 { margin-top: 2px; font-size: 18px; font-weight: 900; }
+  .mobile-detail-action > button { width: 100%; margin-top: 14px; }
+  .mobile-detail-action > p { margin-top: 10px; text-align: center; font-size: 11.5px; color: var(--ink-soft); }
+  .mobile-detail-section { margin-top: 24px; }
+  .mobile-detail-section > h2 { margin-bottom: 12px; font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
+  .mobile-detail-description { font-size: 14px; line-height: 22px; color: var(--ink-soft); white-space: pre-line; }
+  .mobile-detail-description button { font-weight: 700; text-decoration: underline; color: var(--ink); }
+  .mobile-detail-skills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .mobile-detail-skills > span { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper-muted); font-size: 12px; font-weight: 600; }
+  .mobile-detail-registry { margin-top: 24px; }
+  .mobile-detail-registry > section { border-radius: 24px; }
+  .mobile-detail-registry > section > button { padding: 16px; gap: 8px; }
+  .mobile-detail-registry > section > button h2 { font-size: 14px; }
+  .mobile-detail-registry > section > button p, .mobile-detail-registry > section > button h2 + span { display: none; }
+  .mobile-action-sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: 560px; max-height: calc(92dvh - env(safe-area-inset-top)); margin: 0 auto; padding: 16px 20px max(24px, env(safe-area-inset-bottom)); border: 1px solid var(--line); border-radius: 28px 28px 0 0; background: var(--canvas); color: var(--ink); overflow-y: auto; overscroll-behavior: contain; }
+  .mobile-action-sheet::backdrop { background: #0006; }
+  .mobile-action-sheet > header { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-bottom: 16px; }
+  .mobile-action-sheet > header h2 { min-width: 0; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+  .mobile-action-sheet .surface-raised { padding: 16px; }
+  .mobile-action-sheet input, .mobile-action-sheet select, .mobile-action-sheet textarea { font-size: 16px; }
 }

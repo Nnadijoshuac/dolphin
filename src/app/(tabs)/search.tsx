@@ -13,10 +13,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentRow } from "@/components/agent-row";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { CatalogFilterRail } from "@/components/catalog-filter-rail";
+import { FilterSheet } from "@/components/filter-sheet";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { categoryLabel } from "@/constants/agents";
-import { colors, shadows } from "@/constants/theme";
+import { colors, radii, shadows } from "@/constants/theme";
 import {
   useAgentList,
   useAgentSignals,
@@ -30,40 +32,27 @@ import type { Agent } from "@/types/agent";
  * SEARCH.
  *
  * ---------------------------------------------------------------------------
- * SEARCH MOVED TO THE SERVER (2026-09-07)
+ * SEARCH & FILTER ARCHITECTURE (2026-09-08 REVAMP)
  * ---------------------------------------------------------------------------
- * This screen used to call `useAgents()` for the ENTIRE catalog and run
- * `searchAgentsLocally` over it on every keystroke - a substring scan across
- * every agent's name, publisher, category, tagline, description and skills, on
- * the device, in a `useMemo`.
+ * The filter and search experience has been unified into a calm, predictable,
+ * tactile flow:
  *
- * It worked because the catalog was 25 agents. It is now a Convex search index
- * (`agents.search`), which is paginated and relevance-ordered, and it is what
- * makes a catalog of thousands searchable at all rather than only loadable.
+ * 1. PERSISTENT CONTROLS: The search input and filter trigger are always
+ *    visible and stable. Focusing the search input no longer causes controls
+ *    to jump, disappear, or displace other UI elements.
  *
- * The "Explore Categories" grid is likewise read from `useCategoryFacets` and
- * carries real counts, rather than iterating a hardcoded list of five and
- * counting a client-side array.
+ * 2. UNIFIED DIMENSIONS: Filters support both Kind (`protocol`: a2a / mcp)
+ *    and Category simultaneously. Category selection filters the live catalog
+ *    in-place via Convex rather than ejecting the user to a different route.
  *
- * ---------------------------------------------------------------------------
- * WHAT WAS DROPPED, AND ONE THING THAT SHOULD NOT HAVE BEEN
- * ---------------------------------------------------------------------------
- * "Suggested for you" is gone, correctly. Both of its bases depended on holding
- * the whole catalog in memory: the history basis re-ran the local search over
- * every agent once per remembered term, and the fallback sorted every agent in
- * every category by feedback count to take the top one. Neither survives
- * pagination.
+ * 3. DUAL-TIER FILTERING:
+ *    - `CatalogFilterRail`: A single-row silky horizontal rail right under the
+ *      search bar for instant 1-tap switching.
+ *    - `FilterSheet`: A serene bottom sheet with active counters, full
+ *      descriptions, and reset capability for deep multi-dimensional tuning.
  *
- * "All agents" went with it, and that was WRONG - it was cut in the same pass
- * for the same stated reason, but it never depended on holding the catalog at
- * all. It is a plain browse, and a browse is exactly what pagination made cheap.
- * Removing it left the search screen showing nothing but chips until the user
- * typed, which is an empty shop floor.
- *
- * It is back below, and the list query is no longer gated on there being a
- * query: `useAgentList` routes an empty `search` to `agents.list` (a browse) and
- * a non-empty one to `agents.search`, so one hook serves both states and the
- * screen never has a mode where it asks the backend for nothing.
+ * 4. DISMISSABLE ACTIVE CHIPS: When filters are active, calm dismissable pills
+ *    appear above the results for effortless 1-tap removal.
  */
 export default function SearchScreen() {
   const router = useRouter();
@@ -79,55 +68,28 @@ export default function SearchScreen() {
 
   const { categories } = useCategoryFacets();
 
-  /*
-   * THE KIND FILTER, and it is named in user language deliberately.
-   *
-   * The underlying field is `protocol` - "a2a" or "mcp" - which is the right
-   * thing for an index to be keyed on and the wrong thing to put in front of
-   * someone who has never heard of either. What a user is choosing between is
-   * work they COMMISSION and pay for, and tools they RUN for free. So the chips
-   * say "Hire" and "View", the protocol is the subtitle, and project-scope.md's
-   * zero-knowledge-user requirement survives contact with the protocol layer.
-   */
+  // Filter state
   const [kind, setKind] = useState<AgentProtocol | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
-  /**
-   * Distribute categories across at most 2 lines, each scrolling independently.
-   * When items fill line 1 (2 items across the viewport), they flow to line 2.
-   * Any additional items extend line 1 and line 2 as horizontally scrollable overflow.
-   */
-  const categoryRows = useMemo(() => {
-    if (categories.length === 0) return [];
-    if (categories.length === 1) return [categories];
-    const mid = Math.ceil(categories.length / 2);
-    return [categories.slice(0, mid), categories.slice(mid)];
-  }, [categories]);
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (kind !== null) count += 1;
+    if (selectedCategory !== null) count += 1;
+    return count;
+  }, [kind, selectedCategory]);
 
   /*
-   * NOT gated on there being a query. An empty `search` routes to `agents.list`
-   * (browse) and a non-empty one to `agents.search`, so the same hook feeds both
-   * the "All agents" list below and the results list above, and switching
-   * between them is one subscription swapping rather than a mount/unmount.
+   * Server-side paginated list. Handles both browse and text search, with both
+   * category and protocol filters applied server-side.
    */
   const { agents, status, isLoading, loadMore, isEmpty } = useAgentList({
     search: deferredQuery,
     protocol: kind ?? undefined,
+    category: selectedCategory ?? undefined,
   });
 
-  /*
-   * Rendered in the BACKEND'S order, not re-sorted here.
-   *
-   * This was `sortHireableFirst(agents)`, which partitioned on
-   * `assessHireability` - so every MCP agent, 26 of the 28 live ones, sank to
-   * the bottom of every list for failing a test that does not apply to it.
-   *
-   * It was also a client-side re-sort of a PAGINATED page, which is the same
-   * defect that took the reputation sort off the category screen: a cursor is a
-   * position in an index, so reordering a page means page two is ordered
-   * independently of page one, and a reader sees one agent twice and never sees
-   * another. The backend's stored `rank` is the ordering.
-   */
   const results = agents;
   const signals = useAgentSignals(agents);
 
@@ -148,6 +110,12 @@ export default function SearchScreen() {
     addRecentSearch(tag);
   };
 
+  const handleResetAllFilters = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setKind(null);
+    setSelectedCategory(null);
+  };
+
   const isSearching = query.trim().length > 0;
 
   return (
@@ -156,8 +124,9 @@ export default function SearchScreen() {
       edges={["top", "left", "right"]}
       style={{ backgroundColor: colors.canvas }}
     >
+      {/* Search Header */}
       <View
-        className="px-4 pt-1.5 pb-2.5 flex-row items-center gap-2.5"
+        className="px-4 pt-1.5 pb-2 flex-row items-center gap-2.5"
         style={{ backgroundColor: colors.canvas, zIndex: 20 }}
       >
         <View
@@ -204,122 +173,142 @@ export default function SearchScreen() {
           ) : null}
         </View>
 
-        {isFocused || isSearching ? (
-          <PressableScale
-            accessibilityLabel="Cancel search"
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => {
-              Keyboard.dismiss();
-              setQuery("");
-              setIsFocused(false);
-            }}
-          >
-            <Text className="text-[14px] font-semibold" style={{ color: colors.ink }}>
-              Cancel
-            </Text>
-          </PressableScale>
-        ) : (
-          <PressableScale
-            accessibilityHint="Show only agents you hire, or only agents you run"
-            accessibilityLabel={
-              kind === null
-                ? "Filter by kind"
-                : `Filter by kind, ${kind === "a2a" ? "Hire" : "View"} selected`
-            }
-            accessibilityRole="button"
-            accessibilityState={{ expanded: filterOpen, selected: kind !== null }}
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setFilterOpen((open) => !open);
-            }}
-            containerStyle={{
-              alignItems: "center",
-              justifyContent: "center",
-              height: 42,
-              width: 42,
-              borderRadius: 9999,
-              // Filled while a filter is ON, so the control itself says the
-              // list is narrowed - otherwise a user who forgets reads a short
-              // list as an empty catalog.
-              backgroundColor: kind ? colors.gold : colors.surface,
-              borderColor: kind ? colors.goldBorder : colors.line,
-              borderWidth: 1.5,
-              ...shadows.subtle,
-            }}
-          >
-            <CategoryGlyph
-              color={kind ? colors.ink : "#8C8E88"}
-              name="filter"
-              size={17}
-            />
-          </PressableScale>
-        )}
+        {/* Stable Filter Button */}
+        <PressableScale
+          accessibilityHint="Filter agents by kind or category"
+          accessibilityLabel={
+            activeFilterCount > 0
+              ? `Filters, ${activeFilterCount} active`
+              : "Open filters"
+          }
+          accessibilityRole="button"
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setFilterSheetOpen(true);
+          }}
+          containerStyle={{
+            alignItems: "center",
+            justifyContent: "center",
+            height: 42,
+            width: 42,
+            borderRadius: 9999,
+            backgroundColor: activeFilterCount > 0 ? colors.gold : colors.surface,
+            borderColor: activeFilterCount > 0 ? colors.goldBorder : colors.line,
+            borderWidth: 1.5,
+            ...shadows.subtle,
+          }}
+        >
+          <CategoryGlyph
+            color={activeFilterCount > 0 ? colors.ink : "#7A7C75"}
+            name="filter"
+            size={17}
+          />
+          {activeFilterCount > 0 ? (
+            <View
+              className="absolute -top-1 -right-1 h-5 w-5 rounded-full items-center justify-center"
+              style={{
+                backgroundColor: colors.ink,
+                borderWidth: 1.5,
+                borderColor: colors.canvas,
+              }}
+            >
+              <Text className="text-[10px] font-bold text-white leading-none">
+                {activeFilterCount}
+              </Text>
+            </View>
+          ) : null}
+        </PressableScale>
       </View>
 
-      {/*
-        * The kind chips. Shown on tap rather than always, because two chips
-        * permanently under the search bar is chrome a user has to read past on
-        * every visit for a choice most of them will never make.
-        *
-        * Each says what you DO with the agent and names the protocol
-        * underneath - the protocol is real, checkable information for the
-        * people who want it, and meaningless noise as a headline.
-        */}
-      {filterOpen ? (
-        <View
-          className="px-4 pb-2.5 flex-row gap-2"
-          style={{ backgroundColor: colors.canvas, zIndex: 19 }}
-        >
-          {([
-            { value: null, title: "All", sub: "Everything verified" },
-            { value: "a2a" as const, title: "Hire", sub: "Paid work · A2A" },
-            { value: "mcp" as const, title: "View", sub: "Free tools · MCP" },
-          ]).map((option) => {
-            const selected = kind === option.value;
-            return (
-              <PressableScale
-                key={option.title}
-                accessibilityLabel={`${option.title}, ${option.sub}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setKind(option.value);
-                }}
-                style={{ flex: 1 }}
-                containerStyle={{
-                  paddingVertical: 9,
-                  paddingHorizontal: 12,
-                  borderRadius: 14,
-                  backgroundColor: selected ? colors.gold : colors.surface,
-                  borderColor: selected ? colors.goldBorder : colors.line,
-                  borderWidth: 1,
-                  ...(selected ? shadows.goldGlow : shadows.subtle),
-                }}
-              >
-                <Text
-                  className="text-[13px]"
-                  style={{
-                    color: selected ? colors.ink : colors.muted,
-                    fontWeight: selected ? "700" : "600",
-                  }}
-                >
-                  {option.title}
-                </Text>
-                <Text
-                  className="text-[10.5px] mt-0.5 font-medium"
-                  numberOfLines={1}
-                  style={{ color: selected ? colors.ink : "#9A9C96" }}
-                >
-                  {option.sub}
-                </Text>
-              </PressableScale>
-            );
-          })}
+      {/* Silky Filter Rail */}
+      <View className="px-4 pb-2.5" style={{ backgroundColor: colors.canvas, zIndex: 19 }}>
+        <CatalogFilterRail
+          activeFilterCount={activeFilterCount}
+          categories={categories}
+          category={selectedCategory}
+          onOpenFilterSheet={() => setFilterSheetOpen(true)}
+          onSelectCategory={(cat) => setSelectedCategory(cat)}
+          onSelectProtocol={(proto) => setKind(proto)}
+          protocol={kind}
+        />
+      </View>
+
+      {/* Active Filter Dismissable Pills */}
+      {activeFilterCount > 0 ? (
+        <View className="flex-row items-center flex-wrap gap-1.5 px-4 pb-2.5">
+          <Text className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mr-1">
+            Active:
+          </Text>
+
+          {kind !== null ? (
+            <PressableScale
+              accessibilityLabel={`Remove ${kind === "a2a" ? "Hire" : "Tools"} filter`}
+              accessibilityRole="button"
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setKind(null);
+              }}
+              containerStyle={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 5,
+                paddingVertical: 3.5,
+                paddingHorizontal: 9,
+                borderRadius: radii.pill,
+                backgroundColor: colors.goldSoft,
+                borderColor: colors.goldBorder,
+                borderWidth: 1,
+              }}
+            >
+              <Text className="text-[11.5px] font-semibold" style={{ color: colors.ink }}>
+                {kind === "a2a" ? "Hire · A2A" : "Tools · MCP"}
+              </Text>
+              <CategoryGlyph color={colors.ink} name="close" size={10} strokeWidth={2.5} />
+            </PressableScale>
+          ) : null}
+
+          {selectedCategory !== null ? (
+            <PressableScale
+              accessibilityLabel={`Remove ${selectedCategory} category filter`}
+              accessibilityRole="button"
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSelectedCategory(null);
+              }}
+              containerStyle={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 5,
+                paddingVertical: 3.5,
+                paddingHorizontal: 9,
+                borderRadius: radii.pill,
+                backgroundColor: colors.surfaceSubtle,
+                borderColor: colors.line,
+                borderWidth: 1,
+              }}
+            >
+              <Text className="text-[11.5px] font-semibold" style={{ color: colors.ink }}>
+                {categoryLabel(selectedCategory)}
+              </Text>
+              <CategoryGlyph color={colors.ink} name="close" size={10} strokeWidth={2.5} />
+            </PressableScale>
+          ) : null}
+
+          <PressableScale
+            accessibilityLabel="Clear all filters"
+            accessibilityRole="button"
+            hitSlop={6}
+            onPress={handleResetAllFilters}
+            containerStyle={{ paddingVertical: 3.5, paddingHorizontal: 6 }}
+          >
+            <Text className="text-[11px] font-bold text-zinc-400">
+              Clear all
+            </Text>
+          </PressableScale>
         </View>
       ) : null}
 
+      {/* Main Content Area */}
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 110 }}
@@ -335,7 +324,7 @@ export default function SearchScreen() {
       >
         {isSearching ? (
           <View className="px-4 pt-1">
-            <View className="pb-2.5">
+            <View className="pb-2.5 flex-row items-center justify-between">
               <Text className="text-[12px] font-bold uppercase tracking-wider text-zinc-500">
                 {isLoading
                   ? "Searching"
@@ -343,6 +332,12 @@ export default function SearchScreen() {
                       results.length === 1 ? "agent found" : "agents found"
                     }`}
               </Text>
+
+              {selectedCategory ? (
+                <Text className="text-[11px] font-medium text-zinc-400">
+                  in {categoryLabel(selectedCategory)}
+                </Text>
+              ) : null}
             </View>
 
             {isLoading ? (
@@ -352,7 +347,9 @@ export default function SearchScreen() {
             ) : isEmpty ? (
               <View className="pt-8">
                 <StatePanel
-                  body={`No verified agent matches "${query}". Try a capability, a protocol, or a publisher name.`}
+                  body={`No verified agent matches "${query}"${
+                    selectedCategory ? ` in ${categoryLabel(selectedCategory)}` : ""
+                  }${kind ? ` under ${kind === "a2a" ? "Hire" : "Tools"}` : ""}. Try a broader term or clearing active filters.`}
                   state="unavailable"
                   title="No results found"
                 />
@@ -377,7 +374,7 @@ export default function SearchScreen() {
               </View>
             )}
           </View>
-        ) : isFocused ? (
+        ) : isFocused && query.length === 0 ? (
           <View className="px-4 pt-1">
             {recentSearches.length > 0 ? (
               <View>
@@ -440,84 +437,53 @@ export default function SearchScreen() {
             )}
           </View>
         ) : (
-          <View className="px-4 pt-1 gap-5">
-
-            {/* Category pills - at most 3 lines, horizontally scrollable */}
-            <View>
-              <Text className="text-[14px] font-bold pb-3" style={{ color: colors.ink }}>
-                Explore categories
-              </Text>
-              {categories.length === 0 ? (
-                <StatePanel
-                  body="No agent has passed verification yet. Discovery runs every half hour."
-                  state="syncing"
-                  title="Building the catalog"
-                />
-              ) : (
-                <View style={{ gap: 8 }}>
-                  {categoryRows.map((rowItems, rowIndex) =>
-                    rowItems.length > 0 ? (
-                      <ScrollView
-                        key={rowIndex}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        className="-mx-4"
-                        contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
-                      >
-                        {rowItems.map((facet) => (
-                          <PressableScale
-                            key={facet.slug}
-                            accessibilityLabel={facet.label}
-                            accessibilityRole="button"
-                            onPress={() => {
-                              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                              router.push({
-                                pathname: "/category/[slug]",
-                                params: { slug: facet.slug },
-                              });
-                            }}
-                            containerStyle={{
-                              alignItems: "center",
-                              justifyContent: "center",
-                              backgroundColor: colors.surface,
-                              borderRadius: 9999,
-                              borderWidth: 1,
-                              borderColor: colors.line,
-                              paddingVertical: 8,
-                              paddingHorizontal: 16,
-                              ...shadows.subtle,
-                            }}
-                          >
-                            <Text
-                              className="text-[13px] font-semibold tracking-tight"
-                              style={{ color: colors.ink }}
-                            >
-                              {facet.label}
-                            </Text>
-                          </PressableScale>
-                        ))}
-                      </ScrollView>
-                    ) : null
-                  )}
-                </View>
-              )}
-            </View>
-
-            {/*
-              * ALL AGENTS. Restored 2026-09-07 after being cut alongside
-              * "Suggested for you" - see this file's header. Without it the
-              * screen showed nothing but chips until the user typed.
-              *
-              * Paginated, so this is a page of agents and a button, not the
-              * whole catalog the old version rendered at once.
-              */}
+          /* Catalog Browse Mode */
+          <View className="px-4 pt-1 gap-4">
             <View className="pb-4">
-              <Text className="text-[14px] font-bold" style={{ color: colors.ink }}>
-                All agents
-              </Text>
-              <Text className="text-[11.5px] font-medium text-zinc-500 pt-0.5 pb-2.5">
-                Verified live on BNB Chain
-              </Text>
+              <View className="flex-row items-center justify-between pb-2.5">
+                <View>
+                  <Text className="text-[15px] font-bold" style={{ color: colors.ink }}>
+                    {selectedCategory ? categoryLabel(selectedCategory) : "All agents"}
+                  </Text>
+                  <Text className="text-[11.5px] font-medium text-zinc-500 pt-0.5">
+                    {kind === "a2a"
+                      ? "Hireable tasks · Escrow backed"
+                      : kind === "mcp"
+                        ? "Free direct tools · MCP endpoints"
+                        : "Verified live on BNB Chain"}
+                  </Text>
+                </View>
+
+                {selectedCategory ? (
+                  <PressableScale
+                    accessibilityLabel={`View full ${categoryLabel(selectedCategory)} category page`}
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      router.push({
+                        pathname: "/category/[slug]",
+                        params: { slug: selectedCategory },
+                      });
+                    }}
+                    containerStyle={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      paddingVertical: 4,
+                      paddingHorizontal: 8,
+                      borderRadius: radii.small,
+                      backgroundColor: colors.surfaceSubtle,
+                      borderWidth: 1,
+                      borderColor: colors.line,
+                    }}
+                  >
+                    <Text className="text-[11.5px] font-semibold" style={{ color: colors.ink }}>
+                      Page
+                    </Text>
+                    <CategoryGlyph color={colors.ink} name="arrow-right" size={11} />
+                  </PressableScale>
+                ) : null}
+              </View>
 
               {isLoading ? (
                 <View className="items-center py-8">
@@ -525,9 +491,13 @@ export default function SearchScreen() {
                 </View>
               ) : isEmpty ? (
                 <StatePanel
-                  body="No agent has passed verification yet. An agent is listed once its own endpoint answers, and discovery runs every half hour."
+                  body={
+                    activeFilterCount > 0
+                      ? "No verified agent matches the selected filters. Try broadening your selection or resetting filters."
+                      : "No agent has passed verification yet. An agent is listed once its own endpoint answers, and discovery runs every half hour."
+                  }
                   state="unavailable"
-                  title="Catalog is empty"
+                  title={activeFilterCount > 0 ? "No matching agents" : "Catalog is empty"}
                 />
               ) : (
                 <View className="gap-2.5">
@@ -576,6 +546,18 @@ export default function SearchScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Serene Filter Bottom Sheet */}
+      <FilterSheet
+        categories={categories}
+        category={selectedCategory}
+        onClose={() => setFilterSheetOpen(false)}
+        onResetAll={handleResetAllFilters}
+        onSelectCategory={(cat) => setSelectedCategory(cat)}
+        onSelectProtocol={(proto) => setKind(proto)}
+        protocol={kind}
+        visible={filterSheetOpen}
+      />
     </SafeAreaView>
   );
 }

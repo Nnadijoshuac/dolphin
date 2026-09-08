@@ -463,16 +463,12 @@ export function AgentDetail({
     if (agent.protocol === "mcp") return "Free to Connect";
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      return `${formatTokenAmount(
-        agent.pricing.amountRaw,
-        agent.pricing.tokenDecimals || 18,
-      )} ${agent.pricing.tokenSymbol || "BNB"}`;
+      const decimals = agent.pricing.tokenDecimals;
+      const symbol = agent.pricing.tokenSymbol || agent.pricing.token;
+      return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
     if (price === null) return "Price not reported yet";
     if (Number(price.amount) === 0) return "Free to hire";
-    if (Number(price.amount) > 1_000_000_000) {
-      return `${formatTokenAmount(price.amount, 18)} ${price.token || "BNB"}`;
-    }
     return `${price.amount} ${price.token} per hire`;
   })();
 

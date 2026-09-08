@@ -81,16 +81,12 @@ export function HireAction({ agent }: { agent: Agent }) {
     if (agent.protocol === "mcp") return "Free to Connect";
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      return `${formatTokenAmount(
-        agent.pricing.amountRaw,
-        agent.pricing.tokenDecimals || 18,
-      )} ${agent.pricing.tokenSymbol || "BNB"}`;
+      const decimals = agent.pricing.tokenDecimals;
+      const symbol = agent.pricing.tokenSymbol || agent.pricing.token;
+      return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
-    if (priceModel === null) return "Free to hire";
+    if (priceModel === null) return "Price not reported yet";
     if (Number(priceModel.amount) === 0) return "Free to hire";
-    if (Number(priceModel.amount) > 1_000_000_000) {
-      return `${formatTokenAmount(priceModel.amount, 18)} ${priceModel.token || "BNB"}`;
-    }
     return `${priceModel.amount} ${priceModel.token}`;
   })();
 

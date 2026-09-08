@@ -70,10 +70,12 @@ export function PaymentAction({
   // Deliberately not defaulted to "free" or to a raw number.
   const catalogPrice = (() => {
     if (agent.pricing?.display) return agent.pricing.display;
-    if (priceAmount !== null && Number(priceAmount) > 0) {
-      if (Number(priceAmount) > 1_000_000_000) {
-        return `${formatTokenAmount(priceAmount, 18)} ${priceToken || "BNB"}`;
-      }
+    if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
+      const decimals = agent.pricing.tokenDecimals;
+      const symbol = agent.pricing.tokenSymbol || agent.pricing.token;
+      return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
+    }
+    if (priceAmount !== null && Number(priceAmount) > 0 && priceToken) {
       return `${priceAmount} ${priceToken}`;
     }
     return null;

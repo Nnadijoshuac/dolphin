@@ -372,34 +372,27 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             <AgentIcon category={agent.category} seed={agent.iconSeed} size={84} uri={agent.iconUrl} />
           </div>
 
+          {/*
+           * No badge row here - no category, no protocol, no verification chip.
+           *
+           * Three chips led the page with taxonomy and a claim before the reader
+           * had been told what the agent IS. The category is which drawer it
+           * browses in, the protocol is how Dolphin talks to it rather than a
+           * choice the reader makes, and "Verified on BNB Chain" is the weakest
+           * of the three in the strongest position: it means the token resolves
+           * on the identity registry, which is true of 307,559 identities and is
+           * NOT the verification that matters here. What earns a listing is that
+           * the agent answered its own protocol, and that is what the action card
+           * and the detail record say.
+           *
+           * Nothing is lost. The category is in the breadcrumb directly above and
+           * on the cards that led here, and the protocol and the registry record
+           * are both in "Details & Registry Record" below, which carries its own
+           * Verified chip next to the on-chain parameters that back it up.
+           *
+           * Mirrors the same removal in src/components/agent-detail.tsx.
+           */}
           <div className="min-w-0 flex-1">
-            {/* Badges Row */}
-            <div className="flex flex-wrap items-center gap-2 mb-2.5">
-              <Link
-                className="interactive inline-flex items-center rounded-full bg-paper-muted px-3 py-1 text-xs font-semibold text-ink hover:bg-canvas"
-                href={`/search?category=${agent.category}`}
-              >
-                {categoryLabel(agent.category)}
-              </Link>
-
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                  agent.protocol === "mcp"
-                    ? "bg-purple-100 text-purple-900"
-                    : "bg-accent-soft text-accent-ink"
-                }`}
-              >
-                {agent.protocol === "mcp" ? "MCP Server" : "A2A Agent"}
-              </span>
-
-              {isRegistryVerified ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-200">
-                  <CategoryGlyph color="currentColor" name="check" size={12} strokeWidth={2.4} />
-                  Verified on BNB Chain
-                </span>
-              ) : null}
-            </div>
-
             {/* Agent Name */}
             <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
               {agent.name}

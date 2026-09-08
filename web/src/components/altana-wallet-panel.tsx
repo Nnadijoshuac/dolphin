@@ -47,12 +47,12 @@ function truncateAddress(address: string) {
 /* ─────────────── session row ─────────────── */
 
 function SessionRow({
-  session, onRevoke, isBusy, _isLiveThisTab,
+  session, onRevoke, isBusy,
 }: {
   session: AgentSessionRow;
   onRevoke: () => void;
   isBusy: boolean;
-  _isLiveThisTab?: boolean;
+  isLiveThisTab?: boolean;
 }) {
   const now = useNow();
   const expiresAt = new Date(session.expiry * 1000);

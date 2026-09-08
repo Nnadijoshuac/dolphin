@@ -3,16 +3,41 @@
 import Image from "next/image";
 import { colors } from "@/constants/theme";
 
-export function BrandMark({ size = 32 }: { size?: number }) {
+export function BrandMark({
+  size = 32,
+  color,
+  inverted = false,
+  className = "",
+}: {
+  size?: number;
+  color?: string;
+  inverted?: boolean;
+  className?: string;
+}) {
+  const isWhite = inverted || color === "#FFFFFF" || color === "white";
+  const isBlack =
+    color === "#121316" ||
+    color === "#141416" ||
+    color === "#111215" ||
+    color === "#000000";
+
   return (
     <Image
       alt="Dolphin"
       src="/dolphin-logo.png"
       width={size}
       height={size}
-      className="object-contain"
+      className={`object-contain ${className}`}
       priority
-      style={{ height: size, width: size }}
+      style={{
+        height: size,
+        width: size,
+        filter: isWhite
+          ? "brightness(0) invert(1)"
+          : isBlack
+          ? "brightness(0)"
+          : undefined,
+      }}
     />
   );
 }

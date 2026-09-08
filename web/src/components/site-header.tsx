@@ -137,50 +137,105 @@ export function SiteHeader() {
           className="mobile-tab-bar"
           ref={mobileNav}
         >
-          <div className="mobile-tab-bar-container">
-            <div className="mobile-tab-island">
-              {navigation.map((item) => {
-                if (item.path === "/dolphin") {
-                  return (
-                    <div
-                      aria-hidden="true"
-                      className="mobile-tab-spacer"
-                      key="dolphin-spacer"
-                    />
-                  );
-                }
-                const isActive = isActiveRoute(pathname, item.path);
+          <div className="mobile-sculpted-nav">
+            {/* The exact 3-lobed metaball SVG background */}
+            <svg
+              aria-hidden="true"
+              className="mobile-sculpted-nav__bg"
+              fill="none"
+              viewBox="0 0 350 64"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M 30,2 L 122,2 C 134,2 138,15 146,15 C 154,15 162,0 175,0 C 188,0 196,15 204,15 C 212,15 216,2 228,2 L 320,2 A 30 30 0 0 1 320,62 L 228,62 C 216,62 212,49 204,49 C 196,49 188,64 175,64 C 162,64 154,49 146,49 C 138,49 134,62 122,62 L 30,62 A 30 30 0 0 1 30,2 Z"
+                fill="#16171A"
+              />
+            </svg>
 
+            {/* Left Lobe: Discover & Search */}
+            <div className="mobile-sculpted-nav__lobe mobile-sculpted-nav__lobe--left">
+              {navigation.slice(0, 2).map((item) => {
+                const isActive = isActiveRoute(pathname, item.path);
                 return (
                   <Link
                     aria-current={isActive ? "page" : undefined}
-                    className="mobile-tab-link"
+                    aria-label={item.label}
+                    className="mobile-sculpted-nav__link"
                     href={item.path}
                     key={item.path}
                   >
-                    <CategoryGlyph
-                      color="currentColor"
-                      name={item.icon}
-                      size={21}
-                      strokeWidth={isActive ? 2.2 : 1.8}
-                    />
-                    <span className="truncate">{item.label}</span>
+                    <span
+                      className={`mobile-sculpted-nav__bubble ${
+                        isActive ? "mobile-sculpted-nav__bubble--active" : ""
+                      }`}
+                    >
+                      <CategoryGlyph
+                        color={isActive ? "#141416" : "#FFFFFF"}
+                        name={item.icon}
+                        size={21}
+                        strokeWidth={isActive ? 2.3 : 1.9}
+                      />
+                    </span>
                   </Link>
                 );
               })}
             </div>
-            <Link
-              aria-current={isActiveRoute(pathname, "/dolphin") ? "page" : undefined}
-              aria-label="Dolphin AI"
-              className={`mobile-dolphin-orb ${
-                isActiveRoute(pathname, "/dolphin")
-                  ? "mobile-dolphin-orb--active"
-                  : ""
-              }`}
-              href="/dolphin"
-            >
-              <BrandMark size={30} />
-            </Link>
+
+            {/* Center Lobe: Dolphin */}
+            <div className="mobile-sculpted-nav__lobe mobile-sculpted-nav__lobe--center">
+              {(() => {
+                const item = navigation[2];
+                const isActive = isActiveRoute(pathname, item.path);
+                return (
+                  <Link
+                    aria-current={isActive ? "page" : undefined}
+                    aria-label={item.label}
+                    className="mobile-sculpted-nav__link mobile-sculpted-nav__link--center"
+                    href={item.path}
+                  >
+                    <span
+                      className={`mobile-sculpted-nav__bubble ${
+                        isActive ? "mobile-sculpted-nav__bubble--active" : ""
+                      }`}
+                    >
+                      <BrandMark
+                        color={isActive ? "#141416" : "#FFFFFF"}
+                        size={26}
+                      />
+                    </span>
+                  </Link>
+                );
+              })()}
+            </div>
+
+            {/* Right Lobe: My Agents & Wallet */}
+            <div className="mobile-sculpted-nav__lobe mobile-sculpted-nav__lobe--right">
+              {navigation.slice(3, 5).map((item) => {
+                const isActive = isActiveRoute(pathname, item.path);
+                return (
+                  <Link
+                    aria-current={isActive ? "page" : undefined}
+                    aria-label={item.label}
+                    className="mobile-sculpted-nav__link"
+                    href={item.path}
+                    key={item.path}
+                  >
+                    <span
+                      className={`mobile-sculpted-nav__bubble ${
+                        isActive ? "mobile-sculpted-nav__bubble--active" : ""
+                      }`}
+                    >
+                      <CategoryGlyph
+                        color={isActive ? "#141416" : "#FFFFFF"}
+                        name={item.icon}
+                        size={21}
+                        strokeWidth={isActive ? 2.3 : 1.9}
+                      />
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </nav>
       ) : null}

@@ -1,16 +1,20 @@
-"use client";
+import type { Metadata } from "next";
 
-import { AltanaWalletPanel } from "@/components/altana-wallet-panel";
-import { IdentityWalletSection } from "@/components/identity-wallet-section";
+import { WalletClient } from "@/app/wallet/wallet-client";
+
+/**
+ * Server shell, for metadata only. See app/search/page.tsx for the reasoning.
+ *
+ * Not indexed, for the same index-quality reason as /my-agents: without a
+ * connected wallet this page is a pair of empty panels.
+ */
+export const metadata: Metadata = {
+  title: "Wallet & permissions",
+  description:
+    "The wallets connected to Dolphin, what each one has authorised, and how to revoke it.",
+  robots: { index: false, follow: false },
+};
 
 export default function WalletPage() {
-  return (
-    <main className="site-frame" style={{ paddingBlock: "clamp(2rem, 5vw, 4rem)" }}>
-      {/* Dolphin (Altana passkey) wallet — top priority */}
-      <AltanaWalletPanel />
-
-      {/* Identity wallet (wagmi / MetaMask / WalletConnect) — secondary */}
-      <IdentityWalletSection />
-    </main>
-  );
+  return <WalletClient />;
 }

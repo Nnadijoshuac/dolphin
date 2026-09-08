@@ -184,10 +184,68 @@
   background: var(--paper);
 }
 
+/*
+ * The Discover filter rail. This class existed and was never referenced by any
+ * element, because the rail itself was never rendered - see the long note at
+ * its JSX in app/page.tsx. It is a wrapping row rather than a horizontal
+ * scroller now: the category list comes from the catalog and is thirteen-odd
+ * entries rather than five, and a scroller that long hides most of itself
+ * off-screen with no affordance saying so. In the aside it wraps; on the
+ * narrow layout, where the aside becomes a two-column band, it scrolls.
+ */
 .filterScroller {
-  margin-top: 2rem;
-  overflow-x: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 1.75rem;
   padding: 0.2rem 0.1rem 0.45rem;
+}
+
+.filterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  padding-inline: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.filterChip:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.filterChipActive,
+.filterChipActive:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/*
+ * The population behind the chip. Shown because a chip that leads to four
+ * agents and a chip that leads to four hundred are different offers, and
+ * because the count is the thing that makes an empty category visibly empty
+ * BEFORE it is clicked rather than after.
+ */
+.filterChipCount {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+
+.filterChipActive .filterChipCount {
+  color: color-mix(in srgb, var(--paper) 72%, transparent);
 }
 
 .cirTabs {
@@ -620,9 +678,24 @@
     gap: 0.4rem;
   }
 
+  /*
+   * On the narrow layout the aside collapses into a band, so the rail gets one
+   * line and scrolls rather than wrapping into a wall of chips above the grid.
+   */
   .filterScroller {
+    flex-wrap: nowrap;
+    overflow-x: auto;
     margin-inline: -1.125rem;
     padding-inline: 1.125rem;
+    scrollbar-width: none;
+  }
+
+  .filterScroller::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filterChip {
+    flex: 0 0 auto;
   }
 
   .cirTabs {

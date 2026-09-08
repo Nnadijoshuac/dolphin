@@ -4,12 +4,15 @@ import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { AGENT_CATEGORIES } from "@/constants/agents";
+import { categoryLabel } from "@/constants/agents";
+import { track, type AnalyticsSurface } from "@/lib/analytics";
 import type { Agent, LiveMetric, LiveMetricStatus } from "@/types/agent";
 
 type AgentCardProps = {
   agent: Agent;
   className?: string;
+  /** Where this card is rendered, for the click event. */
+  surface?: AnalyticsSurface;
 };
 
 type MetricPreview = {
@@ -90,10 +93,19 @@ const statusLabels: Record<LiveMetricStatus, string> = {
   unavailable: "Not available",
 };
 
-export function AgentCard({ agent, className = "" }: AgentCardProps) {
-  const categoryLabel =
-    AGENT_CATEGORIES.find((category) => category.slug === agent.category)?.label ??
-    "Monitoring";
+export function AgentCard({
+  agent,
+  className = "",
+  surface = "search",
+}: AgentCardProps) {
+  /*
+   * `categoryLabel()` is TOTAL. This looked the slug up in a hardcoded list of
+   * five and fell back to the literal string "Monitoring" - so every research,
+   * security, payments, content, automation and `general` agent in the catalog
+   * was labelled "Monitoring" on its card. A wrong label is worse than a
+   * derived one: it is a claim about what the agent does.
+   */
+  const label = categoryLabel(agent.category);
   const preview = getMetricPreview(agent);
   const checkedAt = preview ? formatCheckedAt(preview.asOf) : null;
   const displayPublisher = agent.publisher?.startsWith("0x")
@@ -104,6 +116,13 @@ export function AgentCard({ agent, className = "" }: AgentCardProps) {
     <Link
       className={`interactive group block border-t border-line py-5 no-underline first:border-t-0 sm:py-6 ${className}`}
       href={`/agent/${agent.tokenId}`}
+      onClick={() =>
+        track("agent_card_opened", {
+          agentKey: agent.agentKey,
+          category: agent.category,
+          surface,
+        })
+      }
     >
       <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_170px_auto] sm:items-center sm:gap-5">
         <div className="flex items-start gap-4 sm:contents">
@@ -111,7 +130,7 @@ export function AgentCard({ agent, className = "" }: AgentCardProps) {
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.69rem] font-semibold uppercase tracking-[0.09em] text-faint">
-              <span>{categoryLabel}</span>
+              <span>{label}</span>
               <span aria-hidden="true">·</span>
               <span>ERC-8004 #{agent.tokenId}</span>
             </div>

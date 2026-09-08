@@ -1,7 +1,9 @@
+"use client";
+
 import Link from "next/link";
 
 import { BnbLogo, BrandMark } from "@/components/brand-mark";
-import { AGENT_CATEGORIES } from "@/constants/agents";
+import { useCategoryFacets } from "@/hooks/use-agents";
 
 function XLogo({ size = 20 }: { size?: number }) {
   return (
@@ -31,15 +33,18 @@ function InstagramLogo({ size = 20 }: { size?: number }) {
   );
 }
 
-// Derived from AGENT_CATEGORIES, not hand-listed. This was four hardcoded
-// entries and silently went stale the moment a category was added - the /search
-// chips it links into were already showing one the footer didn't. Deriving it
-// also settles the casing, which had drifted ("Grid trading" here vs the
-// canonical "Grid Trading" everywhere the label comes from the constant).
-const browseLinks = AGENT_CATEGORIES.map((category) => ({
-  href: `/search?category=${category.slug}`,
-  label: category.label,
-}));
+/*
+ * FROM THE CATALOG. This was hand-listed, then derived from AGENT_CATEGORIES -
+ * and each time it went stale the moment the backend classified an agent into
+ * a category the constant did not know about. It is now the same
+ * convex/facets.ts row the Discover rail and the Search tabs read, so all three
+ * agree by construction rather than by remembering to update three files.
+ *
+ * Capped at eight, ordered by population (the backend sorts them), because a
+ * footer column is not a category index - it is the top of one. "Browse all"
+ * carries the rest.
+ */
+const FOOTER_CATEGORY_LIMIT = 8;
 
 const accountLinks = [
   { href: "/my-agents", label: "My agents" },
@@ -48,6 +53,14 @@ const accountLinks = [
 ] as const;
 
 export function SiteFooter() {
+  const facets = useCategoryFacets();
+  const browseLinks = facets.categories
+    .slice(0, FOOTER_CATEGORY_LIMIT)
+    .map((category) => ({
+      href: `/search?category=${category.slug}`,
+      label: category.label,
+    }));
+
   return (
     <footer className="mt-24 border-t border-line bg-paper">
       <div className="site-frame py-12 sm:py-16">
@@ -103,6 +116,16 @@ export function SiteFooter() {
                   </Link>
                 </li>
               ))}
+              {/*
+               * Always present, including while the facets load and when the
+               * catalog is unreachable, so this column is never an empty list
+               * with a heading over it.
+               */}
+              <li>
+                <Link className="interactive hover:text-ink" href="/search">
+                  {browseLinks.length > 0 ? "All categories" : "Browse the catalog"}
+                </Link>
+              </li>
             </ul>
           </nav>
 

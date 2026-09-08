@@ -10,6 +10,7 @@ import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
 import { StatePanel } from "@/components/state-panel";
 import { useAgentCategoryStats } from "@/hooks/use-category-stats";
+import { categoryLabel } from "@/constants/agents";
 import { convexClient } from "@/providers/convex-provider";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import type {
@@ -19,15 +20,17 @@ import type {
   LiveMetric,
 } from "@/types/agent";
 
-const categoryLabels: Record<AgentCategory, string> = {
-  monitoring: "Monitoring",
-  rebalancing: "Rebalancing",
-  "grid-trading": "Grid trading",
-  "health-factor": "Health factor",
-  yield: "Yield",
-  trading: "Trading",
-};
-
+/*
+ * There was a `Record<AgentCategory, string>` here with six entries, indexed
+ * directly as `categoryLabels[agent.category]` in the breadcrumb and the header.
+ * `AgentCategory` is an OPEN string (see the note in @/types/agent), so that
+ * index does not type-error on a missing key - it returns `undefined` at
+ * runtime. A research, security, payments or `general` agent therefore rendered
+ * an empty breadcrumb crumb and an empty eyebrow above its own name.
+ *
+ * `categoryLabel()` from @/constants/agents is total by construction and is the
+ * only way a category should be turned into text anywhere in this app.
+ */
 function shortAddress(value: string | null) {
   if (!value) return "Not published";
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
@@ -293,7 +296,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           className="interactive hover:text-ink"
           href={`/search?category=${agent.category}`}
         >
-          {categoryLabels[agent.category]}
+          {categoryLabel(agent.category)}
         </Link>
         <span aria-hidden="true">/</span>
         <span aria-current="page" className="text-ink">
@@ -308,7 +311,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               <AgentIcon category={agent.category} size={76} uri={agent.iconUrl} />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                  <span>{categoryLabels[agent.category]}</span>
+                  <span>{categoryLabel(agent.category)}</span>
                   <span aria-hidden="true">·</span>
                   <span>ERC-8004 #{agent.tokenId}</span>
                 </div>

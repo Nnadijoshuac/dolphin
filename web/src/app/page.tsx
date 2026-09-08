@@ -2,17 +2,24 @@
 
 import Link from "next/link";
 import {
+  useEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
-  Fragment,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
-import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
-import { AGENT_CATEGORIES } from "@/constants/agents";
-import { useAgentList } from "@/hooks/use-agents";
+import { CategoryGlyph } from "@/components/category-glyph";
+import {
+  CatalogUnavailable,
+  useBackendStatus,
+  useReportBackendStatus,
+} from "@/components/backend-status";
+import { HeroVideo } from "@/components/hero-video";
+import { categoryDescription, categoryLabel } from "@/constants/agents";
+import { useAgentList, useCategoryFacets } from "@/hooks/use-agents";
+import { track } from "@/lib/analytics";
 import type { Agent, AgentCategory } from "@/types/agent";
 
 import styles from "./page.module.css";
@@ -21,35 +28,43 @@ type CatalogFilter = {
   value: AgentCategory | null;
   label: string;
   description: string;
-  glyph: GlyphName;
+  /** Null for "All agents", whose count is the catalog total rather than a facet. */
+  count: number | null;
 };
 
-const catalogFilters: readonly CatalogFilter[] = [
-  {
-    value: null,
-    label: "All agents",
-    description: "Choose the job, not a generic score. Each role is compared using evidence that fits the work.",
-    glyph: "categories",
-  },
-  ...AGENT_CATEGORIES.map((category) => ({
-    value: category.slug,
-    label: category.label,
-    description: category.description,
-    glyph: category.slug,
-  })),
-];
+const ALL_AGENTS_FILTER: CatalogFilter = {
+  value: null,
+  label: "All agents",
+  description:
+    "Choose the job, not a generic score. Each role is compared using evidence that fits the work.",
+  count: null,
+};
 
 const categoryChangeEvent = "dolphin:discover-category-change";
 
-function isCatalogCategory(value: string | null): value is AgentCategory {
-  return AGENT_CATEGORIES.some((category) => category.slug === value);
+/**
+ * A URL `?category=` value, or null.
+ *
+ * DELIBERATELY NOT VALIDATED against a known list. Category slugs are an open
+ * set (see the note in @/constants/agents) and the browse chips are read from
+ * the catalog, so this cannot know the valid set at the moment it runs - the
+ * facets may not have loaded yet. Anything slug-shaped is passed through to the
+ * backend, which either has agents in it or does not; the empty state already
+ * says so. The old version tested against a hardcoded five and silently dropped
+ * every other category on the floor.
+ */
+function readCategoryParam(value: string | null): AgentCategory | null {
+  if (!value) return null;
+  const trimmed = value.trim().toLowerCase();
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(trimmed) ? trimmed : null;
 }
 
 function getSelectedCategorySnapshot(): AgentCategory | null {
   if (typeof window === "undefined") return null;
 
-  const value = new URLSearchParams(window.location.search).get("category");
-  return isCatalogCategory(value) ? value : null;
+  return readCategoryParam(
+    new URLSearchParams(window.location.search).get("category"),
+  );
 }
 
 function subscribeToCategoryChanges(onStoreChange: () => void) {
@@ -62,24 +77,27 @@ function subscribeToCategoryChanges(onStoreChange: () => void) {
   };
 }
 
-function getCategoryLabel(category: AgentCategory) {
-  return (
-    AGENT_CATEGORIES.find((option) => option.slug === category)?.label ??
-    "Monitoring"
-  );
-}
-
 function getRecordSource(agent: Agent) {
   return agent.sourceLabels[0]?.label ?? "Source not listed";
 }
 
 function DiscoverAgentCard({ agent }: { agent: Agent }) {
-  const categoryLabel = getCategoryLabel(agent.category);
+  const label = categoryLabel(agent.category);
   const recordLabel =
     agent.recordStatus === "indexed" ? "Indexed record" : "Editorial record";
 
   return (
-    <Link className={styles.agentCard} href={`/agent/${agent.tokenId}`}>
+    <Link
+      className={styles.agentCard}
+      href={`/agent/${agent.tokenId}`}
+      onClick={() =>
+        track("agent_card_opened", {
+          agentKey: agent.agentKey,
+          category: agent.category,
+          surface: "discover",
+        })
+      }
+    >
       <article className="flex h-full flex-col">
         <div className="flex items-start justify-between gap-4">
           <AgentIcon category={agent.category} size={58} uri={agent.iconUrl} />
@@ -90,7 +108,7 @@ function DiscoverAgentCard({ agent }: { agent: Agent }) {
         </div>
 
         <div className="mt-6">
-          <p className="text-xs font-semibold text-accent-ink">{categoryLabel}</p>
+          <p className="text-xs font-semibold text-accent-ink">{label}</p>
           <h3 className="mt-2 text-xl font-semibold leading-tight tracking-[-0.035em] text-ink sm:text-2xl">
             {agent.name}
           </h3>
@@ -218,22 +236,67 @@ export default function DiscoverPage() {
   const { agents, status, isLoading, loadMore } = useAgentList({
     category: selectedCategory ?? undefined,
   });
+
+  /*
+   * THE CHIPS, FROM THE CATALOG. See the note in @/constants/agents for what
+   * this replaced and what it cost: a hardcoded five, against a backend that
+   * classifies into thirteen, so eight categories - including `general`, the
+   * fallback every unclassified agent lands in - had no chip anywhere on the
+   * site.
+   */
+  const facets = useCategoryFacets();
+  const backend = useBackendStatus();
+  useReportBackendStatus(backend, "discover");
+
   const filterRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const hasCatalog = !isLoading;
-  const isError = false;
+  const catalogFilters = useMemo<readonly CatalogFilter[]>(
+    () => [
+      ALL_AGENTS_FILTER,
+      ...facets.categories.map((facet) => ({
+        value: facet.slug,
+        label: facet.label,
+        description:
+          categoryDescription(facet.slug) ??
+          `Agents the catalog classifies as ${facet.label.toLowerCase()}.`,
+        count: facet.count,
+      })),
+    ],
+    [facets.categories],
+  );
+
+  const hasCatalog = agents.length > 0;
+  /*
+   * A REAL ERROR STATE. Both of these were literals - `const isError = false`
+   * and `const refetch = () => undefined` - which made every error branch below
+   * unreachable and left "the catalog is empty" as the only thing this page
+   * could say about a backend it could not reach. See components/backend-status.
+   */
+  const isUnavailable = backend.kind === "unreachable" || backend.kind === "unconfigured";
   const isFetching = status === "LoadingMore";
-  const refetch = () => undefined;
-  const visibleAgents = useMemo(() => agents, [agents]);
-  const displayedAgents = visibleAgents;
+  const displayedAgents = agents;
   const selectedOption = catalogFilters.find(
     (option) => option.value === selectedCategory,
   );
-  const selectedLabel = selectedOption?.label ?? "All agents";
+  const selectedLabel = selectedOption?.label ?? categoryLabel(selectedCategory);
   const selectedDescription =
-    selectedOption?.description ?? "Explore every role in the shared catalog.";
-  const showInitialLoading = isLoading && !hasCatalog;
-  const showUnavailable = isError && !hasCatalog;
+    selectedOption?.description ??
+    categoryDescription(selectedCategory) ??
+    "Explore every role in the shared catalog.";
+  /* Show the skeleton only while there is genuinely nothing to draw yet. */
+  const showInitialLoading = isLoading && !hasCatalog && !isUnavailable;
+  const showUnavailable = isUnavailable && !hasCatalog;
+
+  /** Emitted once the catalog has actually rendered, not on mount. */
+  const reportedCatalog = useRef(false);
+  useEffect(() => {
+    if (reportedCatalog.current || isLoading) return;
+    reportedCatalog.current = true;
+    track("catalog_viewed", {
+      surface: "discover",
+      categoryCount: facets.isLoading ? null : facets.categories.length,
+    });
+  }, [isLoading, facets.isLoading, facets.categories.length]);
 
   function updateSelectedCategory(category: AgentCategory | null) {
     if (category === selectedCategory) return;
@@ -255,6 +318,14 @@ export default function DiscoverPage() {
 
     updateSelectedCategory(option.value);
     filterRefs.current[index]?.focus();
+
+    if (option.value) {
+      track("category_selected", {
+        surface: "discover",
+        category: option.value,
+        count: option.count,
+      });
+    }
   }
 
   function handleFilterKeyDown(
@@ -279,11 +350,29 @@ export default function DiscoverPage() {
     selectFilter(nextIndex);
   }
 
+  /*
+   * THE COUNT IS THE MATCHING TOTAL, NOT THE LOADED PAGE.
+   *
+   * This printed `agents.length`, which is how many have been fetched so far -
+   * so it said "24 records" with a "Show more agents" button directly beneath
+   * it. On a page that prints a source and a check-timestamp beside every
+   * metric, the one number describing our own inventory was the misleading one.
+   *
+   * The real total comes from convex/facets.ts, which counts the live catalog on
+   * a schedule. When it has not been computed yet the loaded count is shown with
+   * a "+" rather than dressed up as a total.
+   */
+  const matchingTotal = selectedCategory
+    ? (facets.categories.find((facet) => facet.slug === selectedCategory)?.count ?? null)
+    : facets.totalLive || null;
+
   const resultStatus = showInitialLoading
     ? "Syncing with the catalog"
     : showUnavailable
       ? "Catalog unavailable"
-      : `${visibleAgents.length} ${visibleAgents.length === 1 ? "record" : "records"}`;
+      : matchingTotal !== null
+        ? `${matchingTotal.toLocaleString()} ${matchingTotal === 1 ? "record" : "records"}`
+        : `${displayedAgents.length}+ records loaded`;
 
   return (
     <div className={styles.page}>
@@ -294,14 +383,13 @@ export default function DiscoverPage() {
        * on the same 1280px measure as every other section on the page.
        */}
       <section aria-labelledby="discover-heading" className={styles.heroSection}>
-        <video
-          autoPlay
-          className={styles.heroBgVideo}
-          loop
-          muted
-          playsInline
-          src="https://res.cloudinary.com/ejr7iufx/video/upload/v1788251928/0901.mp4"
-        />
+        {/*
+         * Deferred, poster-backed and reduced-motion-aware. It used to be a
+         * bare autoplaying <video> with no poster and no preload hint, which
+         * made an MP4 on a third-party CDN the Largest Contentful Paint of the
+         * entire site. See components/hero-video.tsx.
+         */}
+        <HeroVideo className={styles.heroBgVideo} />
         <div className={styles.heroOverlay} />
 
         <div className="site-frame">
@@ -377,6 +465,73 @@ export default function DiscoverPage() {
               {isFetching && hasCatalog ? " · Refreshing" : ""}
             </p>
 
+            {/*
+             * ===================================================================
+             * THE FILTER RAIL, WHICH WAS NEVER RENDERED. (2026-09-08)
+             * ===================================================================
+             * `catalogFilters`, `filterRefs`, `selectFilter` and
+             * `handleFilterKeyDown` all existed in this component, fully written,
+             * including roving-tabindex keyboard handling - and NOTHING IN THE
+             * JSX USED ANY OF THEM. `.filterScroller` sat unreferenced in
+             * page.module.css for the same reason.
+             *
+             * So this section (id="browse-by-role") offered no roles to click.
+             * The aside printed the name and description of the SELECTED
+             * category while giving no way to select one: the only route to a
+             * filtered Discover was hand-editing `?category=` in the URL bar.
+             *
+             * It is a listbox-style toolbar rather than tabs, because the panel
+             * it controls is the same panel in every state - only its contents
+             * change - and because the roving tabindex below is what makes one
+             * Tab stop with arrow-key traversal, instead of thirteen Tab stops.
+             */}
+            <div
+              aria-label="Filter the catalog by role"
+              className={styles.filterScroller}
+              role="toolbar"
+            >
+              {facets.isLoading
+                ? [0, 1, 2, 3, 4].map((item) => (
+                    <span
+                      aria-hidden="true"
+                      className="skeleton h-9 w-24 shrink-0 rounded-full"
+                      key={item}
+                    />
+                  ))
+                : catalogFilters.map((option, index) => {
+                    const isSelected = option.value === selectedCategory;
+
+                    return (
+                      <button
+                        aria-pressed={isSelected}
+                        className={`${styles.filterChip} ${
+                          isSelected ? styles.filterChipActive : ""
+                        }`}
+                        key={option.value ?? "all"}
+                        onClick={() => selectFilter(index)}
+                        onKeyDown={(event) => handleFilterKeyDown(event, index)}
+                        ref={(node) => {
+                          filterRefs.current[index] = node;
+                        }}
+                        /* Roving tabindex: one stop for the whole rail. */
+                        tabIndex={
+                          isSelected || (selectedCategory === null && index === 0)
+                            ? 0
+                            : -1
+                        }
+                        type="button"
+                      >
+                        {option.label}
+                        {option.count !== null ? (
+                          <span className={styles.filterChipCount}>
+                            {option.count.toLocaleString()}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+            </div>
+
             <div className={styles.readingGuide}>
               <p className="font-semibold text-ink">Read the record first</p>
               <ul className="mt-3 space-y-2.5 text-sm leading-5 text-muted">
@@ -392,33 +547,27 @@ export default function DiscoverPage() {
             className={styles.catalogPanel}
             id="agent-catalog"
           >
-            {isError && hasCatalog ? (
+            {isUnavailable && hasCatalog ? (
               <div className={styles.refreshAlert} role="alert">
                 <span>
-                  The latest refresh failed. Showing the last available catalog records.
+                  The connection to the catalog dropped. These are the last
+                  records Dolphin received, and they may be out of date.
                 </span>
-                <button
-                  disabled={isFetching}
-                  onClick={() => void refetch()}
-                  type="button"
-                >
-                  {isFetching ? "Retrying" : "Retry"}
-                </button>
               </div>
             ) : null}
 
             {showInitialLoading ? (
               <CatalogSkeleton />
             ) : showUnavailable ? (
-              <CatalogNotice
-                actionDisabled={isFetching}
-                actionLabel={isFetching ? "Retrying catalog" : "Retry catalog"}
-                body="Dolphin could not reach the shared agent catalog. No fallback records or performance numbers are being shown."
-                onAction={() => void refetch()}
-                state="unavailable"
-                title="Catalog unavailable"
+              <CatalogUnavailable
+                status={
+                  backend as Extract<
+                    typeof backend,
+                    { kind: "unreachable" | "unconfigured" }
+                  >
+                }
               />
-            ) : visibleAgents.length === 0 ? (
+            ) : displayedAgents.length === 0 ? (
               <CatalogNotice
                 actionLabel={selectedCategory ? "Show all agents" : undefined}
                 body={

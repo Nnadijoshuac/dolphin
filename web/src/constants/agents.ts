@@ -13,9 +13,46 @@ export const ERC8004_REGISTRY_ADDRESSES = {
   reputation: "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63" as Address,
 } as const;
 
-// Mirrors AGENT_CATEGORY_SLUGS in src/constants/agents.ts, where the reasoning
-// for each entry lives. "trading" is an additional Dolphin category, not a
-// fifth hackathon-graded one.
+/**
+ * ===========================================================================
+ * CATEGORIES ARE DATA. THIS FILE ONLY HOLDS COPY. (2026-09-08)
+ * ===========================================================================
+ *
+ * WHAT THIS USED TO BE, and what it cost. `AGENT_CATEGORIES` was a hardcoded
+ * list of five, and it was THE browse list: Discover's filter rail, Search's
+ * tab row, the footer's Browse column and `isAgentCategory()`'s guard all read
+ * it. Meanwhile `convex/lib/categorize.ts` classifies agents into THIRTEEN
+ * slugs - the five below plus monitoring, research, development, security,
+ * payments, content, automation, and `general`, which is the fallback every
+ * unclassified agent lands in.
+ *
+ * So eight categories, including the default one, had no chip anywhere on the
+ * site. Agents in them were reachable only by typing the right word into the
+ * search box. `useCategoryFacets()` - the hook written for exactly this, whose
+ * own comment says "which categories exist is a property of the data" - existed
+ * in src/hooks/use-agents.ts and was called from nowhere.
+ *
+ * It also broke a link. `agent-detail.tsx` sends the category breadcrumb to
+ * `/search?category=<slug>`, and Search's guard rejected any slug not in this
+ * list, so a monitoring or research agent's own breadcrumb silently landed on
+ * "All agents".
+ *
+ * THE BROWSE LIST NOW COMES FROM `useCategoryFacets()`, which reads
+ * `convex/facets.ts` - counted from the live catalog, ordered by population,
+ * and containing a category only if agents are actually in it. What stays here
+ * is what the backend has no opinion about: the one-line DESCRIPTION shown
+ * beside a chip. A category with no entry below gets a derived label and no
+ * description, which is a smaller failure than not existing.
+ *
+ * Never reintroduce a hardcoded browse list, and never index a category map
+ * directly - use `categoryLabel()` / `categoryDescription()` below, both total.
+ */
+
+/**
+ * The five Dolphin has editorial copy for. NOT the browse list, NOT a
+ * constraint, and NOT the set the backend classifies into. "trading" is an
+ * additional Dolphin category, not a fifth hackathon-graded one.
+ */
 export const AGENT_CATEGORY_SLUGS = [
   "rebalancing",
   "grid-trading",
@@ -59,6 +96,71 @@ export const AGENT_CATEGORIES: readonly {
       "Agents that plan or execute trades, and the track-record evidence they publish.",
   },
 ];
+
+/**
+ * Descriptions for the categories the backend classifies into but this app has
+ * no editorial entry for. Mirrors the slugs in `convex/lib/categorize.ts`'s
+ * CATEGORY_DEFINITIONS; the LABEL comes from the backend with the facet, so
+ * only the description lives here.
+ *
+ * A slug missing from both maps still browses - it just gets a derived label
+ * and no supporting line. That is the point of the open set.
+ */
+const CATEGORY_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(
+    AGENT_CATEGORIES.map((category) => [category.slug, category.description]),
+  ),
+  monitoring:
+    "Read-only agents that watch positions, wallets or markets and raise alerts.",
+  research:
+    "Agents that gather, summarise or analyse information rather than act on it.",
+  development:
+    "Agents that write, review or operate code and developer tooling.",
+  security:
+    "Agents that audit contracts, screen transactions or monitor for exploits.",
+  payments:
+    "Agents that quote, invoice or settle payments on behalf of their operator.",
+  content: "Agents that generate or transform text, images, audio or video.",
+  automation:
+    "Agents that chain tasks together and run workflows on a schedule or trigger.",
+  general:
+    "Agents whose published description did not place them in a narrower role.",
+};
+
+/**
+ * A human label for any slug, including one the registry invented.
+ *
+ * Mirrors `categoryLabel` in convex/lib/categorize.ts, and exists for the two
+ * places a label is needed WITHOUT a facet row to hand: a single agent's own
+ * category on a detail page or a card. When a facet row is available, prefer
+ * its `label` - it is the same function, run against the same data, one hop
+ * closer to the source.
+ *
+ * Total by construction. `AgentCategory` is an open string, so
+ * `Record<AgentCategory, T>[slug]` returns `undefined` at runtime without a
+ * type error - which is how every unknown category rendered as the literal
+ * string "Monitoring" on cards and as `undefined` in the detail breadcrumb.
+ */
+export function categoryLabel(slug: AgentCategory | null | undefined): string {
+  if (!slug) return "Uncategorised";
+
+  const known = AGENT_CATEGORIES.find((category) => category.slug === slug);
+  if (known) return known.label;
+
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/** The supporting line beside a chip, or null when Dolphin has nothing to add. */
+export function categoryDescription(
+  slug: AgentCategory | null | undefined,
+): string | null {
+  if (!slug) return null;
+  return CATEGORY_DESCRIPTIONS[slug] ?? null;
+}
 
 export const AGENT_DATA_SOURCES = {
   registry: {

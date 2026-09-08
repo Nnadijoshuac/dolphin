@@ -119,6 +119,20 @@ jobs:
       - name: Generate route types
         run: npx next typegen
 
+      # FIRST, because it is the only step here that can catch the failure mode
+      # that has actually taken this site down. web/src/convex/api.ts describes
+      # the backend by hand, so `tsc` type-checks the site against that
+      # description rather than against Convex - and on 2026-09-06 the
+      # description drifted, tsc passed, and every hire on the live site failed
+      # in the browser with ArgumentValidationError. This parses the real
+      # convex/*.ts modules and compares them. It caught a genuine gap on its
+      # first run (an indexed `protocol` filter the site never declared).
+      #
+      # It reads ../convex, so it is the one step here that depends on the
+      # repository rather than only on web/.
+      - name: Check Convex API declarations match the backend
+        run: npm run check:convex-api
+
       # Typecheck separately from the build so a type error is reported as a
       # type error, rather than as a generic build failure 60 seconds later.
       - name: Typecheck
@@ -126,6 +140,14 @@ jobs:
 
       - name: Lint
         run: npx eslint .
+
+      # Pure-logic tests over the units that have actually broken here: the
+      # category label that was wrong for eight of thirteen categories, the
+      # reputation-registry write path that spends real BNB, and the analytics
+      # vocabulary's privacy properties. No component rendering - what breaks on
+      # this site is never JSX.
+      - name: Test
+        run: npm run test
 
       - name: Build
         run: npx next build

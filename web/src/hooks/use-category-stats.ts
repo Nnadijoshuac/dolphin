@@ -84,11 +84,57 @@ export function useAgentCategoryStats(
       void refresh({ agentKey, category: statsCategory, agentWallet });
     }
 
-    const interval = setInterval(() => {
-      void refresh({ agentKey, category: statsCategory, agentWallet });
-    }, REFRESH_INTERVAL_MS);
+    /*
+     * ===================================================================
+     * GATED ON TAB VISIBILITY (2026-09-08)
+     * ===================================================================
+     * This was a bare setInterval. A backgrounded tab left open overnight
+     * kept calling `refreshAgentCategoryStats` once a minute until it was
+     * closed - 1,440 Convex action invocations, each one on behalf of
+     * nobody, for a page no one was looking at. Multiply by every open tab.
+     *
+     * The action is also PUBLIC and unauthenticated (convex/categoryStats.ts),
+     * so this is not only wasted spend - it is the largest caller of an
+     * endpoint that anyone holding the deployment URL can also call, and the
+     * URL is inlined into this bundle by design. Reducing our own traffic to
+     * what a visible tab actually needs is the part of that we control.
+     *
+     * On becoming visible again it refreshes IMMEDIATELY rather than waiting
+     * out the interval, so returning to a tab shows current numbers instead
+     * of up-to-a-minute-old ones with a live badge on them.
+     */
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    return () => clearInterval(interval);
+    const stop = () => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const start = () => {
+      if (interval !== null) return;
+      interval = setInterval(() => {
+        void refresh({ agentKey, category: statsCategory, agentWallet });
+      }, REFRESH_INTERVAL_MS);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refresh({ agentKey, category: statsCategory, agentWallet });
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [agentKey, statsCategory, agentWallet, refresh]);
 
   return cached;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * A value that lags behind its input until the input stops changing.
@@ -34,25 +34,33 @@ export const SEARCH_DEBOUNCE_MS = 250;
 
 export function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
-  const previous = useRef(value);
+
+  /*
+   * CLEARING IS NOT DEBOUNCED, and it is adjusted DURING RENDER rather than in
+   * an effect. Emptying the box should show the unfiltered catalog at once -
+   * there is no expensive query to protect against, and a quarter-second of
+   * stale results after an explicit "Clear" reads as a bug.
+   *
+   * React's documented "adjusting state when a prop changes" pattern, the same
+   * one app/search/search-client.tsx uses for its URL sync. React restarts the
+   * render before committing, so there is no cascade and no extra paint - and
+   * unlike a synchronous setState inside an effect it does not trip
+   * react-hooks/set-state-in-effect, which flags that shape precisely because
+   * the effect version DOES cause a second render pass.
+   *
+   * Termination is guaranteed: the condition tests the value it then sets.
+   */
+  if (typeof value === "string" && value.length === 0 && debounced !== value) {
+    setDebounced(value);
+  }
 
   useEffect(() => {
-    /*
-     * Clearing is not debounced. Emptying the box should show the unfiltered
-     * catalog at once - there is no expensive query to protect against, and a
-     * quarter-second of stale results after an explicit "Clear" reads as a bug.
-     */
-    if (value === previous.current) return undefined;
-    previous.current = value;
+    if (value === debounced) return undefined;
 
-    if (typeof value === "string" && value.length === 0) {
-      setDebounced(value);
-      return undefined;
-    }
-
+    // Inside a timeout, so this is not a synchronous setState in an effect.
     const timer = setTimeout(() => setDebounced(value), delayMs);
     return () => clearTimeout(timer);
-  }, [value, delayMs]);
+  }, [value, debounced, delayMs]);
 
   return debounced;
 }

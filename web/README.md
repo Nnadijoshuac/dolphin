@@ -79,6 +79,7 @@ npm run dev
 | `npm run test` | Vitest, once |
 | `npm run test:watch` | Vitest, watching |
 | `npm run check:convex-api` | Verifies `src/convex/api.ts` still matches the real backend (see below) |
+| `npm run verify` | All four of the above, in the order CI runs them |
 
 `npm run typecheck` runs `next typegen` first on purpose: Next 16 generates the
 global route types (`PageProps`, `LayoutProps`) into `.next/types`, which is not
@@ -104,9 +105,15 @@ the site failed at runtime with `ArgumentValidationError`.
 
 **`npm run check:convex-api` exists because of that outage.** It parses the real
 `convex/*.ts` modules and asserts that every function this site declares still
-exists and still takes the arguments declared here. It runs in CI. A clean
-`tsc --noEmit` proves nothing about whether this site can talk to its backend;
-that script is what does.
+exists, is public rather than internal, and still takes the arguments declared
+here. It runs first in CI. A clean `tsc --noEmit` proves nothing about whether
+this site can talk to its backend; that script is what does.
+
+It is a name-level check by design — it cannot see a `v.string()` that became a
+`v.number()`. It does catch every failure this project has actually had, and it
+found a real one on its first run: `agents.list` and `agents.search` have taken
+an `a2a`/`mcp` `protocol` filter since the backend rebuild, and the website had
+never declared it, so the filter could not be offered at all.
 
 ### Data honesty
 

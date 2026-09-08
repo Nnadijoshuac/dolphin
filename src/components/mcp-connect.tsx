@@ -73,19 +73,29 @@ export function McpUseButton({ agent }: { agent: Agent }) {
     >
       <View className="flex-row items-center justify-between mb-3.5">
         <View>
-          <Text className="text-[11px] font-bold uppercase tracking-wider text-muted">
+          <Text
+            className="text-[11px] font-bold uppercase tracking-wider"
+            style={{ color: colors.inkSecondary }}
+          >
             Integration
           </Text>
-          <Text className="text-[18px] font-black text-ink mt-0.5">
+          <Text
+            className="text-[18px] font-black mt-0.5"
+            style={{ color: colors.ink }}
+          >
             Free to Connect
           </Text>
         </View>
         <View
           className="flex-row items-center gap-1.5 px-3 py-1 rounded-full"
-          style={{ backgroundColor: colors.lilac }}
+          style={{
+            backgroundColor: colors.surfaceSubtle,
+            borderColor: colors.line,
+            borderWidth: 1,
+          }}
         >
-          <CategoryGlyph color={colors.lilacInk} name="layers" size={12} strokeWidth={2.4} />
-          <Text className="text-[11.5px] font-bold" style={{ color: colors.lilacInk }}>
+          <CategoryGlyph color={colors.inkSecondary} name="layers" size={12} strokeWidth={2.4} />
+          <Text className="text-[11.5px] font-bold" style={{ color: colors.inkSecondary }}>
             {toolCount > 0 ? `${toolCount} MCP ${toolCount === 1 ? "Tool" : "Tools"}` : "MCP Server"}
           </Text>
         </View>
@@ -108,14 +118,14 @@ export function McpUseButton({ agent }: { agent: Agent }) {
         }}
       >
         <CategoryGlyph
-          color={copied ? colors.mintInk : colors.ink}
+          color={colors.ink}
           name={copied ? "check" : "copy"}
           size={16}
           strokeWidth={2.4}
         />
         <Text
           className="text-[16px] font-bold tracking-[-0.2px]"
-          style={{ color: copied ? colors.mintInk : colors.ink }}
+          style={{ color: colors.ink }}
         >
           {copied ? "Endpoint Copied" : "Copy MCP Endpoint"}
         </Text>
@@ -123,7 +133,7 @@ export function McpUseButton({ agent }: { agent: Agent }) {
 
       <Text
         className="mt-2.5 text-center text-[11.5px]"
-        style={{ color: colors.muted }}
+        style={{ color: colors.inkSecondary }}
       >
         {copied
           ? "Ready to paste into Claude Desktop, Cursor, or Cline"
@@ -143,16 +153,16 @@ export function McpUseButton({ agent }: { agent: Agent }) {
           className="text-[11px] font-mono flex-1 mr-2"
           ellipsizeMode="middle"
           numberOfLines={1}
-          style={{ color: colors.muted }}
+          style={{ color: colors.inkSecondary }}
         >
           {endpoint}
         </Text>
-        <CategoryGlyph color={colors.faint} name="copy" size={12} strokeWidth={2} />
+        <CategoryGlyph color={colors.inkSecondary} name="copy" size={12} strokeWidth={2} />
       </View>
 
       <Text
         className="mt-2 text-center text-[10.5px] leading-[15px]"
-        style={{ color: colors.faint }}
+        style={{ color: colors.inkSecondary }}
       >
         Dolphin confirmed this server answers and lists tools · Verified live
       </Text>

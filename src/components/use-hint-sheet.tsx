@@ -71,7 +71,7 @@ export function UseHintSheet({
           </Text>
           <Text
             className="mt-2 text-[14px] leading-[21px]"
-            style={{ color: colors.muted }}
+            style={{ color: colors.inkSecondary }}
           >
             This agent is free. Use puts its link on your clipboard — paste it
             into Claude Desktop, Cursor, or your own agent to give it these
@@ -113,7 +113,7 @@ export function UseHintSheet({
                 justifyContent: "center",
               }}
             >
-              <Text className="text-[14px] font-semibold" style={{ color: colors.muted }}>
+              <Text className="text-[14px] font-semibold" style={{ color: colors.inkSecondary }}>
                 Don&apos;t show again
               </Text>
             </PressableScale>

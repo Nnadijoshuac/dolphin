@@ -52,7 +52,7 @@ export function StatePanel({
       </Text>
       <Text
         className="mt-2 max-w-[320px] text-center text-[13px] leading-5"
-        style={{ color: colors.muted }}
+        style={{ color: colors.inkSecondary }}
       >
         {body}
       </Text>

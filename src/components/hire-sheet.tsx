@@ -313,13 +313,13 @@ function Body({
           className="mb-4 rounded-2xl border p-4"
           style={{ backgroundColor: colors.surface, borderColor: colors.line }}
         >
-          <Text className="text-[11px] uppercase tracking-[0.8px]" style={{ color: colors.faint }}>
+          <Text className="text-[11px] uppercase tracking-[0.8px]" style={{ color: colors.inkSecondary }}>
             This agent&apos;s price
           </Text>
           <Text className="mt-1 text-[28px] font-bold" style={{ color: colors.ink }}>
             {price}
           </Text>
-          <Text className="mt-2 text-[11px] leading-4" style={{ color: colors.muted }}>
+          <Text className="mt-2 text-[11px] leading-4" style={{ color: colors.inkSecondary }}>
             Held in escrow on BNB Chain and released when the agent delivers.
             Refundable to you if it never does.
           </Text>
@@ -378,10 +378,10 @@ function Body({
             padding: 12,
           }}
         >
-          <Text className="text-[12px] leading-[18px]" style={{ color: colors.muted }} numberOfLines={3}>
+          <Text className="text-[12px] leading-[18px]" style={{ color: colors.inkSecondary }} numberOfLines={3}>
             {task}
           </Text>
-          <Text className="mt-1.5 text-[11px] font-bold" style={{ color: colors.goldDark }}>
+          <Text className="mt-1.5 text-[11px] font-bold" style={{ color: colors.ink }}>
             Edit
           </Text>
         </PressableScale>
@@ -414,7 +414,7 @@ function Layout({
       <Text className="text-[20px] font-bold tracking-[-0.4px]" style={{ color: colors.ink }}>
         {title}
       </Text>
-      <Text className="mb-5 mt-1.5 text-[13px] leading-[19px]" style={{ color: colors.muted }}>
+      <Text className="mb-5 mt-1.5 text-[13px] leading-[19px]" style={{ color: colors.inkSecondary }}>
         {body}
       </Text>
       {error ? (

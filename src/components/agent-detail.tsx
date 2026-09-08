@@ -141,7 +141,7 @@ function Section({
       {caption ? (
         <Text
           className="mt-1 text-[12px] leading-[17px]"
-          style={{ color: colors.muted }}
+          style={{ color: colors.inkSecondary }}
         >
           {caption}
         </Text>
@@ -171,7 +171,7 @@ function FactRow({
         paddingTop: isFirst ? 0 : 11,
       }}
     >
-      <Text className="text-[12px] shrink-0" style={{ color: colors.muted }}>
+      <Text className="text-[12px] shrink-0" style={{ color: colors.inkSecondary }}>
         {label}
       </Text>
       <Text
@@ -192,14 +192,14 @@ function Pill({ label, accent = false }: { label: string; accent?: boolean }) {
     <View
       className="rounded-full px-3 py-1.5"
       style={{
-        backgroundColor: accent ? colors.goldSoft : colors.surfaceSubtle,
-        borderColor: accent ? colors.goldBorder : colors.line,
+        backgroundColor: accent ? colors.surfaceMuted : colors.surfaceSubtle,
+        borderColor: colors.line,
         borderWidth: 1,
       }}
     >
       <Text
         className="text-[12px] font-semibold"
-        style={{ color: accent ? colors.goldDark : colors.inkSecondary }}
+        style={{ color: accent ? colors.ink : colors.inkSecondary }}
       >
         {label}
       </Text>
@@ -265,7 +265,7 @@ function BackendReviews({ agent }: { agent: Agent }) {
             <View className="w-1/2 pr-2.5">
               <Text
                 className="text-[11px] font-bold uppercase tracking-[0.8px]"
-                style={{ color: colors.faint }}
+                style={{ color: colors.inkSecondary }}
               >
                 Would hire again
               </Text>
@@ -277,7 +277,7 @@ function BackendReviews({ agent }: { agent: Agent }) {
                   ? `${reviews.wouldHireAgainCount}/${reviews.total}`
                   : `${Math.round(reviews.wouldHireAgainRate * 100)}%`}
               </Text>
-              <Text className="mt-0.5 text-[11px]" style={{ color: colors.muted }}>
+              <Text className="mt-0.5 text-[11px]" style={{ color: colors.inkSecondary }}>
                 {reviews.wouldHireAgainRate === null
                   ? "Too few to rate"
                   : `of ${reviews.total} reviews`}
@@ -286,7 +286,7 @@ function BackendReviews({ agent }: { agent: Agent }) {
             <View className="w-1/2 pl-2.5">
               <Text
                 className="text-[11px] font-bold uppercase tracking-[0.8px]"
-                style={{ color: colors.faint }}
+                style={{ color: colors.inkSecondary }}
               >
                 Did what it said
               </Text>
@@ -295,7 +295,7 @@ function BackendReviews({ agent }: { agent: Agent }) {
                 style={{ color: colors.ink }}
               >
                 {outcomes.yes}
-                <Text className="text-[13px]" style={{ color: colors.muted }}>
+                <Text className="text-[13px]" style={{ color: colors.inkSecondary }}>
                   {` yes · ${outcomes.partially} partly · ${outcomes.no} no`}
                 </Text>
               </Text>
@@ -307,7 +307,7 @@ function BackendReviews({ agent }: { agent: Agent }) {
               className="mt-4 border-t pt-3"
               style={{ borderColor: colors.lineLight }}
             >
-              <Text className="text-[11px] leading-4" style={{ color: colors.muted }}>
+              <Text className="text-[11px] leading-4" style={{ color: colors.inkSecondary }}>
                 {reviews.paidReviews} of {reviews.total}{" "}
                 {reviews.paidReviews === 1 ? "review is" : "reviews are"} from a hire
                 that paid this agent through an on-chain escrow.
@@ -348,7 +348,7 @@ function BackendReviews({ agent }: { agent: Agent }) {
             {review.comment ? (
               <Text
                 className="mt-2 text-[13px] leading-[20px]"
-                style={{ color: colors.muted }}
+                style={{ color: colors.inkSecondary }}
               >
                 {review.comment}
               </Text>
@@ -372,7 +372,7 @@ function FactGroup({
     <View>
       <Text
         className="mb-2 text-[11px] font-bold uppercase tracking-[0.9px]"
-        style={{ color: colors.faint }}
+        style={{ color: colors.inkSecondary }}
       >
         {title}
       </Text>
@@ -528,19 +528,22 @@ export function AgentDetail({
             <Text
               className="shrink text-[13px] font-bold"
               numberOfLines={1}
-              style={{ color: colors.goldDark }}
+              style={{ color: colors.inkSecondary }}
             >
               {agent.publisher}
             </Text>
             {isRegistered ? (
               <CategoryGlyph
-                color={colors.goldDark}
+                color={colors.inkSecondary}
                 name="check"
                 size={13}
                 strokeWidth={2.4}
               />
             ) : null}
-            <Text className="text-[12px] font-medium text-zinc-400">
+            <Text
+              className="text-[12px] font-medium"
+              style={{ color: colors.inkSecondary }}
+            >
               · #{agent.tokenId}
             </Text>
           </View>
@@ -572,19 +575,29 @@ export function AgentDetail({
           >
             <View className="flex-row items-center justify-between mb-3.5">
               <View>
-                <Text className="text-[11px] font-bold uppercase tracking-wider text-muted">
+                <Text
+                  className="text-[11px] font-bold uppercase tracking-wider"
+                  style={{ color: colors.inkSecondary }}
+                >
                   Hire Price
                 </Text>
-                <Text className="text-[18px] font-black text-ink mt-0.5">
+                <Text
+                  className="text-[18px] font-black mt-0.5"
+                  style={{ color: colors.ink }}
+                >
                   {priceText}
                 </Text>
               </View>
               <View
                 className="flex-row items-center gap-1.5 px-3 py-1 rounded-full"
-                style={{ backgroundColor: colors.mint }}
+                style={{
+                  backgroundColor: colors.surfaceSubtle,
+                  borderColor: colors.line,
+                  borderWidth: 1,
+                }}
               >
-                <CategoryGlyph color={colors.mintInk} name="shield" size={12} strokeWidth={2.4} />
-                <Text className="text-[11.5px] font-bold" style={{ color: colors.mintInk }}>
+                <CategoryGlyph color={colors.inkSecondary} name="shield" size={12} strokeWidth={2.4} />
+                <Text className="text-[11.5px] font-bold" style={{ color: colors.inkSecondary }}>
                   Escrow Protected
                 </Text>
               </View>
@@ -600,7 +613,7 @@ export function AgentDetail({
 
             <Text
               className="mt-2.5 text-center text-[11.5px]"
-              style={{ color: colors.muted }}
+              style={{ color: colors.inkSecondary }}
             >
               Secured on BNB Chain · Funds released on verified completion
             </Text>
@@ -611,7 +624,7 @@ export function AgentDetail({
           <Card style={{ backgroundColor: colors.surfaceSubtle }}>
             <View className="flex-row items-start gap-3">
               <View className="mt-0.5">
-                <CategoryGlyph color={colors.muted} name="info" size={17} />
+                <CategoryGlyph color={colors.inkSecondary} name="info" size={17} />
               </View>
               <View className="min-w-0 flex-1">
                 <Text
@@ -622,7 +635,7 @@ export function AgentDetail({
                 </Text>
                 <Text
                   className="mt-1 text-[12px] leading-[18px]"
-                  style={{ color: colors.muted }}
+                  style={{ color: colors.inkSecondary }}
                 >
                   {hireability.reason}
                 </Text>
@@ -636,7 +649,7 @@ export function AgentDetail({
       <Section title="Overview">
         <Text
           className="text-[14px] leading-[22px]"
-          style={{ color: colors.muted }}
+          style={{ color: colors.inkSecondary }}
         >
           {displayedDescription}
           {isLongDescription ? (
@@ -645,9 +658,9 @@ export function AgentDetail({
               <Text
                 accessibilityLabel={expandedAbout ? "Show less" : "Show more"}
                 accessibilityRole="button"
-                className="text-[14px] font-bold"
+                className="text-[14px] font-bold underline"
                 onPress={handleToggleAbout}
-                style={{ color: colors.goldDark }}
+                style={{ color: colors.ink }}
                 suppressHighlighting
               >
                 {expandedAbout ? "Show less" : "Show more"}
@@ -720,7 +733,7 @@ function Details({ agent }: { agent: Agent }) {
           Details & registry record
         </Text>
         <CategoryGlyph
-          color={colors.muted}
+          color={colors.inkSecondary}
           name={open ? "chevron-left" : "chevron-right"}
           size={15}
         />
@@ -767,7 +780,7 @@ function Details({ agent }: { agent: Agent }) {
           />
 
           <Card>
-            <Text className="text-[12px] leading-[18px]" style={{ color: colors.muted }}>
+            <Text className="text-[12px] leading-[18px]" style={{ color: colors.inkSecondary }}>
               {booleanMetricText(
                 registeredMetric,
                 `Token #${agent.tokenId} is registered on BNB Smart Chain, checked directly against the registry contract.`,

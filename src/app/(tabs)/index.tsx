@@ -18,12 +18,11 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { categoryLabel } from "@/constants/agents";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import {
   useAgentList,
   useAgentSignals,
   useCategoryFacets,
-  type AgentProtocol,
 } from "@/hooks/use-agents";
 import type { Agent } from "@/types/agent";
 
@@ -78,7 +77,6 @@ export default function DiscoverScreen() {
    * selected on mount whether or not a single rebalancing agent existed.
    */
   const [selected, setSelected] = useState<string | null>(null);
-  const [protocol, setProtocol] = useState<AgentProtocol | null>(null);
   const activeCategory =
     selected && categories.some((c) => c.slug === selected)
       ? selected
@@ -86,7 +84,6 @@ export default function DiscoverScreen() {
 
   const { agents, status, isLoading, loadMore, isEmpty } = useAgentList({
     category: activeCategory ?? undefined,
-    protocol: protocol ?? undefined,
     enabled: activeCategory !== null || (!facetsLoading && categories.length === 0),
   });
 
@@ -199,53 +196,11 @@ export default function DiscoverScreen() {
           <AdvertCarousel agents={rows} onAgentPress={handleAgentPress} />
         </View>
 
-        {/* Sticky filter rail: protocol quick pills + category tabs */}
+        {/* Sticky category chips, read from the catalog rather than hardcoded. */}
         <View
-          className="py-2 gap-2"
+          className="py-2.5"
           style={{ backgroundColor: colors.canvas, zIndex: 30 }}
         >
-          {/* Quick kind selector pills */}
-          <View className="px-4 flex-row items-center gap-1.5">
-            {([
-              { value: null, label: "All" },
-              { value: "a2a" as const, label: "Hireable · A2A" },
-              { value: "mcp" as const, label: "Tools · MCP" },
-            ]).map((opt) => {
-              const isSelected = protocol === opt.value;
-              return (
-                <PressableScale
-                  key={opt.label}
-                  accessibilityLabel={opt.label}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: isSelected }}
-                  onPress={() => {
-                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setProtocol(opt.value);
-                  }}
-                  containerStyle={{
-                    paddingVertical: 5,
-                    paddingHorizontal: 11,
-                    borderRadius: radii.pill,
-                    backgroundColor: isSelected ? colors.ink : colors.surface,
-                    borderColor: isSelected ? colors.ink : colors.line,
-                    borderWidth: 1,
-                    ...shadows.subtle,
-                  }}
-                >
-                  <Text
-                    className="text-[11.5px]"
-                    style={{
-                      color: isSelected ? colors.surface : colors.ink,
-                      fontWeight: isSelected ? "700" : "500",
-                    }}
-                  >
-                    {opt.label}
-                  </Text>
-                </PressableScale>
-              );
-            })}
-          </View>
-
           <ScrollView
             ref={tabsScrollRef}
             horizontal
@@ -317,11 +272,7 @@ export default function DiscoverScreen() {
           ) : isEmpty ? (
             <View className="py-8">
               <StatePanel
-                body={
-                  protocol
-                    ? `No ${protocol === "a2a" ? "hireable" : "free tool"} agent found in ${categoryLabel(activeCategory ?? "")}. Try switching kind or selecting another category.`
-                    : `No agent in ${categoryLabel(activeCategory ?? "")} is answering right now. Try another category.`
-                }
+                body={`No agent in ${categoryLabel(activeCategory ?? "")} is answering right now. Try another category.`}
                 state="unavailable"
                 title="Nothing here yet"
               />

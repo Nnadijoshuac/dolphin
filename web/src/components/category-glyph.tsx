@@ -1,6 +1,73 @@
-import type { AgentCategory } from "@/types/agent";
-import { colors } from "@/constants/theme";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
+import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
+import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
+import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
+import ArrowUpRight01Icon from "@hugeicons/core-free-icons/ArrowUpRight01Icon";
+import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
+import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
+import Compass01Icon from "@hugeicons/core-free-icons/Compass01Icon";
+import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
+import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
+import GridViewIcon from "@hugeicons/core-free-icons/GridViewIcon";
+import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleIcon";
+import Layers01Icon from "@hugeicons/core-free-icons/Layers01Icon";
+import Menu01Icon from "@hugeicons/core-free-icons/Menu01Icon";
+import MoreVerticalIcon from "@hugeicons/core-free-icons/MoreVerticalIcon";
+import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
+import Robot01Icon from "@hugeicons/core-free-icons/Robot01Icon";
+import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
+import Share01Icon from "@hugeicons/core-free-icons/Share01Icon";
+import Shield01Icon from "@hugeicons/core-free-icons/Shield01Icon";
+import ShieldOffIcon from "@hugeicons/core-free-icons/ShieldOffIcon";
+import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
+import StarIcon from "@hugeicons/core-free-icons/StarIcon";
+import Tick01Icon from "@hugeicons/core-free-icons/Tick01Icon";
+import Wallet01Icon from "@hugeicons/core-free-icons/Wallet01Icon";
 
+import { colors } from "@/constants/theme";
+import type { AgentCategory } from "@/types/agent";
+
+/**
+ * Interface icons come from Hugeicons; the six AGENT CATEGORY glyphs do not.
+ *
+ * ===========================================================================
+ * WHY THE SPLIT
+ * ===========================================================================
+ * The generic interface marks (wallet, info, search, chevrons, close, …) were
+ * hand-drawn here and had no reason to be: they are the same shapes every app
+ * uses, drawn less consistently than a real icon set draws them, and each one
+ * was a small amount of SVG to maintain and to get subtly wrong. Twenty-odd of
+ * them added up to most of this file.
+ *
+ * The six CATEGORY glyphs — monitoring, grid-trading, rebalancing,
+ * health-factor, yield, trading — are kept exactly as they were. They are not
+ * generic: each encodes what its category of agent actually does (a radar eye,
+ * a liquidity ladder, a health gauge, a candlestick series), and no
+ * general-purpose icon set has a mark that carries that meaning. Swapping them
+ * would trade Dolphin's own visual vocabulary for a stock approximation, on the
+ * one axis where this product's identity actually lives.
+ *
+ * MIRRORS src/components/category-glyph.tsx in the mobile app, which made the
+ * same switch first. Same glyph names, same Hugeicons mapping, same six
+ * hand-drawn categories — so a category reads identically on both surfaces.
+ * The only differences are the renderer (`@hugeicons/react` rather than
+ * `@hugeicons/react-native`) and plain SVG elements rather than react-native-svg
+ * ones. Keep them in step.
+ *
+ * ===========================================================================
+ * IMPORT ONE FILE PER ICON. DO NOT IMPORT FROM THE BARREL.
+ * ===========================================================================
+ * `@hugeicons/core-free-icons`'s root export is the entire set — every icon in
+ * the package in one module. Next and Turbopack do tree-shake, so a named
+ * import from the barrel would probably be fine here in a way it is NOT under
+ * Metro (see the mobile file's note); "probably fine" is a bundle-size
+ * regression waiting for a config change, and the per-icon subpath costs
+ * nothing to use. The package's `./*` export maps to one small file per icon.
+ *
+ * Each per-icon file default-exports the icon's element array, hence the
+ * default imports.
+ */
 export type GlyphName =
   | AgentCategory
   | "discover"
@@ -16,11 +83,56 @@ export type GlyphName =
   | "copy"
   | "sparkle"
   | "layers"
+  | "filter"
   | "info"
   | "chevron-right"
+  | "chevron-left"
   | "arrow-right"
   | "menu"
-  | "close";
+  | "close"
+  | "receive"
+  | "external"
+  | "refresh"
+  | "share"
+  | "more"
+  | "star";
+
+/**
+ * Every glyph name that is a Hugeicons mark. A name absent from this map falls
+ * through to the hand-drawn category glyphs below, which is what keeps the two
+ * systems from silently overlapping — and what makes an unknown category render
+ * nothing rather than a wrong icon.
+ */
+const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
+  discover: Compass01Icon,
+  categories: GridViewIcon,
+  search: Search01Icon,
+  agents: Robot01Icon,
+  // `bot` is this app's older alias for the same thing. Both map to one mark
+  // rather than to two similar ones.
+  bot: Robot01Icon,
+  wallet: Wallet01Icon,
+  shield: Shield01Icon,
+  clock: Clock01Icon,
+  revoke: ShieldOffIcon,
+  check: Tick01Icon,
+  copy: Copy01Icon,
+  sparkle: SparklesIcon,
+  layers: Layers01Icon,
+  filter: FilterHorizontalIcon,
+  info: InformationCircleIcon,
+  "chevron-right": ArrowRight01Icon,
+  "chevron-left": ArrowLeft01Icon,
+  "arrow-right": ArrowRight02Icon,
+  menu: Menu01Icon,
+  close: Cancel01Icon,
+  receive: ArrowDown01Icon,
+  external: ArrowUpRight01Icon,
+  refresh: Refresh01Icon,
+  share: Share01Icon,
+  more: MoreVerticalIcon,
+  star: StarIcon,
+};
 
 type CategoryGlyphProps = {
   name: GlyphName;
@@ -35,6 +147,27 @@ export function CategoryGlyph({
   color = colors.ink,
   strokeWidth = 1.8,
 }: CategoryGlyphProps) {
+  const hugeicon = HUGEICONS[name];
+
+  if (hugeicon) {
+    /*
+     * `color` is honoured here, which it was NOT by the old hand-drawn "check".
+     * That one painted a hardcoded gold disc with a white tick and ignored the
+     * prop entirely, so every call site passing a colour was silently
+     * overridden — including the accent-coloured ticks in onboarding and the
+     * trust list on Discover, which were asking for `currentColor` and getting
+     * gold-on-gold.
+     */
+    return (
+      <HugeiconsIcon
+        color={color}
+        icon={hugeicon}
+        size={size}
+        strokeWidth={strokeWidth}
+      />
+    );
+  }
+
   const common = {
     fill: "none",
     stroke: color,
@@ -43,42 +176,57 @@ export function CategoryGlyph({
     strokeWidth,
   };
 
+  /*
+   * One flat props object per element rather than `{...common} strokeWidth={n}`.
+   * On the web that spread-then-override is harmless, but the mobile twin of
+   * this file must avoid it — react-native-svg 15.15.4 paints nothing on
+   * Android when a spread is followed by an override of a key the spread
+   * already set. Written the same way in both so the two files stay diffable.
+   */
+  const stroked = (width: number) => ({ ...common, strokeWidth: width });
+
   return (
-    <svg height={size} viewBox="0 0 24 24" width={size}>
+    <svg aria-hidden="true" height={size} viewBox="0 0 24 24" width={size}>
       {name === "monitoring" && (
         <>
-          <path d="M3 13s3.2-5.5 9-5.5 9 5.5 9 5.5-3.2 5.5-9 5.5-9-5.5-9-5.5Z" {...common} strokeWidth={1.8} />
+          {/* Eye shape centred */}
+          <path d="M3 13s3.2-5.5 9-5.5 9 5.5 9 5.5-3.2 5.5-9 5.5-9-5.5-9-5.5Z" {...stroked(1.8)} />
           <circle cx="12" cy="13" fill={color} r="2.6" />
-          <path d="M14 4.5c1.8.8 3 2 3.8 3.5" {...common} strokeWidth={1.5} />
-          <path d="M16 2.5c2.5 1.2 4.2 3 5 5" {...common} strokeWidth={1.5} />
-          <path d="M17 18l3.5 3.5" {...common} strokeWidth={2.2} />
-        </>
-      )}
-
-      {name === "rebalancing" && (
-        <>
-          <rect height="9" rx="1.5" width="8" x="5" y="7.5" {...common} strokeWidth={1.8} />
-          <line x1="9" x2="9" y1="4.5" y2="19.5" {...common} strokeWidth={1.4} />
-          <path d="M14.5 8.5h4.5m0 0-2-2m2 2-2 2" {...common} strokeWidth={1.8} />
-          <path d="M19.5 15.5H15m0 0 2-2m-2 2 2 2" {...common} strokeWidth={1.8} />
+          {/* Radar waves */}
+          <path d="M14 4.5c1.8.8 3 2 3.8 3.5" {...stroked(1.5)} />
+          <path d="M16 2.5c2.5 1.2 4.2 3 5 5" {...stroked(1.5)} />
+          {/* Magnifying handle */}
+          <path d="M17 18l3.5 3.5" {...stroked(2.2)} />
         </>
       )}
 
       {name === "grid-trading" && (
         <>
-          <line x1="4.5" x2="4.5" y1="5.5" y2="18.5" {...common} strokeWidth={2.2} />
-          <line x1="19.5" x2="19.5" y1="5.5" y2="18.5" {...common} strokeWidth={2.2} />
-          <line strokeDasharray="3,2" x1="4.5" x2="19.5" y1="7.5" y2="7.5" {...common} strokeWidth={1.2} />
-          <line strokeDasharray="3,2" x1="4.5" x2="19.5" y1="16.5" y2="16.5" {...common} strokeWidth={1.2} />
-          <path d="M4.5 12c2.5-5.5 5-5.5 7.5 0s5 5.5 7.5 0" {...common} strokeWidth={2} />
+          <line x1="4.5" x2="4.5" y1="5.5" y2="18.5" {...stroked(2.2)} />
+          <line x1="19.5" x2="19.5" y1="5.5" y2="18.5" {...stroked(2.2)} />
+          <line strokeDasharray="3,2" x1="4.5" x2="19.5" y1="7.5" y2="7.5" {...stroked(1.2)} />
+          <line strokeDasharray="3,2" x1="4.5" x2="19.5" y1="16.5" y2="16.5" {...stroked(1.2)} />
+          <path d="M4.5 12c2.5-5.5 5-5.5 7.5 0s5 5.5 7.5 0" {...stroked(2)} />
+        </>
+      )}
+
+      {name === "rebalancing" && (
+        <>
+          {/* Two cycle arrows around a centred LP-range bracket. Matches the
+              mobile glyph, which was redrawn from the old sliders shape. */}
+          <path d="M6 8a6 6 0 0 1 10.5-3.3" {...stroked(2)} />
+          <path d="m16.5 2 1 3-3 .5" {...stroked(2)} />
+          <path d="M18 16a6 6 0 0 1-10.5 3.3" {...stroked(2)} />
+          <path d="m7.5 22-1-3 3-.5" {...stroked(2)} />
+          <line x1="12" x2="12" y1="9" y2="15" {...stroked(1.6)} />
         </>
       )}
 
       {name === "health-factor" && (
         <>
-          <path d="M11 20s6-3.2 6-8.5V5.5l-6-2.5-6 2.5v6C5 16.8 11 20 11 20Z" {...common} strokeWidth={1.8} />
-          <line x1="11" x2="11" y1="6.5" y2="14.5" {...common} strokeWidth={1.8} />
-          <line x1="8.5" x2="13.5" y1="9" y2="9" {...common} strokeWidth={1.8} />
+          <path d="M11 20s6-3.2 6-8.5V5.5l-6-2.5-6 2.5v6C5 16.8 11 20 11 20Z" {...stroked(1.8)} />
+          <line x1="11" x2="11" y1="6.5" y2="14.5" {...stroked(1.8)} />
+          <line x1="8.5" x2="13.5" y1="9" y2="9" {...stroked(1.8)} />
           <circle cx="17.5" cy="17.5" fill="#111215" r="3.8" />
           <line stroke="#FFFFFF" strokeLinecap="round" strokeWidth={1.4} x1="17.5" x2="17.5" y1="15.5" y2="17.5" />
           <circle cx="17.5" cy="19.4" fill="#FFFFFF" r="0.6" />
@@ -87,141 +235,24 @@ export function CategoryGlyph({
 
       {name === "yield" && (
         <>
-          <path d="M11 20v-6.5c0-3.5 3.5-5.5 8-5.5-1 4.5-2.5 8-8 8" {...common} strokeWidth={1.8} />
-          <path d="M11 13.5c0-2.8-2.8-4.5-6.5-4.5 1 3.8 2.8 6.5 6.5 6.5" {...common} strokeWidth={1.8} />
-          <path d="M17.5 3.5l2 2-2 2" {...common} strokeWidth={1.8} />
-          <path d="M14.5 5.5h5" {...common} strokeWidth={1.8} />
+          <path d="M11 20v-6.5c0-3.5 3.5-5.5 8-5.5-1 4.5-2.5 8-8 8" {...stroked(1.8)} />
+          <path d="M11 13.5c0-2.8-2.8-4.5-6.5-4.5 1 3.8 2.8 6.5 6.5 6.5" {...stroked(1.8)} />
+          <path d="M17.5 3.5l2 2-2 2" {...stroked(1.8)} />
+          <path d="M14.5 5.5h5" {...stroked(1.8)} />
         </>
       )}
 
       {name === "trading" && (
         <>
-          {/* Candlesticks - wick plus body. Filled/hollow/filled, the
+          {/* Candlesticks — wick plus body. Filled/hollow/filled, the
               conventional down/up/down reading, so it stays legible small and
               cannot be confused with grid-trading's ladder. */}
-          <line x1="6.5" x2="6.5" y1="5" y2="19" {...common} strokeWidth={1.6} />
+          <line x1="6.5" x2="6.5" y1="5" y2="19" {...stroked(1.6)} />
           <rect fill={color} height="6" rx="1" width="4" x="4.5" y="9" />
-          <line x1="12" x2="12" y1="3.5" y2="17" {...common} strokeWidth={1.6} />
-          <rect height="7" rx="1" width="4" x="10" y="6.5" {...common} strokeWidth={1.8} />
-          <line x1="17.5" x2="17.5" y1="7" y2="21" {...common} strokeWidth={1.6} />
+          <line x1="12" x2="12" y1="3.5" y2="17" {...stroked(1.6)} />
+          <rect height="7" rx="1" width="4" x="10" y="6.5" {...stroked(1.8)} />
+          <line x1="17.5" x2="17.5" y1="7" y2="21" {...stroked(1.6)} />
           <rect fill={color} height="6" rx="1" width="4" x="15.5" y="11" />
-        </>
-      )}
-
-      {name === "discover" && (
-        <>
-          <circle cx="12" cy="12" r="9" {...common} />
-          <path d="m15.5 8.5-2.5 5-5 2.5 2.5-5 5-2.5Z" {...common} />
-          <circle cx="12" cy="12" fill={color} r="1" />
-        </>
-      )}
-
-      {name === "categories" && (
-        <>
-          <rect height="7" rx="2" width="7" x="4" y="4" {...common} />
-          <rect height="7" rx="2" width="7" x="13" y="4" {...common} />
-          <rect height="7" rx="2" width="7" x="4" y="13" {...common} />
-          <rect height="7" rx="2" width="7" x="13" y="13" {...common} />
-        </>
-      )}
-
-      {name === "search" && (
-        <>
-          <circle cx="11" cy="11" r="7" {...common} />
-          <line x1="16.5" x2="21" y1="16.5" y2="21" {...common} />
-        </>
-      )}
-
-      {(name === "agents" || name === "bot") && (
-        <>
-          <rect height="12" rx="3.5" width="16" x="4" y="8" {...common} />
-          <line x1="12" x2="12" y1="4" y2="8" {...common} />
-          <circle cx="12" cy="3" fill={color} r="1.5" />
-          <circle cx="9" cy="13" fill={color} r="1.2" />
-          <circle cx="15" cy="13" fill={color} r="1.2" />
-          <line x1="9" x2="15" y1="16" y2="16" {...common} />
-        </>
-      )}
-
-      {name === "wallet" && (
-        <>
-          <rect height="14" rx="3" width="18" x="3" y="5" {...common} />
-          <path d="M15 10h6v4h-6a2 2 0 0 1 0-4Z" {...common} />
-          <circle cx="16.5" cy="12" fill={color} r="0.8" />
-        </>
-      )}
-
-      {name === "shield" && (
-        <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11Z" {...common} />
-      )}
-
-      {name === "clock" && (
-        <>
-          <circle cx="12" cy="12" r="9" {...common} />
-          <path d="M12 7v5l3 2" {...common} />
-        </>
-      )}
-
-      {name === "revoke" && (
-        <>
-          <circle cx="12" cy="12" r="9" {...common} />
-          <line x1="6" x2="18" y1="6" y2="18" {...common} />
-        </>
-      )}
-
-      {name === "check" && (
-        <>
-          <circle cx="12" cy="12" fill={colors.gold} r="9" />
-          <path d="m8.5 12 2.5 2.5 5-5" stroke="#FFFFFF" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
-        </>
-      )}
-
-      {name === "sparkle" && (
-        <path
-          d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"
-          fill={color}
-        />
-      )}
-
-      {name === "layers" && (
-        <>
-          <path d="m12 2 10 5-10 5-10-5 10-5Z" {...common} />
-          <path d="m2 12 10 5 10-5" {...common} />
-          <path d="m2 17 10 5 10-5" {...common} />
-        </>
-      )}
-
-      {name === "info" && (
-        <>
-          <circle cx="12" cy="12" r="9" {...common} />
-          <line x1="12" x2="12" y1="11" y2="16" {...common} />
-          <circle cx="12" cy="8" fill={color} r="1" />
-        </>
-      )}
-
-      {name === "chevron-right" && (
-        <path d="m9 18 6-6-6-6" {...common} />
-      )}
-
-      {name === "arrow-right" && (
-        <>
-          <line x1="5" x2="19" y1="12" y2="12" {...common} />
-          <path d="m12 5 7 7-7 7" {...common} />
-        </>
-      )}
-
-      {name === "menu" && (
-        <>
-          <line x1="4" x2="20" y1="6" y2="6" {...common} strokeWidth={2} />
-          <line x1="4" x2="20" y1="12" y2="12" {...common} strokeWidth={2} />
-          <line x1="4" x2="20" y1="18" y2="18" {...common} strokeWidth={2} />
-        </>
-      )}
-
-      {name === "close" && (
-        <>
-          <line x1="6" x2="18" y1="6" y2="18" {...common} strokeWidth={2} />
-          <line x1="6" x2="18" y1="18" y2="6" {...common} strokeWidth={2} />
         </>
       )}
     </svg>

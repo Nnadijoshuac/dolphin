@@ -6,8 +6,8 @@ import * as Haptics from "expo-haptics";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { McpUseButton } from "@/components/mcp-connect";
+import { PearlButton } from "@/components/pearl-button";
 import { PressableScale } from "@/components/pressable-scale";
-import { StatePanel } from "@/components/state-panel";
 import { colors, radii, shadows } from "@/constants/theme";
 import { useAgentReviews } from "@/hooks/use-agent-reviews";
 import { convexClient } from "@/providers/convex-provider";
@@ -590,32 +590,13 @@ export function AgentDetail({
               </View>
             </View>
 
-            <PressableScale
+            <PearlButton
               accessibilityLabel={actionLabel}
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                onHire();
-              }}
-              containerStyle={{
-                alignItems: "center",
-                backgroundColor: colors.gold,
-                borderRadius: radii.pill,
-                flexDirection: "row",
-                gap: 8,
-                height: 52,
-                justifyContent: "center",
-                ...shadows.goldGlow,
-              }}
-            >
-              <Text
-                className="text-[16px] font-bold tracking-[-0.2px]"
-                style={{ color: colors.ink }}
-              >
-                {actionLabel}
-              </Text>
-              <CategoryGlyph color={colors.ink} name="arrow-right" size={16} strokeWidth={2.4} />
-            </PressableScale>
+              label={actionLabel}
+              onPress={onHire}
+              size="lg"
+              style={{ width: "100%" }}
+            />
 
             <Text
               className="mt-2.5 text-center text-[11.5px]"

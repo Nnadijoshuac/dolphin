@@ -1,8 +1,9 @@
 import { Text, View } from "react-native";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { PearlButton } from "@/components/pearl-button";
 import { PressableScale } from "@/components/pressable-scale";
-import { colors, radii, shadows } from "@/constants/theme";
+import { colors, shadows } from "@/constants/theme";
 import type { Agent, AgentCategory } from "@/types/agent";
 
 const categoryLabels: Record<AgentCategory, string> = {
@@ -80,18 +81,10 @@ export function AgentCard({ agent, onPress }: AgentCardProps) {
               </Text>
             </View>
 
-            <View
-              className="items-center justify-center rounded-xl px-4 py-1.5"
-              style={{
-                backgroundColor: colors.gold,
-                minWidth: 64,
-                ...shadows.subtle,
-              }}
-            >
-              <Text className="text-[13px] font-bold text-black">
-                View
-              </Text>
-            </View>
+            <PearlButton
+              label="View"
+              size="sm"
+            />
           </View>
         </View>
       </View>

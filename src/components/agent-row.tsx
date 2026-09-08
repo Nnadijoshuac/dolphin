@@ -1,6 +1,7 @@
 import { Text, View } from "react-native";
 
 import { AgentIcon } from "@/components/agent-icon";
+import { PearlButton } from "@/components/pearl-button";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
 import {
@@ -98,23 +99,11 @@ export function AgentRow({ agent, onPress, subtitle, signals }: AgentRowProps) {
           </Text>
         </View>
 
-        {/* Action Button (Pill-shaped) */}
-        <View
-          className="items-center justify-center px-3.5 py-1.5"
-          style={{
-            borderColor: isHire ? colors.goldBorder : colors.line,
-            backgroundColor: isHire ? colors.goldSoft : colors.surfaceSubtle,
-            borderWidth: 1,
-            borderRadius: 9999,
-          }}
-        >
-          <Text
-            className="text-[12px] font-bold"
-            style={{ color: isHire ? colors.goldDark : colors.muted }}
-          >
-            {isHire ? "Hire" : "View"}
-          </Text>
-        </View>
+        {/* Action Button (Pearl Button) */}
+        <PearlButton
+          label={isHire ? "Hire" : "View"}
+          size="sm"
+        />
       </View>
     </PressableScale>
   );

@@ -112,3 +112,5 @@ export function Button({
     </PressableScale>
   );
 }
+
+export { PearlButton, type PearlButtonProps, type PearlButtonSize } from "@/components/pearl-button";

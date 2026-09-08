@@ -631,4 +631,110 @@ export default defineSchema({
     .index("by_job", ["chainId", "jobId"])
     .index("by_altana_wallet", ["chainId", "altanaWalletAddress"])
     .index("by_agent_wallet", ["agentKey", "altanaWalletAddress"]),
+
+  /* -------------------------------------------------------------------------
+   * DOLPHIN - the in-app agent that consults other agents
+   * ---------------------------------------------------------------------- */
+
+  /**
+   * One conversation with the Dolphin agent.
+   *
+   * ACCESS MODEL, stated because it is a deliberate tradeoff rather than an
+   * oversight. `conversationKey` is a high-entropy string the client generates
+   * and is the only thing needed to read the conversation back - it is a
+   * capability, not a name. `ownerAddress` is bound when a SIWE session is
+   * present and left null otherwise.
+   *
+   * Anonymous conversations are allowed on purpose: the alternative is that a
+   * judge without a connected wallet cannot use the flagship feature at all,
+   * which fails project-scope.md §11's zero-knowledge-user requirement more
+   * badly than an unguessable id fails privacy. A conversation is never listed
+   * by anything but its owner - an anonymous one is reachable only by someone
+   * who already holds its key.
+   */
+  dolphinConversations: defineTable({
+    conversationKey: v.string(),
+    /** Lowercased wallet address when a session was present, else null. */
+    ownerAddress: v.union(v.string(), v.null()),
+    /** First user message, trimmed - what the history list shows. */
+    title: v.string(),
+    /**
+     * Set when the conversation was opened from an agent's page, so the first
+     * turn already knows what the user was looking at.
+     */
+    seedAgentKey: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["conversationKey"])
+    .index("by_owner", ["ownerAddress", "updatedAt"]),
+
+  /**
+   * One turn. Assistant turns are written empty and filled in by the action, so
+   * the client's subscription renders progress without any streaming transport.
+   *
+   * `promptHash` exists so a repeated question can reuse a previous answer
+   * rather than spend one of a strictly limited number of free-tier model calls.
+   * NOTE FOR ANY UI THAT USES IT: a reused answer keeps its ORIGINAL
+   * `completedAt`, and must be shown with that timestamp. Live metrics restated
+   * as current when they were read an hour ago is the fabricated-liveness
+   * failure of AGENTS.md §5 wearing a cache as a disguise.
+   */
+  dolphinMessages: defineTable({
+    conversationId: v.id("dolphinConversations"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    /** Assistant turns only. `error` carries a reason a person can read. */
+    status: v.union(
+      v.literal("thinking"),
+      v.literal("consulting"),
+      v.literal("complete"),
+      v.literal("error"),
+    ),
+    /** Populated when status is "error". Never a stack trace. */
+    errorReason: v.union(v.string(), v.null()),
+    /** SHA-256 of the normalized user prompt. Null on assistant turns. */
+    promptHash: v.union(v.string(), v.null()),
+    /** Which OpenRouter model answered. Null until one has. */
+    model: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    completedAt: v.union(v.number(), v.null()),
+  })
+    .index("by_conversation", ["conversationId", "createdAt"])
+    .index("by_prompt_hash", ["promptHash"]),
+
+  /**
+   * One call the Dolphin agent made to one marketplace agent, as it happened.
+   *
+   * This table IS the product's evidence. It is what lets the UI say "consulted
+   * Brain on BNB, getPositionHealth, 1.2s" with a tap-through to that agent,
+   * and it is the difference between an agent that demonstrably consulted the
+   * catalog and a chatbot asserting that it did.
+   *
+   * `resultText` is a stranger's bytes - see convex/lib/mcpClient.ts. It is
+   * stored so a claim can be audited against what the agent actually returned,
+   * and rendered as a quotation attributed to that agent, never as Dolphin's
+   * own statement of fact.
+   */
+  dolphinToolCalls: defineTable({
+    conversationId: v.id("dolphinConversations"),
+    messageId: v.id("dolphinMessages"),
+    /** Identity of the consulted agent. See AGENTS.md §9 on agentKey. */
+    agentKey: v.string(),
+    /** Denormalized so a citation renders without a second read. */
+    agentName: v.string(),
+    toolName: v.string(),
+    /** Arguments as sent, JSON. Kept so a bad call is diagnosable. */
+    argumentsJson: v.string(),
+    /** Truncated tool output. Null while the call is still in flight. */
+    resultText: v.union(v.string(), v.null()),
+    /** The server's own isError flag - a tool that fails is still answering. */
+    isError: v.boolean(),
+    /** Set when the call could not be made at all, as opposed to failing. */
+    transportError: v.union(v.string(), v.null()),
+    latencyMs: v.union(v.number(), v.null()),
+    calledAt: v.number(),
+  })
+    .index("by_message", ["messageId", "calledAt"])
+    .index("by_conversation", ["conversationId", "calledAt"]),
 });

@@ -25,19 +25,6 @@ import { track } from "@/lib/analytics";
 import { useAppStore } from "@/store/use-app-store";
 import type { AgentCategory } from "@/types/agent";
 
-// Hand-picked search terms, deliberately a mix of protocols and category
-// language rather than the category list itself - the category chips below
-// already cover that, and these exist to show the search box takes either.
-const suggestedSearches = [
-  "Venus",
-  "PancakeSwap",
-  "Liquidation",
-  "Rebalancing",
-  "Yield",
-  "Trading",
-  "Grid trading",
-] as const;
-
 /**
  * A `?category=` value, or "all".
  *
@@ -81,10 +68,7 @@ function SearchContent() {
   );
 
 
-  const recentSearches = useAppStore((state) => state.recentSearches);
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
-  const removeRecentSearch = useAppStore((state) => state.removeRecentSearch);
-  const clearRecentSearches = useAppStore((state) => state.clearRecentSearches);
 
   /*
    * Re-sync from the URL when the URL itself changes — during render, not in an
@@ -198,16 +182,6 @@ function SearchContent() {
     const nextUrl = params.size > 0 ? `/search?${params.toString()}` : "/search";
     router.replace(nextUrl, { scroll: false });
   };
-
-  const runSearch = (term: string) => {
-    const trimmedTerm = term.trim();
-
-    setQuery(trimmedTerm);
-    if (trimmedTerm) addRecentSearch(trimmedTerm);
-    syncSearchUrl(trimmedTerm, selectedCategory);
-  };
-
-  const hasActiveSearch = normalizedQuery.length > 0 || selectedCategory !== "all";
 
   return (
     <div className="site-frame page-shell" style={{ paddingBlockStart: 0 }}>
@@ -356,74 +330,6 @@ function SearchContent() {
           );
         })}
       </div>
-
-      {!hasActiveSearch ? (
-        <section className="grid gap-10 border-b border-line py-10 md:grid-cols-2 md:gap-16">
-          <div>
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-sm font-semibold tracking-[-0.01em]">Try a search</h2>
-              <span className="text-xs text-faint">Suggestions</span>
-            </div>
-            <div className="mt-4 border-t border-line">
-              {suggestedSearches.map((term) => (
-                <button
-                  className="interactive group flex w-full items-center justify-between border-b border-line py-3 text-left text-sm text-muted hover:text-ink"
-                  key={term}
-                  onClick={() => runSearch(term)}
-                  type="button"
-                >
-                  <span>{term}</span>
-                  <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">
-                    →
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-sm font-semibold tracking-[-0.01em]">Recent searches</h2>
-              {recentSearches.length > 0 ? (
-                <button
-                  className="interactive text-xs text-muted underline-offset-4 hover:text-ink hover:underline"
-                  onClick={clearRecentSearches}
-                  type="button"
-                >
-                  Clear all
-                </button>
-              ) : null}
-            </div>
-            {recentSearches.length > 0 ? (
-              <ul className="mt-4 border-t border-line">
-                {recentSearches.slice(0, 6).map((term) => (
-                  <li className="flex items-center border-b border-line" key={term}>
-                    <button
-                      className="interactive flex-1 py-3 text-left text-sm text-muted hover:text-ink"
-                      onClick={() => runSearch(term)}
-                      type="button"
-                    >
-                      {term}
-                    </button>
-                    <button
-                      aria-label={`Remove ${term} from recent searches`}
-                      className="interactive px-2 py-3 text-xs text-faint hover:text-danger"
-                      onClick={() => removeRecentSearch(term)}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-4 border-t border-line py-4 text-sm leading-6 text-faint">
-                Searches you submit will appear here on this device.
-              </p>
-            )}
-          </div>
-        </section>
-      ) : null}
 
       <section aria-labelledby="results-heading" className="pt-12 sm:pt-16" id="search-results">
         <div className="flex flex-col gap-3 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">

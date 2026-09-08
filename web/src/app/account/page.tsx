@@ -2,7 +2,7 @@ import { AltanaWalletPanel } from "@/components/altana-wallet-panel";
 import { IdentityWalletSection } from "@/components/identity-wallet-section";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 
-export const metadata = { title: "Account | Dolphin" };
+export const metadata = { title: "Account" };
 
 export default function AccountPage() {
   return <>

@@ -66,10 +66,18 @@ export function PaymentAction({
   );
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
 
-  // Null whenever the catalog has no price for this agent, which is every
-  // agent today. Deliberately not defaulted to "free" or to a number.
-  const catalogPrice =
-    priceAmount !== null && priceToken !== null ? `${priceAmount} ${priceToken}` : null;
+  // Null whenever the catalog has no payable price for this agent.
+  // Deliberately not defaulted to "free" or to a raw number.
+  const catalogPrice = (() => {
+    if (agent.pricing?.display) return agent.pricing.display;
+    if (priceAmount !== null && Number(priceAmount) > 0) {
+      if (Number(priceAmount) > 1_000_000_000) {
+        return `${formatTokenAmount(priceAmount, 18)} ${priceToken || "BNB"}`;
+      }
+      return `${priceAmount} ${priceToken}`;
+    }
+    return null;
+  })();
 
   const paidJobs = useConvexQuery(
     agentPaymentsApi.agentPayments.getJobsForAgent,

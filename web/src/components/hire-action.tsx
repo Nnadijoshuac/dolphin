@@ -14,7 +14,7 @@ import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent } from "@/types/agent";
 import { track } from "@/lib/analytics";
 import { toUserMessage } from "@/wallet/wallet-errors";
-import { canNegotiate } from "@/wallet/erc8183-policy";
+import { canNegotiate, formatTokenAmount } from "@/wallet/erc8183-policy";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
 
@@ -76,8 +76,30 @@ export function HireAction({ agent }: { agent: Agent }) {
   const price = agent.priceModel;
   const priceModel =
     price.status === "live" || price.status === "stale" ? price.value : null;
-  const priceIsFree = priceModel !== null && Number(priceModel.amount) === 0;
-  const priceRequiresPayment = priceModel !== null && !priceIsFree;
+
+  const priceText = (() => {
+    if (agent.protocol === "mcp") return "Free to Connect";
+    if (agent.pricing?.display) return agent.pricing.display;
+    if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
+      return `${formatTokenAmount(
+        agent.pricing.amountRaw,
+        agent.pricing.tokenDecimals || 18,
+      )} ${agent.pricing.tokenSymbol || "BNB"}`;
+    }
+    if (priceModel === null) return "Free to hire";
+    if (Number(priceModel.amount) === 0) return "Free to hire";
+    if (Number(priceModel.amount) > 1_000_000_000) {
+      return `${formatTokenAmount(priceModel.amount, 18)} ${priceModel.token || "BNB"}`;
+    }
+    return `${priceModel.amount} ${priceModel.token}`;
+  })();
+
+  const priceIsFree =
+    agent.protocol === "mcp" ||
+    (agent.pricing
+      ? Number(agent.pricing.amountRaw) === 0
+      : priceModel === null || Number(priceModel.amount) === 0);
+  const priceRequiresPayment = !priceIsFree;
   const paymentOutstanding = priceRequiresPayment && paidJobId === null;
   const alreadyHired =
     hiredAgents?.some((record) => record.agentKey === agent.agentKey) ?? false;
@@ -182,7 +204,7 @@ export function HireAction({ agent }: { agent: Agent }) {
       return "Dolphin will not assume a price while this agent's catalog value is unresolved, so it cannot record a hire yet.";
     }
     if (paymentOutstanding) {
-      return `This agent charges ${priceModel.amount} ${priceModel.token}. Settle it below — Dolphin verifies the escrow on-chain, and the hire is recorded the moment it does.`;
+      return `This agent charges ${priceText}. Settle it below — Dolphin verifies the escrow on-chain, and the hire is recorded the moment it does.`;
     }
     return null;
   })();
@@ -217,9 +239,7 @@ export function HireAction({ agent }: { agent: Agent }) {
       <div className="mt-5 flex items-baseline justify-between gap-4 border-y border-line py-3">
         <span className="text-xs text-muted">Price</span>
         <span className="text-sm font-semibold text-ink">
-          {priceModel === null
-            ? "Not resolved"
-            : `${priceModel.amount} ${priceModel.token}`}
+          {priceText}
         </span>
       </div>
 

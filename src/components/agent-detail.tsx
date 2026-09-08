@@ -12,6 +12,7 @@ import { colors, radii, shadows } from "@/constants/theme";
 import { useAgentReviews } from "@/hooks/use-agent-reviews";
 import { convexClient } from "@/providers/convex-provider";
 import { assessHireability } from "@/services/hireability";
+import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import type { Agent, AgentCategory, LiveMetric } from "@/types/agent";
 
 /**
@@ -458,12 +459,22 @@ export function AgentDetail({
     agent.priceModel.status === "live" || agent.priceModel.status === "stale"
       ? agent.priceModel.value
       : null;
-  const priceText =
-    price === null
-      ? "Price not reported yet"
-      : Number(price.amount) === 0
-        ? "Free to hire"
-        : `${price.amount} ${price.token} per hire`;
+  const priceText = (() => {
+    if (agent.protocol === "mcp") return "Free to Connect";
+    if (agent.pricing?.display) return agent.pricing.display;
+    if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
+      return `${formatTokenAmount(
+        agent.pricing.amountRaw,
+        agent.pricing.tokenDecimals || 18,
+      )} ${agent.pricing.tokenSymbol || "BNB"}`;
+    }
+    if (price === null) return "Price not reported yet";
+    if (Number(price.amount) === 0) return "Free to hire";
+    if (Number(price.amount) > 1_000_000_000) {
+      return `${formatTokenAmount(price.amount, 18)} ${price.token || "BNB"}`;
+    }
+    return `${price.amount} ${price.token} per hire`;
+  })();
 
   const MAX_PREVIEW_LENGTH = 220;
   const description = agent.description;

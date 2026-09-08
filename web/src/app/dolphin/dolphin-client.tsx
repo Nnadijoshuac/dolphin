@@ -178,6 +178,26 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
 
   return (
     <div className="relative flex h-[calc(100dvh-4rem)] flex-col">
+      {/* Mobile top bar matching src/app/(tabs)/dolphin.tsx */}
+      <div className="mobile-only flex items-center justify-between gap-2.5 px-5 pb-3 pt-2">
+        <div className="flex items-center gap-2.5">
+          <BrandMark size={24} />
+          <h1 className="text-[20px] font-extrabold text-ink">Dolphin</h1>
+        </div>
+        {!isEmpty ? (
+          <button
+            className="text-[13px] font-bold text-accent-ink hover:underline"
+            onClick={() => {
+              reset();
+              setDraft("");
+            }}
+            type="button"
+          >
+            New
+          </button>
+        ) : null}
+      </div>
+
       <div className="flex-1 overflow-y-auto">
         {/*
           `pb-36` is the composer island's landing space. The island is
@@ -251,7 +271,7 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
         either side of it - an island floating over content should not capture
         clicks in the water around it.
       */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+      <div className="dolphin-composer-wrapper pointer-events-none absolute inset-x-0 bottom-0 z-10">
         <div className="mx-auto w-full max-w-[46rem] px-4 pb-5 pt-2">
           <div className="pointer-events-auto flex w-full flex-col items-end rounded-3xl border border-line bg-paper-strong/90 p-2 shadow-[0_8px_28px_rgba(17,18,20,0.12)] backdrop-blur-xl transition-shadow focus-within:border-line-strong focus-within:shadow-[0_10px_34px_rgba(17,18,20,0.17)]">
             <textarea

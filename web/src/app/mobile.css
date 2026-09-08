@@ -278,4 +278,12 @@
   .mobile-onboarding-dots button[aria-current] span { width: 24px; height: 10px; background: var(--accent); }
   .mobile-onboarding-continue { display: flex; width: 100%; min-height: 52px; align-items: center; justify-content: center; gap: 10px; border-radius: 16px; background: var(--accent); font-size: 16px; font-weight: 700; }
   .mobile-onboarding-back { margin-top: 10px; padding: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+
+  .dolphin-composer-wrapper {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+  body:has([data-keyboard-open]) .dolphin-composer-wrapper {
+    bottom: 0 !important;
+  }
 }
+

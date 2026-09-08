@@ -369,7 +369,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
       <header className="border-b border-line pb-8 pt-6 sm:pb-10 sm:pt-8">
         <div className="flex flex-col sm:flex-row sm:items-start gap-5">
           <div className="shrink-0">
-            <AgentIcon category={agent.category} size={84} uri={agent.iconUrl} />
+            <AgentIcon category={agent.category} seed={agent.iconSeed} size={84} uri={agent.iconUrl} />
           </div>
 
           <div className="min-w-0 flex-1">

@@ -186,7 +186,7 @@ function ConnectedManage({
 
       <header className="border-b border-line pb-8 pt-6">
         <div className="flex flex-wrap items-start gap-5">
-          <AgentIcon category={agent.category} size={64} uri={agent.iconUrl} />
+          <AgentIcon category={agent.category} seed={agent.iconSeed} size={64} uri={agent.iconUrl} />
           <div className="min-w-0 flex-1">
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-faint">
               {categoryLabel(agent.category)} · ERC-8004 #{agent.tokenId}

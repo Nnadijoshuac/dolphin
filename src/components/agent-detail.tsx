@@ -510,7 +510,7 @@ export function AgentDetail({
       {/* ── 1. identity & value proposition ────────────────────────────── */}
       <View className="flex-row items-start gap-3.5">
         <View style={{ ...shadows.card }}>
-          <AgentIcon category={agent.category} size={72} uri={agent.iconUrl} />
+          <AgentIcon category={agent.category} seed={agent.iconSeed} size={72} uri={agent.iconUrl} />
         </View>
 
         <View className="min-w-0 flex-1 pt-0.5">

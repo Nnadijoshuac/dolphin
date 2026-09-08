@@ -81,6 +81,13 @@ type ActivityItem = {
    * takes, rather than a second kind of placeholder unique to this one.
    */
   iconUrl: string | null;
+  /**
+   * Seed for the deterministic avatar AgentIcon draws when `iconUrl` is null,
+   * which is the common case here: most agents publish no icon of their own.
+   * Null when the catalog has not resolved this agent at all, and the category
+   * mark is drawn instead.
+   */
+  iconSeed: string | null;
   detail: string;
   amount: string | null;
   sortAt: number;
@@ -109,7 +116,12 @@ function ActivityRow({
       className="flex-row items-center gap-3.5 px-1"
       style={{ paddingVertical: 10 }}
     >
-      <AgentIcon category={item.category ?? "general"} size={48} uri={item.iconUrl} />
+      <AgentIcon
+        category={item.category ?? "general"}
+        seed={item.iconSeed}
+        size={48}
+        uri={item.iconUrl}
+      />
 
       <View className="flex-1">
         <Text
@@ -210,6 +222,7 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
       // a receipt. Read live from the catalog when it is there.
       category: agentFor(job.agentKey)?.category ?? null,
       iconUrl: agentFor(job.agentKey)?.iconUrl ?? null,
+      iconSeed: agentFor(job.agentKey)?.iconSeed ?? null,
       detail: [`Paid · ${job.jobStatus.toLowerCase()}`, date].filter(Boolean).join(" · "),
       amount,
       sortAt: Date.parse(job.verifiedAt) || 0,
@@ -235,6 +248,7 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
       title: agent?.name ?? `Agent ${hire.agentKey}`,
       category: agent?.category ?? null,
       iconUrl: agent?.iconUrl ?? null,
+      iconSeed: agent?.iconSeed ?? null,
       detail: ["Hired · no payment", date].filter(Boolean).join(" · "),
       amount: null,
       sortAt: Date.parse(hire.hiredAt) || 0,

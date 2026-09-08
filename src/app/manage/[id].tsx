@@ -349,7 +349,7 @@ export default function ManageAgentRoute() {
             paddingVertical: 10,
           }}
         >
-          <AgentIcon category={category} size={62} uri={agent?.iconUrl} />
+          <AgentIcon category={category} seed={agent?.iconSeed} size={62} uri={agent?.iconUrl} />
           <View className="min-w-0 flex-1">
             <View className="flex-row items-center gap-1.5">
               <Text

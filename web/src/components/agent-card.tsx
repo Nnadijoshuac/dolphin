@@ -135,7 +135,7 @@ export function AgentCard({
     >
       <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_170px_auto] sm:items-center sm:gap-5">
         <div className="flex items-start gap-4 sm:contents">
-          <AgentIcon category={agent.category} size={56} uri={agent.iconUrl} />
+          <AgentIcon category={agent.category} seed={agent.iconSeed} size={56} uri={agent.iconUrl} />
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.69rem] font-semibold uppercase tracking-[0.09em] text-faint">

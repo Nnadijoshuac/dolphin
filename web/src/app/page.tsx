@@ -113,7 +113,7 @@ function DiscoverAgentCard({
     >
       <article className="flex h-full flex-col">
         <div className="flex items-start justify-between gap-4">
-          <AgentIcon category={agent.category} size={58} uri={agent.iconUrl} />
+          <AgentIcon category={agent.category} seed={agent.iconSeed} size={58} uri={agent.iconUrl} />
           <span className={styles.recordBadge}>
             <span aria-hidden="true" className={styles.statusDot} />
             {recordLabel}

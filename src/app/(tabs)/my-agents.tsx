@@ -198,7 +198,7 @@ function AgentListCard({
       onPress={onPress}
     >
       <View className="flex-row items-start gap-3.5">
-        <AgentIcon category={category} size={52} uri={agent?.iconUrl} />
+        <AgentIcon category={category} seed={agent?.iconSeed} size={52} uri={agent?.iconUrl} />
         <View className="min-w-0 flex-1">
           <Text
             className="text-[17px] font-bold"

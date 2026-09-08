@@ -72,7 +72,7 @@ export function AgentRow({ agent, onPress, subtitle, signals }: AgentRowProps) {
     >
       <View className="flex-row items-center gap-4">
         {/* App Icon */}
-        <AgentIcon category={agent.category} size={56} uri={agent.iconUrl} />
+        <AgentIcon category={agent.category} seed={agent.iconSeed} size={56} uri={agent.iconUrl} />
 
         <View className="flex-1 pr-2">
           {/* App Title */}

@@ -44,7 +44,7 @@ export function AgentCard({ agent, onPress }: AgentCardProps) {
           screens already do - so a card and its detail page now show the same
           image instead of every agent in a category sharing one drawing.
         */}
-        <AgentIcon category={agent.category} size={80} uri={agent.iconUrl} />
+        <AgentIcon category={agent.category} seed={agent.iconSeed} size={80} uri={agent.iconUrl} />
 
         {/* Middle Info Column */}
         <View className="flex-1">

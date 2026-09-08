@@ -1,39 +1,27 @@
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text } from "react-native";
 import * as Haptics from "expo-haptics";
 
-import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors, radii, shadows } from "@/constants/theme";
-import type { AgentProtocol, CategoryFacet } from "@/hooks/use-agents";
+import type { CategoryFacet } from "@/hooks/use-agents";
 
-interface CatalogFilterRailProps {
-  onOpenFilterModal: () => void;
-  protocol: AgentProtocol | null;
-  onSelectProtocol: (protocol: AgentProtocol | null) => void;
+interface CategoryRailProps {
   category: string | null;
   onSelectCategory: (category: string | null) => void;
   categories: CategoryFacet[];
-  activeFilterCount: number;
 }
 
 /**
- * CatalogFilterRail
+ * CategoryRail
  *
- * A serene, single-row horizontal scroll rail combining a dedicated FilterModal
- * trigger with instant 1-tap pills for Kind and Category. Gives users immediate,
- * calm control over the catalog without jarring page shifts or dual-row clutter.
+ * A clean, serene horizontal scroll rail purely for categories.
+ * Free of kind pills or filter triggers, letting the user browse roles calmly.
  */
-export function CatalogFilterRail({
-  onOpenFilterModal,
-  protocol,
-  onSelectProtocol,
+export function CategoryRail({
   category,
   onSelectCategory,
   categories,
-  activeFilterCount,
-}: CatalogFilterRailProps) {
-  const hasActiveFilters = activeFilterCount > 0;
-
+}: CategoryRailProps) {
   return (
     <ScrollView
       horizontal
@@ -45,106 +33,37 @@ export function CatalogFilterRail({
         gap: 8,
       }}
     >
-      {/* Deep Filter Modal Trigger */}
+      {/* All Categories Pill */}
       <PressableScale
-        accessibilityLabel={`All filters, ${activeFilterCount} active`}
+        accessibilityLabel="All categories"
         accessibilityRole="button"
+        accessibilityState={{ selected: category === null }}
         onPress={() => {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onOpenFilterModal();
+          onSelectCategory(null);
         }}
         containerStyle={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 6,
           paddingVertical: 7,
-          paddingHorizontal: 12,
+          paddingHorizontal: 14,
           borderRadius: radii.pill,
-          backgroundColor: hasActiveFilters ? colors.gold : colors.surface,
-          borderColor: hasActiveFilters ? colors.goldBorder : colors.line,
+          backgroundColor: category === null ? colors.ink : colors.surface,
+          borderColor: category === null ? colors.ink : colors.line,
           borderWidth: 1,
-          ...(hasActiveFilters ? shadows.goldGlow : shadows.subtle),
+          ...shadows.subtle,
         }}
       >
-        <CategoryGlyph
-          color={hasActiveFilters ? colors.ink : "#7A7C75"}
-          name="filter"
-          size={14}
-        />
         <Text
           className="text-[12.5px]"
           style={{
-            color: colors.ink,
-            fontWeight: hasActiveFilters ? "700" : "600",
+            color: category === null ? colors.surface : colors.ink,
+            fontWeight: category === null ? "700" : "500",
           }}
         >
-          {hasActiveFilters ? `Filters (${activeFilterCount})` : "Filters"}
+          All
         </Text>
       </PressableScale>
 
-      {/* Subtle Separator */}
-      <View
-        style={{
-          width: 1,
-          height: 18,
-          backgroundColor: colors.line,
-          marginHorizontal: 2,
-        }}
-      />
-
-      {/* Quick Kind Pills */}
-      {([
-        { value: null, label: "All kinds" },
-        { value: "a2a" as const, label: "Hire" },
-        { value: "mcp" as const, label: "Tools" },
-      ]).map((opt) => {
-        const isSelected = protocol === opt.value;
-        return (
-          <PressableScale
-            key={opt.label}
-            accessibilityLabel={opt.label}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: isSelected }}
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onSelectProtocol(opt.value);
-            }}
-            containerStyle={{
-              paddingVertical: 7,
-              paddingHorizontal: 13,
-              borderRadius: radii.pill,
-              backgroundColor: isSelected ? colors.ink : colors.surface,
-              borderColor: isSelected ? colors.ink : colors.line,
-              borderWidth: 1,
-              ...shadows.subtle,
-            }}
-          >
-            <Text
-              className="text-[12.5px]"
-              style={{
-                color: isSelected ? colors.surface : colors.ink,
-                fontWeight: isSelected ? "700" : "500",
-              }}
-            >
-              {opt.label}
-            </Text>
-          </PressableScale>
-        );
-      })}
-
-      {/* Subtle Separator if categories exist */}
-      {categories.length > 0 ? (
-        <View
-          style={{
-            width: 1,
-            height: 18,
-            backgroundColor: colors.line,
-            marginHorizontal: 2,
-          }}
-        />
-      ) : null}
-
-      {/* Category Pills */}
+      {/* Dynamic Category Chips */}
       {categories.map((facet) => {
         const isSelected = category === facet.slug;
         return (
@@ -193,3 +112,6 @@ export function CatalogFilterRail({
     </ScrollView>
   );
 }
+
+// Keep export alias for any callers
+export { CategoryRail as CatalogFilterRail };

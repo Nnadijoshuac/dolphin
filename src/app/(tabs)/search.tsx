@@ -70,14 +70,9 @@ export default function SearchScreen() {
   // Filter state
   const [kind, setKind] = useState<AgentProtocol | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (kind !== null) count += 1;
-    if (selectedCategory !== null) count += 1;
-    return count;
-  }, [kind, selectedCategory]);
+  const isKindFiltered = kind !== null;
 
   /*
    * Server-side paginated list. Handles both browse and text search, with both
@@ -172,18 +167,18 @@ export default function SearchScreen() {
           ) : null}
         </View>
 
-        {/* Stable Filter Button */}
+        {/* Kind Filter Button (All agents, Hire, Tools) */}
         <PressableScale
-          accessibilityHint="Filter agents by kind or category"
+          accessibilityHint="Filter agents by kind: All, Hire, or Tools"
           accessibilityLabel={
-            activeFilterCount > 0
-              ? `Filters, ${activeFilterCount} active`
-              : "Open filters"
+            isKindFiltered
+              ? `Filter by kind, ${kind === "a2a" ? "Hire" : "Tools"} selected`
+              : "Filter by kind"
           }
           accessibilityRole="button"
           onPress={() => {
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setFilterSheetOpen(true);
+            setFilterModalOpen(true);
           }}
           containerStyle={{
             alignItems: "center",
@@ -191,118 +186,55 @@ export default function SearchScreen() {
             height: 42,
             width: 42,
             borderRadius: 9999,
-            backgroundColor: activeFilterCount > 0 ? colors.gold : colors.surface,
-            borderColor: activeFilterCount > 0 ? colors.goldBorder : colors.line,
+            backgroundColor: isKindFiltered ? colors.gold : colors.surface,
+            borderColor: isKindFiltered ? colors.goldBorder : colors.line,
             borderWidth: 1.5,
             ...shadows.subtle,
           }}
         >
           <CategoryGlyph
-            color={activeFilterCount > 0 ? colors.ink : "#7A7C75"}
+            color={isKindFiltered ? colors.ink : "#7A7C75"}
             name="filter"
             size={17}
           />
-          {activeFilterCount > 0 ? (
-            <View
-              className="absolute -top-1 -right-1 h-5 w-5 rounded-full items-center justify-center"
-              style={{
-                backgroundColor: colors.ink,
-                borderWidth: 1.5,
-                borderColor: colors.canvas,
-              }}
-            >
-              <Text className="text-[10px] font-bold text-white leading-none">
-                {activeFilterCount}
-              </Text>
-            </View>
-          ) : null}
         </PressableScale>
       </View>
 
-      {/* Silky Filter Rail */}
+      {/* Categories Scroll Rail (purely categories) */}
       <View className="px-4 pb-2.5" style={{ backgroundColor: colors.canvas, zIndex: 19 }}>
         <CatalogFilterRail
-          activeFilterCount={activeFilterCount}
           categories={categories}
           category={selectedCategory}
-          onOpenFilterModal={() => setFilterSheetOpen(true)}
           onSelectCategory={(cat) => setSelectedCategory(cat)}
-          onSelectProtocol={(proto) => setKind(proto)}
-          protocol={kind}
         />
       </View>
 
-      {/* Active Filter Dismissable Pills */}
-      {activeFilterCount > 0 ? (
-        <View className="flex-row items-center flex-wrap gap-1.5 px-4 pb-2.5">
-          <Text className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mr-1">
-            Active:
-          </Text>
-
-          {kind !== null ? (
-            <PressableScale
-              accessibilityLabel={`Remove ${kind === "a2a" ? "Hire" : "Tools"} filter`}
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setKind(null);
-              }}
-              containerStyle={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 5,
-                paddingVertical: 3.5,
-                paddingHorizontal: 9,
-                borderRadius: radii.pill,
-                backgroundColor: colors.goldSoft,
-                borderColor: colors.goldBorder,
-                borderWidth: 1,
-              }}
-            >
-              <Text className="text-[11.5px] font-semibold" style={{ color: colors.ink }}>
-                {kind === "a2a" ? "Hire · A2A" : "Tools · MCP"}
-              </Text>
-              <CategoryGlyph color={colors.ink} name="close" size={10} strokeWidth={2.5} />
-            </PressableScale>
-          ) : null}
-
-          {selectedCategory !== null ? (
-            <PressableScale
-              accessibilityLabel={`Remove ${selectedCategory} category filter`}
-              accessibilityRole="button"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSelectedCategory(null);
-              }}
-              containerStyle={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 5,
-                paddingVertical: 3.5,
-                paddingHorizontal: 9,
-                borderRadius: radii.pill,
-                backgroundColor: colors.surfaceSubtle,
-                borderColor: colors.line,
-                borderWidth: 1,
-              }}
-            >
-              <Text className="text-[11.5px] font-semibold" style={{ color: colors.ink }}>
-                {categoryLabel(selectedCategory)}
-              </Text>
-              <CategoryGlyph color={colors.ink} name="close" size={10} strokeWidth={2.5} />
-            </PressableScale>
-          ) : null}
-
+      {/* Active Kind Tag if filtered */}
+      {isKindFiltered ? (
+        <View className="flex-row items-center px-4 pb-2.5">
           <PressableScale
-            accessibilityLabel="Clear all filters"
+            accessibilityLabel={`Remove ${kind === "a2a" ? "Hire" : "Tools"} filter`}
             accessibilityRole="button"
-            hitSlop={6}
-            onPress={handleResetAllFilters}
-            containerStyle={{ paddingVertical: 3.5, paddingHorizontal: 6 }}
+            onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setKind(null);
+            }}
+            containerStyle={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+              paddingVertical: 3.5,
+              paddingHorizontal: 9,
+              borderRadius: radii.pill,
+              backgroundColor: colors.goldSoft,
+              borderColor: colors.goldBorder,
+              borderWidth: 1,
+            }}
           >
-            <Text className="text-[11px] font-bold text-zinc-400">
-              Clear all
+            <Text className="text-[11.5px] font-semibold" style={{ color: colors.ink }}>
+              {kind === "a2a" ? "Hire · A2A" : "Tools · MCP"}
             </Text>
+            <CategoryGlyph color={colors.ink} name="close" size={10} strokeWidth={2.5} />
           </PressableScale>
         </View>
       ) : null}
@@ -548,10 +480,10 @@ export default function SearchScreen() {
 
       {/* Filter Modal */}
       <FilterModal
-        onClose={() => setFilterSheetOpen(false)}
+        onClose={() => setFilterModalOpen(false)}
         onSelectProtocol={(proto) => setKind(proto)}
         protocol={kind}
-        visible={filterSheetOpen}
+        visible={filterModalOpen}
       />
     </SafeAreaView>
   );

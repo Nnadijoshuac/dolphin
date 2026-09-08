@@ -10,7 +10,10 @@ import {
   useConnect,
   useDisconnect,
   useSignMessage,
+  useSwitchChain,
+  useWriteContract,
 } from "wagmi";
+import type { Abi } from "viem";
 import { bsc } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
 
@@ -218,6 +221,45 @@ export interface WalletState {
    * cannot proceed on a signature it did not get.
    */
   signMessage: (message: string) => Promise<string>;
+  /**
+   * Sends ONE contract call from the identity wallet, returning its hash.
+   *
+   * -------------------------------------------------------------------------
+   * ADDED 2026-09-08, AND IT NARROWS A PROMISE THIS FILE USED TO MAKE
+   * -------------------------------------------------------------------------
+   * `signMessage`'s comment above says signing a message is "deliberately the
+   * ONLY signing capability on this site - no transaction, no typed data, no
+   * approval". That was true and it is no longer, so the reason has to be
+   * written down rather than left as an unexplained widening.
+   *
+   * Dolphin publishes reviews to the ERC-8004 Reputation Registry, and the
+   * registry records `msg.sender` as the feedback's author. There is therefore
+   * no design in which Dolphin sends that transaction on the reviewer's behalf:
+   * a review published by Dolphin's key would be a review BY Dolphin. It has to
+   * come from the reviewer's own wallet or it is not their review. The mobile
+   * app reached the same conclusion and exposes the same capability.
+   *
+   * WHAT IS STILL TRUE, and is what the original promise was actually
+   * protecting:
+   *
+   *   - This wallet is never asked for a token approval, and never will be.
+   *     Nothing in this product spends from it.
+   *   - It cannot be used to move value: `value` is not a parameter here, so
+   *     every call this can make is non-payable by construction.
+   *   - The only call site is the reputation registry write. A second one is a
+   *     code review, not a configuration change.
+   *
+   * Rejects if the wallet is on the wrong chain and the switch is declined,
+   * rather than sending a BNB-Chain-shaped transaction to whatever network
+   * happens to be selected.
+   */
+  writeContract: (input: {
+    address: `0x${string}`;
+    abi: Abi | readonly unknown[];
+    functionName: string;
+    args: readonly unknown[];
+    chainId: number;
+  }) => Promise<`0x${string}`>;
 }
 
 /** No-op subscribe: the store below never changes after mount. */
@@ -235,7 +277,15 @@ function subscribe() {
  * `false`/`null` until mounted is what keeps those two renders identical.
  */
 export function useWallet(): WalletState {
-  const { address, isConnected, isConnecting: accountConnecting, isReconnecting } = useAccount();
+  const {
+    address,
+    chainId: currentChainId,
+    isConnected,
+    isConnecting: accountConnecting,
+    isReconnecting,
+  } = useAccount();
+  const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
   const { connectAsync, connectors: available, isPending } = useConnect();
   const { disconnectAsync } = useDisconnect();
   const { signMessageAsync } = useSignMessage();
@@ -423,6 +473,37 @@ export function useWallet(): WalletState {
     [address, isConnected, signMessageAsync],
   );
 
+  const writeContract = useCallback<WalletState["writeContract"]>(
+    async ({ address: contract, abi, functionName, args, chainId }) => {
+      if (!isConnected || !address) {
+        throw new Error(
+          "Connect a wallet before publishing. Dolphin cannot send a transaction from an account that is not connected.",
+        );
+      }
+
+      /*
+       * The chain is switched BEFORE the write rather than passed alongside it.
+       * wagmi's `chainId` argument makes the connector reject a mismatch, which
+       * surfaces to the user as an opaque failure after they have already
+       * approved something; asking for the switch first means the wallet's own
+       * network prompt appears, which is a question they can answer.
+       */
+      if (currentChainId !== chainId) {
+        await switchChainAsync({ chainId });
+      }
+
+      return writeContractAsync({
+        account: address,
+        abi: abi as Abi,
+        address: contract,
+        args: args as readonly unknown[],
+        chainId,
+        functionName,
+      });
+    },
+    [address, currentChainId, isConnected, switchChainAsync, writeContractAsync],
+  );
+
   const isBusy = isPending || accountConnecting || isReconnecting;
 
   return {
@@ -442,6 +523,7 @@ export function useWallet(): WalletState {
     connect,
     disconnect,
     signMessage,
+    writeContract,
   };
 }
 

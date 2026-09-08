@@ -61,12 +61,31 @@ export const api = anyApi as unknown as {
      * file-storage lookup per agent inside it.
      */
     list: Query<
-      { category?: string; paginationOpts: PaginationOptions },
+      {
+        category?: string;
+        /**
+         * WHAT THE AGENT IS, not what it does. Added here 2026-09-08, having
+         * existed on the backend and been undeclared - so the website could not
+         * offer the filter at all, and `npm run check:convex-api` caught it on
+         * its first run.
+         *
+         * An A2A agent is commissioned and paid over an ERC-8183 escrow; an MCP
+         * agent publishes tools you call. Conflating them is what made MCP
+         * agents read as broken A2A ones (bc9b46e on mobile).
+         */
+        protocol?: "a2a" | "mcp";
+        paginationOpts: PaginationOptions;
+      },
       PaginationResult<Agent>
     >;
     /** convex/agents.ts -> search. A Convex search index, relevance-ordered. */
     search: Query<
-      { text: string; category?: string; paginationOpts: PaginationOptions },
+      {
+        text: string;
+        category?: string;
+        protocol?: "a2a" | "mcp";
+        paginationOpts: PaginationOptions;
+      },
       PaginationResult<Agent>
     >;
     /** convex/agents.ts -> get. Accepts an agentKey or a bare tokenId. */
@@ -154,6 +173,43 @@ export const categoryStatsApi = anyApi as unknown as {
     refreshAgentCategoryStats: Action<
       { agentKey: string; category: StatsCategory; agentWallet: string | null },
       unknown
+    >;
+    /**
+     * convex/categoryStats.ts -> getAgentStatsHistory. THE CHART'S REAL SOURCE.
+     *
+     * -----------------------------------------------------------------------
+     * WHY THE CHART WAS EMPTY ON EVERY AGENT, FOREVER (found 2026-09-08)
+     * -----------------------------------------------------------------------
+     * `PerformancePanel` read `agent.performanceSeries`, and
+     * convex/lib/publicAgent.ts sets that to `[] as never[]` on every agent it
+     * returns. The panel needs two points to draw. So 100% of agent pages
+     * rendered "No performance series yet" - permanently - and the entire SVG
+     * path builder behind it was code that had never executed and could not.
+     *
+     * The data existed. `agentStatsHistory` has been accumulating real
+     * observations since 2026-09-06: each point is ONE protocol read (Venus's
+     * Comptroller, PancakeSwap V3's position manager, Aave's pool) at the
+     * timestamp it was taken, carrying the source label the metric carried,
+     * written at most hourly per agent and pruned to a bound. Nothing is
+     * interpolated, backfilled or seeded, and `convex/lib/statsHistory.ts` says
+     * so at length. This query has existed the whole time and neither frontend
+     * called it.
+     *
+     * `metric` is null when the category has no chartable number - three of the
+     * six do not, and those get no chart rather than a chart of something
+     * unrelated. A flat line at zero is a claim.
+     */
+    getAgentStatsHistory: Query<
+      { agentKey: string; category: StatsCategory },
+      {
+        points: {
+          timestamp: string;
+          value: number;
+          source: { id: string; label: string; url?: string };
+        }[];
+        metric: string | null;
+        metricLabel: string | null;
+      }
     >;
   };
 };
@@ -248,6 +304,154 @@ export const agentHiresApi = anyApi as unknown as {
         hiredAt: string;
         paymentJobId: string | null;
       }[]
+    >;
+  };
+};
+
+/**
+ * convex/agentReviews.ts. STRUCTURED OUTCOMES, NOT STARS.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS NAMESPACE TOOK SO LONG TO APPEAR (2026-09-08)
+ * ---------------------------------------------------------------------------
+ * It is not new work. `convex/agentReviews.ts` has been complete for days: three
+ * gates enforced in the mutation (authenticated, has hired it, hire at least
+ * 24h old), one editable review per wallet per agent, a summary query, and an
+ * action that witnesses an ERC-8004 Reputation Registry transaction on-chain
+ * before a review is allowed to claim it was published. The mobile app consumes
+ * all of it through src/hooks/use-agent-reviews.ts.
+ *
+ * THIS FILE DID NOT DECLARE IT AT ALL, so the website - the surface a stranger
+ * actually sees - showed a "Feedback" count sourced from 8004scan's index and
+ * nothing else. The one differentiated thing this marketplace has was built and
+ * then shown to nobody. That is the drift the two-frontends decision record
+ * warns about, in its purest form.
+ *
+ * WHY NOT STARS, restated here because it is the reason the shapes below look
+ * unusual: a five-star mean over a marketplace this size reorders on a single
+ * opinion, "how did you feel" is the wrong question about software that moves
+ * money, and stars invite bulk manufacture in a way two structured questions
+ * tied to a verified, aged, sometimes-paid hire do not.
+ */
+export type ReviewOutcome = "yes" | "partially" | "no";
+
+export type AgentReviewRow = {
+  /** Full, not anonymised: it is already public, and checkability is the point. */
+  walletAddress: string;
+  outcome: ReviewOutcome;
+  wouldHireAgain: boolean;
+  comment: string | null;
+  /** Non-null when an on-chain escrow paid for the hire behind this review. */
+  paidJobId: string | null;
+  /** Non-null once witnessed in the ERC-8004 Reputation Registry. */
+  onChainTxHash: string | null;
+  hiredAt: string;
+  updatedAt: string;
+};
+
+export const agentReviewsApi = anyApi as unknown as {
+  agentReviews: {
+    /**
+     * Every review of one agent, plus the summary above them.
+     *
+     * `wouldHireAgainRate` is NULL below five reviews rather than a
+     * small-sample percentage - "100% would hire again" over one review is true
+     * arithmetic and a false impression. A caller that gets null must render
+     * the counts instead. Do not work that refusal around on the client.
+     */
+    getAgentReviews: Query<
+      { agentKey: string },
+      {
+        total: number;
+        paidReviews: number;
+        onChainReviews: number;
+        outcomes: { yes: number; partially: number; no: number };
+        wouldHireAgainCount: number;
+        wouldHireAgainRate: number | null;
+        reviews: AgentReviewRow[];
+      }
+    >;
+    /**
+     * Whether this wallet may review this agent, and if not, WHY.
+     *
+     * Public so the form can state the real reason - "your hire is 3 hours old"
+     * is a different thing to tell someone than "you have not hired this agent"
+     * - rather than offering a form that fails on submit. The gates are still
+     * enforced in the mutation; this only makes the UI agree with them.
+     */
+    getReviewEligibility: Query<
+      { agentKey: string; sessionToken: string | null },
+      {
+        eligible: boolean;
+        reason: string | null;
+        existing: {
+          outcome: ReviewOutcome;
+          wouldHireAgain: boolean;
+          comment: string | null;
+          updatedAt: string;
+          onChainTxHash: string | null;
+        } | null;
+      }
+    >;
+    submitReview: Mutation<
+      {
+        sessionToken: string;
+        agentKey: string;
+        outcome: ReviewOutcome;
+        wouldHireAgain: boolean;
+        comment: string | null;
+      },
+      null
+    >;
+    /**
+     * Marks an ALREADY-SAVED review as published to the reputation registry.
+     *
+     * It does not send the transaction - Convex holds no key and cannot. The
+     * caller sends it from the reviewer's own wallet and hands over the hash;
+     * this reads the receipt off BNB Chain and refuses unless it succeeded,
+     * went to the registry, and came from the reviewer. A hash alone proves
+     * nothing, which is exactly why this is an action and not a mutation.
+     */
+    attestReviewOnChain: Action<
+      { sessionToken: string; agentKey: string; transactionHash: string },
+      { transactionHash: string }
+    >;
+  };
+};
+
+/**
+ * convex/agentRetention.ts. The signal that needs no reviewer.
+ *
+ * The percentage of hires still active after 7 and 30 days, computed entirely
+ * from Dolphin's own agentHires table. It is the most honest comparison signal
+ * this marketplace can produce - nobody writes it, nobody can inflate it
+ * without paying for hires, and it is available for every agent the moment it
+ * has any history at all.
+ *
+ * `rate` is null below five eligible hires, same threshold and same reason as
+ * the review rate above. A null must be rendered as counts, never as a
+ * percentage with a small denominator hidden behind it.
+ */
+export const agentRetentionApi = anyApi as unknown as {
+  agentRetention: {
+    getAgentRetention: Query<
+      { agentKey: string },
+      {
+        totalHires: number;
+        activeHires: number;
+        day7: {
+          eligible: number;
+          retained: number;
+          sufficient: boolean;
+          rate: number | null;
+        };
+        day30: {
+          eligible: number;
+          retained: number;
+          sufficient: boolean;
+          rate: number | null;
+        };
+      }
     >;
   };
 };

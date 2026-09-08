@@ -45,8 +45,19 @@ export class AgentsUnavailableError extends Error {
 const NO_BACKEND =
   "NEXT_PUBLIC_CONVEX_URL is not configured, so the agent catalog cannot be read.";
 
+/**
+ * What kind of agent, not what it does.
+ *
+ * `a2a` agents are commissioned and paid for over an ERC-8183 escrow; `mcp`
+ * agents publish tools you call directly. The backend has indexed this since
+ * the rebuild and the website did not declare it - see the note on
+ * `agents.list` in @/convex/api.
+ */
+export type AgentProtocol = "a2a" | "mcp";
+
 export interface UseAgentListOptions {
   category?: string;
+  protocol?: AgentProtocol;
   search?: string;
   enabled?: boolean;
 }
@@ -58,13 +69,17 @@ export function useAgentList(options: UseAgentListOptions = {}) {
 
   const browse = usePaginatedQuery(
     api.agents.list,
-    enabled && !isSearching ? { category: options.category } : "skip",
+    enabled && !isSearching
+      ? { category: options.category, protocol: options.protocol }
+      : "skip",
     { initialNumItems: PAGE_SIZE },
   );
 
   const found = usePaginatedQuery(
     api.agents.search,
-    enabled && isSearching ? { text: search, category: options.category } : "skip",
+    enabled && isSearching
+      ? { text: search, category: options.category, protocol: options.protocol }
+      : "skip",
     { initialNumItems: PAGE_SIZE },
   );
 
@@ -116,10 +131,43 @@ export function useAgentsByKeys(references: readonly string[]): Map<string, Agen
   }, [rows]);
 }
 
-/** Hire and review signals for the agents currently on the page. */
-export function useAgentSignals(agents: readonly Agent[]) {
+export type AgentSignals = {
+  agentKey: string;
+  hires: number;
+  activeHires: number;
+  paidHires: number;
+  reviews: number;
+  wouldHireAgain: number;
+  wouldHireAgainRate: number | null;
+  deliveredCount: number;
+};
+
+/**
+ * Hire and review signals for the agents currently on the page.
+ *
+ * ---------------------------------------------------------------------------
+ * DEFINED SINCE THE BACKEND REBUILD, CALLED FROM NOWHERE UNTIL 2026-09-08
+ * ---------------------------------------------------------------------------
+ * This hook and the batched `agents.signals` query behind it both existed and
+ * neither had a caller on the website. The consequence was a catalog grid where
+ * every record looked identical: a name, a category and a source label, with
+ * nothing to prefer one agent over another by. The marketplace had no
+ * comparison signal on the surface where comparison happens.
+ *
+ * BATCHED, and that is the load-bearing part: one query for every agent on the
+ * page, not one per rendered row. The mobile app's note on the same query
+ * records why - the version before it read every row of `agentHires` and
+ * `agentReviews` and bucketed them in memory, which is a full scan of two
+ * growing tables on every render.
+ *
+ * `agent.id` is the agentKey - see convex/lib/publicAgent.ts, which sets them
+ * to the same value.
+ */
+export function useAgentSignals(
+  agents: readonly Agent[],
+): Map<string, AgentSignals> {
   const agentKeys = useMemo(
-    () => [...new Set(agents.map((agent) => agent.id))].sort(),
+    () => [...new Set(agents.map((agent) => agent.agentKey))].sort(),
     [agents],
   );
 
@@ -129,7 +177,7 @@ export function useAgentSignals(agents: readonly Agent[]) {
   );
 
   return useMemo(() => {
-    const map = new Map<string, (typeof rows extends undefined ? never : NonNullable<typeof rows>)[number]>();
+    const map = new Map<string, AgentSignals>();
     for (const row of rows ?? []) map.set(row.agentKey, row);
     return map;
   }, [rows]);

@@ -4,7 +4,9 @@ import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { SignalStrip } from "@/components/signal-strip";
 import { categoryLabel } from "@/constants/agents";
+import type { AgentSignals } from "@/hooks/use-agents";
 import { track, type AnalyticsSurface } from "@/lib/analytics";
 import type { Agent, LiveMetric, LiveMetricStatus } from "@/types/agent";
 
@@ -13,6 +15,12 @@ type AgentCardProps = {
   className?: string;
   /** Where this card is rendered, for the click event. */
   surface?: AnalyticsSurface;
+  /**
+   * Hire and review signals, from the batched `useAgentSignals` query. Optional
+   * because a caller that has not loaded them yet should render the card rather
+   * than wait, and undefined renders nothing at all.
+   */
+  signals?: AgentSignals;
 };
 
 type MetricPreview = {
@@ -97,6 +105,7 @@ export function AgentCard({
   agent,
   className = "",
   surface = "search",
+  signals,
 }: AgentCardProps) {
   /*
    * `categoryLabel()` is TOTAL. This looked the slug up in a hardcoded list of
@@ -141,6 +150,11 @@ export function AgentCard({
               {agent.tagline}
             </p>
             <p className="mt-2 truncate text-xs text-faint">By {displayPublisher}</p>
+            {/*
+             * The comparison signal, on the surface where comparison happens.
+             * Renders nothing for an agent with no history - see signal-strip.
+             */}
+            <SignalStrip className="mt-2" signals={signals} />
           </div>
         </div>
 

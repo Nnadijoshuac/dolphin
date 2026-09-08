@@ -9,16 +9,12 @@ import { HireAction } from "@/components/hire-action";
 import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
 import { StatePanel } from "@/components/state-panel";
+import { TrackRecord } from "@/components/track-record";
 import { useAgentCategoryStats } from "@/hooks/use-category-stats";
 import { categoryLabel } from "@/constants/agents";
 import { convexClient } from "@/providers/convex-provider";
 import { assessAuthorizationCapability } from "@/services/authorization";
-import type {
-  Agent,
-  AgentCategory,
-  AgentLiveStats,
-  LiveMetric,
-} from "@/types/agent";
+import type { Agent, AgentLiveStats, LiveMetric } from "@/types/agent";
 
 /*
  * There was a `Record<AgentCategory, string>` here with six entries, indexed
@@ -382,11 +378,24 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             <LiveStats agent={agent} />
           </DetailSection>
 
+          {/*
+           * TRACK RECORD. Placed directly under Live evidence and ABOVE
+           * Performance, because it is the section a person deciding between
+           * two agents actually reads, and because unlike Performance it has
+           * something to say for every agent from its first hire.
+           */}
           <DetailSection
-            summary="A chart appears only when the record includes enough sourced points."
+            summary="Retention Dolphin computes from its own hire records, and structured reviews from wallets that hired this agent."
+            title="Track record"
+          >
+            <TrackRecord agentKey={agent.agentKey} agentName={agent.name} />
+          </DetailSection>
+
+          <DetailSection
+            summary="Each point is one real protocol read at a real timestamp. Nothing is interpolated or backfilled."
             title="Performance"
           >
-            <PerformancePanel category={agent.category} series={agent.performanceSeries} />
+            <PerformancePanel agent={agent} />
           </DetailSection>
 
           <DetailSection

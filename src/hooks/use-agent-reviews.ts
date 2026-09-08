@@ -67,6 +67,43 @@ export function useReviewEligibility(tokenId: string | null | undefined) {
  *
  * This costs real BNB in gas. Every caller must have said so first.
  */
+
+/**
+ * The bare ERC-8004 token id inside a Dolphin agentKey.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS FUNCTION HAD TO BE ADDED (2026-09-08)
+ * ---------------------------------------------------------------------------
+ * `giveFeedback`'s first parameter is a `uint256 agentId`, and this hook passed
+ * `BigInt(input.agentKey)`. An agentKey is NOT a number - it is
+ * "<chainId>:<lowercase registry address>:<tokenId>", built by
+ * convex/model/agent.ts and byte-identical to 8004scan's own agent_id. Its only
+ * caller, src/app/manage/[id].tsx:502, passes `realHire.agentKey`, which is
+ * that composite.
+ *
+ * So `BigInt("56:0x8004a1…:302257")` threw a SyntaxError before the wallet was
+ * ever opened, and the whole on-chain publish path - the one feature that makes
+ * Dolphin a CONTRIBUTOR to ERC-8004 rather than a reader of it - could not have
+ * worked for anyone. Found on 2026-09-08 while porting this hook to the website.
+ *
+ * Parsing here rather than changing the call site keeps `agentKey` the identity
+ * everywhere (AGENTS.md SS9) while giving the contract the one field it wants.
+ * Mirrors parseAgentKey in convex/model/agent.ts.
+ */
+function tokenIdFromAgentKey(agentKey: string): bigint {
+  const segments = agentKey.split(":");
+  const tokenId = segments[segments.length - 1]?.trim() ?? "";
+
+  if (!/^\d+$/.test(tokenId)) {
+    throw new Error(
+      `Cannot publish this review on-chain: "${agentKey}" does not end in a numeric ERC-8004 token id, ` +
+        "and the Reputation Registry keys feedback by that id. Nothing was sent and no gas was spent.",
+    );
+  }
+
+  return BigInt(tokenId);
+}
+
 export function usePublishReviewOnChain() {
   const attest = useAction(api.agentReviews.attestReviewOnChain);
   const session = useWalletSession();
@@ -79,13 +116,19 @@ export function usePublishReviewOnChain() {
   }) => {
     const sessionToken = requireSessionToken(session);
 
+    /*
+     * Parsed BEFORE the wallet is opened, so a malformed key fails with a
+     * readable message instead of after the user has approved a transaction.
+     */
+    const agentId = tokenIdFromAgentKey(input.agentKey);
+
     const tags = feedbackTagsFor(input.outcome, input.wouldHireAgain);
     const transactionHash = await wallet.writeContract({
       address: REPUTATION_REGISTRY_ADDRESS,
       abi: REPUTATION_REGISTRY_ABI,
       functionName: "giveFeedback",
       args: [
-        BigInt(input.agentKey),
+        agentId,
         BigInt(feedbackValueFor(input.outcome, input.wouldHireAgain)),
         FEEDBACK_VALUE_DECIMALS,
         tags.tag1,

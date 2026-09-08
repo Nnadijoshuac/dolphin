@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -104,11 +104,6 @@ export default function SearchScreen() {
     addRecentSearch(tag);
   };
 
-  const handleResetAllFilters = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setKind(null);
-    setSelectedCategory(null);
-  };
 
   const isSearching = query.trim().length > 0;
 

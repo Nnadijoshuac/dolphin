@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
-import { BnbLogo, BrandMark } from "@/components/brand-mark";
+import { BnbBadge, BnbLogo, BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { useWallet } from "@/wallet/wallet-provider";
 
 const navigation = [
-  { path: "/", label: "Discover", icon: "sparkle" as const },
+  { path: "/", label: "Discover", icon: "discover" as const },
   { path: "/search", label: "Search", icon: "search" as const },
-  { path: "/my-agents", label: "My agents", icon: "bot" as const },
-  { path: "/wallet", label: "Wallet", icon: "shield" as const },
+  { path: "/my-agents", label: "My Agents", icon: "agents" as const },
+  { path: "/wallet", label: "Wallet", icon: "wallet" as const },
 ] as const;
 
 function isActiveRoute(pathname: string, path: string) {
@@ -29,10 +30,30 @@ function shortAddress(address: string) {
 export function SiteHeader() {
   const pathname = usePathname();
   const wallet = useWallet();
+  const mobileNav = useRef<HTMLElement>(null);
+  const isTabPage = navigation.some((item) => item.path === pathname);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => {
+      const editing = document.activeElement?.matches("input, textarea, [contenteditable='true']");
+      const keyboardOpen = editing && window.innerHeight - viewport.height > 120;
+      mobileNav.current?.toggleAttribute("data-keyboard-open", Boolean(keyboardOpen));
+    };
+    viewport.addEventListener("resize", update);
+    document.addEventListener("focusin", update);
+    document.addEventListener("focusout", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      document.removeEventListener("focusin", update);
+      document.removeEventListener("focusout", update);
+    };
+  }, []);
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-line bg-canvas/92 backdrop-blur-xl">
+      <header className="desktop-site-header sticky top-0 z-50 border-b border-line bg-canvas/92 backdrop-blur-xl">
         <div className="site-frame flex h-[72px] items-center justify-between gap-5">
           <Link
             aria-label="Dolphin home"
@@ -95,38 +116,43 @@ export function SiteHeader() {
         </div>
       </header>
 
-      <nav
+      {pathname === "/" ? (
+        <header className="mobile-brand-header">
+          <Link href="/" aria-label="Dolphin home">
+            <BrandMark size={38} />
+            <div><strong>Dolphin</strong><p>ERC-8004 AI agent marketplace</p><BnbBadge /></div>
+          </Link>
+        </header>
+      ) : null}
+
+      {isTabPage ? <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-paper/96 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
+        className="mobile-tab-bar"
+        ref={mobileNav}
       >
-        <div className="grid h-[68px] grid-cols-4">
+        <div className="mobile-tab-island">
           {navigation.map((item) => {
             const isActive = isActiveRoute(pathname, item.path);
 
             return (
               <Link
                 aria-current={isActive ? "page" : undefined}
-                className={`interactive relative flex min-w-0 flex-col items-center justify-center gap-1 text-[0.68rem] font-medium no-underline ${
-                  isActive ? "text-accent-ink" : "text-muted"
-                }`}
+                className="mobile-tab-link"
                 href={item.path}
                 key={item.path}
               >
-                {isActive ? (
-                  <span className="absolute left-1/2 top-0 h-0.5 w-7 -translate-x-1/2 bg-accent" />
-                ) : null}
                 <CategoryGlyph
                   color="currentColor"
                   name={item.icon}
-                  size={19}
-                  strokeWidth={isActive ? 2.35 : 2}
+                  size={21}
+                  strokeWidth={isActive ? 2.2 : 1.8}
                 />
                 <span className="truncate">{item.label}</span>
               </Link>
             );
           })}
         </div>
-      </nav>
+      </nav> : null}
     </>
   );
 }

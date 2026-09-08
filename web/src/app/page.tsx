@@ -17,6 +17,8 @@ import {
   useReportBackendStatus,
 } from "@/components/backend-status";
 import { HeroVideo } from "@/components/hero-video";
+import { MobileAgentRow } from "@/components/mobile-agent-row";
+import { MobileDiscoverHero } from "@/components/mobile-discover-hero";
 import { OnboardingPrompt } from "@/components/onboarding-prompt";
 import { SignalStrip } from "@/components/signal-strip";
 import { categoryDescription, categoryLabel } from "@/constants/agents";
@@ -26,6 +28,7 @@ import {
   useCategoryFacets,
 } from "@/hooks/use-agents";
 import { track } from "@/lib/analytics";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import type { AgentSignals } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
 
@@ -238,11 +241,15 @@ function CatalogNotice({
 }
 
 export default function DiscoverPage() {
-  const selectedCategory = useSyncExternalStore(
+  const requestedCategory = useSyncExternalStore(
     subscribeToCategoryChanges,
     getSelectedCategorySnapshot,
     () => null,
   );
+  const isMobile = useMobileLayout();
+  const facets = useCategoryFacets();
+  // The app opens the first live category. An explicit URL selection wins.
+  const selectedCategory = requestedCategory ?? (isMobile ? facets.categories[0]?.slug ?? null : null);
 
   /*
    * PAGINATED, and the category filter is an index range rather than a
@@ -251,6 +258,7 @@ export default function DiscoverPage() {
    */
   const { agents, status, isLoading, loadMore } = useAgentList({
     category: selectedCategory ?? undefined,
+    enabled: !isMobile || selectedCategory !== null || !facets.isLoading,
   });
 
   /*
@@ -260,7 +268,6 @@ export default function DiscoverPage() {
    * fallback every unclassified agent lands in - had no chip anywhere on the
    * site.
    */
-  const facets = useCategoryFacets();
   const backend = useBackendStatus();
   useReportBackendStatus(backend, "discover");
 
@@ -269,7 +276,7 @@ export default function DiscoverPage() {
 
   const catalogFilters = useMemo<readonly CatalogFilter[]>(
     () => [
-      ALL_AGENTS_FILTER,
+      ...(!isMobile || facets.categories.length === 0 ? [ALL_AGENTS_FILTER] : []),
       ...facets.categories.map((facet) => ({
         value: facet.slug,
         label: facet.label,
@@ -279,7 +286,7 @@ export default function DiscoverPage() {
         count: facet.count,
       })),
     ],
-    [facets.categories],
+    [facets.categories, isMobile],
   );
 
   const hasCatalog = agents.length > 0;
@@ -349,6 +356,9 @@ export default function DiscoverPage() {
 
     updateSelectedCategory(option.value);
     document.getElementById(chipId(option.value))?.focus();
+    if (isMobile) {
+      document.getElementById(chipId(option.value))?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    }
 
     if (option.value) {
       track("category_selected", {
@@ -407,6 +417,7 @@ export default function DiscoverPage() {
 
   return (
     <div className={styles.page}>
+      <MobileDiscoverHero agents={agents} />
       {/*
        * Full-bleed hero: the video IS the background, not a picture inside a
        * card. `site-frame` moved off the section and onto the copy — the
@@ -420,7 +431,7 @@ export default function DiscoverPage() {
          * made an MP4 on a third-party CDN the Largest Contentful Paint of the
          * entire site. See components/hero-video.tsx.
          */}
-        <HeroVideo className={styles.heroBgVideo} />
+        {!isMobile ? <HeroVideo className={styles.heroBgVideo} /> : null}
         <div className={styles.heroOverlay} />
 
         <div className="site-frame">
@@ -484,17 +495,17 @@ export default function DiscoverPage() {
        * rather than above it, so it never displaces the thing a returning
        * visitor came for. See components/onboarding-prompt.tsx.
        */}
-      <OnboardingPrompt />
+      <div className="desktop-only"><OnboardingPrompt /></div>
 
       <section
         aria-labelledby="catalog-heading"
         id="browse-by-role"
-        className="site-frame py-14 sm:py-20"
+        className={`site-frame py-14 sm:py-20 ${styles.catalogSection}`}
       >
         <div className={styles.catalogLayout}>
           <aside className={styles.catalogAside}>
             <p className="text-sm font-semibold text-accent-ink">Catalog</p>
-            <h2 className="section-title mt-3" id="catalog-heading">
+            <h2 className={`section-title mt-3 ${styles.catalogHeading}`} id="catalog-heading">
               {selectedLabel}
             </h2>
             <p className="mt-4 text-sm leading-6 text-muted">{selectedDescription}</p>
@@ -619,7 +630,12 @@ export default function DiscoverPage() {
               />
             ) : (
               <>
-                <div className={styles.agentGrid}>
+                <div className={`mobile-only ${styles.mobileRows}`}>
+                  {displayedAgents.map((agent) => (
+                    <MobileAgentRow agent={agent} key={agent.agentKey} signals={signals.get(agent.agentKey)} surface="discover" />
+                  ))}
+                </div>
+                <div className={`${styles.agentGrid} ${styles.desktopCards}`}>
                   {displayedAgents.map((agent) => (
                     <DiscoverAgentCard
                       agent={agent}

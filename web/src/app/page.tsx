@@ -17,9 +17,16 @@ import {
   useReportBackendStatus,
 } from "@/components/backend-status";
 import { HeroVideo } from "@/components/hero-video";
+import { OnboardingPrompt } from "@/components/onboarding-prompt";
+import { SignalStrip } from "@/components/signal-strip";
 import { categoryDescription, categoryLabel } from "@/constants/agents";
-import { useAgentList, useCategoryFacets } from "@/hooks/use-agents";
+import {
+  useAgentList,
+  useAgentSignals,
+  useCategoryFacets,
+} from "@/hooks/use-agents";
 import { track } from "@/lib/analytics";
+import type { AgentSignals } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
 
 import styles from "./page.module.css";
@@ -81,7 +88,13 @@ function getRecordSource(agent: Agent) {
   return agent.sourceLabels[0]?.label ?? "Source not listed";
 }
 
-function DiscoverAgentCard({ agent }: { agent: Agent }) {
+function DiscoverAgentCard({
+  agent,
+  signals,
+}: {
+  agent: Agent;
+  signals?: AgentSignals;
+}) {
   const label = categoryLabel(agent.category);
   const recordLabel =
     agent.recordStatus === "indexed" ? "Indexed record" : "Editorial record";
@@ -114,6 +127,9 @@ function DiscoverAgentCard({ agent }: { agent: Agent }) {
           </h3>
           <p className={styles.agentTagline}>{agent.tagline}</p>
         </div>
+
+        {/* The comparison signal. Renders nothing for an agent with no history. */}
+        <SignalStrip className="mt-4" signals={signals} />
 
         <dl className={styles.agentEvidence}>
           <div>
@@ -248,7 +264,8 @@ export default function DiscoverPage() {
   const backend = useBackendStatus();
   useReportBackendStatus(backend, "discover");
 
-  const filterRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  /* One batched query for every card on the page, never one per card. */
+  const signals = useAgentSignals(agents);
 
   const catalogFilters = useMemo<readonly CatalogFilter[]>(
     () => [
@@ -312,12 +329,26 @@ export default function DiscoverPage() {
     window.dispatchEvent(new Event(categoryChangeEvent));
   }
 
+  /*
+   * Focus follows selection by ELEMENT ID rather than through a refs array.
+   *
+   * The array version (`filterRefs.current[index]?.focus()`) tripped
+   * react-hooks/refs: the React Compiler cannot prove a function defined in the
+   * component body is only ever called from an event handler, so touching
+   * `.current` inside one reads to it as a render-time ref access. Ids are
+   * stable, derived from the slug rather than the index, and remove the array
+   * entirely - there is nothing left to keep in sync with the rendered list.
+   */
+  function chipId(value: AgentCategory | null) {
+    return `catalog-filter-${value ?? "all"}`;
+  }
+
   function selectFilter(index: number) {
     const option = catalogFilters[index];
     if (!option) return;
 
     updateSelectedCategory(option.value);
-    filterRefs.current[index]?.focus();
+    document.getElementById(chipId(option.value))?.focus();
 
     if (option.value) {
       track("category_selected", {
@@ -448,6 +479,13 @@ export default function DiscoverPage() {
         </div>
       </section>
 
+      {/*
+       * Offered here rather than as a forced interstitial, and below the hero
+       * rather than above it, so it never displaces the thing a returning
+       * visitor came for. See components/onboarding-prompt.tsx.
+       */}
+      <OnboardingPrompt />
+
       <section
         aria-labelledby="catalog-heading"
         id="browse-by-role"
@@ -507,12 +545,10 @@ export default function DiscoverPage() {
                         className={`${styles.filterChip} ${
                           isSelected ? styles.filterChipActive : ""
                         }`}
+                        id={chipId(option.value)}
                         key={option.value ?? "all"}
                         onClick={() => selectFilter(index)}
                         onKeyDown={(event) => handleFilterKeyDown(event, index)}
-                        ref={(node) => {
-                          filterRefs.current[index] = node;
-                        }}
                         /* Roving tabindex: one stop for the whole rail. */
                         tabIndex={
                           isSelected || (selectedCategory === null && index === 0)
@@ -585,7 +621,11 @@ export default function DiscoverPage() {
               <>
                 <div className={styles.agentGrid}>
                   {displayedAgents.map((agent) => (
-                    <DiscoverAgentCard agent={agent} key={agent.id} />
+                    <DiscoverAgentCard
+                      agent={agent}
+                      key={agent.id}
+                      signals={signals.get(agent.agentKey)}
+                    />
                   ))}
                 </div>
                 {status === "CanLoadMore" ? (

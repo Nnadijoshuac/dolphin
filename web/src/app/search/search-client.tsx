@@ -11,7 +11,12 @@ import {
 } from "@/components/backend-status";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { StatePanel } from "@/components/state-panel";
-import { useAgentList, useCategoryFacets } from "@/hooks/use-agents";
+import {
+  useAgentList,
+  useAgentSignals,
+  useCategoryFacets,
+  type AgentProtocol,
+} from "@/hooks/use-agents";
 import {
   SEARCH_DEBOUNCE_MS,
   useDebouncedValue,
@@ -60,6 +65,19 @@ function SearchContent() {
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory | "all">(
     () => readCategoryParam(initialCategory),
+  );
+  /*
+   * WHAT the agent is, not what it does. The backend has indexed this since the
+   * rebuild and the website never declared it, so the filter could not be
+   * offered - caught by `npm run check:convex-api` on its first run.
+   *
+   * Named in user language rather than protocol language, as the mobile app
+   * does: an A2A agent is one you commission and pay for, an MCP agent publishes
+   * tools you call yourself. Showing them undifferentiated is what made MCP
+   * agents look like broken A2A ones.
+   */
+  const [selectedProtocol, setSelectedProtocol] = useState<AgentProtocol | "all">(
+    "all",
   );
 
 
@@ -131,6 +149,7 @@ function SearchContent() {
   } = useAgentList({
     search: debouncedQuery,
     category: selectedCategory === "all" ? undefined : selectedCategory,
+    protocol: selectedProtocol === "all" ? undefined : selectedProtocol,
   });
 
   /*
@@ -141,6 +160,9 @@ function SearchContent() {
    */
   const isUnavailable =
     backend.kind === "unreachable" || backend.kind === "unconfigured";
+
+  /* One batched query for every result on the page, never one per row. */
+  const signals = useAgentSignals(searchResults);
 
   /*
    * One event per settled search, not per keystroke. The QUERY TEXT is never
@@ -294,6 +316,47 @@ function SearchContent() {
         </div>
       </section>
 
+      <div
+        aria-label="Filter by what the agent is"
+        className="flex flex-wrap items-center gap-2 border-b border-line py-4"
+        role="group"
+      >
+        {[
+          { value: "all" as const, label: "Everything", hint: "" },
+          { value: "a2a" as const, label: "Hire for work", hint: "Paid tasks · A2A" },
+          { value: "mcp" as const, label: "Use as a tool", hint: "Call directly · MCP" },
+        ].map((option) => {
+          const isSelected = selectedProtocol === option.value;
+
+          return (
+            <button
+              aria-pressed={isSelected}
+              className={`interactive inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 text-xs font-medium ${
+                isSelected
+                  ? "border-ink bg-ink text-paper"
+                  : "border-line bg-paper text-muted hover:text-ink"
+              }`}
+              key={option.value}
+              onClick={() => setSelectedProtocol(option.value)}
+              type="button"
+            >
+              {option.label}
+              {option.hint ? (
+                <span
+                  className={
+                    isSelected
+                      ? "text-[0.65rem] text-paper-muted"
+                      : "text-[0.65rem] text-faint"
+                  }
+                >
+                  {option.hint}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
       {!hasActiveSearch ? (
         <section className="grid gap-10 border-b border-line py-10 md:grid-cols-2 md:gap-16">
           <div>
@@ -416,7 +479,12 @@ function SearchContent() {
         ) : (
           <div>
             {searchResults.map((agent) => (
-              <AgentCard agent={agent} key={agent.id} />
+              <AgentCard
+                agent={agent}
+                key={agent.id}
+                signals={signals.get(agent.agentKey)}
+                surface="search"
+              />
             ))}
             {status === "CanLoadMore" ? (
               <button

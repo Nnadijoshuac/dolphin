@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { useState } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,7 +19,6 @@ export type PearlButtonProps = {
   loading?: boolean;
   icon?: ReactNode;
   iconRight?: ReactNode;
-  showSparkle?: boolean;
   style?: StyleProp<ViewStyle>;
   accessibilityHint?: string;
   accessibilityLabel?: string;
@@ -31,7 +29,6 @@ const SIZES = {
     height: 30,
     paddingHorizontal: 12,
     fontSize: 12,
-    sparkleSize: 10.5,
     gap: 5,
     minWidth: 64,
   },
@@ -39,7 +36,6 @@ const SIZES = {
     height: 42,
     paddingHorizontal: 18,
     fontSize: 14,
-    sparkleSize: 12.5,
     gap: 7,
     minWidth: 100,
   },
@@ -47,15 +43,14 @@ const SIZES = {
     height: 52,
     paddingHorizontal: 24,
     fontSize: 16,
-    sparkleSize: 14.5,
     gap: 8,
     minWidth: 130,
   },
 } as const;
 
 /**
- * PearlButton — Luxury dark pearl pill button with inset reflections,
- * dynamic gloss sheen, and sparkle glyphs (✧ idle, ✦ pressed).
+ * PearlButton — Luxury dark pearl pill button with inset reflections
+ * and dynamic gloss sheen.
  */
 export function PearlButton({
   label,
@@ -65,12 +60,10 @@ export function PearlButton({
   loading = false,
   icon,
   iconRight,
-  showSparkle = true,
   style,
   accessibilityHint,
   accessibilityLabel,
 }: PearlButtonProps) {
-  const [isPressed, setIsPressed] = useState(false);
   const scale = useSharedValue(1);
   const translateY = useSharedValue(0);
 
@@ -123,7 +116,7 @@ export function PearlButton({
         style={styles.bottomRim}
       />
 
-      {/* 4. Text & Sparkle Content */}
+      {/* 4. Content */}
       <View
         style={[
           styles.contentRow,
@@ -134,19 +127,7 @@ export function PearlButton({
           <ActivityIndicator color="#FFE7FF" size="small" />
         ) : (
           <>
-            {icon ? (
-              icon
-            ) : showSparkle ? (
-              <Text
-                style={[
-                  styles.sparkleText,
-                  { fontSize: config.sparkleSize },
-                ]}
-              >
-                {isPressed ? "✦" : "✧"}
-              </Text>
-            ) : null}
-
+            {icon}
             <Text
               numberOfLines={1}
               style={[
@@ -156,7 +137,6 @@ export function PearlButton({
             >
               {label}
             </Text>
-
             {iconRight}
           </>
         )}
@@ -184,12 +164,10 @@ export function PearlButton({
         onPress();
       }}
       onPressIn={() => {
-        setIsPressed(true);
         scale.set(withSpring(0.97, { damping: 18, stiffness: 280 }));
         translateY.set(withSpring(2, { damping: 18, stiffness: 280 }));
       }}
       onPressOut={() => {
-        setIsPressed(false);
         scale.set(withSpring(1, { damping: 18, stiffness: 280 }));
         translateY.set(withSpring(0, { damping: 18, stiffness: 280 }));
       }}
@@ -254,11 +232,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     zIndex: 1,
-  },
-  sparkleText: {
-    color: "#FFE7FF",
-    fontWeight: "400",
-    opacity: 0.95,
   },
   labelText: {
     color: "#FFE7FF",

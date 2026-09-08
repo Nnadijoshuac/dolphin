@@ -53,18 +53,6 @@
   letter-spacing: -0.01em;
 }
 
-.wrap p span:nth-child(2) {
-  display: none;
-}
-
-.pearlButton:hover:not(:disabled) .wrap p span:nth-child(1) {
-  display: none;
-}
-
-.pearlButton:hover:not(:disabled) .wrap p span:nth-child(2) {
-  display: inline-block;
-}
-
 .wrap::before,
 .wrap::after {
   content: "";

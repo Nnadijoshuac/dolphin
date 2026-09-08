@@ -14,6 +14,7 @@ import {
 } from "@/constants/site";
 
 import "./globals.css";
+import "./mobile.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -91,6 +92,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   themeColor: "#f4f3ed",
   width: "device-width",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

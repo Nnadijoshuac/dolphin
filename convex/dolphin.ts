@@ -250,6 +250,7 @@ export const appendTurn = internalMutation({
       errorReason: null,
       promptHash,
       model: null,
+      mentions: [],
       createdAt: now,
       completedAt: now,
     });
@@ -262,6 +263,7 @@ export const appendTurn = internalMutation({
       errorReason: null,
       promptHash: null,
       model: null,
+      mentions: [],
       createdAt: now + 1,
       completedAt: null,
     });

@@ -1,6 +1,52 @@
 /* eslint-disable @next/next/no-img-element */
+"use client";
+
+import { useCallback, useSyncExternalStore } from "react";
+
 import { CategoryGlyph } from "@/components/category-glyph";
+import { readCacheStable, writeCache } from "@/lib/local-cache";
 import type { AgentCategory } from "@/types/agent";
+
+/**
+ * How long a publisher icon URL is remembered as broken.
+ *
+ * ---------------------------------------------------------------------------
+ * MEASURED, 2026-09-08
+ * ---------------------------------------------------------------------------
+ * Publisher icons are served by `api.8004scan.io/api/v1/media/agents/...`,
+ * which 307s to an immutable blob. The blob itself is
+ * `Cache-Control: public, max-age=31536000, immutable` - once fetched, the
+ * browser never asks again, and that half works beautifully.
+ *
+ * The REDIRECT is `max-age=300`, and it returns HTTP 500
+ * (`{"code":"DATABASE_ERROR"}`) on a large fraction of requests - three of four
+ * consecutive attempts on one agent during measurement. So every five minutes
+ * the browser must traverse a hop that frequently fails, for each of the ~29
+ * agents on a page that publish an icon. That is the flicker between real icons
+ * and generated ones, and a chunk of the slowness.
+ *
+ * Remembering a failure for five minutes - the redirect's OWN max-age - means a
+ * page that has already discovered a broken icon paints the generated avatar
+ * immediately instead of spending a request and a timeout rediscovering it.
+ *
+ * DELIBERATELY SHORT. This endpoint is flaky, not dead: a longer TTL would turn
+ * a transient 500 into an agent whose real icon is hidden for the rest of the
+ * day. Five minutes is long enough to spare a page-load's worth of retries and
+ * short enough that recovery is automatic.
+ */
+const ICON_FAILURE_TTL_MS = 5 * 60 * 1000;
+
+/** One entry per failed URL, so two agents cannot mask each other's icon. */
+function iconFailureKey(url: string): string {
+  return `icon.failed.${url}`;
+}
+
+/**
+ * Module scope so its identity is stable across renders. Nothing pushes updates
+ * into this store - a failure is recorded by this component's own onError and
+ * read back on the next render - so the unsubscribe is a no-op.
+ */
+const ICON_STORE_NEVER_CHANGES = () => () => {};
 
 const categoryBgColors: Record<AgentCategory, { bg: string; border: string; glyphColor: string }> = {
   rebalancing: { bg: "#FEF5D6", border: "#F3E3A6", glyphColor: "#946B00" },
@@ -55,11 +101,32 @@ export function AgentIcon({ category, size = 48, uri, seed }: AgentIconProps) {
   const dimensions = { width: size, height: size, flexShrink: 0 };
 
   const generated = seed ? dicebearUrl(seed) : null;
-  // Publisher icon first, the generated one when there is none. Only ONE image
-  // is requested per agent: the generated tier is not preloaded behind a
-  // working publisher icon, which on a full catalog page would be a wasted
-  // request per row.
-  const src = uri ?? generated;
+
+  /*
+   * Whether this browser has recently watched `uri` fail.
+   *
+   * Read through useSyncExternalStore with a null server snapshot, for the same
+   * reason useCachedQuery does: this component renders on the server too, and
+   * reading localStorage during the first client render would disagree with the
+   * HTML Next sent.
+   *
+   * The consequence is that a hard page load still attempts the publisher URL
+   * once, and the memory applies from the following render. That is the right
+   * way round - a recovered endpoint gets a fresh chance on every page load
+   * rather than being written off for the whole TTL.
+   */
+  const getBroken = useCallback(
+    () => (uri ? readCacheStable<true>(iconFailureKey(uri), ICON_FAILURE_TTL_MS) === true : false),
+    [uri],
+  );
+
+  const knownBroken = useSyncExternalStore(ICON_STORE_NEVER_CHANGES, getBroken, () => false);
+
+  // Publisher icon first, the generated one when there is none or when the
+  // publisher's has just failed. Only ONE image is requested per agent: the
+  // generated tier is not preloaded behind a working publisher icon, which on a
+  // full catalog page would be a wasted request per row.
+  const src = uri && !knownBroken ? uri : generated;
 
   return (
     <div
@@ -91,6 +158,10 @@ export function AgentIcon({ category, size = 48, uri, seed }: AgentIconProps) {
              */
             const image = event.currentTarget;
             if (generated && image.src !== generated) {
+              // Remember it, so the rest of this session - and the next few
+              // minutes of loads - skip straight to the avatar instead of
+              // paying for this request again on every render.
+              if (uri) writeCache(iconFailureKey(uri), true);
               image.src = generated;
               return;
             }

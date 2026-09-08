@@ -5,6 +5,7 @@ import { usePaginatedQuery, useQuery } from "convex/react";
 
 import { AGENT_DATA_SOURCES } from "@/constants/agents";
 import { api } from "@/convex/api";
+import { CACHE_TTL, useCachedQuery } from "@/hooks/use-cached-query";
 import { convexClient } from "@/providers/convex-provider";
 import { verifyAgentRegistration } from "@/services/chain";
 import { useQuery as useReactQuery } from "@tanstack/react-query";
@@ -84,13 +85,57 @@ export function useAgentList(options: UseAgentListOptions = {}) {
   );
 
   const active = isSearching ? found : browse;
+  const liveAgents = active.results as unknown as Agent[] | undefined;
+
+  /*
+   * Only the FIRST PAGE is cached, and only for browse - never for search.
+   *
+   * Browse is the page every visitor lands on and returns to, and its first
+   * page is what stands between them and an empty grid. Later pages are not
+   * cached because they are reached by an explicit "load more", by which point
+   * the socket is long since connected and there is nothing to hide.
+   *
+   * Search is excluded outright: a result set for a query someone typed is not
+   * something to replay from disk on a later visit, and the cache key would
+   * grow one entry per distinct search string.
+   *
+   * `loadMore` and `status` stay live-only. A cached array is content to paint,
+   * never pagination state to act on - handing back a stale cursor would page
+   * from a position the server no longer agrees with.
+   */
+  const firstPageArgs = isSearching
+    ? "skip"
+    : { category: options.category, protocol: options.protocol };
+
+  const cachedFirstPage = useCachedQuery<Agent[]>(
+    // Only feed the cache once the first page is genuinely settled. Convex
+    // grows `results` as pages stream in, and writing mid-stream would store a
+    // half-filled page as though it were the whole of one.
+    !isSearching && active.status !== "LoadingFirstPage" && liveAgents
+      ? liveAgents.slice(0, PAGE_SIZE)
+      : undefined,
+    "agents.list.firstPage",
+    firstPageArgs,
+    CACHE_TTL.catalog,
+  );
+
+  const showingCache =
+    active.status === "LoadingFirstPage" && (cachedFirstPage.data?.length ?? 0) > 0;
+  const agents = showingCache ? (cachedFirstPage.data as Agent[]) : (liveAgents ?? []);
 
   return {
-    agents: (active.results ?? []) as unknown as Agent[],
+    agents,
     status: active.status,
-    isLoading: active.status === "LoadingFirstPage",
+    isLoading: active.status === "LoadingFirstPage" && !showingCache,
     loadMore: () => active.loadMore(PAGE_SIZE),
+    /**
+     * Still keyed off LIVE status. "Empty" is a claim about the catalog, and a
+     * cache miss is not evidence for it - saying the marketplace is empty when
+     * the socket simply has not answered is the same class of lie as saying it
+     * is empty when the backend is down (see backend-status.tsx).
+     */
     isEmpty: active.status !== "LoadingFirstPage" && (active.results?.length ?? 0) === 0,
+    isFromCache: showingCache,
   };
 }
 
@@ -101,11 +146,26 @@ export function useAgentList(options: UseAgentListOptions = {}) {
  * a property of the data. One with no agents in it does not appear.
  */
 export function useCategoryFacets() {
-  const data = useQuery(api.facets.list, convexClient ? {} : "skip");
+  const args = convexClient ? {} : "skip";
+  const live = useQuery(api.facets.list, args);
+
+  /*
+   * Cached, and this is the highest-value read on the site to cache: the chip
+   * row sits above the fold on every page, it is one small document, and it
+   * changes only when a category gains or loses its last agent. Without this it
+   * was a websocket round trip before the reader could see what the marketplace
+   * even contains.
+   */
+  const { data, isLoading, isFromCache } = useCachedQuery<{
+    categories: { slug: string; label: string; count: number }[];
+    totalLive: number;
+  }>(live, "facets.list", args, CACHE_TTL.facets);
+
   return {
     categories: data?.categories ?? [],
     totalLive: data?.totalLive ?? 0,
-    isLoading: data === undefined,
+    isLoading,
+    isFromCache,
   };
 }
 
@@ -230,10 +290,26 @@ export function useAgent(
   const enabled =
     normalizedReference.length > 0 && (options.enabled === undefined || options.enabled);
 
-  const row = useQuery(
-    api.agents.get,
-    convexClient && enabled ? { reference: normalizedReference } : "skip",
+  const getArgs = convexClient && enabled ? { reference: normalizedReference } : "skip";
+  const liveRow = useQuery(api.agents.get, getArgs);
+
+  /*
+   * The detail page is the one most often arrived at from outside - a shared
+   * link, a search result - and the one where an empty frame is most obvious,
+   * because it is a whole page rather than one row in a grid.
+   *
+   * Only a POSITIVE result seeds from cache. A cached `null` is not replayed:
+   * "no such agent" is a strong claim, and flashing it at someone following a
+   * link to an agent that has since been relisted is worse than a spinner.
+   * `notFound` below is therefore read from live data only.
+   */
+  const cached = useCachedQuery<Agent | null>(
+    liveRow as Agent | null | undefined,
+    "agents.get",
+    getArgs,
+    CACHE_TTL.agent,
   );
+  const row = liveRow !== undefined ? liveRow : (cached.data ?? undefined);
 
   const verification = useReactQuery({
     queryKey: ["agent-registry", normalizedReference],
@@ -253,8 +329,12 @@ export function useAgent(
     isLoading: convexClient !== null && enabled && row === undefined,
     isError: !convexClient && enabled,
     error: !convexClient && enabled ? new AgentsUnavailableError(NO_BACKEND) : null,
-    /** Distinguishes "still loading" from "the backend says there is no such agent". */
-    notFound: row === null,
+    /**
+     * Distinguishes "still loading" from "the backend says there is no such
+     * agent". Read from LIVE data, never from cache - see the note above.
+     */
+    notFound: liveRow === null,
+    isFromCache: liveRow === undefined && row !== undefined,
   };
 }
 

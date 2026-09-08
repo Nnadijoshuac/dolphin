@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { HireAction } from "@/components/hire-action";
@@ -22,7 +23,7 @@ function Reviews({ agent }: { agent: Agent }) {
 export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   const [open, setOpen] = useState(false);
-  const dialog = useRef<HTMLDialogElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const price = agent.priceModel.status === "live" || agent.priceModel.status === "stale" ? agent.priceModel.value : null;
   const token = agent.pricing?.token || (price?.token.startsWith("0x") ? price.token : null);
   const metadata = useTokenMetadata(token);
@@ -42,10 +43,33 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
   useEffect(() => {
     if (!open) return;
     const element = dialog.current;
-    element?.showModal();
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const frame = document.querySelector<HTMLElement>(".app-frame");
+    const wasInert = frame?.inert ?? false;
+    // A body portal keeps WalletConnect's own modal above this sheet. Native
+    // showModal() would put that SDK portal behind an inert top-layer dialog.
+    if (frame) frame.inert = true;
+    element?.querySelector<HTMLButtonElement>("button")?.focus();
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { element?.close(); document.body.style.overflow = previous; };
+    const keyboard = (event: KeyboardEvent) => {
+      // Let another portal (the wallet chooser) manage its own keyboard focus.
+      if (!element?.contains(document.activeElement) && document.activeElement !== document.body) return;
+      if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
+      if (event.key !== "Tab" || !element) return;
+      const controls = [...element.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter(control => control.getClientRects().length > 0);
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", keyboard);
+    return () => {
+      document.removeEventListener("keydown", keyboard);
+      if (frame) frame.inert = wasInert;
+      document.body.style.overflow = previous;
+      previousFocus?.focus();
+    };
   }, [open]);
   const publisher = agent.publisher?.startsWith("0x") ? `${agent.publisher.slice(0, 8)}…${agent.publisher.slice(-6)}` : agent.publisher;
   return <>
@@ -64,9 +88,9 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
       {convexClient && <Reviews agent={agent} />}
       <div className="mobile-detail-registry">{registry}</div>
     </div>
-    {open && <dialog ref={dialog} className="mobile-action-sheet" aria-labelledby="mobile-action-title" onCancel={() => setOpen(false)} onClick={event => { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientY < bounds.top || event.clientX < bounds.left || event.clientX > bounds.right) setOpen(false); } }}>
+    {open && createPortal(<div className="mobile-sheet-backdrop" onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}><div ref={dialog} role="dialog" aria-modal="true" className="mobile-action-sheet" aria-labelledby="mobile-action-title">
       <header><h2 id="mobile-action-title">{agent.protocol === "mcp" ? "Use" : "Hire"} {agent.name}</h2><button className="mobile-circle" type="button" aria-label="Close" onClick={() => setOpen(false)}><CategoryGlyph name="close" size={18} /></button></header>
       {agent.protocol === "mcp" ? <McpUseAction agent={agent} /> : <HireAction agent={agent} />}
-    </dialog>}
+    </div></div>, document.body)}
   </>;
 }

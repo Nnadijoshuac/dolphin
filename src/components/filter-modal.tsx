@@ -32,19 +32,19 @@ export function FilterModal({
       value: null,
       title: "All agents",
       desc: "Everything verified across protocols",
-      glyph: "layers" as const,
+      glyph: "agents" as const,
     },
     {
       value: "a2a" as const,
       title: "Hire",
       desc: "Paid tasks · ERC-8183 escrow",
-      glyph: "sparkle" as const,
+      glyph: "dollar" as const,
     },
     {
       value: "mcp" as const,
       title: "Tools",
       desc: "Free tools · Call directly via MCP",
-      glyph: "copy" as const,
+      glyph: "spanner" as const,
     },
   ];
 

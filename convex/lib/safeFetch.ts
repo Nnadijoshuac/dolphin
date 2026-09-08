@@ -162,6 +162,24 @@ export interface SafeFetchOptions {
   timeoutMs: number;
   /** Hard cap, enforced while streaming rather than from content-length. */
   maxBytes: number;
+  /**
+   * Response headers to copy onto the result, lowercased. Opt-in and named
+   * one-by-one: a caller gets the headers it asked for and nothing else.
+   *
+   * ADDED 2026-09-08 for the MCP `tools/call` path. A Streamable HTTP MCP
+   * server issues `Mcp-Session-Id` on `initialize` and a stateful one rejects
+   * every later call that does not echo it back. `probe.ts` never needed this
+   * because `initialize` + `tools/list` is answered without a session by all 26
+   * MCP servers in the catalog - but that is evidence about those two calls,
+   * not about `tools/call`, which nothing has ever sent them.
+   *
+   * Deliberately NOT a blanket `headers` field. A stranger's response headers
+   * are attacker-controlled like the body is, and handing every caller the full
+   * set invites someone to read `set-cookie` or an auth echo out of one. Naming
+   * the header you want keeps the surface at exactly what the caller reasoned
+   * about.
+   */
+  exposeHeaders?: readonly string[];
 }
 
 export interface SafeResponse {
@@ -173,6 +191,11 @@ export interface SafeResponse {
   /** The URL that actually answered, after redirects. */
   finalUrl: string;
   latencyMs: number;
+  /**
+   * Only the headers named in `exposeHeaders`, keyed lowercase. Empty when the
+   * caller asked for none - which is every caller written before this existed.
+   */
+  headers: Record<string, string>;
 }
 
 /**
@@ -260,6 +283,14 @@ export async function safeFetch(
       continue;
     }
 
+    const exposed: Record<string, string> = {};
+    for (const name of options.exposeHeaders ?? []) {
+      const key = name.toLowerCase();
+      const value = response.headers.get(key);
+      // Capped for the same reason the body is: a header is a stranger's bytes.
+      if (value !== null) exposed[key] = value.slice(0, MAX_HEADER_CHARS);
+    }
+
     return {
       ok: response.ok,
       status: response.status,
@@ -267,6 +298,7 @@ export async function safeFetch(
       text: await readCapped(response, options.maxBytes),
       finalUrl: current.toString(),
       latencyMs: Date.now() - startedAt,
+      headers: exposed,
     };
   }
 
@@ -276,3 +308,10 @@ export async function safeFetch(
 /** Byte caps, by what is being fetched. A JSON API answer is small. */
 export const MAX_JSON_BYTES = 256 * 1024;
 export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Cap on a single exposed response header. An MCP session id is a UUID; nothing
+ * legitimate needs more than this, and an unbounded header would be a way to
+ * push a stranger's bytes past the body cap that exists to stop exactly that.
+ */
+const MAX_HEADER_CHARS = 1024;

@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 
 import { BnbBadge, BnbLogo, BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { MobileStackHeader } from "@/components/mobile-stack-header";
 import { useWallet } from "@/wallet/wallet-provider";
 
 const navigation = [
@@ -153,6 +154,7 @@ export function SiteHeader() {
           })}
         </div>
       </nav> : null}
+      {pathname.startsWith("/manage/") && <MobileStackHeader title="Manage agent" fallback="/my-agents" />}
     </>
   );
 }

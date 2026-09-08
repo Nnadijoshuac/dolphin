@@ -19,6 +19,7 @@ import {
   useDolphinChat,
   useDolphinConversation,
 } from "@/hooks/use-dolphin-conversation";
+import { useWallet } from "@/wallet/wallet-provider";
 
 /**
  * DOLPHIN - the in-app agent.
@@ -62,6 +63,11 @@ export default function DolphinScreen() {
   const { conversationKey, send, reset, isSending, sendError } =
     useDolphinChat(seedAgentKey);
   const { turns } = useDolphinConversation(conversationKey);
+  const wallet = useWallet();
+
+  // Two hex characters off the connected address, matching the web build.
+  // "You" when no wallet is connected, which is a supported way to use this.
+  const initials = wallet.address ? wallet.address.slice(2, 4) : "You";
 
   const submit = useCallback(
     (text: string) => {
@@ -161,7 +167,9 @@ export default function DolphinScreen() {
               ))}
             </View>
           ) : (
-            turns.map((turn) => <DolphinTurnView key={turn.id} turn={turn} />)
+            turns.map((turn) => (
+              <DolphinTurnView initials={initials} key={turn.id} turn={turn} />
+            ))
           )}
 
           {/*

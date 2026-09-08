@@ -1,32 +1,39 @@
 import { useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
+import { AgentIcon } from "@/components/agent-icon";
+import { BrandMark } from "@/components/brand-mark";
+import { CategoryGlyph } from "@/components/category-glyph";
+import { DolphinLoader } from "@/components/dolphin-loader";
 import { PressableScale } from "@/components/pressable-scale";
-import { colors, radii } from "@/constants/theme";
+import { colors } from "@/constants/theme";
 import type { DolphinToolCall, DolphinTurn } from "@/hooks/use-dolphin-conversation";
 
 /**
  * One turn of the Dolphin conversation, with the agents it consulted.
  *
- * ---------------------------------------------------------------------------
- * THE CITATION ROWS ARE THE POINT
- * ---------------------------------------------------------------------------
- * They are what separates this from a chatbot bolted onto a crypto app: visible
- * proof that real third-party agents were called, with the latency it took, and
- * a tap-through to the agent's own page.
+ * The web build of this is web/src/app/dolphin/dolphin-client.tsx and
+ * web/src/components/dolphin-tool-calls.tsx. Same design, same information, in
+ * React Native - kept deliberately parallel so a change to one is obviously
+ * portable to the other. Two frontends against one backend is a documented
+ * decision (Agent/DECISION-2026-09-08-two-frontends.md) whose one real cost is
+ * drift.
  *
- * They come from `dolphinToolCalls`, which the ACTION writes before and after
- * each call - they are not parsed out of the model's prose. The model is small
- * and free and will claim to have consulted an agent it never called; rendering
- * its own account of its sources would be the fabricated-provenance failure of
- * AGENTS.md §5. If the answer text and these rows disagree, these rows are
+ * ---------------------------------------------------------------------------
+ * THE CONSULTED-AGENTS BLOCK IS THE PRODUCT
+ * ---------------------------------------------------------------------------
+ * Everything else here is a chat interface, and chat interfaces are a
+ * commodity. That block is what says Dolphin did not answer from its own
+ * weights: it called these third-party agents, asked them these things, and got
+ * these answers, in this many milliseconds.
+ *
+ * Every row comes from `dolphinToolCalls`, which convex/dolphin.ts writes
+ * BEFORE each call and patches after. It is never parsed out of the model's
+ * prose - the model is small and free and will claim to have consulted an agent
+ * it never called. If the answer text and these rows disagree, these rows are
  * right.
- *
- * The rows also make the chat a discovery surface: every consulted agent is a
- * tap away from its marketplace page, so the agent feeds the catalog rather
- * than competing with it.
  */
 
 function relativeTime(timestamp: number): string {
@@ -39,119 +46,299 @@ function relativeTime(timestamp: number): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function CitationRow({ call }: { call: DolphinToolCall }) {
-  const [expanded, setExpanded] = useState(false);
-  const router = useRouter();
+function prettyJson(value: string): string {
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
+}
 
-  const pending = call.latencyMs === null;
-  const failed = call.transportError !== null;
+/**
+ * The consulted agents' icons, overlapped and alternately tilted.
+ *
+ * Deduplicated by AGENT rather than by call: Dolphin frequently asks the same
+ * agent twice in one turn, and four identical stacked icons would imply four
+ * sources where there is one.
+ */
+function StackedIcons({ calls }: { calls: DolphinToolCall[] }) {
+  const seen = new Set<string>();
+  const unique = calls.filter((call) => {
+    if (seen.has(call.agentKey)) return false;
+    seen.add(call.agentKey);
+    return true;
+  });
+  const shown = unique.slice(0, 5);
 
   return (
-    <View
-      style={{
-        borderRadius: radii.small,
-        borderWidth: 1,
-        borderColor: failed ? "#E7D3D3" : colors.goldBorder,
-        backgroundColor: failed ? "#FDF6F6" : colors.goldMuted,
-        marginTop: 8,
-        overflow: "hidden",
-      }}
-    >
-      <PressableScale
-        onPress={() => {
-          void Haptics.selectionAsync();
-          setExpanded((value) => !value);
-        }}
-        containerStyle={{ padding: 12 }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {pending ? (
-            <ActivityIndicator size="small" color={colors.goldDark} />
-          ) : (
-            <View
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: 4,
-                backgroundColor: failed ? "#C0564E" : colors.goldDark,
-              }}
-            />
-          )}
-          <Text style={{ flex: 1, fontSize: 12, fontWeight: "700", color: colors.ink }}>
-            {pending ? "Consulting" : failed ? "Could not reach" : "Consulted"}{" "}
-            {call.agentName}
-          </Text>
-          {call.latencyMs !== null ? (
-            <Text style={{ fontSize: 11, color: colors.inkSecondary }}>
-              {call.latencyMs}ms
-            </Text>
-          ) : null}
-        </View>
-
-        <Text style={{ fontSize: 11, color: colors.inkSecondary, marginTop: 3 }}>
-          {call.toolName}
-          {call.isError && !failed ? " — the agent reported an error" : ""}
-        </Text>
-      </PressableScale>
-
-      {expanded ? (
-        <View style={{ paddingHorizontal: 12, paddingBottom: 12, gap: 10 }}>
+    <View style={{ flexDirection: "row", alignItems: "center" }}>
+      {shown.map((call, index) => (
+        <View
+          key={call.agentKey}
+          style={{
+            marginLeft: index === 0 ? 0 : -8,
+            zIndex: index,
+            transform: [{ rotate: shown.length > 1 ? (index % 2 === 0 ? "8deg" : "-8deg") : "0deg" }],
+          }}
+        >
           {/*
-            Shown verbatim and labelled as the agent's own words. An agent's
-            prose is its CLAIM, never an established outcome - a collectFees
-            tool in this catalog once answered `note: "Fees collected"` when
-            nothing had been collected.
+            The agent's own icon, not a generic glyph. `seed` produces the same
+            deterministic fallback the catalog draws when a publisher serves no
+            image, so a consulted agent looks here as it looks on its own card.
           */}
-          <Text style={{ fontSize: 11, color: colors.inkSecondary, fontWeight: "600" }}>
-            {failed ? "Why it failed" : `What ${call.agentName} returned`}
+          <AgentIcon category="monitoring" seed={call.agentKey} size={26} />
+        </View>
+      ))}
+      {unique.length > shown.length ? (
+        <View
+          style={{
+            marginLeft: -8,
+            width: 26,
+            height: 26,
+            borderRadius: 8,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: colors.goldMuted,
+          }}
+        >
+          <Text style={{ fontSize: 10, fontWeight: "600", color: colors.inkSecondary }}>
+            +{unique.length - shown.length}
           </Text>
-          <Text
-            selectable
-            style={{
-              fontSize: 11,
-              lineHeight: 16,
-              color: colors.inkSecondary,
-              fontFamily: "monospace",
-            }}
-          >
-            {call.transportError ?? call.resultText ?? "No content returned."}
-          </Text>
-
-          <PressableScale
-            onPress={() => {
-              void Haptics.selectionAsync();
-              router.push(`/agent/${encodeURIComponent(call.agentKey)}`);
-            }}
-            containerStyle={{ alignSelf: "flex-start" }}
-          >
-            <Text style={{ fontSize: 12, fontWeight: "700", color: colors.goldDark }}>
-              View {call.agentName} →
-            </Text>
-          </PressableScale>
         </View>
       ) : null}
     </View>
   );
 }
 
-export function DolphinTurnView({ turn }: { turn: DolphinTurn }) {
+function ToolCallRow({ call, isLast }: { call: DolphinToolCall; isLast: boolean }) {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+
+  const failed = call.transportError !== null;
+  const pending = call.latencyMs === null;
+
+  return (
+    <View style={{ flexDirection: "row", gap: 10 }}>
+      {/* Icon column with the connector line down to the next call. */}
+      <View style={{ alignItems: "center" }}>
+        <AgentIcon category="monitoring" seed={call.agentKey} size={26} />
+        {!isLast ? (
+          <View style={{ width: 1, flex: 1, minHeight: 16, backgroundColor: colors.goldBorder }} />
+        ) : null}
+      </View>
+
+      <View style={{ flex: 1, paddingBottom: 10 }}>
+        <PressableScale
+          accessibilityLabel={`Details of the call to ${call.agentName}`}
+          onPress={() => {
+            void Haptics.selectionAsync();
+            setOpen((value) => !value);
+          }}
+          containerStyle={{ flexDirection: "row", alignItems: "center", gap: 5 }}
+        >
+          <Text style={{ fontSize: 12, fontWeight: "600", color: colors.ink, flexShrink: 1 }}>
+            {failed
+              ? `Could not reach ${call.agentName}`
+              : pending
+                ? `Asking ${call.agentName}…`
+                : `Asked ${call.agentName}`}
+          </Text>
+          {call.latencyMs !== null ? (
+            <Text style={{ fontSize: 10.5, color: colors.inkSecondary }}>
+              {call.latencyMs}ms
+            </Text>
+          ) : null}
+          <CategoryGlyph
+            color={colors.inkSecondary}
+            name={open ? "chevron-left" : "chevron-right"}
+            size={12}
+            strokeWidth={2.4}
+          />
+        </PressableScale>
+
+        <Text style={{ fontSize: 11, color: colors.inkSecondary, marginTop: 1 }}>
+          {call.toolName.replace(/[_-]/g, " ")}
+          {call.isError && !failed ? " · the agent reported an error" : ""}
+        </Text>
+
+        {open ? (
+          <View
+            style={{
+              marginTop: 8,
+              borderRadius: 12,
+              backgroundColor: colors.goldMuted,
+              padding: 11,
+              gap: 10,
+            }}
+          >
+            <View>
+              <Text style={{ fontSize: 10.5, fontWeight: "600", color: colors.inkSecondary }}>
+                Dolphin asked
+              </Text>
+              <Text
+                selectable
+                style={{
+                  fontSize: 10.5,
+                  lineHeight: 15,
+                  color: colors.inkSecondary,
+                  fontFamily: "monospace",
+                  marginTop: 3,
+                }}
+              >
+                {prettyJson(call.argumentsJson)}
+              </Text>
+            </View>
+
+            <View>
+              <Text style={{ fontSize: 10.5, fontWeight: "600", color: colors.inkSecondary }}>
+                {failed ? "Why it failed" : `${call.agentName} answered`}
+              </Text>
+              {/*
+                Verbatim, labelled as that agent's own words. An agent's output
+                is its CLAIM, never an established outcome - a collectFees tool
+                in this catalog once answered `note: "Fees collected"` when
+                nothing had been collected.
+              */}
+              <Text
+                selectable
+                style={{
+                  fontSize: 10.5,
+                  lineHeight: 15,
+                  color: colors.inkSecondary,
+                  fontFamily: "monospace",
+                  marginTop: 3,
+                }}
+              >
+                {call.transportError ??
+                  call.resultText ??
+                  (pending ? "Still waiting…" : "No content returned.")}
+              </Text>
+            </View>
+
+            <PressableScale
+              onPress={() => {
+                void Haptics.selectionAsync();
+                router.push({ pathname: "/agent/[id]", params: { id: call.agentKey } });
+              }}
+              containerStyle={{ alignSelf: "flex-start" }}
+            >
+              <Text style={{ fontSize: 11.5, fontWeight: "700", color: colors.goldDark }}>
+                View {call.agentName} →
+              </Text>
+            </PressableScale>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function ConsultedAgents({ calls }: { calls: DolphinToolCall[] }) {
+  const [open, setOpen] = useState(false);
+  if (calls.length === 0) return null;
+
+  const agentCount = new Set(calls.map((call) => call.agentKey)).size;
+  const pending = calls.some((call) => call.latencyMs === null);
+
+  return (
+    <View style={{ marginBottom: 8 }}>
+      <PressableScale
+        accessibilityLabel={`${agentCount} agents consulted`}
+        onPress={() => {
+          void Haptics.selectionAsync();
+          setOpen((value) => !value);
+        }}
+        containerStyle={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          paddingVertical: 6,
+        }}
+      >
+        <StackedIcons calls={calls} />
+        <Text style={{ fontSize: 12, fontWeight: "600", color: colors.inkSecondary, flexShrink: 1 }}>
+          {pending ? "Consulting" : "Consulted"} {agentCount} agent
+          {agentCount > 1 ? "s" : ""} · {calls.length} call{calls.length > 1 ? "s" : ""}
+        </Text>
+        <CategoryGlyph
+          color={colors.inkSecondary}
+          name={open ? "chevron-left" : "chevron-right"}
+          size={14}
+          strokeWidth={2.4}
+        />
+      </PressableScale>
+
+      {open ? (
+        <View style={{ paddingTop: 4 }}>
+          {calls.map((call, index) => (
+            <ToolCallRow call={call} isLast={index === calls.length - 1} key={call.id} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function Avatar({ kind, initials }: { kind: "user" | "assistant"; initials: string }) {
+  const base = {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+  };
+
+  if (kind === "assistant") {
+    return (
+      <View style={[base, { backgroundColor: colors.goldSoft }]}>
+        <BrandMark size={17} />
+      </View>
+    );
+  }
+  return (
+    <View style={[base, { backgroundColor: colors.surfaceSubtle ?? colors.goldMuted }]}>
+      <Text style={{ fontSize: 10.5, fontWeight: "700", color: colors.inkSecondary }}>
+        {initials.toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
+export function DolphinTurnView({
+  turn,
+  initials = "You",
+}: {
+  turn: DolphinTurn;
+  initials?: string;
+}) {
   if (turn.role === "user") {
     return (
-      <View style={{ alignItems: "flex-end", marginBottom: 18 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "flex-end",
+          justifyContent: "flex-end",
+          gap: 8,
+          paddingVertical: 8,
+        }}
+      >
         <View
           style={{
-            maxWidth: "88%",
+            maxWidth: "80%",
             backgroundColor: colors.goldSoft,
             borderRadius: 18,
-            borderTopRightRadius: 6,
+            borderBottomRightRadius: 6,
             paddingHorizontal: 14,
             paddingVertical: 10,
           }}
         >
-          <Text style={{ fontSize: 15, lineHeight: 21, color: colors.ink }}>
+          <Text style={{ fontSize: 14.5, lineHeight: 21, color: colors.ink }}>
             {turn.content}
           </Text>
         </View>
+        <Avatar initials={initials} kind="user" />
       </View>
     );
   }
@@ -159,68 +346,72 @@ export function DolphinTurnView({ turn }: { turn: DolphinTurn }) {
   const working = turn.status === "thinking" || turn.status === "consulting";
 
   return (
-    <View style={{ marginBottom: 22 }}>
-      {working ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <ActivityIndicator size="small" color={colors.goldDark} />
-          <Text style={{ fontSize: 13, color: colors.inkSecondary }}>
-            {turn.status === "thinking"
-              ? "Choosing which agents to ask…"
-              : "Consulting agents…"}
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 8 }}>
+      <Avatar initials="AI" kind="assistant" />
+
+      <View style={{ flex: 1, minWidth: 0 }}>
+        {/*
+          Progress and provenance sit ABOVE the answer, in the order they
+          happened: Dolphin picks who to ask, asks them, then writes.
+        */}
+        {working && turn.toolCalls.length === 0 ? (
+          <DolphinLoader
+            label={
+              turn.status === "thinking"
+                ? "Choosing which agents to ask…"
+                : "Consulting agents…"
+            }
+          />
+        ) : null}
+
+        <ConsultedAgents calls={turn.toolCalls} />
+
+        {turn.status === "error" ? (
+          <View
+            style={{
+              backgroundColor: colors.surfaceSubtle ?? colors.goldMuted,
+              borderRadius: 18,
+              borderBottomLeftRadius: 6,
+              paddingHorizontal: 14,
+              paddingVertical: 11,
+            }}
+          >
+            <Text style={{ fontSize: 14, lineHeight: 20, color: colors.ink }}>
+              {turn.errorReason ?? "Dolphin could not answer that."}
+            </Text>
+          </View>
+        ) : null}
+
+        {turn.content.length > 0 ? (
+          <View
+            style={{
+              backgroundColor: colors.surfaceSubtle ?? colors.goldMuted,
+              borderRadius: 18,
+              borderBottomLeftRadius: 6,
+              paddingHorizontal: 14,
+              paddingVertical: 11,
+            }}
+          >
+            <Text selectable style={{ fontSize: 14.5, lineHeight: 22, color: colors.ink }}>
+              {turn.content}
+            </Text>
+          </View>
+        ) : null}
+
+        {/*
+          WHEN the answer was produced, always shown. A reused answer keeps its
+          ORIGINAL completedAt, so a cached reply must not read as fresh: live
+          metrics restated as current when they were read an hour ago is the
+          fabricated-liveness failure of AGENTS.md §5 wearing a cache as a
+          disguise.
+        */}
+        {turn.status === "complete" && turn.completedAt !== null ? (
+          <Text style={{ fontSize: 10, color: colors.inkSecondary, marginTop: 6, paddingLeft: 4 }}>
+            Answered {relativeTime(turn.completedAt)}
+            {turn.model ? ` · ${turn.model.split("/").pop()?.replace(":free", "")}` : ""}
           </Text>
-        </View>
-      ) : null}
-
-      {/* Citations first while working, so progress is the visible thing. */}
-      {turn.toolCalls.map((call) => (
-        <CitationRow key={call.id} call={call} />
-      ))}
-
-      {turn.status === "error" ? (
-        <View
-          style={{
-            marginTop: turn.toolCalls.length > 0 ? 12 : 0,
-            padding: 14,
-            borderRadius: 14,
-            backgroundColor: "#FDF6F6",
-            borderWidth: 1,
-            borderColor: "#E7D3D3",
-          }}
-        >
-          <Text style={{ fontSize: 14, lineHeight: 20, color: colors.ink }}>
-            {turn.errorReason ?? "Dolphin could not answer that."}
-          </Text>
-        </View>
-      ) : null}
-
-      {turn.content.length > 0 ? (
-        <Text
-          selectable
-          style={{
-            fontSize: 15,
-            lineHeight: 22,
-            color: colors.ink,
-            marginTop: turn.toolCalls.length > 0 ? 14 : 0,
-          }}
-        >
-          {turn.content}
-        </Text>
-      ) : null}
-
-      {/*
-        WHEN the answer was produced, always shown.
-        A reused answer keeps its ORIGINAL completedAt (see promptHash on
-        dolphinMessages), so a cached reply must not read as fresh. Live metrics
-        restated as current when they were read an hour ago is the
-        fabricated-liveness failure of AGENTS.md §5 wearing a cache as a
-        disguise.
-      */}
-      {turn.status === "complete" && turn.completedAt !== null ? (
-        <Text style={{ fontSize: 10, color: colors.inkSecondary, marginTop: 10 }}>
-          Answered {relativeTime(turn.completedAt)}
-          {turn.model ? ` · ${turn.model.split("/").pop()?.replace(":free", "")}` : ""}
-        </Text>
-      ) : null}
+        ) : null}
+      </View>
     </View>
   );
 }

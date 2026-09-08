@@ -122,8 +122,8 @@ export default function SearchScreen() {
         <View
           className="flex-1 flex-row items-center rounded-full bg-white px-3.5 h-[42px]"
           style={{
-            borderColor: isFocused ? colors.gold : colors.line,
-            borderWidth: 1.5,
+            borderColor: colors.line,
+            borderWidth: 1,
             ...shadows.subtle,
           }}
         >
@@ -133,6 +133,7 @@ export default function SearchScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             className="ml-2.5 flex-1 text-[14px] font-medium h-full"
+            cursorColor={colors.ink}
             onBlur={() => {
               setTimeout(() => {
                 setIsFocused(false);
@@ -184,7 +185,7 @@ export default function SearchScreen() {
             borderRadius: 9999,
             backgroundColor: isKindFiltered ? colors.gold : colors.surface,
             borderColor: isKindFiltered ? colors.goldBorder : colors.line,
-            borderWidth: 1.5,
+            borderWidth: 1,
             ...shadows.subtle,
           }}
         >

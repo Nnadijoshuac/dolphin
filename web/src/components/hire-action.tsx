@@ -7,6 +7,7 @@ import { useState } from "react";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { PaymentAction } from "@/components/payment-action";
+import { PearlButton } from "@/components/pearl-button";
 import { agentHiresApi } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { assessAuthorizationCapability } from "@/services/authorization";
@@ -232,15 +233,14 @@ export function HireAction({ agent }: { agent: Agent }) {
             <CategoryGlyph color="currentColor" name="arrow-right" size={16} strokeWidth={2} />
           </Link>
         ) : (
-          <button
+          <PearlButton
             aria-busy={busy}
-            className="interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-paper-muted disabled:text-faint"
             disabled={busy || priceModel === null || paymentOutstanding}
             onClick={() => void runHire(paidJobId)}
             type="button"
           >
             {label}
-          </button>
+          </PearlButton>
         )}
         {state.kind === "done" ? (
           <p className="mt-3 font-mono text-[0.68rem] text-success">

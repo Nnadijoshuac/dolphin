@@ -10,6 +10,7 @@ import {
   useReportBackendStatus,
 } from "@/components/backend-status";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { FilterModal } from "@/components/filter-modal";
 import { StatePanel } from "@/components/state-panel";
 import {
   useAgentList,
@@ -66,7 +67,8 @@ function SearchContent() {
   const [selectedProtocol, setSelectedProtocol] = useState<AgentProtocol | "all">(
     "all",
   );
-
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const isKindFiltered = selectedProtocol !== "all";
 
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
 
@@ -221,6 +223,33 @@ function SearchContent() {
                 Clear
               </button>
             ) : null}
+
+            <button
+              aria-label={
+                isKindFiltered
+                  ? `Filter by kind: ${selectedProtocol === "a2a" ? "Hire" : "Tools"}`
+                  : "Filter by kind"
+              }
+              className={`interactive flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all sm:h-11 sm:w-11 ${
+                isKindFiltered
+                  ? "border-accent bg-accent text-ink shadow-sm"
+                  : "border-line bg-paper text-muted hover:border-line-strong hover:text-ink"
+              }`}
+              onClick={() => setFilterModalOpen(true)}
+              title={
+                isKindFiltered
+                  ? `Filtering by ${selectedProtocol === "a2a" ? "Hire" : "Tools"}`
+                  : "Filter by kind"
+              }
+              type="button"
+            >
+              <CategoryGlyph
+                color="currentColor"
+                name="filter"
+                size={18}
+                strokeWidth={2}
+              />
+            </button>
           </div>
         </form>
 
@@ -290,48 +319,7 @@ function SearchContent() {
         </div>
       </section>
 
-      <div
-        aria-label="Filter by what the agent is"
-        className="flex flex-wrap items-center gap-2 border-b border-line py-4"
-        role="group"
-      >
-        {[
-          { value: "all" as const, label: "Everything", hint: "" },
-          { value: "a2a" as const, label: "Hire for work", hint: "Paid tasks · A2A" },
-          { value: "mcp" as const, label: "Use as a tool", hint: "Call directly · MCP" },
-        ].map((option) => {
-          const isSelected = selectedProtocol === option.value;
-
-          return (
-            <button
-              aria-pressed={isSelected}
-              className={`interactive inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 text-xs font-medium ${
-                isSelected
-                  ? "border-ink bg-ink text-paper"
-                  : "border-line bg-paper text-muted hover:text-ink"
-              }`}
-              key={option.value}
-              onClick={() => setSelectedProtocol(option.value)}
-              type="button"
-            >
-              {option.label}
-              {option.hint ? (
-                <span
-                  className={
-                    isSelected
-                      ? "text-[0.65rem] text-paper-muted"
-                      : "text-[0.65rem] text-faint"
-                  }
-                >
-                  {option.hint}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-
-      <section aria-labelledby="results-heading" className="pt-12 sm:pt-16" id="search-results">
+      <section aria-labelledby="results-heading" className="pt-8 sm:pt-12" id="search-results">
         <div className="flex flex-col gap-3 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="eyebrow">Results</p>
@@ -407,6 +395,13 @@ function SearchContent() {
           </div>
         )}
       </section>
+
+      <FilterModal
+        isOpen={filterModalOpen}
+        onClose={() => setFilterModalOpen(false)}
+        onSelectProtocol={setSelectedProtocol}
+        protocol={selectedProtocol}
+      />
     </div>
   );
 }

@@ -24,6 +24,8 @@ import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import StarIcon from "@hugeicons/core-free-icons/StarIcon";
 import Tick01Icon from "@hugeicons/core-free-icons/Tick01Icon";
 import Wallet01Icon from "@hugeicons/core-free-icons/Wallet01Icon";
+import Dollar01Icon from "@hugeicons/core-free-icons/Dollar01Icon";
+import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
 
 import { colors } from "@/constants/theme";
 import type { AgentCategory } from "@/types/agent";
@@ -95,7 +97,9 @@ export type GlyphName =
   | "refresh"
   | "share"
   | "more"
-  | "star";
+  | "star"
+  | "spanner"
+  | "dollar";
 
 /**
  * Every glyph name that is a Hugeicons mark. A name absent from this map falls
@@ -132,6 +136,8 @@ const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
   share: Share01Icon,
   more: MoreVerticalIcon,
   star: StarIcon,
+  spanner: Wrench01Icon,
+  dollar: Dollar01Icon,
 };
 
 type CategoryGlyphProps = {

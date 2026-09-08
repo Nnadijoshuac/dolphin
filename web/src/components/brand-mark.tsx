@@ -14,11 +14,17 @@ export function BrandMark({
   inverted?: boolean;
   className?: string;
 }) {
-  const isWhite = inverted || color === "#FFFFFF" || color === "white";
+  const isWhite =
+    inverted ||
+    color === "#FFFFFF" ||
+    color === "white" ||
+    color === "#FFE7FF" ||
+    color === "#ffe7ff";
   const isBlack =
     color === "#121316" ||
     color === "#141416" ||
     color === "#111215" ||
+    color === "#080808" ||
     color === "#000000";
 
   return (

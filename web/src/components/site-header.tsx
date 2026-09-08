@@ -38,6 +38,8 @@ export function SiteHeader() {
   const wallet = useWallet();
   const mobileNav = useRef<HTMLElement>(null);
   const isTabPage = navigation.some((item) => item.path === pathname);
+  const TAB_X_POSITIONS = [6, 76, 150, 224, 294] as const;
+  const activeIndex = navigation.findIndex((item) => isActiveRoute(pathname, item.path));
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -138,7 +140,7 @@ export function SiteHeader() {
           ref={mobileNav}
         >
           <div className="mobile-sculpted-nav">
-            {/* The exact 3-lobed metaball SVG background with continuous curvature */}
+            {/* The exact 3-lobed metaball SVG background with continuous curvature & pearl material */}
             <svg
               aria-hidden="true"
               className="mobile-sculpted-nav__bg"
@@ -147,11 +149,61 @@ export function SiteHeader() {
               viewBox="0 0 348 64"
               xmlns="http://www.w3.org/2000/svg"
             >
+              <defs>
+                {/* Pearl base: deep obsidian with metallic/pearl luster */}
+                <linearGradient id="pearl-base" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#1c1b22" />
+                  <stop offset="25%" stopColor="#0a0a0c" />
+                  <stop offset="75%" stopColor="#050506" />
+                  <stop offset="100%" stopColor="#141318" />
+                </linearGradient>
+
+                {/* Pearl rim: luminous top highlight, soft bottom reflection */}
+                <linearGradient id="pearl-rim" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.45)" />
+                  <stop offset="20%" stopColor="rgba(255, 231, 255, 0.22)" />
+                  <stop offset="80%" stopColor="rgba(0, 0, 0, 0.5)" />
+                  <stop offset="100%" stopColor="rgba(255, 231, 255, 0.28)" />
+                </linearGradient>
+
+                {/* Upper dome specular gloss sheen */}
+                <linearGradient id="pearl-gloss" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.28)" />
+                  <stop offset="40%" stopColor="rgba(255, 231, 255, 0.08)" />
+                  <stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
+                </linearGradient>
+              </defs>
+
+              {/* Base Pearl Body */}
               <path
                 d="M 27,5 L 120,5 C 132.00,5.00 143.44,21.59 148.61,14.22 A 31.0 31.0 0 0 1 199.39 14.22 C 204.56,21.59 216.00,5.00 228.00,5.00 L 321,5 C 336,5 346,16 346,32 C 346,48 336,59 321,59 L 228.00,59 C 216.00,59.00 204.56,42.41 199.39,49.78 A 31.0 31.0 0 0 1 148.61 49.78 C 143.44,42.41 132.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
-                fill="#16171A"
+                fill="url(#pearl-base)"
+                stroke="url(#pearl-rim)"
+                strokeWidth="1.2"
+              />
+
+              {/* Specular gloss sheen overlay on upper half */}
+              <path
+                d="M 27,5 L 120,5 C 132.00,5.00 143.44,21.59 148.61,14.22 A 31.0 31.0 0 0 1 199.39 14.22 C 204.56,21.59 216.00,5.00 228.00,5.00 L 321,5 C 336,5 346,16 346,32 C 346,48 336,59 321,59 L 228.00,59 C 216.00,59.00 204.56,42.41 199.39,49.78 A 31.0 31.0 0 0 1 148.61 49.78 C 143.44,42.41 132.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
+                fill="url(#pearl-gloss)"
+                opacity="0.8"
               />
             </svg>
+
+            {/* Sliding Nano Jelly Pill */}
+            {activeIndex !== -1 && (
+              <div
+                className="mobile-sculpted-nav__jelly-pill"
+                style={{
+                  transform: `translateX(${TAB_X_POSITIONS[activeIndex]}px)`,
+                }}
+              >
+                <div
+                  className="mobile-sculpted-nav__jelly-inner"
+                  key={activeIndex}
+                />
+              </div>
+            )}
 
             {/* Left Lobe: Discover & Search */}
             <div className="mobile-sculpted-nav__lobe mobile-sculpted-nav__lobe--left">
@@ -171,7 +223,7 @@ export function SiteHeader() {
                       }`}
                     >
                       <CategoryGlyph
-                        color={isActive ? "#141416" : "#FFFFFF"}
+                        color={isActive ? "#080808" : "#FFE7FF"}
                         name={item.icon}
                         size={21}
                         strokeWidth={isActive ? 2.3 : 1.9}
@@ -200,7 +252,7 @@ export function SiteHeader() {
                       }`}
                     >
                       <BrandMark
-                        color={isActive ? "#141416" : "#FFFFFF"}
+                        color={isActive ? "#080808" : "#FFE7FF"}
                         size={26}
                       />
                     </span>
@@ -227,7 +279,7 @@ export function SiteHeader() {
                       }`}
                     >
                       <CategoryGlyph
-                        color={isActive ? "#141416" : "#FFFFFF"}
+                        color={isActive ? "#080808" : "#FFE7FF"}
                         name={item.icon}
                         size={21}
                         strokeWidth={isActive ? 2.3 : 1.9}

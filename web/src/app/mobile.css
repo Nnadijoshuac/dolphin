@@ -64,7 +64,7 @@
     max-width: calc(100vw - 28px);
     height: 64px;
     pointer-events: auto;
-    filter: drop-shadow(0 14px 32px rgba(0, 0, 0, 0.36));
+    filter: drop-shadow(0 14px 24px rgba(0, 0, 0, 0.45)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
     user-select: none;
     -webkit-user-select: none;
   }
@@ -102,6 +102,46 @@
     padding-right: 6px;
     box-sizing: border-box;
   }
+  .mobile-sculpted-nav__jelly-pill {
+    position: absolute;
+    top: 8px;
+    left: 0;
+    width: 48px;
+    height: 48px;
+    pointer-events: none;
+    z-index: 1;
+    transition: transform 0.44s cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: transform;
+  }
+  .mobile-sculpted-nav__jelly-inner {
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    background: #FFFFFF;
+    box-shadow:
+      0 4px 14px rgba(0, 0, 0, 0.3),
+      inset 0 1px 2px rgba(255, 255, 255, 0.9),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.12);
+    animation: nano-jelly-squish 0.44s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes nano-jelly-squish {
+    0% {
+      transform: scale(0.9, 1.12);
+    }
+    35% {
+      transform: scale(1.16, 0.86);
+    }
+    65% {
+      transform: scale(0.94, 1.06);
+    }
+    85% {
+      transform: scale(1.03, 0.98);
+    }
+    100% {
+      transform: scale(1, 1);
+    }
+  }
+
   .mobile-sculpted-nav__link {
     display: flex;
     align-items: center;
@@ -110,19 +150,20 @@
     -webkit-tap-highlight-color: transparent;
   }
   .mobile-sculpted-nav__bubble {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 48px;
     height: 48px;
     border-radius: 9999px;
-    color: #FFFFFF;
-    transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    color: #FFE7FF;
+    background: transparent;
+    transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), color 0.2s ease;
   }
   .mobile-sculpted-nav__bubble--active {
-    background: #FFFFFF;
-    color: #141416;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    color: #080808;
   }
   .mobile-sculpted-nav__link:active .mobile-sculpted-nav__bubble {
     transform: scale(0.92);

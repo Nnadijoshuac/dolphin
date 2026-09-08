@@ -50,6 +50,8 @@ import {
   normalizeQuote,
   resolveA2AEndpoint,
 } from "./erc8183";
+// The one MCP client. See the note where this file's private copies used to be.
+import { mcpCall, parseJsonRpc } from "./mcpClient";
 import type { AgentProtocol, AgentPricing, FailureClass, VerificationState } from "../model/agent";
 
 /** Fetching a card is cheap; asking for a quote is not. */
@@ -513,49 +515,20 @@ async function probeA2A(
  * MCP
  * ------------------------------------------------------------------------ */
 
-function parseJsonRpc(body: string): Record<string, unknown> | null {
-  // Either a JSON body or an SSE frame carrying one; both are valid answers
-  // from a Streamable HTTP transport server.
-  const start = body.indexOf("{");
-  if (start < 0) return null;
-  try {
-    const parsed = JSON.parse(body.slice(start)) as unknown;
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-async function mcpCall(endpoint: string, method: string, params: unknown): Promise<RawCall> {
-  try {
-    const response = await safeFetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        // Streamable HTTP transport servers require both to be acceptable.
-        accept: "application/json, text/event-stream",
-      },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-      timeoutMs: RPC_TIMEOUT_MS,
-      maxBytes: MAX_JSON_BYTES,
-    });
-    if (!response.ok) {
-      return { ok: false, failureClass: "http", detail: `MCP ${method} -> HTTP ${response.status}` };
-    }
-    return { ok: true, body: response.text };
-  } catch (cause) {
-    if (cause instanceof UnsafeUrlError) {
-      return { ok: false, failureClass: "unsafe-url", detail: cause.message };
-    }
-    return {
-      ok: false,
-      failureClass: "transport",
-      detail: `MCP ${method} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-    };
-  }
-}
+/*
+ * `parseJsonRpc` and `mcpCall` USED TO LIVE HERE (until 2026-09-08).
+ *
+ * They moved to convex/lib/mcpClient.ts when the Dolphin agent needed
+ * `tools/call`, so that the probe and the agent speak one MCP client rather
+ * than two that happen to agree today. This is the same invariant this file's
+ * header states for the A2A path, applied to MCP: a probe that addresses its
+ * target differently from the caller is measuring a different endpoint.
+ *
+ * Behaviour here is unchanged. The shared client additionally carries an
+ * `Mcp-Session-Id` when a server issues one and sends the spec's
+ * `notifications/initialized` after the handshake - both of which are no-ops
+ * against the stateless servers this probe has always talked to.
+ */
 
 /**
  * `initialize`, then `tools/list`.

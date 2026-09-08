@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AgentRow } from "@/components/agent-row";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { CatalogFilterRail } from "@/components/catalog-filter-rail";
-import { FilterSheet } from "@/components/filter-sheet";
+import { SmartFilterModal } from "@/components/smart-filter-modal";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatePanel } from "@/components/state-panel";
 import { categoryLabel } from "@/constants/agents";
@@ -546,8 +546,8 @@ export default function SearchScreen() {
         )}
       </ScrollView>
 
-      {/* Serene Filter Bottom Sheet */}
-      <FilterSheet
+      {/* Smart Filter Modal */}
+      <SmartFilterModal
         categories={categories}
         category={selectedCategory}
         onClose={() => setFilterSheetOpen(false)}

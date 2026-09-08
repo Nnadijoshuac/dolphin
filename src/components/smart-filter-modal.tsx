@@ -24,7 +24,7 @@ interface SmartFilterModalProps {
   onResetAll?: () => void;
 }
 
-interface SmartFilterModalContentProps extends Omit<SmartFilterModalProps, "visible"> {}
+type SmartFilterModalContentProps = Omit<SmartFilterModalProps, "visible">;
 
 /**
  * SmartFilterModalContent

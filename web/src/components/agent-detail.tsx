@@ -6,6 +6,7 @@ import { useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { HireAction } from "@/components/hire-action";
+import { McpUseAction } from "@/components/mcp-use-action";
 import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
 import { TrackRecord } from "@/components/track-record";
@@ -426,9 +427,18 @@ export function AgentDetail({ agent }: { agent: Agent }) {
       </header>
 
       {/* ── Main Layout: Content & Action Sidebar ── */}
-      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-12 lg:items-start">
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-12 lg:items-start">
+        {/* Action Card: On mobile it is order-1 (one of the first things seen!), on desktop it is order-2 (sticky right column) */}
+        <aside className="order-1 lg:order-2 lg:sticky lg:top-24 space-y-4">
+          {agent.protocol === "mcp" ? (
+            <McpUseAction agent={agent} />
+          ) : (
+            <HireAction agent={agent} />
+          )}
+        </aside>
+
         {/* Left Column: Core Agent Information */}
-        <div className="space-y-8 min-w-0">
+        <div className="order-2 lg:order-1 space-y-8 min-w-0">
           {/* 1. About section (Top priority) */}
           <section className="rounded-2xl border border-line bg-paper p-6 sm:p-7">
             <h2 className="text-base font-bold tracking-tight text-ink">About this agent</h2>
@@ -487,11 +497,6 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           {/* 4. Details & Technical Record (Collapsible Accordion) */}
           <TechnicalDetailsAccordion agent={agent} isRegistryVerified={isRegistryVerified} />
         </div>
-
-        {/* Right Column: Sticky Hire & Action Card */}
-        <aside className="lg:sticky lg:top-24 space-y-4">
-          <HireAction agent={agent} />
-        </aside>
       </div>
     </div>
   );

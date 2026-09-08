@@ -60,11 +60,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 350px;
+    width: 348px;
     max-width: calc(100vw - 28px);
     height: 64px;
     pointer-events: auto;
-    filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.35));
+    filter: drop-shadow(0 14px 32px rgba(0, 0, 0, 0.36));
     user-select: none;
     -webkit-user-select: none;
   }
@@ -74,6 +74,7 @@
     width: 100%;
     height: 100%;
     pointer-events: none;
+    shape-rendering: geometricPrecision;
   }
   .mobile-sculpted-nav__lobe {
     position: relative;
@@ -83,22 +84,22 @@
     height: 100%;
   }
   .mobile-sculpted-nav__lobe--left {
-    width: 41.7%;
+    width: 138px;
     justify-content: space-between;
-    padding-left: 8px;
+    padding-left: 6px;
     padding-right: 14px;
     box-sizing: border-box;
   }
   .mobile-sculpted-nav__lobe--center {
-    width: 16.6%;
+    width: 72px;
     justify-content: center;
     box-sizing: border-box;
   }
   .mobile-sculpted-nav__lobe--right {
-    width: 41.7%;
+    width: 138px;
     justify-content: space-between;
     padding-left: 14px;
-    padding-right: 8px;
+    padding-right: 6px;
     box-sizing: border-box;
   }
   .mobile-sculpted-nav__link {

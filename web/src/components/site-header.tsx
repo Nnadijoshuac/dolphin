@@ -138,16 +138,17 @@ export function SiteHeader() {
           ref={mobileNav}
         >
           <div className="mobile-sculpted-nav">
-            {/* The exact 3-lobed metaball SVG background */}
+            {/* The exact 3-lobed metaball SVG background with continuous curvature */}
             <svg
               aria-hidden="true"
               className="mobile-sculpted-nav__bg"
               fill="none"
-              viewBox="0 0 350 64"
+              shapeRendering="geometricPrecision"
+              viewBox="0 0 348 64"
               xmlns="http://www.w3.org/2000/svg"
             >
               <path
-                d="M 30,2 L 122,2 C 134,2 138,15 146,15 C 154,15 162,0 175,0 C 188,0 196,15 204,15 C 212,15 216,2 228,2 L 320,2 A 30 30 0 0 1 320,62 L 228,62 C 216,62 212,49 204,49 C 196,49 188,64 175,64 C 162,64 154,49 146,49 C 138,49 134,62 122,62 L 30,62 A 30 30 0 0 1 30,2 Z"
+                d="M 27,5 L 120,5 C 132.00,5.00 143.44,21.59 148.61,14.22 A 31.0 31.0 0 0 1 199.39 14.22 C 204.56,21.59 216.00,5.00 228.00,5.00 L 321,5 C 336,5 346,16 346,32 C 346,48 336,59 321,59 L 228.00,59 C 216.00,59.00 204.56,42.41 199.39,49.78 A 31.0 31.0 0 0 1 148.61 49.78 C 143.44,42.41 132.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
                 fill="#16171A"
               />
             </svg>

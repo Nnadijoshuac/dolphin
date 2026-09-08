@@ -66,6 +66,7 @@
     filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.75)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.9));
     user-select: none;
     -webkit-user-select: none;
+    overflow: hidden;
   }
   .mobile-sculpted-nav__bg {
     position: absolute;
@@ -95,13 +96,12 @@
   .mobile-sculpted-nav__jelly-pill {
     position: absolute;
     top: 8px;
-    left: 0;
     width: 48px;
     height: 48px;
     pointer-events: none;
     z-index: 1;
-    transition: transform 0.44s cubic-bezier(0.34, 1.56, 0.64, 1);
-    will-change: transform;
+    transition: left 0.44s cubic-bezier(0.34, 1.56, 0.64, 1);
+    will-change: left;
   }
   .mobile-sculpted-nav__jelly-inner {
     width: 100%;

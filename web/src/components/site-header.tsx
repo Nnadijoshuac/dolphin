@@ -38,7 +38,6 @@ export function SiteHeader() {
   const wallet = useWallet();
   const mobileNav = useRef<HTMLElement>(null);
   const isTabPage = navigation.some((item) => item.path === pathname);
-  const TAB_X_POSITIONS = [11, 81, 151, 221, 291] as const;
   const activeIndex = navigation.findIndex((item) => isActiveRoute(pathname, item.path));
 
   useEffect(() => {
@@ -190,12 +189,12 @@ export function SiteHeader() {
               />
             </svg>
 
-            {/* Sliding Nano Jelly Pill */}
+            {/* Sliding Nano Jelly Pill — percentage-based so it scales with container */}
             {activeIndex !== -1 && (
               <div
                 className="mobile-sculpted-nav__jelly-pill"
                 style={{
-                  transform: `translateX(${TAB_X_POSITIONS[activeIndex]}px)`,
+                  left: `calc(${activeIndex * 20 + 10}% - 24px)`,
                 }}
               >
                 <div

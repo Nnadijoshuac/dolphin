@@ -10,6 +10,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { Button } from "@/components/buttons";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { NavigationButton } from "@/components/navigation-button";
+import { PearlButton, PEARL_LABEL_COLOR } from "@/components/pearl-button";
 import { PressableScale } from "@/components/pressable-scale";
 import { ReviewForm } from "@/components/review-form";
 import { StatePanel } from "@/components/state-panel";
@@ -153,10 +154,20 @@ export default function ManageAgentRoute() {
             state="empty"
             title="Nothing to manage"
           />
-          <Button
+          <PearlButton
+            accessibilityLabel="Browse agents"
+            iconRight={
+              <CategoryGlyph
+                color={PEARL_LABEL_COLOR}
+                name="arrow-right"
+                size={16}
+                strokeWidth={2.4}
+              />
+            }
             label="Browse agents"
             onPress={() => router.replace("/(tabs)/search")}
-            style={{ marginTop: 18 }}
+            size="lg"
+            style={{ marginTop: 18, width: "100%" }}
           />
         </View>
       </SafeAreaView>

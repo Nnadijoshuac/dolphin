@@ -4,8 +4,8 @@ import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AgentIcon } from "@/components/agent-icon";
-import { Button } from "@/components/buttons";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { PearlButton, PEARL_LABEL_COLOR } from "@/components/pearl-button";
 import { PressableScale } from "@/components/pressable-scale";
 import { StatusBadge } from "@/components/status-badge";
 import { Surface } from "@/components/surface";
@@ -144,14 +144,25 @@ export default function MyAgentsScreen() {
                   <Text className="text-center text-[20px] font-bold" style={{ color: colors.ink }}>
                     No agents yet
                   </Text>
-                  <Text className="mt-2 text-center text-[14px] leading-5" style={{ color: colors.muted }}>
+                  <Text className="mt-2 text-center text-[14px] leading-5" style={{ color: colors.inkSecondary }}>
                     Review an agent’s identity, data availability, authorization model,
                     and payment readiness before hiring or saving a setup preview.
                   </Text>
                   <View className="mt-6 w-full">
-                    <Button
+                    <PearlButton
+                      accessibilityLabel="Browse agent catalog"
+                      iconRight={
+                        <CategoryGlyph
+                          color={PEARL_LABEL_COLOR}
+                          name="arrow-right"
+                          size={16}
+                          strokeWidth={2.4}
+                        />
+                      }
                       label="Browse agent catalog"
                       onPress={() => router.push("/(tabs)/search")}
+                      size="lg"
+                      style={{ width: "100%" }}
                     />
                   </View>
                 </View>

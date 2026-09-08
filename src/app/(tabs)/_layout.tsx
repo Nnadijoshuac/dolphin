@@ -10,6 +10,7 @@ import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 
+import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
@@ -105,6 +106,19 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
+
+          /*
+           * Dolphin is not a peer tab - it is the primary action, and it is
+           * drawn as a raised orb OUTSIDE this container. See the note where
+           * that orb is rendered for why it cannot live in here.
+           *
+           * A flex:1 spacer still reserves its slot, so the four real tabs
+           * distribute around it exactly as they would around a fifth item.
+           */
+          if (route.name === "dolphin") {
+            return <View key={route.key} style={{ flex: 1 }} pointerEvents="none" />;
+          }
+
           const label =
             options.tabBarLabel !== undefined
               ? options.tabBarLabel
@@ -160,6 +174,96 @@ function FloatingIslandTabBar({ state, descriptors, navigation }: BottomTabBarPr
           );
         })}
       </View>
+
+      {/*
+        THE DOLPHIN ORB.
+        ---------------------------------------------------------------------
+        Rendered here, as a sibling of the island rather than a child of it,
+        and this is not a stylistic choice: the island sets
+        `overflow: "hidden"` with `borderRadius: 31` to keep the BlurView from
+        bleeding past its corners, so anything drawn inside it that breaks the
+        baseline is CLIPPED. An orb that rises above the bar has to escape that
+        container, and the outer wrapper - which is `pointerEvents="box-none"`
+        and has no overflow rule - is where it can.
+
+        It is deliberately not styled like the other four. Dolphin is the
+        product's primary action, not a fifth section, and a peer-styled tab
+        would say the opposite.
+      */}
+      <DolphinOrb state={state} navigation={navigation} />
+    </View>
+  );
+}
+
+/**
+ * The raised centre action. Positioned over the island's middle slot, which the
+ * spacer above reserves for it.
+ */
+function DolphinOrb({
+  state,
+  navigation,
+}: Pick<BottomTabBarProps, "state" | "navigation">) {
+  const index = state.routes.findIndex((route) => route.name === "dolphin");
+  if (index < 0) return null;
+
+  const isFocused = state.index === index;
+  const route = state.routes[index];
+
+  const onPress = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const event = navigation.emit({
+      type: "tabPress",
+      target: route.key,
+      canPreventDefault: true,
+    });
+    if (!isFocused && !event.defaultPrevented) {
+      navigation.navigate(route.name);
+    }
+  };
+
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: "absolute",
+        // Lifts the orb so it overlaps the island's top edge rather than
+        // sitting on it. The island is 62 tall; 58 puts roughly a third of the
+        // orb above the bar.
+        bottom: 14,
+        left: 0,
+        right: 0,
+        alignItems: "center",
+      }}
+    >
+      <PressableScale
+        accessibilityLabel="Dolphin"
+        accessibilityRole="tab"
+        accessibilityState={{ selected: isFocused }}
+        onPress={onPress}
+        containerStyle={{ alignItems: "center", justifyContent: "center" }}
+      >
+        <View
+          style={{
+            width: 58,
+            height: 58,
+            borderRadius: 29,
+            backgroundColor: isFocused ? colors.goldHover : colors.gold,
+            alignItems: "center",
+            justifyContent: "center",
+            borderWidth: 3,
+            // Matches the island's own translucency so the orb reads as part
+            // of the same object rather than floating in front of it.
+            borderColor: Platform.OS === "ios" ? "rgba(255,255,255,0.85)" : "#FFFFFF",
+            shadowColor: colors.goldDark,
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.35,
+            shadowRadius: 12,
+            elevation: 14,
+          }}
+        >
+          <BrandMark size={30} color={colors.ink} />
+        </View>
+      </PressableScale>
     </View>
   );
 }
@@ -203,6 +307,17 @@ export default function TabsLayout() {
         name="search"
         options={{
           title: "Search",
+        }}
+      />
+      {/*
+        DECLARATION ORDER IS RENDER ORDER, and the orb is drawn over the slot
+        this reserves - so Dolphin must be third of five for it to land in the
+        middle of the island. Moving this line moves the button.
+      */}
+      <Tabs.Screen
+        name="dolphin"
+        options={{
+          title: "Dolphin",
         }}
       />
       <Tabs.Screen

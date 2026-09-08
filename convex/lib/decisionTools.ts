@@ -33,7 +33,91 @@ import type { ToolDefinition } from "./openrouter";
 export const MAX_AGENTS_PER_DECISION = 4;
 
 /** How many tools from any one agent may be offered. */
-export const MAX_TOOLS_PER_AGENT = 8;
+export const MAX_TOOLS_PER_AGENT = 3;
+
+/**
+ * The total menu size, and the most important number in this file.
+ *
+ * MEASURED 2026-09-08. At 28 tools, `nvidia/nemotron-3-super-120b-a12b:free`
+ * stopped emitting structured tool calls and instead wrote the call as JSON
+ * into the message body - `finish_reason: "stop"`, `tool_calls: []`, and a
+ * content of `[{"name": "a1__find_agents_on_bnb_chain", "parameters": {...}}]`.
+ * The same model against a hand-written one-tool menu emits a correct
+ * structured call every time.
+ *
+ * That is the degradation mode of a small model given too much surface, and it
+ * is silent: nothing errors, the caller simply sees no tool calls. Ten is
+ * chosen to sit far below where it was observed to break, not adjacent to it.
+ *
+ * If a bigger model is ever used here, raise this deliberately and re-measure -
+ * do not assume it inherited the ceiling.
+ */
+export const MAX_TOOLS_TOTAL = 10;
+
+/**
+ * Tool-name fragments that indicate a tool DOES something rather than reports
+ * something. Any match is excluded from the menu.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS EXISTS
+ * ---------------------------------------------------------------------------
+ * Found by reading a real menu on 2026-09-08. A query about Venus lending
+ * selected "Aave powered by HeyAnon", and the menu Dolphin was about to hand a
+ * free model contained `borrow`, `supply`, `withdraw`, `repay`,
+ * `repayWithATokens`, `liquidationCall`, `setEModeCategory` and
+ * `setUsageAsCollateral`.
+ *
+ * Dolphin's stated guarantee is that it cannot spend or take on-chain actions.
+ * Putting write verbs in front of the model contradicts that in the one place
+ * where it matters, whatever the prompt says - a prompt is a request, and a
+ * tool menu is a capability.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS IS AND IS NOT
+ * ---------------------------------------------------------------------------
+ * This is a DENYLIST over names a stranger chose, so it is defence in depth and
+ * not a guarantee. Something will eventually be named in a way it does not
+ * catch. Two things stand behind it:
+ *
+ *   1. Dolphin holds no key and can sign nothing. An MCP tool cannot move funds
+ *      without a signature, and one such tool in this catalog was verified to
+ *      return UNSIGNED CALLDATA rather than execute
+ *      (SESSION-LOG-2026-09-07-backend-rebuild.md §12).
+ *   2. Every call is recorded in `dolphinToolCalls` before it is made, so an
+ *      unexpected one is visible after the fact rather than silent.
+ *
+ * Neither makes the denylist optional. It is the layer that stops the model
+ * being ASKED to do these things at all.
+ */
+const MUTATING_TOOL_PATTERNS = [
+  "borrow", "supply", "withdraw", "repay", "liquidat", "swap", "transfer",
+  "approve", "execute", "send", "buy", "sell", "stake", "claim", "mint",
+  "burn", "deposit", "bridge", "sign", "rebalance", "cancel", "pause",
+  "resume", "close", "open_position", "set_", "set-", "act", "trade",
+  "allocate", "migrate", "route",
+];
+
+/**
+ * Verbs that are only mutating when they START the name.
+ *
+ * Kept separate because as substrings they are everywhere and harmless -
+ * "asset" contains "set", "budget" contains "get", "created_at" contains
+ * "create". `setEModeCategory` and `setUsageAsCollateral` both survived the
+ * substring list on 2026-09-08 for exactly that reason: the pattern was written
+ * as "set_" and these are camelCase.
+ */
+const MUTATING_PREFIXES = [
+  "set", "add", "remove", "update", "create", "delete", "enable", "disable",
+  "toggle", "start", "stop", "run",
+];
+
+function isMutating(toolName: string): boolean {
+  const name = toolName.toLowerCase();
+  if (MUTATING_PREFIXES.some((prefix) => name.startsWith(prefix))) return true;
+  // camelCase and snake_case both appear in this catalog, so match on the raw
+  // lowercased string rather than tokenizing.
+  return MUTATING_TOOL_PATTERNS.some((pattern) => name.includes(pattern));
+}
 
 /** OpenAI-compatible function names: letters, digits, underscore, hyphen. */
 const NAME_SAFE = /[^a-zA-Z0-9_-]/g;
@@ -99,7 +183,15 @@ export async function buildToolMenu(candidates: CandidateAgent[]): Promise<ToolM
       const session = await openMcpSession(candidate.endpoint);
       const available = await listMcpTools(session);
 
-      for (const tool of available.slice(0, MAX_TOOLS_PER_AGENT)) {
+      // Read-only tools only, then a per-agent cap so one chatty server cannot
+      // consume the whole menu and crowd out the other agents' answers.
+      const readable = available
+        .filter((tool) => !isMutating(tool.name))
+        .slice(0, MAX_TOOLS_PER_AGENT);
+
+      for (const tool of readable) {
+        if (tools.length >= MAX_TOOLS_TOTAL) break;
+
         const functionName = `a${index}__${tool.name.replace(NAME_SAFE, "_")}`.slice(0, 64);
         if (bindings.has(functionName)) continue;
 

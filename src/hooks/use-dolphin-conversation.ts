@@ -127,7 +127,7 @@ export function useDolphinChat(seedAgentKey?: string | null) {
             ...(seedAgentKey ? { seedAgentKey } : {}),
             // Binds the conversation to the wallet when signed in, so it shows
             // up in history. Anonymous is permitted and is not an error.
-            ...(session.token ? { sessionToken: session.token } : {}),
+            ...(session.sessionToken ? { sessionToken: session.sessionToken } : {}),
           });
           key = created.conversationKey;
           setConversationKey(key);
@@ -147,7 +147,7 @@ export function useDolphinChat(seedAgentKey?: string | null) {
         setIsSending(false);
       }
     },
-    [ask, conversationKey, createConversation, isSending, seedAgentKey, session.token],
+    [ask, conversationKey, createConversation, isSending, seedAgentKey, session.sessionToken],
   );
 
   const reset = useCallback(() => {

@@ -80,6 +80,22 @@ const MAX_STORED_RESULT_CHARS = 4_000;
 /** What the model is allowed to see of a tool's answer. */
 const MAX_MODEL_RESULT_CHARS = 6_000;
 
+/**
+ * The prompt for the TOOL ROUNDS. Deliberately almost empty.
+ *
+ * MEASURED 2026-09-08. With the full rule list below in front of it,
+ * `nemotron-3-super` stopped emitting structured tool calls and wrote them as
+ * JSON into the message body instead - at 28 tools and still at 10, so it was
+ * never only a menu-size problem. It is a reasoning model, and a long
+ * rule-heavy prompt makes it deliberate in prose, which is exactly the mode in
+ * which a tool call becomes text.
+ *
+ * The honesty rules are not needed here anyway: nothing this turn produces is
+ * shown to anyone. The only job is to gather evidence. The rules apply where
+ * they matter, at synthesis, when there is prose to govern.
+ */
+const CONSULT_PROMPT = `You gather evidence by calling tools. Call the tools that will answer the user's question. Do not write prose. Do not explain your plan. Only call tools.`;
+
 const SYSTEM_PROMPT = `You are Dolphin, an assistant inside a marketplace of on-chain AI agents on BNB Smart Chain.
 
 You answer by CONSULTING the agents available to you as tools. Those tools are real agents published by third parties, and calling one is how you learn anything specific.
@@ -90,7 +106,7 @@ Rules you must follow:
 2. Attribute every specific claim to the agent it came from, by name, in your prose. Write "Brain on BNB reports a health factor of 1.84" - never "your health factor is 1.84".
 3. A tool's output is that agent's CLAIM, not an established outcome. If an agent says it did something, report that it said so. Agents in this catalog have been observed reporting success for actions that did not occur.
 4. If the tools you called do not answer the question, say so plainly. An honest "the agents I can reach do not cover this" is correct and useful. Inventing a plausible answer is not.
-5. Be brief and concrete. You are on a phone screen.
+5. Be brief and concrete. You are rendered as plain text on a phone screen: no markdown tables, no headings, no code fences. Short paragraphs, and a dash for a list item if you need one. A table will render as unreadable pipe characters.
 
 You cannot spend money, sign transactions, or take on-chain actions. If the user needs paid work, explain which agent could do it and that hiring it requires their own signature.`;
 
@@ -350,6 +366,123 @@ export const candidatesFor = internalQuery({
   },
 });
 
+/**
+ * What the model budget actually looks like right now, and whether the model
+ * this agent depends on will answer a tool call.
+ *
+ * Exists because the free tier fails in ways that look like application bugs.
+ * A model that is out of budget, and a model that is present but declines to
+ * emit a structured tool call, produce the same visible symptom - an answer
+ * with no citations - and they need completely different responses. Guessing
+ * between them wasted a cycle on 2026-09-08.
+ *
+ * Returns no secret: `/api/v1/key` reports usage and limits, never the key.
+ *
+ * Run it with:
+ *   npx convex run dolphin:checkModelBudget '{}'
+ */
+export const checkModelBudget = action({
+  args: { text: v.optional(v.string()) },
+  handler: async (
+    ctx,
+    { text },
+  ): Promise<{
+    budget: unknown;
+    toolCallProbe: { model: string; toolCalls: number; finishReason: string | null } | string;
+    realMenu?: unknown;
+  }> => {
+    let budget: unknown;
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/key", {
+        headers: { authorization: `Bearer ${process.env.OPENROUTER_API_KEY ?? ""}` },
+      });
+      budget = JSON.parse(await response.text());
+    } catch (cause) {
+      budget = `could not read: ${cause instanceof Error ? cause.message : String(cause)}`;
+    }
+
+    // The smallest possible question that REQUIRES a tool call to answer.
+    let toolCallProbe: { model: string; toolCalls: number; finishReason: string | null } | string;
+    try {
+      const result = await chatCompletion({
+        messages: [{ role: "user", content: "What is the weather in Lagos? Use the tool." }],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "get_weather",
+              description: "Returns the current weather for a city.",
+              parameters: {
+                type: "object",
+                properties: { city: { type: "string" } },
+                required: ["city"],
+              },
+            },
+          },
+        ],
+        toolChoice: "required",
+      });
+      toolCallProbe = {
+        model: result.model,
+        toolCalls: result.toolCalls.length,
+        finishReason: result.finishReason,
+      };
+    } catch (cause) {
+      toolCallProbe = cause instanceof Error ? cause.message : String(cause);
+    }
+
+    if (text === undefined) return { budget, toolCallProbe };
+
+    /*
+     * The same menu a real question would build, then the same forced call.
+     * This is the half that matters: the model demonstrably emits tool calls
+     * against a hand-written one-tool menu, so a failure here is the CATALOG's
+     * schemas, not the model - and the two need opposite fixes.
+     */
+    const candidates: CandidateAgent[] = await ctx.runQuery(internal.dolphin.candidatesFor, {
+      text,
+      limit: 6,
+    });
+    const menu = await buildToolMenu(candidates);
+
+    let menuProbe: unknown;
+    try {
+      const result = await chatCompletion({
+        messages: [
+          { role: "system", content: CONSULT_PROMPT },
+          { role: "user", content: text },
+        ],
+        tools: menu.tools,
+        toolChoice: "required",
+      });
+      menuProbe = {
+        model: result.model,
+        toolCalls: result.toolCalls.length,
+        finishReason: result.finishReason,
+        content: result.content.slice(0, 300),
+      };
+    } catch (cause) {
+      menuProbe = cause instanceof Error ? cause.message : String(cause);
+    }
+
+    return {
+      budget,
+      toolCallProbe,
+      realMenu: {
+        candidates: candidates.map((candidate) => candidate.name),
+        unreachable: menu.unreachable,
+        toolCount: menu.tools.length,
+        tools: menu.tools.map((tool) => ({
+          name: tool.function.name,
+          schemaBytes: JSON.stringify(tool.function.parameters).length,
+          schema: tool.function.parameters,
+        })),
+        menuProbe,
+      },
+    };
+  },
+});
+
 /* ---------------------------------------------------------------------------
  * The loop
  * ------------------------------------------------------------------------ */
@@ -417,8 +550,10 @@ export const ask = action({
         return { messageId: assistantId };
       }
 
+      // Starts with the terse consult prompt; swapped for the full rules before
+      // synthesis. See CONSULT_PROMPT for the measurement behind the split.
       const messages: ChatMessage[] = [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: CONSULT_PROMPT },
         { role: "user", content: text },
       ];
 
@@ -443,6 +578,7 @@ export const ask = action({
        * would make it invent a reason to make one.
        */
       let callsRemaining = MAX_TOOL_CALLS_PER_TURN;
+      let callsMade = 0;
 
       for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
         const turn = await chatCompletion({
@@ -461,6 +597,7 @@ export const ask = action({
 
         const batch = turn.toolCalls.slice(0, callsRemaining);
         callsRemaining -= batch.length;
+        callsMade += batch.length;
 
         await executeToolCalls(ctx, {
           conversationId,
@@ -471,8 +608,43 @@ export const ask = action({
         });
       }
 
-      // SYNTHESIZE. No tools: the evidence is in, and the model must now write
-      // an answer rather than reach for one more call it cannot afford.
+      /*
+       * NO CITATIONS, NO ANSWER.
+       *
+       * If nothing was consulted there is nothing to synthesise from, and
+       * anything the model writes here is its own weights talking - an
+       * unsourced answer wearing the costume of a researched one. That is the
+       * single outcome this product exists to not produce, and it is worse than
+       * a stated failure because only one of the two tells the user something
+       * true.
+       *
+       * Reached for real on 2026-09-08: `tool_choice: "required"` was set and
+       * the served model returned no tool calls anyway, the loop fell through,
+       * and synthesis produced prose from an empty evidence set. Providers on
+       * this tier do not all honour forced tool use, so it is enforced here
+       * rather than assumed of them.
+       */
+      if (callsMade === 0) {
+        await ctx.runMutation(internal.dolphin.setMessageStatus, {
+          messageId: assistantId,
+          status: "error",
+          errorReason:
+            "Dolphin could not get any of the matching agents to answer, so it has nothing " +
+            "to base a reply on. It will not guess. Try asking again, or rephrase the question " +
+            "toward what a specific agent does.",
+        });
+        return { messageId: assistantId };
+      }
+
+      /*
+       * SYNTHESIZE. No tools: the evidence is in, and the model must now write
+       * an answer rather than reach for one more call it cannot afford.
+       *
+       * The system turn is swapped here, from the terse consult prompt to the
+       * full rules. This is the point where prose starts existing, so it is the
+       * point where rules about prose start applying.
+       */
+      messages[0] = { role: "system", content: SYSTEM_PROMPT };
       const final = await chatCompletion({ messages });
 
       await ctx.runMutation(internal.dolphin.setMessageStatus, {

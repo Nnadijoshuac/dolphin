@@ -470,28 +470,27 @@ export function AgentDetail({
     if (agent.protocol === "mcp") return "Free to Connect";
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 18;
+      if (!agent.pricing.tokenDecimals && !tokenMeta) {
+        return "Syncing price…";
+      }
+      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 0;
       const symbol =
         agent.pricing.tokenSymbol ||
         tokenMeta?.symbol ||
-        (agent.pricing.token.startsWith("0x")
-          ? shortAddress(agent.pricing.token)
-          : agent.pricing.token);
+        shortAddress(agent.pricing.token);
       return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
     if (price === null) return "Price not reported yet";
     if (Number(price.amount) === 0) return "Free to hire";
 
-    const isHexToken = price.token.startsWith("0x");
-    const decimals = tokenMeta?.decimals || (isHexToken ? 18 : 0);
-    const symbol =
-      tokenMeta?.symbol ||
-      (isHexToken ? shortAddress(price.token) : price.token);
-
-    if (decimals > 0) {
-      return `${formatTokenAmount(price.amount, decimals)} ${symbol} per hire`;
+    if (price.token.startsWith("0x")) {
+      if (!tokenMeta) {
+        return "Syncing price…";
+      }
+      return `${formatTokenAmount(price.amount, tokenMeta.decimals)} ${tokenMeta.symbol} per hire`;
     }
-    return `${price.amount} ${symbol} per hire`;
+
+    return `${price.amount} ${price.token} per hire`;
   })();
 
   const MAX_PREVIEW_LENGTH = 220;

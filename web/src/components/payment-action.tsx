@@ -82,25 +82,24 @@ export function PaymentAction({
   const catalogPrice = (() => {
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 18;
+      if (!agent.pricing.tokenDecimals && !tokenMeta) {
+        return "Syncing price…";
+      }
+      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 0;
       const symbol =
         agent.pricing.tokenSymbol ||
         tokenMeta?.symbol ||
-        (agent.pricing.token.startsWith("0x")
-          ? shortAddress(agent.pricing.token)
-          : agent.pricing.token);
+        shortAddress(agent.pricing.token);
       return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
     if (priceAmount !== null && Number(priceAmount) > 0 && priceToken) {
-      const isHexToken = priceToken.startsWith("0x");
-      const decimals = tokenMeta?.decimals || (isHexToken ? 18 : 0);
-      const symbol =
-        tokenMeta?.symbol ||
-        (isHexToken ? shortAddress(priceToken) : priceToken);
-      if (decimals > 0) {
-        return `${formatTokenAmount(priceAmount, decimals)} ${symbol}`;
+      if (priceToken.startsWith("0x")) {
+        if (!tokenMeta) {
+          return "Syncing price…";
+        }
+        return `${formatTokenAmount(priceAmount, tokenMeta.decimals)} ${tokenMeta.symbol}`;
       }
-      return `${priceAmount} ${symbol}`;
+      return `${priceAmount} ${priceToken}`;
     }
     return null;
   })();

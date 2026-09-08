@@ -92,28 +92,27 @@ export function HireAction({ agent }: { agent: Agent }) {
     if (agent.protocol === "mcp") return "Free to Connect";
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 18;
+      if (!agent.pricing.tokenDecimals && !tokenMeta) {
+        return "Syncing price…";
+      }
+      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 0;
       const symbol =
         agent.pricing.tokenSymbol ||
         tokenMeta?.symbol ||
-        (agent.pricing.token.startsWith("0x")
-          ? shortAddress(agent.pricing.token)
-          : agent.pricing.token);
+        shortAddress(agent.pricing.token);
       return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
     if (priceModel === null) return "Price not reported yet";
     if (Number(priceModel.amount) === 0) return "Free to hire";
 
-    const isHexToken = priceModel.token.startsWith("0x");
-    const decimals = tokenMeta?.decimals || (isHexToken ? 18 : 0);
-    const symbol =
-      tokenMeta?.symbol ||
-      (isHexToken ? shortAddress(priceModel.token) : priceModel.token);
-
-    if (decimals > 0) {
-      return `${formatTokenAmount(priceModel.amount, decimals)} ${symbol}`;
+    if (priceModel.token.startsWith("0x")) {
+      if (!tokenMeta) {
+        return "Syncing price…";
+      }
+      return `${formatTokenAmount(priceModel.amount, tokenMeta.decimals)} ${tokenMeta.symbol}`;
     }
-    return `${priceModel.amount} ${symbol}`;
+
+    return `${priceModel.amount} ${priceModel.token}`;
   })();
 
   const priceIsFree =

@@ -25,13 +25,8 @@ export interface TokenMetadata {
   decimals: number;
 }
 
-/** Pre-seeded verified BSC tokens for instant synchronous rendering */
-const tokenCache = new Map<string, TokenMetadata>([
-  ["0xce24439f2d9c6a2289f741120fe202248b666666", { symbol: "$U", decimals: 18 }],
-  ["0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c", { symbol: "WBNB", decimals: 18 }],
-  ["0x55d398326f99059ff775485246999027b3197955", { symbol: "USDT", decimals: 18 }],
-  ["0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", { symbol: "USDC", decimals: 18 }],
-]);
+/** Session cache populated exclusively by live on-chain reads from the ERC-20 contract */
+const tokenCache = new Map<string, TokenMetadata>();
 
 export function useTokenMetadata(tokenAddress: string | null | undefined): TokenMetadata | null {
   const normalized = tokenAddress && isAddress(tokenAddress) ? tokenAddress.toLowerCase() : null;

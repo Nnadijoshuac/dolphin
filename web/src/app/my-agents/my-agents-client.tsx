@@ -210,7 +210,7 @@ export function MyAgentsClient() {
 
   return (
     <div className="mobile-my-agents site-frame page-shell" style={{ paddingBlockStart: "clamp(1.5rem, 4vw, 3rem)" }}>
-      <header className="mobile-only mobile-page-heading"><h1>My Agents</h1><p>Your hired agents</p></header>
+      <header className="mobile-only mobile-page-heading"><h1>My Agents</h1><p>Hired agents and saved setup previews</p></header>
       <div>
         {!wallet.isConnected || !wallet.address ? (
           isMobile ? <MobileEmptyAgents /> :

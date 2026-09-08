@@ -38,7 +38,7 @@ export function SiteHeader() {
   const wallet = useWallet();
   const mobileNav = useRef<HTMLElement>(null);
   const isTabPage = navigation.some((item) => item.path === pathname);
-  const TAB_X_POSITIONS = [6, 76, 150, 224, 294] as const;
+  const TAB_X_POSITIONS = [11, 81, 151, 221, 291] as const;
   const activeIndex = navigation.findIndex((item) => isActiveRoute(pathname, item.path));
 
   useEffect(() => {
@@ -140,43 +140,43 @@ export function SiteHeader() {
           ref={mobileNav}
         >
           <div className="mobile-sculpted-nav">
-            {/* The exact 3-lobed metaball SVG background with continuous curvature & pearl material */}
+            {/* The exact 3-lobed metaball SVG background with continuous curvature & deep obsidian pearl material */}
             <svg
               aria-hidden="true"
               className="mobile-sculpted-nav__bg"
               fill="none"
               shapeRendering="geometricPrecision"
-              viewBox="0 0 348 64"
+              viewBox="0 0 350 64"
               xmlns="http://www.w3.org/2000/svg"
             >
               <defs>
-                {/* Pearl base: deep obsidian with metallic/pearl luster */}
+                {/* Deep pitch-black obsidian pearl base */}
                 <linearGradient id="pearl-base" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#1c1b22" />
-                  <stop offset="25%" stopColor="#0a0a0c" />
-                  <stop offset="75%" stopColor="#050506" />
-                  <stop offset="100%" stopColor="#141318" />
+                  <stop offset="0%" stopColor="#0a0a0c" />
+                  <stop offset="25%" stopColor="#040405" />
+                  <stop offset="75%" stopColor="#000000" />
+                  <stop offset="100%" stopColor="#060608" />
                 </linearGradient>
 
-                {/* Pearl rim: luminous top highlight, soft bottom reflection */}
+                {/* Subtle rim highlight */}
                 <linearGradient id="pearl-rim" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.45)" />
-                  <stop offset="20%" stopColor="rgba(255, 231, 255, 0.22)" />
-                  <stop offset="80%" stopColor="rgba(0, 0, 0, 0.5)" />
-                  <stop offset="100%" stopColor="rgba(255, 231, 255, 0.28)" />
+                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.16)" />
+                  <stop offset="20%" stopColor="rgba(255, 231, 255, 0.08)" />
+                  <stop offset="80%" stopColor="rgba(0, 0, 0, 0.8)" />
+                  <stop offset="100%" stopColor="rgba(255, 231, 255, 0.1)" />
                 </linearGradient>
 
-                {/* Upper dome specular gloss sheen */}
+                {/* Delicate specular gloss sheen */}
                 <linearGradient id="pearl-gloss" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.28)" />
-                  <stop offset="40%" stopColor="rgba(255, 231, 255, 0.08)" />
+                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.1)" />
+                  <stop offset="35%" stopColor="rgba(255, 231, 255, 0.03)" />
                   <stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
                 </linearGradient>
               </defs>
 
               {/* Base Pearl Body */}
               <path
-                d="M 27,5 L 120,5 C 132.00,5.00 143.44,21.59 148.61,14.22 A 31.0 31.0 0 0 1 199.39 14.22 C 204.56,21.59 216.00,5.00 228.00,5.00 L 321,5 C 336,5 346,16 346,32 C 346,48 336,59 321,59 L 228.00,59 C 216.00,59.00 204.56,42.41 199.39,49.78 A 31.0 31.0 0 0 1 148.61 49.78 C 143.44,42.41 132.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
+                d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
                 fill="url(#pearl-base)"
                 stroke="url(#pearl-rim)"
                 strokeWidth="1.2"
@@ -184,9 +184,9 @@ export function SiteHeader() {
 
               {/* Specular gloss sheen overlay on upper half */}
               <path
-                d="M 27,5 L 120,5 C 132.00,5.00 143.44,21.59 148.61,14.22 A 31.0 31.0 0 0 1 199.39 14.22 C 204.56,21.59 216.00,5.00 228.00,5.00 L 321,5 C 336,5 346,16 346,32 C 346,48 336,59 321,59 L 228.00,59 C 216.00,59.00 204.56,42.41 199.39,49.78 A 31.0 31.0 0 0 1 148.61 49.78 C 143.44,42.41 132.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
+                d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
                 fill="url(#pearl-gloss)"
-                opacity="0.8"
+                opacity="0.4"
               />
             </svg>
 
@@ -205,15 +205,15 @@ export function SiteHeader() {
               </div>
             )}
 
-            {/* Left Lobe: Discover & Search */}
-            <div className="mobile-sculpted-nav__lobe mobile-sculpted-nav__lobe--left">
-              {navigation.slice(0, 2).map((item) => {
+            {/* Relative 5-Slot Navigation Track */}
+            <div className="mobile-sculpted-nav__track">
+              {navigation.map((item) => {
                 const isActive = isActiveRoute(pathname, item.path);
                 return (
                   <Link
                     aria-current={isActive ? "page" : undefined}
                     aria-label={item.label}
-                    className="mobile-sculpted-nav__link"
+                    className="mobile-sculpted-nav__slot"
                     href={item.path}
                     key={item.path}
                   >
@@ -222,68 +222,19 @@ export function SiteHeader() {
                         isActive ? "mobile-sculpted-nav__bubble--active" : ""
                       }`}
                     >
-                      <CategoryGlyph
-                        color={isActive ? "#080808" : "#FFE7FF"}
-                        name={item.icon}
-                        size={21}
-                        strokeWidth={isActive ? 2.3 : 1.9}
-                      />
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-
-            {/* Center Lobe: Dolphin */}
-            <div className="mobile-sculpted-nav__lobe mobile-sculpted-nav__lobe--center">
-              {(() => {
-                const item = navigation[2];
-                const isActive = isActiveRoute(pathname, item.path);
-                return (
-                  <Link
-                    aria-current={isActive ? "page" : undefined}
-                    aria-label={item.label}
-                    className="mobile-sculpted-nav__link mobile-sculpted-nav__link--center"
-                    href={item.path}
-                  >
-                    <span
-                      className={`mobile-sculpted-nav__bubble ${
-                        isActive ? "mobile-sculpted-nav__bubble--active" : ""
-                      }`}
-                    >
-                      <BrandMark
-                        color={isActive ? "#080808" : "#FFE7FF"}
-                        size={26}
-                      />
-                    </span>
-                  </Link>
-                );
-              })()}
-            </div>
-
-            {/* Right Lobe: My Agents & Wallet */}
-            <div className="mobile-sculpted-nav__lobe mobile-sculpted-nav__lobe--right">
-              {navigation.slice(3, 5).map((item) => {
-                const isActive = isActiveRoute(pathname, item.path);
-                return (
-                  <Link
-                    aria-current={isActive ? "page" : undefined}
-                    aria-label={item.label}
-                    className="mobile-sculpted-nav__link"
-                    href={item.path}
-                    key={item.path}
-                  >
-                    <span
-                      className={`mobile-sculpted-nav__bubble ${
-                        isActive ? "mobile-sculpted-nav__bubble--active" : ""
-                      }`}
-                    >
-                      <CategoryGlyph
-                        color={isActive ? "#080808" : "#FFE7FF"}
-                        name={item.icon}
-                        size={21}
-                        strokeWidth={isActive ? 2.3 : 1.9}
-                      />
+                      {item.path === "/dolphin" ? (
+                        <BrandMark
+                          color={isActive ? "#080808" : "#FFE7FF"}
+                          size={26}
+                        />
+                      ) : (
+                        <CategoryGlyph
+                          color={isActive ? "#080808" : "#FFE7FF"}
+                          name={item.icon}
+                          size={21}
+                          strokeWidth={isActive ? 2.3 : 1.9}
+                        />
+                      )}
                     </span>
                   </Link>
                 );

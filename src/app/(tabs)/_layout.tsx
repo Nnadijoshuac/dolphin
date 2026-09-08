@@ -24,13 +24,13 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-const TAB_X_OFFSETS = [6, 76, 150, 224, 294] as const;
+const TAB_X_OFFSETS = [11, 81, 151, 221, 291] as const;
 
 function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
-  const activeOffset = TAB_X_OFFSETS[state.index] ?? 6;
+  const activeOffset = TAB_X_OFFSETS[state.index] ?? 11;
   const translateX = useSharedValue(activeOffset);
   const scaleX = useSharedValue(1);
   const scaleY = useSharedValue(1);
@@ -143,7 +143,7 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         accessibilityRole="tab"
         accessibilityState={{ selected: isFocused }}
         onPress={onPress}
-        containerStyle={{ alignItems: "center", justifyContent: "center" }}
+        containerStyle={{ flex: 1, height: "100%", alignItems: "center", justifyContent: "center" }}
       >
         <View
           style={{
@@ -189,60 +189,59 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       <View
         style={{
           position: "relative",
-          width: 348,
+          width: 350,
           height: 64,
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
           shadowColor: "#000000",
           shadowOffset: { width: 0, height: 14 },
-          shadowOpacity: 0.45,
-          shadowRadius: 24,
-          elevation: 16,
+          shadowOpacity: 0.55,
+          shadowRadius: 28,
+          elevation: 18,
         }}
       >
-        {/* The 3-lobed metaball SVG background with continuous curvature & pearl obsidian material */}
+        {/* The 3-lobed metaball SVG background with continuous curvature & deep obsidian pearl material */}
         <Svg
           height={64}
           style={StyleSheet.absoluteFill}
-          viewBox="0 0 348 64"
-          width={348}
+          viewBox="0 0 350 64"
+          width={350}
         >
           <Defs>
-            {/* Pearl base: deep obsidian with metallic/pearl luster */}
+            {/* Deep pitch-black obsidian pearl base */}
             <LinearGradient id="pearl-base" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="#1c1b22" />
-              <Stop offset="25%" stopColor="#0a0a0c" />
-              <Stop offset="75%" stopColor="#050506" />
-              <Stop offset="100%" stopColor="#141318" />
+              <Stop offset="0%" stopColor="#0a0a0c" />
+              <Stop offset="25%" stopColor="#040405" />
+              <Stop offset="75%" stopColor="#000000" />
+              <Stop offset="100%" stopColor="#060608" />
             </LinearGradient>
 
-            {/* Pearl rim: luminous top highlight, soft bottom reflection */}
+            {/* Subtle rim highlight */}
             <LinearGradient id="pearl-rim" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="rgba(255, 255, 255, 0.45)" />
-              <Stop offset="20%" stopColor="rgba(255, 231, 255, 0.22)" />
-              <Stop offset="80%" stopColor="rgba(0, 0, 0, 0.5)" />
-              <Stop offset="100%" stopColor="rgba(255, 231, 255, 0.28)" />
+              <Stop offset="0%" stopColor="rgba(255, 255, 255, 0.16)" />
+              <Stop offset="20%" stopColor="rgba(255, 231, 255, 0.08)" />
+              <Stop offset="80%" stopColor="rgba(0, 0, 0, 0.8)" />
+              <Stop offset="100%" stopColor="rgba(255, 231, 255, 0.1)" />
             </LinearGradient>
 
-            {/* Upper dome specular gloss sheen */}
+            {/* Delicate specular gloss sheen */}
             <LinearGradient id="pearl-gloss" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="rgba(255, 255, 255, 0.28)" />
-              <Stop offset="40%" stopColor="rgba(255, 231, 255, 0.08)" />
+              <Stop offset="0%" stopColor="rgba(255, 255, 255, 0.1)" />
+              <Stop offset="35%" stopColor="rgba(255, 231, 255, 0.03)" />
               <Stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
             </LinearGradient>
           </Defs>
 
           <Path
-            d="M 27,5 L 120,5 C 132.00,5.00 143.44,21.59 148.61,14.22 A 31.0 31.0 0 0 1 199.39 14.22 C 204.56,21.59 216.00,5.00 228.00,5.00 L 321,5 C 336,5 346,16 346,32 C 346,48 336,59 321,59 L 228.00,59 C 216.00,59.00 204.56,42.41 199.39,49.78 A 31.0 31.0 0 0 1 148.61 49.78 C 143.44,42.41 132.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
+            d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
             fill="url(#pearl-base)"
             stroke="url(#pearl-rim)"
             strokeWidth={1.2}
           />
           <Path
-            d="M 27,5 L 120,5 C 132.00,5.00 143.44,21.59 148.61,14.22 A 31.0 31.0 0 0 1 199.39 14.22 C 204.56,21.59 216.00,5.00 228.00,5.00 L 321,5 C 336,5 346,16 346,32 C 346,48 336,59 321,59 L 228.00,59 C 216.00,59.00 204.56,42.41 199.39,49.78 A 31.0 31.0 0 0 1 148.61 49.78 C 143.44,42.41 132.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
+            d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
             fill="url(#pearl-gloss)"
-            opacity={0.8}
+            opacity={0.4}
           />
         </Svg>
 
@@ -260,7 +259,7 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               backgroundColor: "#FFFFFF",
               shadowColor: "#000000",
               shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
+              shadowOpacity: 0.35,
               shadowRadius: 14,
               elevation: 8,
               zIndex: 1,
@@ -269,51 +268,17 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           ]}
         />
 
-        {/* Left Lobe: Discover (0) & Search (1) */}
+        {/* Relative 5-Slot Navigation Track */}
         <View
           style={{
-            width: 138,
+            width: "100%",
             height: "100%",
             flexDirection: "row",
             alignItems: "center",
-            justifyContent: "space-between",
-            paddingLeft: 6,
-            paddingRight: 14,
             zIndex: 2,
           }}
         >
-          {renderTab(0)}
-          {renderTab(1)}
-        </View>
-
-        {/* Center Lobe: Dolphin (2) */}
-        <View
-          style={{
-            width: 72,
-            height: "100%",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 2,
-          }}
-        >
-          {renderTab(2)}
-        </View>
-
-        {/* Right Lobe: My Agents (3) & Wallet (4) */}
-        <View
-          style={{
-            width: 138,
-            height: "100%",
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            paddingLeft: 14,
-            paddingRight: 6,
-            zIndex: 2,
-          }}
-        >
-          {renderTab(3)}
-          {renderTab(4)}
+          {state.routes.map((route, index) => renderTab(index))}
         </View>
       </View>
     </View>

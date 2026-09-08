@@ -433,6 +433,22 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           ) : (
             <HireAction agent={agent} />
           )}
+
+          {/*
+            Opens Dolphin with this agent already in context, so a conversation
+            started from an agent's page does not begin cold.
+
+            Deliberately secondary to the action above it. Using the agent
+            directly is the primary thing to do here; asking Dolphin about it is
+            the thing to do when you do not yet know whether you want it.
+          */}
+          <Link
+            className="flex items-center justify-center gap-2 rounded-xl border border-line bg-paper-strong px-4 py-3 text-sm font-semibold text-ink transition-colors hover:border-line-strong hover:bg-paper-muted"
+            href={`/dolphin?agent=${encodeURIComponent(agent.id)}`}
+          >
+            <CategoryGlyph name="sparkle" size={16} />
+            Ask Dolphin about this agent
+          </Link>
         </aside>
 
         {/* Left Column: Core Agent Information */}

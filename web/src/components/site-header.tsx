@@ -12,6 +12,11 @@ import { useWallet } from "@/wallet/wallet-provider";
 const navigation = [
   { path: "/", label: "Discover", icon: "discover" as const },
   { path: "/search", label: "Search", icon: "search" as const },
+  // Third of five, matching the mobile tab order, where Dolphin is the raised
+  // centre action. The centre-orb treatment itself is a tab-bar idiom and does
+  // not carry over to a web header - same feature, same backend, different
+  // front door. See Agent/DOLPHIN-AGENT-SCOPE.md §6.
+  { path: "/dolphin", label: "Dolphin", icon: "sparkle" as const },
   { path: "/my-agents", label: "My Agents", icon: "agents" as const },
   { path: "/wallet", label: "Wallet", icon: "wallet" as const },
 ] as const;

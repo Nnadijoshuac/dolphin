@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Text, View, type ViewStyle } from "react-native";
+import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { AgentIcon } from "@/components/agent-icon";
@@ -435,6 +436,7 @@ export function AgentDetail({
   actionLabel = "Hire Agent",
 }: AgentDetailProps) {
   const [expandedAbout, setExpandedAbout] = useState(false);
+  const router = useRouter();
   const hireability = assessHireability(agent);
 
   const registeredMetric = agent.registryVerification.registered;
@@ -643,6 +645,45 @@ export function AgentDetail({
             </View>
           </Card>
         )}
+
+        {/*
+          Opens Dolphin with this agent already in context, so a conversation
+          started from an agent's page does not begin cold.
+
+          Deliberately secondary to the action above it: using the agent is the
+          primary thing to do here, and asking Dolphin about it is what you do
+          when you do not yet know whether you want it.
+        */}
+        <PressableScale
+          accessibilityLabel="Ask Dolphin about this agent"
+          containerStyle={{
+            marginTop: 12,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            borderWidth: 1,
+            borderColor: colors.goldBorder,
+            backgroundColor: colors.goldMuted,
+            borderRadius: 14,
+            paddingVertical: 13,
+          }}
+          onPress={() => {
+            void Haptics.selectionAsync();
+            /*
+             * Object form, not a template string. expo-router types routes
+             * from the files under app/, and a `/route?query=value` string is
+             * not a member of that union - the params go in their own object
+             * and the router encodes them.
+             */
+            router.push({ pathname: "/dolphin", params: { agentKey: agent.id } });
+          }}
+        >
+          <CategoryGlyph color={colors.goldDark} name="sparkle" size={15} strokeWidth={2.2} />
+          <Text className="text-[13.5px] font-bold" style={{ color: colors.goldDark }}>
+            Ask Dolphin about this agent
+          </Text>
+        </PressableScale>
       </View>
 
       {/* ── 3. overview & capabilities ─────────────────────────────────── */}

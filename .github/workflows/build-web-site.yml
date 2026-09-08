@@ -1,35 +1,47 @@
-# Builds the Next.js website (web/) on Linux, on every push.
+# Verifies the Next.js website (web/) on Linux, on every push.
 #
-# WHY THIS IS A BUILD AND NOT A DEPLOY, stated plainly rather than left as an
-# unexplained gap:
+# ---------------------------------------------------------------------------
+# THE SITE IS DEPLOYED. THIS WORKFLOW IS NOT WHAT DEPLOYS IT.
+# ---------------------------------------------------------------------------
+# https://dolphinamp.vercel.app is the live website, published by VERCEL'S OWN
+# GIT INTEGRATION - Vercel watches this repository directly and builds `web/`
+# on every push, with no workflow, no token and no step in this file involved.
+# Production tracks `main`; every other branch and pull request gets its own
+# Vercel preview URL.
 #
-# GitHub Pages is the only host this repo can publish to without a third-party
-# credential, because it authenticates with the repo's own GITHUB_TOKEN. A
-# repository has exactly ONE Pages site, and deploy-web.yml already publishes
-# the Expo web export to it. Two workflows cannot both deploy to Pages - the
-# second overwrites the first - and combining them into one artifact would mean
-# merging the two pipelines, which is exactly what this repo does not want:
-# each product builds and ships on its own.
+# This header previously claimed the opposite ("a live URL for this site needs
+# a hosting decision only the repo owner can make") and listed Vercel as an
+# unexplored option. That was written before the Vercel project existed and was
+# never corrected, so the repository's own CI documentation asserted the site
+# was unshipped while it was serving traffic. Reading these workflows is how
+# someone new answers "where does this go", and a stale answer here is worse
+# than none: a 2026-09-08 review of this repo concluded from this very comment
+# that the website had no public URL. Corrected here; see web/README.md for the
+# deployment contract in full.
 #
-# So a live URL for this site needs a hosting decision only the repo owner can
-# make, plus one secret:
+# WHAT DOES DEPLOY THE OTHER FRONTEND. deploy-web.yml publishes the EXPO web
+# export (the React Native app rendered through react-native-web) to this
+# repository's single GitHub Pages site. That is a different product from this
+# one and the two do not share a host, which is the whole reason the Pages slot
+# never had to be contested.
 #
-#   Vercel            add VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID, then
-#                     `vercel deploy --prod`. Handles /agent/[id] natively.
-#   Cloudflare Pages  add CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID, then
-#                     `wrangler pages deploy`.
-#   GitHub Pages      only if the Expo export moves off it, AND next.config.ts
-#                     gains `output: "export"` with a `basePath`. Note that
-#                     /agent/[id] is currently server-rendered on demand, so it
-#                     would also need generateStaticParams - it cannot be
-#                     statically exported as written.
-#
-# Until then this job still earns its place: it proves the site builds on Linux
-# from a clean install, which is not a given here. Its first run immediately
+# ---------------------------------------------------------------------------
+# SO WHAT IS THIS JOB FOR
+# ---------------------------------------------------------------------------
+# Vercel builds `web/` and nothing else. It does not run `tsc --noEmit`, it does
+# not run eslint, and a Vercel build that fails is a deploy that silently keeps
+# serving the previous version. This job is the gate Vercel does not provide:
+# typecheck, lint, and a clean-install build on Linux, reported on the pull
+# request BEFORE the merge that would promote it. Its first run immediately
 # caught two things that only show up on a clean Linux checkout - the lockfile
 # defect and the missing generated route types - both documented at their steps
 # below.
-name: Build website (web/)
+#
+# Keep the env block below in step with the Vercel project's own environment
+# variables. They are two separate configurations of the same values, and the
+# failure mode when they drift is that CI passes against one Convex deployment
+# while production serves another.
+name: Verify website (web/)
 
 on:
   push:

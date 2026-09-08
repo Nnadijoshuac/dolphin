@@ -80,6 +80,12 @@
         "projectId": "a3bcb0c1-ff0e-463f-8a52-d9958c829088"
       }
     },
-    "owner": "serenityeye"
+    "owner": "serenityeye",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a3bcb0c1-ff0e-463f-8a52-d9958c829088"
+    }
   }
 }

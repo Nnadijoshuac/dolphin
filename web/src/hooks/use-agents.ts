@@ -238,9 +238,16 @@ export function useAgentSignals(
 
   return useMemo(() => {
     const map = new Map<string, AgentSignals>();
+    // The server omits keys with no hires or reviews and caps reads at 100.
+    // Only a completed response establishes zero; missing response stays unknown.
+    if (rows !== undefined) {
+      for (const agentKey of agentKeys.slice(0, 100)) {
+        map.set(agentKey, { agentKey, hires: 0, activeHires: 0, paidHires: 0, reviews: 0, wouldHireAgain: 0, wouldHireAgainRate: null, deliveredCount: 0 });
+      }
+    }
     for (const row of rows ?? []) map.set(row.agentKey, row);
     return map;
-  }, [rows]);
+  }, [rows, agentKeys]);
 }
 
 export interface UseAgentOptions {

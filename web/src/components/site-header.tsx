@@ -144,6 +144,7 @@ export function SiteHeader() {
               aria-hidden="true"
               className="mobile-sculpted-nav__bg"
               fill="none"
+              preserveAspectRatio="none"
               shapeRendering="geometricPrecision"
               viewBox="0 0 350 64"
               xmlns="http://www.w3.org/2000/svg"

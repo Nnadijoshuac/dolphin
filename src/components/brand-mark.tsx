@@ -20,10 +20,10 @@ export function BrandMark({ size = 32, color, inverted = false }: BrandMarkProps
       cachePolicy="memory-disk"
       contentFit="contain"
       source={dolphinLogo}
+      tintColor={tint}
       style={{
         width: size,
         height: size,
-        tintColor: tint,
       }}
     />
   );
@@ -57,4 +57,3 @@ export function BnbBadge({ label = "on BNB Smart Chain" }: { label?: string }) {
     </View>
   );
 }
-

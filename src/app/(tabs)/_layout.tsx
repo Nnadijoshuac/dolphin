@@ -1,5 +1,11 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Keyboard, Platform, StyleSheet, View } from "react-native";
+import {
+  Keyboard,
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Redirect } from "expo-router";
 // SDK 57: expo-router forked the React Navigation packages it wraps, so
 // @react-navigation/bottom-tabs is no longer installed. Both the Tabs
@@ -24,13 +30,23 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-const TAB_X_OFFSETS = [11, 81, 151, 221, 291] as const;
+const TAB_BAR_MAX_WIDTH = 350;
+const TAB_BAR_GUTTER = 24;
+const ACTIVE_INDICATOR_SIZE = 48;
 
 function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
-  const activeOffset = TAB_X_OFFSETS[state.index] ?? 11;
+  // The island used to be fixed at 350px while its tab controls collapsed to
+  // their 48px content width. That put the controls and animated indicator on
+  // two different grids (and overflowed narrow phones). Keep one responsive
+  // width as the source of truth for the body, five slots, and indicator.
+  const tabBarWidth = Math.min(TAB_BAR_MAX_WIDTH, viewportWidth - TAB_BAR_GUTTER);
+  const slotWidth = tabBarWidth / state.routes.length;
+  const activeOffset =
+    state.index * slotWidth + (slotWidth - ACTIVE_INDICATOR_SIZE) / 2;
   const translateX = useSharedValue(activeOffset);
   const scaleX = useSharedValue(1);
   const scaleY = useSharedValue(1);
@@ -143,7 +159,13 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         accessibilityRole="tab"
         accessibilityState={{ selected: isFocused }}
         onPress={onPress}
-        containerStyle={{ flex: 1, height: "100%", alignItems: "center", justifyContent: "center" }}
+        style={{ flex: 1, height: "100%" }}
+        containerStyle={{
+          width: "100%",
+          height: "100%",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
       >
         <View
           style={{
@@ -189,23 +211,24 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       <View
         style={{
           position: "relative",
-          width: 350,
+          width: tabBarWidth,
           height: 64,
           flexDirection: "row",
           alignItems: "center",
-          shadowColor: "#000000",
+          shadowColor: colors.ink,
           shadowOffset: { width: 0, height: 14 },
-          shadowOpacity: 0.55,
-          shadowRadius: 28,
-          elevation: 18,
+          shadowOpacity: 0.32,
+          shadowRadius: 24,
+          elevation: 14,
         }}
       >
         {/* The 3-lobed metaball SVG background with continuous curvature & deep obsidian pearl material */}
         <Svg
           height={64}
+          preserveAspectRatio="none"
           style={StyleSheet.absoluteFill}
           viewBox="0 0 350 64"
-          width={350}
+          width={tabBarWidth}
         >
           <Defs>
             {/* Deep pitch-black obsidian pearl base */}
@@ -253,9 +276,9 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               position: "absolute",
               top: 8,
               left: 0,
-              width: 48,
-              height: 48,
-              borderRadius: 24,
+              width: ACTIVE_INDICATOR_SIZE,
+              height: ACTIVE_INDICATOR_SIZE,
+              borderRadius: ACTIVE_INDICATOR_SIZE / 2,
               backgroundColor: "#FFFFFF",
               shadowColor: "#000000",
               shadowOffset: { width: 0, height: 4 },

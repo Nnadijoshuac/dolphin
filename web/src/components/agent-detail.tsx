@@ -1,32 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { HireAction } from "@/components/hire-action";
 import { MetricCell } from "@/components/metric-cell";
 import { PerformancePanel } from "@/components/performance-panel";
-import { StatePanel } from "@/components/state-panel";
 import { TrackRecord } from "@/components/track-record";
 import { useAgentCategoryStats } from "@/hooks/use-category-stats";
 import { categoryLabel } from "@/constants/agents";
 import { convexClient } from "@/providers/convex-provider";
-import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent, AgentLiveStats, LiveMetric } from "@/types/agent";
 
-/*
- * There was a `Record<AgentCategory, string>` here with six entries, indexed
- * directly as `categoryLabels[agent.category]` in the breadcrumb and the header.
- * `AgentCategory` is an OPEN string (see the note in @/types/agent), so that
- * index does not type-error on a missing key - it returns `undefined` at
- * runtime. A research, security, payments or `general` agent therefore rendered
- * an empty breadcrumb crumb and an empty eyebrow above its own name.
- *
- * `categoryLabel()` from @/constants/agents is total by construction and is the
- * only way a category should be turned into text anywhere in this app.
- */
 function shortAddress(value: string | null) {
   if (!value) return "Not published";
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
@@ -48,36 +35,6 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
-function metricValue<T>(metric: LiveMetric<T>, format: (value: T) => string) {
-  if (metric.status === "live" || metric.status === "stale") {
-    return format(metric.value);
-  }
-
-  return metric.status === "syncing" ? "Syncing" : "Not available";
-}
-
-function DetailSection({
-  title,
-  summary,
-  children,
-}: {
-  title: string;
-  summary: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="border-t border-line py-9 sm:py-12">
-      <div className="grid gap-6 lg:grid-cols-[190px_minmax(0,1fr)] lg:gap-10">
-        <header>
-          <h2 className="text-lg font-semibold tracking-[-0.03em] text-ink">{title}</h2>
-          <p className="mt-2 text-sm leading-6 text-muted">{summary}</p>
-        </header>
-        <div className="min-w-0">{children}</div>
-      </div>
-    </section>
-  );
-}
-
 function syncingLiveStats(stats: AgentLiveStats): AgentLiveStats {
   return Object.fromEntries(
     Object.entries(stats).map(([key, field]) =>
@@ -96,10 +53,6 @@ function syncingLiveStats(stats: AgentLiveStats): AgentLiveStats {
   ) as AgentLiveStats;
 }
 
-/**
- * Renders nothing for a category with no wired protocol reader - which, since
- * categories became open strings on 2026-09-07, is most of them.
- */
 function LiveStats({ agent }: { agent: Agent }) {
   if (!agent.hasLiveStats) return null;
 
@@ -274,15 +227,126 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   );
 }
 
+/** Collapsible Accordion for On-chain and Technical Records */
+function TechnicalDetailsAccordion({
+  agent,
+  isRegistryVerified,
+}: {
+  agent: Agent;
+  isRegistryVerified: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const facts = [
+    ["ERC-8004 Token", `#${agent.tokenId}`],
+    ["Network", "BNB Smart Chain (Chain ID: 56)"],
+    ["Protocol Type", agent.protocol === "mcp" ? "MCP Server" : "A2A Agent"],
+    ["Identity Registry", shortAddress(agent.registryAddress)],
+    ["Publisher Address", shortAddress(agent.publisherAddress)],
+    ["Agent Wallet", shortAddress(agent.agentWallet)],
+    [
+      "Registered Date",
+      agent.registeredAt ? `${formatDate(agent.registeredAt)} UTC` : "Not reported",
+    ],
+    ["Verified Endpoint", agent.services[0]?.endpoint ?? "Not reported"],
+  ] as const;
+
+  return (
+    <section className="rounded-2xl border border-line bg-paper overflow-hidden">
+      <button
+        aria-expanded={isOpen}
+        className="interactive flex w-full items-center justify-between p-6 sm:p-7 text-left"
+        onClick={() => setIsOpen((prev) => !prev)}
+        type="button"
+      >
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-ink">Details & Registry Record</h2>
+            {isRegistryVerified ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+                Verified
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            On-chain parameters, smart contract addresses, and verification sources.
+          </p>
+        </div>
+        <span
+          className={`flex h-8 w-8 items-center justify-center rounded-full border border-line bg-paper-muted text-muted transition-transform duration-200 ${
+            isOpen ? "rotate-90" : ""
+          }`}
+        >
+          <CategoryGlyph color="currentColor" name="chevron-right" size={14} />
+        </span>
+      </button>
+
+      {isOpen ? (
+        <div className="border-t border-line p-6 sm:p-7 pt-4 space-y-6 animate-in fade-in duration-150">
+          <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 text-xs">
+            {facts.map(([label, value]) => (
+              <div
+                className="flex flex-col justify-center border-b border-line/60 pb-3"
+                key={label}
+              >
+                <dt className="text-muted font-medium">{label}</dt>
+                <dd className="mt-1 font-mono font-semibold text-ink break-all">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          {agent.sourceLabels.length > 0 ? (
+            <div className="border-t border-line/60 pt-4">
+              <p className="text-xs font-semibold text-muted mb-2">Sources attached to this record:</p>
+              <ul className="space-y-1.5">
+                {agent.sourceLabels.map((source) => (
+                  <li
+                    className="flex items-center justify-between text-xs py-1 border-b border-line/40 last:border-b-0"
+                    key={source.id}
+                  >
+                    <span className="text-muted">{source.label}</span>
+                    {source.url ? (
+                      <a
+                        className="interactive font-medium text-ink underline underline-offset-4 hover:text-accent-ink"
+                        href={source.url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Source URL ↗
+                      </a>
+                    ) : (
+                      <span className="text-faint text-[11px]">No public URL</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <p className="text-[11px] leading-relaxed text-muted bg-paper-muted p-3.5 rounded-xl border border-line/80">
+            Token identity #{agent.tokenId} is verified directly against the ERC-8004 registry on BNB Smart Chain. Dolphin never asks for private keys or seed phrases.
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function AgentDetail({ agent }: { agent: Agent }) {
   const registryStatus = agent.registryVerification.registered;
   const isRegistryVerified =
     (registryStatus.status === "live" || registryStatus.status === "stale") &&
     registryStatus.value;
-  const access = assessAuthorizationCapability(agent.category, "read_only_hire");
+
+  const publisherDisplay = agent.publisher?.startsWith("0x")
+    ? shortAddress(agent.publisher)
+    : agent.publisher || "Unlisted publisher";
 
   return (
-    <div className="site-frame pb-16 pt-7 sm:pb-24 sm:pt-10">
+    <div className="site-frame pb-16 pt-6 sm:pb-24 sm:pt-8">
+      {/* ── Breadcrumb ── */}
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-xs text-muted">
         <Link className="interactive hover:text-ink" href="/">
           Discover
@@ -295,254 +359,137 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           {categoryLabel(agent.category)}
         </Link>
         <span aria-hidden="true">/</span>
-        <span aria-current="page" className="text-ink">
+        <span aria-current="page" className="font-medium text-ink truncate max-w-[240px]">
           {agent.name}
         </span>
       </nav>
 
-      <header className="border-b border-line pb-10 pt-8 sm:pb-14 sm:pt-12">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.45fr)] lg:items-end">
-          <div>
-            <div className="flex items-center gap-4 sm:gap-5">
-              <AgentIcon category={agent.category} size={76} uri={agent.iconUrl} />
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                  <span>{categoryLabel(agent.category)}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>ERC-8004 #{agent.tokenId}</span>
-                </div>
-                <h1 className="mt-2 text-balance text-4xl font-semibold tracking-[-0.055em] text-ink sm:text-6xl">
-                  {agent.name}
-                </h1>
-              </div>
-            </div>
-            <p className="body-copy mt-7 max-w-[64ch]">{agent.tagline}</p>
-            <p className="mt-5 break-all text-xs leading-5 text-faint">
-              Publisher <span className="font-mono text-muted">{agent.publisher}</span>
-            </p>
+      {/* ── Hero Header ── */}
+      <header className="border-b border-line pb-8 pt-6 sm:pb-10 sm:pt-8">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-5">
+          <div className="shrink-0">
+            <AgentIcon category={agent.category} size={84} uri={agent.iconUrl} />
           </div>
 
-          <dl className="grid grid-cols-2 border-l border-t border-line text-sm">
-            <div className="border-b border-r border-line p-4">
-              <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                Registry
-              </dt>
-              <dd className="mt-2 flex items-center gap-2 font-medium text-ink">
-                <span
-                  aria-hidden="true"
-                  className={`h-2 w-2 rounded-full ${
-                    isRegistryVerified ? "bg-success" : "bg-faint-mark"
-                  }`}
-                />
-                {isRegistryVerified
-                  ? "Verified on-chain"
-                  : registryStatus.status === "syncing"
-                    ? "Checking"
-                    : "Not verified in this request"}
-              </dd>
+          <div className="min-w-0 flex-1">
+            {/* Badges Row */}
+            <div className="flex flex-wrap items-center gap-2 mb-2.5">
+              <Link
+                className="interactive inline-flex items-center rounded-full bg-paper-muted px-3 py-1 text-xs font-semibold text-ink hover:bg-canvas"
+                href={`/search?category=${agent.category}`}
+              >
+                {categoryLabel(agent.category)}
+              </Link>
+
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                  agent.protocol === "mcp"
+                    ? "bg-purple-100 text-purple-900"
+                    : "bg-accent-soft text-accent-ink"
+                }`}
+              >
+                {agent.protocol === "mcp" ? "MCP Server" : "A2A Agent"}
+              </span>
+
+              {isRegistryVerified ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 border border-emerald-200">
+                  <CategoryGlyph color="currentColor" name="check" size={12} strokeWidth={2.4} />
+                  Verified on BNB Chain
+                </span>
+              ) : null}
             </div>
-            <div className="border-b border-r border-line p-4">
-              <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                Reputation
-              </dt>
-              <dd className="mt-2 font-medium text-ink">
-                {metricValue(agent.reputationScore, (value) => String(value))}
-              </dd>
+
+            {/* Agent Name */}
+            <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+              {agent.name}
+            </h1>
+
+            {/* Tagline */}
+            {agent.tagline ? (
+              <p className="mt-2.5 text-base font-medium leading-relaxed text-ink/80 max-w-3xl">
+                {agent.tagline}
+              </p>
+            ) : null}
+
+            {/* Metadata Footer */}
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted">
+              <span>
+                By <span className="font-semibold text-ink">{publisherDisplay}</span>
+              </span>
+              <span aria-hidden="true">·</span>
+              <span>Token #{agent.tokenId}</span>
+              <span aria-hidden="true">·</span>
+              <span>BNB Smart Chain · 56</span>
             </div>
-            <div className="border-b border-r border-line p-4">
-              <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                Feedback
-              </dt>
-              <dd className="mt-2 font-medium text-ink">
-                {metricValue(agent.feedbackCount, (value) => String(value))}
-              </dd>
-            </div>
-            <div className="border-b border-r border-line p-4">
-              <dt className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                Record
-              </dt>
-              <dd className="mt-2 font-medium text-ink">
-                {agent.recordStatus === "indexed" ? "Indexed" : "Editorial fallback"}
-              </dd>
-            </div>
-          </dl>
+          </div>
         </div>
       </header>
 
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-14">
-        <div>
-          <DetailSection
-            summary="Category-specific values with their source, status, and last check."
-            title="Live evidence"
-          >
-            <LiveStats agent={agent} />
-          </DetailSection>
+      {/* ── Main Layout: Content & Action Sidebar ── */}
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-12 lg:items-start">
+        {/* Left Column: Core Agent Information */}
+        <div className="space-y-8 min-w-0">
+          {/* 1. About section (Top priority) */}
+          <section className="rounded-2xl border border-line bg-paper p-6 sm:p-7">
+            <h2 className="text-base font-bold tracking-tight text-ink">About this agent</h2>
+            <p className="mt-3 text-sm leading-7 text-ink/80 whitespace-pre-line">
+              {agent.description}
+            </p>
 
-          {/*
-           * TRACK RECORD. Placed directly under Live evidence and ABOVE
-           * Performance, because it is the section a person deciding between
-           * two agents actually reads, and because unlike Performance it has
-           * something to say for every agent from its first hire.
-           */}
-          <DetailSection
-            summary="Retention Dolphin computes from its own hire records, and structured reviews from wallets that hired this agent."
-            title="Track record"
-          >
-            <TrackRecord agentKey={agent.agentKey} agentName={agent.name} />
-          </DetailSection>
-
-          <DetailSection
-            summary="Each point is one real protocol read at a real timestamp. Nothing is interpolated or backfilled."
-            title="Performance"
-          >
-            <PerformancePanel agent={agent} />
-          </DetailSection>
-
-          <DetailSection
-            summary="What the publisher says this agent does and how its capabilities are classified."
-            title="About"
-          >
-            <p className="max-w-3xl text-sm leading-7 text-ink-soft">{agent.description}</p>
-
-            <div className="mt-8">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-faint">
-                Published capabilities
-              </h3>
-              {agent.skills.length > 0 ? (
-                <ul className="mt-3 border-t border-line">
+            {/* Published Capabilities */}
+            {agent.skills.length > 0 ? (
+              <div className="mt-6 border-t border-line pt-5">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted mb-3">
+                  Published Capabilities
+                </h3>
+                <div className="flex flex-wrap gap-2">
                   {agent.skills.map((skill) => (
-                    <li
-                      className="grid gap-1 border-b border-line py-3 text-sm sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center"
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-paper-muted px-3 py-1.5 text-xs font-medium text-ink"
                       key={`${skill.name}-${skill.evidence}`}
                     >
-                      <span className="font-medium text-ink">{skill.name}</span>
-                      <span className="text-xs capitalize text-muted">
-                        {skill.evidence.replaceAll("-", " ")}
-                      </span>
-                    </li>
+                      <span>{skill.name}</span>
+                      <span className="text-[10px] text-muted">({skill.evidence.replaceAll("-", " ")})</span>
+                    </span>
                   ))}
-                </ul>
-              ) : (
-                <div className="mt-4">
-                  <StatePanel
-                    body="No capabilities are published for this catalog record."
-                    compact
-                    state="empty"
-                    title="No capabilities listed"
-                  />
                 </div>
-              )}
-            </div>
-          </DetailSection>
+              </div>
+            ) : null}
+          </section>
 
-          <DetailSection
-            summary="Hiring and paying for work are deliberately separate decisions."
-            title="Permission model"
-          >
-            <div className="border-t border-line">
-              {[
-                {
-                  icon: "shield" as const,
-                  title: "Read-only hire",
-                  body: access.reason,
-                },
-                /*
-                 * These two used to describe the spending-session model. That
-                 * feature is gated off in this build
-                 * (FEATURE_SESSION_EXECUTION in altana-policy.ts), so copy
-                 * promising an allowlist, a spend cap and a revocable grant
-                 * would describe something a user cannot reach. Replaced with
-                 * what is actually true of the shipped product.
-                 */
-                {
-                  icon: "clock" as const,
-                  title: "Paid work is a separate purchase",
-                  body: "Hiring records this agent against your address and costs nothing. Buying a task funds an ERC-8183 escrow on BNB Smart Chain, and Dolphin reads that job back off the chain before it will call the hire paid.",
-                },
-                {
-                  icon: "revoke" as const,
-                  title: "No agent can spend from your wallets",
-                  body: "Neither a hire nor a purchase gives an agent authority to move your funds. A paid job escrows one fixed amount for one piece of work, and authorises nothing else.",
-                },
-              ].map((item) => (
-                <article
-                  className="grid gap-3 border-b border-line py-5 sm:grid-cols-[40px_minmax(0,1fr)]"
-                  key={item.title}
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-paper-muted text-accent-ink">
-                    <CategoryGlyph
-                      color="currentColor"
-                      name={item.icon}
-                      size={18}
-                      strokeWidth={2}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-ink">{item.title}</h3>
-                    <p className="mt-1 text-sm leading-6 text-muted">{item.body}</p>
-                  </div>
-                </article>
-              ))}
+          {/* 2. Track Record & Reviews */}
+          <section className="rounded-2xl border border-line bg-paper p-6 sm:p-7">
+            <h2 className="text-base font-bold tracking-tight text-ink">Track Record & Reviews</h2>
+            <p className="mt-1 text-xs text-muted">
+              Verified hire outcomes and structured feedback from wallets on BNB Chain.
+            </p>
+            <div className="mt-5">
+              <TrackRecord agentKey={agent.agentKey} agentName={agent.name} />
             </div>
-          </DetailSection>
+          </section>
 
-          <DetailSection
-            summary="Raw identifiers and source labels for independent inspection."
-            title="Technical record"
-          >
-            <dl className="border-t border-line text-sm">
-              {[
-                ["ERC-8004 token", `#${agent.tokenId}`],
-                ["Chain", "BNB Smart Chain · 56"],
-                ["Registry", shortAddress(agent.registryAddress)],
-                ["Agent wallet", shortAddress(agent.agentWallet)],
-                ["Registered", `${formatDate(agent.registeredAt)}${agent.registeredAt ? " UTC" : ""}`],
-                [
-                  "Classification",
-                  agent.classificationSource.replaceAll("-", " "),
-                ],
-              ].map(([label, value]) => (
-                <div
-                  className="grid gap-1 border-b border-line py-3 sm:grid-cols-[180px_minmax(0,1fr)]"
-                  key={label}
-                >
-                  <dt className="text-muted">{label}</dt>
-                  <dd className="break-all font-mono text-xs font-medium text-ink">{value}</dd>
-                </div>
-              ))}
-            </dl>
+          {/* 3. Live Protocol Evidence (shown only if agent has live stats) */}
+          {agent.hasLiveStats ? (
+            <section className="rounded-2xl border border-line bg-paper p-6 sm:p-7">
+              <h2 className="text-base font-bold tracking-tight text-ink">Live Protocol Evidence</h2>
+              <p className="mt-1 text-xs text-muted">
+                Direct on-chain metrics checked against live protocol contracts.
+              </p>
+              <div className="mt-5">
+                <LiveStats agent={agent} />
+              </div>
+              <div className="mt-6 border-t border-line pt-5">
+                <PerformancePanel agent={agent} />
+              </div>
+            </section>
+          ) : null}
 
-            <div className="mt-7">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-faint">
-                Sources attached to this record
-              </h3>
-              <ul className="mt-3 border-t border-line">
-                {agent.sourceLabels.map((source) => (
-                  <li
-                    className="flex items-center justify-between gap-4 border-b border-line py-3 text-sm"
-                    key={source.id}
-                  >
-                    <span className="text-muted">{source.label}</span>
-                    {source.url ? (
-                      <a
-                        className="interactive shrink-0 font-medium text-ink underline-offset-4 hover:text-accent-ink hover:underline"
-                        href={source.url}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        Open ↗
-                      </a>
-                    ) : (
-                      <span className="text-xs text-faint">No public URL</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </DetailSection>
+          {/* 4. Details & Technical Record (Collapsible Accordion) */}
+          <TechnicalDetailsAccordion agent={agent} isRegistryVerified={isRegistryVerified} />
         </div>
 
-        <aside className="order-first py-9 lg:order-none lg:sticky lg:top-24 lg:self-start lg:py-12">
+        {/* Right Column: Sticky Hire & Action Card */}
+        <aside className="lg:sticky lg:top-24 space-y-4">
           <HireAction agent={agent} />
         </aside>
       </div>

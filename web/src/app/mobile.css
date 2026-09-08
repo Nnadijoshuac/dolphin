@@ -212,7 +212,7 @@
   .mobile-detail-registry > section > button h2 { font-size: 14px; }
   .mobile-detail-registry > section > button p, .mobile-detail-registry > section > button h2 + span { display: none; }
   .mobile-action-sheet { position: fixed; inset: auto 0 0; width: 100%; max-width: 560px; max-height: calc(92dvh - env(safe-area-inset-top)); margin: 0 auto; padding: 16px 20px max(24px, env(safe-area-inset-bottom)); border: 1px solid var(--line); border-radius: 28px 28px 0 0; background: var(--canvas); color: var(--ink); overflow-y: auto; overscroll-behavior: contain; }
-  .mobile-action-sheet::backdrop { background: #0006; }
+  .mobile-sheet-backdrop { position: fixed; inset: 0; z-index: 60; background: #0006; }
   .mobile-action-sheet > header { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-bottom: 16px; }
   .mobile-action-sheet > header h2 { min-width: 0; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
   .mobile-action-sheet .surface-raised { padding: 16px; }

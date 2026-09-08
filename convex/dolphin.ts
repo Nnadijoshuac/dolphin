@@ -1,0 +1,569 @@
+import { v } from "convex/values";
+
+import { api, internal } from "./_generated/api";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type ActionCtx,
+} from "./_generated/server";
+import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
+import { McpError, callMcpTool } from "./lib/mcpClient";
+import {
+  OpenRouterError,
+  chatCompletion,
+  type ChatMessage,
+  type ToolCall,
+} from "./lib/openrouter";
+import { randomHex, requireWalletAddress } from "./lib/walletAuth";
+
+/**
+ * DOLPHIN - the in-app agent that consults marketplace agents to answer.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS IS FOR
+ * ---------------------------------------------------------------------------
+ * 26 of the 28 live agents in this catalog speak MCP, and MCP has no ERC-8183
+ * quote path - so the entire hire/review/retention apparatus reaches 2 of 28
+ * and never can reach the rest (SESSION-LOG-2026-09-07-backend-rebuild.md §12,
+ * SESSION-LOG-2026-09-07-agent-page-and-mcp.md §6, which names it as an
+ * undecided product tension). Those 26 publish 226 working tools that a phone
+ * user has no way to consume.
+ *
+ * This is the way to consume them. It converts a directory listing into
+ * something a person can ask a question of.
+ *
+ * ---------------------------------------------------------------------------
+ * THE CITATIONS ARE RECORDED BY THE EXECUTOR, NOT ASSERTED BY THE MODEL
+ * ---------------------------------------------------------------------------
+ * Every call written to `dolphinToolCalls` is written by the code that made
+ * the call, before and after it happened, with the latency it actually took.
+ * The model does not get to say which agents it consulted - it is told, by the
+ * record of what ran.
+ *
+ * This matters because the model is small, free, and will happily claim to
+ * have consulted an agent it never called. A UI that rendered the model's own
+ * account of its sources would be exactly the fabricated-provenance failure
+ * AGENTS.md §5 forbids, one level up from a fabricated number. So the sources
+ * shown are the sources that ran, and if the prose disagrees with them, the
+ * prose is the thing that is wrong.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS AGENT CANNOT DO, ON PURPOSE
+ * ---------------------------------------------------------------------------
+ * It cannot spend. It reads MCP tools and composes an answer; a paid hire
+ * remains the existing quote -> escrow -> user signature path, and the user
+ * signs. project-scope.md §6 is the reason it could not be otherwise even if
+ * that were wanted: @altananetwork/sdk 0.8.0 ships no injected-wallet signer,
+ * so a Reown-connected wallet cannot drive a session grant at all.
+ */
+
+/** Hard ceiling on tool calls in one turn. A free tier is a real budget. */
+const MAX_TOOL_CALLS_PER_TURN = 6;
+
+/** Stored tool output is truncated - a citation, not an archive. */
+const MAX_STORED_RESULT_CHARS = 4_000;
+
+/** What the model is allowed to see of a tool's answer. */
+const MAX_MODEL_RESULT_CHARS = 6_000;
+
+const SYSTEM_PROMPT = `You are Dolphin, an assistant inside a marketplace of on-chain AI agents on BNB Smart Chain.
+
+You answer by CONSULTING the agents available to you as tools. Those tools are real agents published by third parties, and calling one is how you learn anything specific.
+
+Rules you must follow:
+
+1. Never state a number, price, balance, rate or status that did not come back from a tool call in this conversation. If you do not have it, say you do not have it and say what you would need to get it.
+2. Attribute every specific claim to the agent it came from, by name, in your prose. Write "Brain on BNB reports a health factor of 1.84" - never "your health factor is 1.84".
+3. A tool's output is that agent's CLAIM, not an established outcome. If an agent says it did something, report that it said so. Agents in this catalog have been observed reporting success for actions that did not occur.
+4. If the tools you called do not answer the question, say so plainly. An honest "the agents I can reach do not cover this" is correct and useful. Inventing a plausible answer is not.
+5. Be brief and concrete. You are on a phone screen.
+
+You cannot spend money, sign transactions, or take on-chain actions. If the user needs paid work, explain which agent could do it and that hiring it requires their own signature.`;
+
+/* ---------------------------------------------------------------------------
+ * Reads
+ * ------------------------------------------------------------------------ */
+
+export const getConversation = query({
+  args: { conversationKey: v.string() },
+  handler: async (ctx, { conversationKey }) => {
+    const conversation = await ctx.db
+      .query("dolphinConversations")
+      .withIndex("by_key", (q) => q.eq("conversationKey", conversationKey))
+      .unique();
+    if (!conversation) return null;
+
+    const messages = await ctx.db
+      .query("dolphinMessages")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id))
+      .order("asc")
+      .collect();
+
+    const toolCalls = await ctx.db
+      .query("dolphinToolCalls")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id))
+      .order("asc")
+      .collect();
+
+    return {
+      conversation: {
+        conversationKey: conversation.conversationKey,
+        title: conversation.title,
+        seedAgentKey: conversation.seedAgentKey,
+        createdAt: conversation.createdAt,
+      },
+      messages: messages.map((message) => ({
+        id: message._id,
+        role: message.role,
+        content: message.content,
+        status: message.status,
+        errorReason: message.errorReason,
+        model: message.model,
+        createdAt: message.createdAt,
+        completedAt: message.completedAt,
+      })),
+      /*
+       * Grouped by message so the UI can render each turn's citations under it.
+       * These are the calls that RAN - see this file's header on why they are
+       * not taken from the model's own account of its sources.
+       */
+      toolCalls: toolCalls.map((call) => ({
+        id: call._id,
+        messageId: call.messageId,
+        agentKey: call.agentKey,
+        agentName: call.agentName,
+        toolName: call.toolName,
+        resultText: call.resultText,
+        isError: call.isError,
+        transportError: call.transportError,
+        latencyMs: call.latencyMs,
+        calledAt: call.calledAt,
+      })),
+    };
+  },
+});
+
+/* ---------------------------------------------------------------------------
+ * Writes - internal, called by the action as it works
+ * ------------------------------------------------------------------------ */
+
+export const createConversation = mutation({
+  args: {
+    seedAgentKey: v.optional(v.string()),
+    sessionToken: v.optional(v.string()),
+  },
+  handler: async (ctx, { seedAgentKey, sessionToken }) => {
+    /*
+     * 32 bytes. This key is a capability - holding it is what grants read
+     * access to an anonymous conversation - so it is generated server-side
+     * with the same helper the SIWE session tokens use, never client-side.
+     */
+    const conversationKey = randomHex(32);
+
+    /*
+     * Binds an owner when a session is present; anonymous is permitted. See
+     * the access-model note on the table in schema.ts.
+     *
+     * The catch is deliberate and narrow: an EXPIRED or unknown token means
+     * "not signed in", which downgrades this to an anonymous conversation
+     * rather than refusing to open one. This is the only place in convex/ that
+     * softens requireWalletAddress, and it is safe here because the address is
+     * used solely to list a user's own history - no write is authorised by it.
+     */
+    const ownerAddress = sessionToken
+      ? await requireWalletAddress(ctx, sessionToken, "Opening a Dolphin conversation").catch(
+          () => null,
+        )
+      : null;
+
+    const now = Date.now();
+    await ctx.db.insert("dolphinConversations", {
+      conversationKey,
+      ownerAddress,
+      title: "New conversation",
+      seedAgentKey: seedAgentKey ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { conversationKey };
+  },
+});
+
+export const appendTurn = internalMutation({
+  args: {
+    conversationKey: v.string(),
+    userText: v.string(),
+    promptHash: v.string(),
+  },
+  handler: async (ctx, { conversationKey, userText, promptHash }) => {
+    const conversation = await ctx.db
+      .query("dolphinConversations")
+      .withIndex("by_key", (q) => q.eq("conversationKey", conversationKey))
+      .unique();
+    if (!conversation) throw new Error("That conversation no longer exists.");
+
+    const now = Date.now();
+
+    await ctx.db.insert("dolphinMessages", {
+      conversationId: conversation._id,
+      role: "user",
+      content: userText,
+      status: "complete",
+      errorReason: null,
+      promptHash,
+      model: null,
+      createdAt: now,
+      completedAt: now,
+    });
+
+    const assistantId = await ctx.db.insert("dolphinMessages", {
+      conversationId: conversation._id,
+      role: "assistant",
+      content: "",
+      status: "thinking",
+      errorReason: null,
+      promptHash: null,
+      model: null,
+      createdAt: now + 1,
+      completedAt: null,
+    });
+
+    // The first thing asked becomes the conversation's name in the history list.
+    const title =
+      conversation.title === "New conversation"
+        ? userText.trim().slice(0, 80)
+        : conversation.title;
+    await ctx.db.patch(conversation._id, { title, updatedAt: now });
+
+    return { conversationId: conversation._id, assistantId };
+  },
+});
+
+export const setMessageStatus = internalMutation({
+  args: {
+    messageId: v.id("dolphinMessages"),
+    status: v.union(
+      v.literal("thinking"),
+      v.literal("consulting"),
+      v.literal("complete"),
+      v.literal("error"),
+    ),
+    content: v.optional(v.string()),
+    errorReason: v.optional(v.union(v.string(), v.null())),
+    model: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, { messageId, status, content, errorReason, model }) => {
+    const patch: Partial<Doc<"dolphinMessages">> = { status };
+    if (content !== undefined) patch.content = content;
+    if (errorReason !== undefined) patch.errorReason = errorReason;
+    if (model !== undefined) patch.model = model;
+    if (status === "complete" || status === "error") patch.completedAt = Date.now();
+    await ctx.db.patch(messageId, patch);
+  },
+});
+
+export const recordToolCall = internalMutation({
+  args: {
+    conversationId: v.id("dolphinConversations"),
+    messageId: v.id("dolphinMessages"),
+    agentKey: v.string(),
+    agentName: v.string(),
+    toolName: v.string(),
+    argumentsJson: v.string(),
+  },
+  handler: async (ctx, args) =>
+    // Inserted BEFORE the call is made, so a call that hangs or crashes still
+    // leaves a record that it was attempted. A citation list assembled only
+    // from successes would quietly hide the agents that did not answer.
+    ctx.db.insert("dolphinToolCalls", {
+      ...args,
+      resultText: null,
+      isError: false,
+      transportError: null,
+      latencyMs: null,
+      calledAt: Date.now(),
+    }),
+});
+
+export const completeToolCall = internalMutation({
+  args: {
+    toolCallId: v.id("dolphinToolCalls"),
+    resultText: v.union(v.string(), v.null()),
+    isError: v.boolean(),
+    transportError: v.union(v.string(), v.null()),
+    latencyMs: v.number(),
+  },
+  handler: async (ctx, { toolCallId, ...patch }) => {
+    await ctx.db.patch(toolCallId, patch);
+  },
+});
+
+/**
+ * Candidate agents for a question.
+ *
+ * Deterministic: the catalog's own search index and ranking decide who is
+ * offered, before the model sees anything. Restricted to MCP because that is
+ * the protocol with tools to call - an A2A agent is commissioned and paid, not
+ * queried, and putting one in a tool menu would imply this agent can spend.
+ */
+export const candidatesFor = internalQuery({
+  args: { text: v.string(), limit: v.number() },
+  handler: async (ctx, { text, limit }) => {
+    const trimmed = text.trim();
+
+    const rows = trimmed.length > 0
+      ? await ctx.db
+          .query("agents")
+          .withSearchIndex("search_text", (q) =>
+            q.search("searchText", trimmed).eq("status", "live").eq("protocol", "mcp"),
+          )
+          .take(limit)
+      : await ctx.db
+          .query("agents")
+          .withIndex("by_status_protocol_category_rank", (q) =>
+            q.eq("status", "live").eq("protocol", "mcp"),
+          )
+          .order("desc")
+          .take(limit);
+
+    return rows.map((row) => ({
+      agentKey: row.agentKey,
+      name: row.name,
+      endpoint: row.endpoint,
+      protocol: row.protocol,
+    }));
+  },
+});
+
+/* ---------------------------------------------------------------------------
+ * The loop
+ * ------------------------------------------------------------------------ */
+
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input.trim().toLowerCase());
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export const ask = action({
+  args: {
+    conversationKey: v.string(),
+    text: v.string(),
+  },
+  handler: async (ctx, { conversationKey, text }): Promise<{ messageId: Id<"dolphinMessages"> }> => {
+    const promptHash = await sha256Hex(text);
+
+    const { conversationId, assistantId } = await ctx.runMutation(internal.dolphin.appendTurn, {
+      conversationKey,
+      userText: text,
+      promptHash,
+    });
+
+    try {
+      /*
+       * RETRIEVE - ordinary catalog code, no model involved. See
+       * decisionTools.ts on why the menu the model sees is small.
+       */
+      const candidates: CandidateAgent[] = await ctx.runQuery(internal.dolphin.candidatesFor, {
+        text,
+        limit: 6,
+      });
+
+      if (candidates.length === 0) {
+        await ctx.runMutation(internal.dolphin.setMessageStatus, {
+          messageId: assistantId,
+          status: "error",
+          errorReason:
+            "No live MCP agents in the catalog matched that question, so there was nothing for Dolphin to consult.",
+        });
+        return { messageId: assistantId };
+      }
+
+      await ctx.runMutation(internal.dolphin.setMessageStatus, {
+        messageId: assistantId,
+        status: "consulting",
+      });
+
+      const menu = await buildToolMenu(candidates);
+
+      if (menu.tools.length === 0) {
+        await ctx.runMutation(internal.dolphin.setMessageStatus, {
+          messageId: assistantId,
+          status: "error",
+          errorReason:
+            menu.unreachable.length > 0
+              ? `The agents that matched could not be reached right now: ${menu.unreachable
+                  .map((entry) => entry.agentName)
+                  .join(", ")}.`
+              : "The agents that matched publish no tools Dolphin can call.",
+        });
+        return { messageId: assistantId };
+      }
+
+      const messages: ChatMessage[] = [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: text },
+      ];
+
+      /*
+       * `required` on the first pass. A small model left to its own judgement
+       * answers from its own weights, which is how an unsourced number reaches
+       * a user - the one outcome this product must never produce.
+       */
+      const first = await chatCompletion({
+        messages,
+        tools: menu.tools,
+        toolChoice: "required",
+      });
+
+      messages.push({
+        role: "assistant",
+        content: first.content || null,
+        tool_calls: first.toolCalls,
+      });
+
+      await executeToolCalls(ctx, {
+        conversationId,
+        messageId: assistantId,
+        toolCalls: first.toolCalls.slice(0, MAX_TOOL_CALLS_PER_TURN),
+        menu,
+        messages,
+      });
+
+      // SYNTHESIZE. No tools this time: the evidence is in, and another round
+      // of calls on a free tier buys less than it costs.
+      const final = await chatCompletion({ messages });
+
+      await ctx.runMutation(internal.dolphin.setMessageStatus, {
+        messageId: assistantId,
+        status: "complete",
+        content:
+          final.content.trim().length > 0
+            ? final.content
+            : "Dolphin consulted the agents below but could not form an answer from what they returned.",
+        model: final.model,
+      });
+    } catch (cause) {
+      // A reason a person can read. `isRateLimit` matters: "we are out of free
+      // calls today" and "the agent is broken" are different facts.
+      const reason =
+        cause instanceof OpenRouterError
+          ? cause.message
+          : cause instanceof Error
+            ? cause.message
+            : String(cause);
+
+      await ctx.runMutation(internal.dolphin.setMessageStatus, {
+        messageId: assistantId,
+        status: "error",
+        errorReason: reason,
+      });
+    }
+
+    return { messageId: assistantId };
+  },
+});
+
+/**
+ * Runs the calls the model asked for, recording each one as it goes.
+ *
+ * Every result is appended to `messages` as a `tool` turn, including failures -
+ * a model told nothing about a failed call will assume it succeeded and invent
+ * what it returned.
+ */
+async function executeToolCalls(
+  ctx: ActionCtx,
+  input: {
+    conversationId: Id<"dolphinConversations">;
+    messageId: Id<"dolphinMessages">;
+    toolCalls: ToolCall[];
+    menu: Awaited<ReturnType<typeof buildToolMenu>>;
+    messages: ChatMessage[];
+  },
+): Promise<void> {
+  for (const call of input.toolCalls) {
+    const binding = input.menu.bindings.get(call.function.name);
+
+    if (!binding) {
+      // The model named a tool that was never offered. Not fatal, and worth
+      // telling it plainly rather than silently dropping - a dropped call is
+      // one the model will assume succeeded.
+      input.messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: `No such tool: ${call.function.name}. It was not in the menu you were given.`,
+      });
+      continue;
+    }
+
+    let args: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(call.function.arguments || "{}") as unknown;
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        args = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // A malformed argument string is the model's error, not the agent's.
+      // Recorded as an attempt so the citation list stays honest.
+      args = {};
+    }
+
+    const toolCallId = await ctx.runMutation(internal.dolphin.recordToolCall, {
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      agentKey: binding.agentKey,
+      agentName: binding.agentName,
+      toolName: binding.toolName,
+      argumentsJson: JSON.stringify(args).slice(0, 2_000),
+    });
+
+    const startedAt = Date.now();
+    try {
+      const result = await callMcpTool(binding.session, binding.toolName, args);
+      const latencyMs = Date.now() - startedAt;
+
+      await ctx.runMutation(internal.dolphin.completeToolCall, {
+        toolCallId,
+        resultText: result.text.slice(0, MAX_STORED_RESULT_CHARS),
+        isError: result.isError,
+        transportError: null,
+        latencyMs,
+      });
+
+      input.messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        // Prefixed with the source so the model has what it needs to attribute
+        // the claim, and so a tool that tries to impersonate another agent in
+        // its own output is contradicted by the framing around it.
+        content:
+          `[${binding.agentName} -> ${binding.toolName}${result.isError ? " (reported an error)" : ""}]\n` +
+          result.text.slice(0, MAX_MODEL_RESULT_CHARS),
+      });
+    } catch (cause) {
+      const latencyMs = Date.now() - startedAt;
+      const detail = cause instanceof McpError ? cause.message : String(cause);
+
+      await ctx.runMutation(internal.dolphin.completeToolCall, {
+        toolCallId,
+        resultText: null,
+        isError: true,
+        transportError: detail.slice(0, 500),
+        latencyMs,
+      });
+
+      input.messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: `[${binding.agentName} could not be reached] ${detail}`,
+      });
+    }
+  }
+}

@@ -285,6 +285,7 @@ export default function DolphinScreen() {
                   placeholder="Ask about an agent, a position, or a yield…"
                   placeholderTextColor="#94A3B8"
                   ref={inputRef}
+                  underlineColorAndroid="transparent"
                   style={{
                     flex: 1,
                     maxHeight: 120,
@@ -296,7 +297,15 @@ export default function DolphinScreen() {
                     color: "#0F172A",
                     position: "relative",
                     zIndex: 1,
-                    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
+                    ...(Platform.OS === "web"
+                      ? ({
+                          outline: "none",
+                          outlineWidth: 0,
+                          outlineStyle: "none",
+                          outlineColor: "transparent",
+                          boxShadow: "none",
+                        } as object)
+                      : null),
                   }}
                   value={draft}
                 />

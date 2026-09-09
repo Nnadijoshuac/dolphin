@@ -7,6 +7,7 @@ import styles from "@/app/dolphin/dolphin-chat.module.css";
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
+import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
 import {
     useDolphinChat,
@@ -71,53 +72,15 @@ function HistoryGlyph({ size = 18 }: { size?: number }) {
   );
 }
 
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function LinkifiedContent({
-  text,
-  toolCalls,
+function Turn({
+  turn,
+  dynamicAgents,
+  onSelectPrompt,
 }: {
-  text: string;
-  toolCalls: DolphinTurn["toolCalls"];
+  turn: DolphinTurn;
+  dynamicAgents?: Array<{ name: string; agentKey: string }>;
+  onSelectPrompt?: (prompt: string) => void;
 }) {
-  const agentMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const call of toolCalls) {
-      if (call.agentName && call.agentKey && !map.has(call.agentName)) {
-        map.set(call.agentName, call.agentKey);
-      }
-    }
-    return map;
-  }, [toolCalls]);
-
-  if (agentMap.size === 0) return <>{text}</>;
-
-  const names = Array.from(agentMap.keys()).sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(`(${names.map(escapeRegex).join("|")})`, "g");
-  const parts = text.split(pattern);
-
-  return (
-    <>
-      {parts.map((part, index) => {
-        const agentKey = agentMap.get(part);
-        if (!agentKey) return <span key={index}>{part}</span>;
-        return (
-          <Link
-            className="font-semibold text-accent-ink underline decoration-accent-ink/30 underline-offset-2 hover:decoration-accent-ink"
-            href={`/agent/${encodeURIComponent(agentKey)}`}
-            key={index}
-          >
-            {part}
-          </Link>
-        );
-      })}
-    </>
-  );
-}
-
-function Turn({ turn }: { turn: DolphinTurn }) {
   if (turn.role === "user") {
     return (
       <div className="flex w-full items-end justify-end gap-2 py-3">
@@ -147,8 +110,13 @@ function Turn({ turn }: { turn: DolphinTurn }) {
         ) : null}
 
         {turn.content.length > 0 ? (
-          <div className="overflow-hidden whitespace-pre-wrap rounded-2xl rounded-bl-md bg-paper-muted px-4 py-3 text-[0.92rem] leading-[1.7] text-ink">
-            <LinkifiedContent text={turn.content} toolCalls={turn.toolCalls} />
+          <div className="overflow-hidden rounded-2xl rounded-bl-md bg-paper-muted px-4 py-3 text-[0.92rem] leading-[1.7] text-ink">
+            <DolphinMessageContent
+              content={turn.content}
+              dynamicAgents={dynamicAgents}
+              onSelectPrompt={onSelectPrompt}
+              toolCalls={turn.toolCalls}
+            />
           </div>
         ) : null}
 
@@ -286,7 +254,8 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
 
   const { conversationKey, send, reset, openConversation, isSending, sendError } =
     useDolphinChat(seedAgentKey);
-  const { exists, isLoading, title, turns } = useDolphinConversation(conversationKey);
+  const { exists, isLoading, title, turns, agentDirectory } =
+    useDolphinConversation(conversationKey);
   const history = useAppStore((state) => state.chatHistory);
   const upsertHistory = useAppStore((state) => state.upsertChatHistory);
   const removeHistory = useAppStore((state) => state.removeChatHistory);
@@ -418,7 +387,12 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
             ) : (
               <div>
                 {turns.map((turn) => (
-                  <Turn key={turn.id} turn={turn} />
+                  <Turn
+                    dynamicAgents={agentDirectory}
+                    key={turn.id}
+                    onSelectPrompt={(prompt) => submit(prompt)}
+                    turn={turn}
+                  />
                 ))}
               </div>
             )}

@@ -234,10 +234,21 @@ function ToolCallRow({ call, isLast }: { call: DolphinToolCall; isLast: boolean 
 
 function ConsultedAgents({ calls }: { calls: DolphinToolCall[] }) {
   const [open, setOpen] = useState(false);
-  if (calls.length === 0) return null;
 
-  const agentCount = new Set(calls.map((call) => call.agentKey)).size;
-  const pending = calls.some((call) => call.latencyMs === null);
+  // Filter out calls that failed, errored, or returned empty results.
+  // In-flight calls (latencyMs === null) are kept while actively consulting.
+  const effectiveCalls = useMemo(() => {
+    return calls.filter((call) => {
+      if (call.latencyMs === null) return true;
+      if (call.isError || call.transportError) return false;
+      return typeof call.resultText === "string" && call.resultText.trim().length > 0;
+    });
+  }, [calls]);
+
+  if (effectiveCalls.length === 0) return null;
+
+  const agentCount = new Set(effectiveCalls.map((call) => call.agentKey)).size;
+  const pending = effectiveCalls.some((call) => call.latencyMs === null);
 
   return (
     <View style={{ marginTop: 6 }}>
@@ -254,10 +265,10 @@ function ConsultedAgents({ calls }: { calls: DolphinToolCall[] }) {
           paddingVertical: 6,
         }}
       >
-        <StackedIcons calls={calls} />
+        <StackedIcons calls={effectiveCalls} />
         <Text style={{ fontSize: 12, fontWeight: "600", color: colors.inkSecondary, flexShrink: 1 }}>
           {pending ? "Consulting" : "Consulted"} {agentCount} agent
-          {agentCount > 1 ? "s" : ""} · {calls.length} call{calls.length > 1 ? "s" : ""}
+          {agentCount > 1 ? "s" : ""} · {effectiveCalls.length} call{effectiveCalls.length > 1 ? "s" : ""}
         </Text>
         <CategoryGlyph
           color={colors.inkSecondary}
@@ -269,8 +280,8 @@ function ConsultedAgents({ calls }: { calls: DolphinToolCall[] }) {
 
       {open ? (
         <View style={{ paddingTop: 4 }}>
-          {calls.map((call, index) => (
-            <ToolCallRow call={call} isLast={index === calls.length - 1} key={call.id} />
+          {effectiveCalls.map((call, index) => (
+            <ToolCallRow call={call} isLast={index === effectiveCalls.length - 1} key={call.id} />
           ))}
         </View>
       ) : null}

@@ -38,3 +38,10 @@
     );
   }
 }
+
+.shell textarea,
+.shell textarea:focus,
+.shell textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}

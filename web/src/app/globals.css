@@ -150,6 +150,14 @@ video {
   outline-offset: 3px;
 }
 
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .site-frame {
   width: min(100%, 1280px);
   margin-inline: auto;

@@ -441,7 +441,7 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
             <div className="flex w-full flex-col items-end rounded-[1.65rem] border border-slate-300/90 bg-white/88 p-2 shadow-[0_12px_38px_rgba(15,23,42,0.11)] backdrop-blur-xl">
               <textarea
                 aria-label="Message Dolphin"
-                className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-slate-950 outline-none placeholder:text-slate-400"
+                className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-slate-950 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-slate-400"
                 onChange={(event) => {
                   setDraft(event.target.value);
                   event.target.style.height = "auto";

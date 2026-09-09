@@ -28,7 +28,6 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 const TAB_BAR_MAX_WIDTH = 350;
 const TAB_BAR_GUTTER = 24;
@@ -54,21 +53,22 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   useEffect(() => {
     translateX.set(
       withSpring(activeOffset, {
-        damping: 13,
-        stiffness: 170,
-        mass: 0.9,
+        damping: 18,
+        stiffness: 190,
+        mass: 0.85,
+        overshootClamping: true,
       })
     );
     scaleX.set(
       withSequence(
-        withTiming(1.16, { duration: 110 }),
-        withSpring(1, { damping: 10, stiffness: 180 })
+        withTiming(1.08, { duration: 90 }),
+        withSpring(1, { damping: 16, stiffness: 210 })
       )
     );
     scaleY.set(
       withSequence(
-        withTiming(0.86, { duration: 110 }),
-        withSpring(1, { damping: 10, stiffness: 180 })
+        withTiming(0.94, { duration: 90 }),
+        withSpring(1, { damping: 16, stiffness: 210 })
       )
     );
   }, [activeOffset, scaleX, scaleY, translateX]);
@@ -213,8 +213,6 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           position: "relative",
           width: tabBarWidth,
           height: 64,
-          flexDirection: "row",
-          alignItems: "center",
           shadowColor: colors.ink,
           shadowOffset: { width: 0, height: 14 },
           shadowOpacity: 0.32,
@@ -222,86 +220,52 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           elevation: 14,
         }}
       >
-        {/* The 3-lobed metaball SVG background with continuous curvature & deep obsidian pearl material */}
-        <Svg
-          height={64}
-          preserveAspectRatio="none"
-          style={StyleSheet.absoluteFill}
-          viewBox="0 0 350 64"
-          width={tabBarWidth}
-        >
-          <Defs>
-            {/* Deep pitch-black obsidian pearl base */}
-            <LinearGradient id="pearl-base" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="#0a0a0c" />
-              <Stop offset="25%" stopColor="#040405" />
-              <Stop offset="75%" stopColor="#000000" />
-              <Stop offset="100%" stopColor="#060608" />
-            </LinearGradient>
-
-            {/* Subtle rim highlight */}
-            <LinearGradient id="pearl-rim" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="rgba(255, 255, 255, 0.16)" />
-              <Stop offset="20%" stopColor="rgba(255, 231, 255, 0.08)" />
-              <Stop offset="80%" stopColor="rgba(0, 0, 0, 0.8)" />
-              <Stop offset="100%" stopColor="rgba(255, 231, 255, 0.1)" />
-            </LinearGradient>
-
-            {/* Delicate specular gloss sheen */}
-            <LinearGradient id="pearl-gloss" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor="rgba(255, 255, 255, 0.1)" />
-              <Stop offset="35%" stopColor="rgba(255, 231, 255, 0.03)" />
-              <Stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
-            </LinearGradient>
-          </Defs>
-
-          <Path
-            d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
-            fill="url(#pearl-base)"
-            stroke="url(#pearl-rim)"
-            strokeWidth={1.2}
-          />
-          <Path
-            d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
-            fill="url(#pearl-gloss)"
-            opacity={0.4}
-          />
-        </Svg>
-
-        {/* Sliding Nano Jelly Active Pill */}
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            {
-              position: "absolute",
-              top: 8,
-              left: 0,
-              width: ACTIVE_INDICATOR_SIZE,
-              height: ACTIVE_INDICATOR_SIZE,
-              borderRadius: ACTIVE_INDICATOR_SIZE / 2,
-              backgroundColor: "#FFFFFF",
-              shadowColor: "#000000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.35,
-              shadowRadius: 14,
-              elevation: 8,
-              zIndex: 1,
-            },
-            jellyAnimatedStyle,
-          ]}
-        />
-
-        {/* Relative 5-Slot Navigation Track */}
         <View
           style={{
+            flex: 1,
+            position: "relative",
             width: "100%",
             height: "100%",
-            flexDirection: "row",
-            alignItems: "center",
-            zIndex: 2,
+            borderRadius: 32,
+            backgroundColor: "#000000",
+            overflow: "hidden",
           }}
         >
-          {state.routes.map((route, index) => renderTab(index))}
+          {/* The capsule clips the active circle; its outer wrapper owns the
+              shadow so clipping does not flatten the floating bar. */}
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              {
+                position: "absolute",
+                top: 8,
+                left: 0,
+                width: ACTIVE_INDICATOR_SIZE,
+                height: ACTIVE_INDICATOR_SIZE,
+                borderRadius: ACTIVE_INDICATOR_SIZE / 2,
+                backgroundColor: "#FFFFFF",
+                shadowColor: "#000000",
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.24,
+                shadowRadius: 10,
+                elevation: 6,
+                zIndex: 1,
+              },
+              jellyAnimatedStyle,
+            ]}
+          />
+
+          <View
+            style={{
+              width: "100%",
+              height: "100%",
+              flexDirection: "row",
+              alignItems: "center",
+              zIndex: 2,
+            }}
+          >
+            {state.routes.map((route, index) => renderTab(index))}
+          </View>
         </View>
       </View>
     </View>

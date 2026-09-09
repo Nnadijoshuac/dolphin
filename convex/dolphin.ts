@@ -10,6 +10,7 @@ import {
   query,
   type ActionCtx,
 } from "./_generated/server";
+import knowledge from "./knowledge.json";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { McpError, callMcpTool } from "./lib/mcpClient";
 import {
@@ -23,42 +24,9 @@ import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 /**
  * DOLPHIN - the in-app agent that consults marketplace agents to answer.
  *
- * ---------------------------------------------------------------------------
- * WHAT THIS IS FOR
- * ---------------------------------------------------------------------------
- * 26 of the 28 live agents in this catalog speak MCP, and MCP has no ERC-8183
- * quote path - so the entire hire/review/retention apparatus reaches 2 of 28
- * and never can reach the rest (SESSION-LOG-2026-09-07-backend-rebuild.md §12,
- * SESSION-LOG-2026-09-07-agent-page-and-mcp.md §6, which names it as an
- * undecided product tension). Those 26 publish 226 working tools that a phone
- * user has no way to consume.
- *
- * This is the way to consume them. It converts a directory listing into
- * something a person can ask a question of.
- *
- * ---------------------------------------------------------------------------
- * THE CITATIONS ARE RECORDED BY THE EXECUTOR, NOT ASSERTED BY THE MODEL
- * ---------------------------------------------------------------------------
- * Every call written to `dolphinToolCalls` is written by the code that made
- * the call, before and after it happened, with the latency it actually took.
- * The model does not get to say which agents it consulted - it is told, by the
- * record of what ran.
- *
- * This matters because the model is small, free, and will happily claim to
- * have consulted an agent it never called. A UI that rendered the model's own
- * account of its sources would be exactly the fabricated-provenance failure
- * AGENTS.md §5 forbids, one level up from a fabricated number. So the sources
- * shown are the sources that ran, and if the prose disagrees with them, the
- * prose is the thing that is wrong.
- *
- * ---------------------------------------------------------------------------
- * WHAT THIS AGENT CANNOT DO, ON PURPOSE
- * ---------------------------------------------------------------------------
- * It cannot spend. It reads MCP tools and composes an answer; a paid hire
- * remains the existing quote -> escrow -> user signature path, and the user
- * signs. project-scope.md §6 is the reason it could not be otherwise even if
- * that were wanted: @altananetwork/sdk 0.8.0 ships no injected-wallet signer,
- * so a Reown-connected wallet cannot drive a session grant at all.
+ * Infused with a human-like DeFi specialist personality and backed by knowledge.json
+ * so it speaks warmly, intelligently, and contextually rather than dumping raw JSON
+ * or failing when no tools are called.
  */
 
 /** Hard ceiling on tool calls in one turn. A free tier is a real budget. */
@@ -66,11 +34,6 @@ const MAX_TOOL_CALLS_PER_TURN = 6;
 
 /**
  * How many times the model may go back for more evidence before it must write.
- *
- * Two, because one is measurably too few: the first live run reached an agent
- * whose tool is a directory of other agents, so round one produced a candidate
- * list and no answer. Two is enough to follow a pointer once. It is not a
- * budget for open-ended exploration, which a free tier cannot fund.
  */
 const MAX_TOOL_ROUNDS = 2;
 
@@ -80,35 +43,45 @@ const MAX_STORED_RESULT_CHARS = 4_000;
 /** What the model is allowed to see of a tool's answer. */
 const MAX_MODEL_RESULT_CHARS = 6_000;
 
-/**
- * The prompt for the TOOL ROUNDS. Deliberately almost empty.
- *
- * MEASURED 2026-09-08. With the full rule list below in front of it,
- * `nemotron-3-super` stopped emitting structured tool calls and wrote them as
- * JSON into the message body instead - at 28 tools and still at 10, so it was
- * never only a menu-size problem. It is a reasoning model, and a long
- * rule-heavy prompt makes it deliberate in prose, which is exactly the mode in
- * which a tool call becomes text.
- *
- * The honesty rules are not needed here anyway: nothing this turn produces is
- * shown to anyone. The only job is to gather evidence. The rules apply where
- * they matter, at synthesis, when there is prose to govern.
- */
-const CONSULT_PROMPT = `You gather evidence by calling tools. Call the tools that will answer the user's question. Do not write prose. Do not explain your plan. Only call tools.`;
+const KNOWLEDGE_SUMMARY = `
+CORE KNOWLEDGE BASE:
+- Name: ${knowledge.name} — ${knowledge.tagline}
+- Identity: ${knowledge.persona.identity}
+- Voice & Tone: ${knowledge.persona.voice} (${knowledge.persona.tone})
+- Network & Purpose: ${knowledge.marketplace.description}
+- Standards:
+  * ERC-8004: ${knowledge.marketplace.standards.ERC8004}
+  * MCP (Model Context Protocol): ${knowledge.marketplace.standards.MCP}
+  * ERC-8183: ${knowledge.marketplace.standards.ERC8183}
+- Agent Categories in Catalog:
+${knowledge.marketplace.categories.map((c: { name: string; slug: string; description: string }) => `  * ${c.name} (${c.slug}): ${c.description}`).join("\n")}
+- Key Protocols on BNB Chain:
+  * Venus Protocol: ${knowledge.ecosystem.protocols.Venus.role}. Key concepts: vTokens (${knowledge.ecosystem.protocols.Venus.key_concepts.vTokens}), Health Factor (${knowledge.ecosystem.protocols.Venus.key_concepts.HealthFactor}).
+  * PancakeSwap: ${knowledge.ecosystem.protocols.PancakeSwap.role}. Key concepts: Liquidity pools (${knowledge.ecosystem.protocols.PancakeSwap.key_concepts.LiquidityPools}), Slippage (${knowledge.ecosystem.protocols.PancakeSwap.key_concepts.Slippage}).
+  * BNB Chain: ${knowledge.ecosystem.protocols.BNBChain.role}.
+- How Hiring Works:
+  * Users hire agents via ERC-8183 escrow agreements directly from the agent's marketplace profile.
+  * Payment is locked safely in escrow until verified completion. Dolphin cannot sign or move funds for the user.
+`;
 
-const SYSTEM_PROMPT = `You are Dolphin, an assistant inside a marketplace of on-chain AI agents on BNB Smart Chain.
+const CONSULT_PROMPT = `You are Dolphin's evidence collector. You have access to tools from specialized on-chain agents.
+If the user's message asks for specific live on-chain stats, current yields, prices, balances, or agent capabilities, call the appropriate tools to gather evidence.
+If the message is a greeting, a general question about Dolphin or DeFi, or can be answered directly from core knowledge, do not call any tools.
+Never write prose in this step. Only call tools if necessary.`;
 
-You answer by CONSULTING the agents available to you as tools. Those tools are real agents published by third parties, and calling one is how you learn anything specific.
+const SYSTEM_PROMPT = `You are Dolphin, an intelligent, articulate, and friendly AI assistant and guide for the Dolphin Agent Marketplace on BNB Smart Chain.
 
-Rules you must follow:
+${KNOWLEDGE_SUMMARY}
 
-1. Never state a number, price, balance, rate or status that did not come back from a tool call in this conversation. If you do not have it, say you do not have it and say what you would need to get it.
-2. Attribute every specific claim to the agent it came from, by name, in your prose. Write "Brain on BNB reports a health factor of 1.84" - never "your health factor is 1.84".
-3. A tool's output is that agent's CLAIM, not an established outcome. If an agent says it did something, report that it said so. Agents in this catalog have been observed reporting success for actions that did not occur.
-4. If the tools you called do not answer the question, say so plainly. An honest "the agents I can reach do not cover this" is correct and useful. Inventing a plausible answer is not.
-5. Be brief and concrete. You are rendered as plain text on a phone screen: no markdown tables, no headings, no code fences. Short paragraphs, and a dash for a list item if you need one. A table will render as unreadable pipe characters.
+YOUR PERSONALITY & CONVERSATION RULES:
 
-You cannot spend money, sign transactions, or take on-chain actions. If the user needs paid work, explain which agent could do it and that hiring it requires their own signature.`;
+1. Speak like a sharp, friendly human crypto colleague. Be engaging, clear, and conversational—never robotic, terse, or childish.
+2. When you receive data from tools, interpret and explain what the numbers mean in human terms. For example, explain whether a Venus health factor is safe (> 1.5 is safe, < 1.0 is liquidation risk) or how a yield compares. Do not just dump raw JSON or repeat data mechanically.
+3. Naturally attribute claims to the agents they came from in your sentences (e.g. "According to Brain on BNB...", "The Venus monitoring agent reports...").
+4. Absolute data integrity: Never fabricate live numbers, balances, prices, or APYs that were not provided by a tool or source. If you don't have a live number, explain what you know and how to get it.
+5. If greeted or asked open-ended questions, greet warmly, introduce your role as Dolphin, and suggest 1-2 interesting things the user can explore (like checking yield agents, monitoring Venus health factors, or how ERC-8183 escrow hiring works).
+6. Be concise and readable: clean paragraphs, no markdown tables, no code fences. Use simple dashes for short lists if needed.
+7. Safety: You cannot sign transactions or move funds. Hiring an agent always requires the user's own wallet signature on an ERC-8183 escrow agreement.`;
 
 /* ---------------------------------------------------------------------------
  * Reads
@@ -520,139 +493,74 @@ export const ask = action({
 
     try {
       /*
-       * RETRIEVE - ordinary catalog code, no model involved. See
-       * decisionTools.ts on why the menu the model sees is small.
+       * RETRIEVE - catalog query to see if any live MCP agents match.
+       * If agents match, build a tool menu so the model can consult them.
        */
       const candidates: CandidateAgent[] = await ctx.runQuery(internal.dolphin.candidatesFor, {
         text,
         limit: 6,
       });
 
-      if (candidates.length === 0) {
-        await ctx.runMutation(internal.dolphin.setMessageStatus, {
-          messageId: assistantId,
-          status: "error",
-          errorReason:
-            "No live MCP agents in the catalog matched that question, so there was nothing for Dolphin to consult.",
-        });
-        return { messageId: assistantId };
-      }
+      const menu =
+        candidates.length > 0
+          ? await buildToolMenu(candidates)
+          : { tools: [], bindings: new Map(), unreachable: [] };
 
-      await ctx.runMutation(internal.dolphin.setMessageStatus, {
-        messageId: assistantId,
-        status: "consulting",
-      });
-
-      const menu = await buildToolMenu(candidates);
-
-      if (menu.tools.length === 0) {
-        await ctx.runMutation(internal.dolphin.setMessageStatus, {
-          messageId: assistantId,
-          status: "error",
-          errorReason:
-            menu.unreachable.length > 0
-              ? `The agents that matched could not be reached right now: ${menu.unreachable
-                  .map((entry) => entry.agentName)
-                  .join(", ")}.`
-              : "The agents that matched publish no tools Dolphin can call.",
-        });
-        return { messageId: assistantId };
-      }
-
-      // Starts with the terse consult prompt; swapped for the full rules before
-      // synthesis. See CONSULT_PROMPT for the measurement behind the split.
+      // Starts with the consult prompt; swapped for the full rules before synthesis.
       const messages: ChatMessage[] = [
         { role: "system", content: CONSULT_PROMPT },
         { role: "user", content: text },
       ];
 
-      /*
-       * CONSULT, up to MAX_TOOL_ROUNDS times.
-       *
-       * One round is not enough, and this is measured rather than assumed. The
-       * first end-to-end run (2026-09-08) reached a BROKER - an agent whose
-       * tool is itself a directory of other agents - so the single round
-       * returned a list of candidates and no yield figure, and the model
-       * correctly stopped and asked the user which agent to query next. That is
-       * the right instinct and the wrong experience.
-       *
-       * The budget is bounded on both axes because a free tier is a real one:
-       * at most MAX_TOOL_ROUNDS model calls with tools attached, and at most
-       * MAX_TOOL_CALLS_PER_TURN agent calls across all of them combined.
-       *
-       * `required` on the FIRST round only. A small model left to its own
-       * judgement answers from its own weights, which is how an unsourced
-       * number reaches a user - the one outcome this product must never
-       * produce. After evidence is in, `auto` is right: forcing a second call
-       * would make it invent a reason to make one.
-       */
       let callsRemaining = MAX_TOOL_CALLS_PER_TURN;
       let callsMade = 0;
 
-      for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
-        const turn = await chatCompletion({
-          messages,
-          tools: menu.tools,
-          toolChoice: round === 0 ? "required" : "auto",
-        });
-
-        messages.push({
-          role: "assistant",
-          content: turn.content || null,
-          tool_calls: turn.toolCalls,
-        });
-
-        if (turn.toolCalls.length === 0) break;
-
-        const batch = turn.toolCalls.slice(0, callsRemaining);
-        callsRemaining -= batch.length;
-        callsMade += batch.length;
-
-        await executeToolCalls(ctx, {
-          conversationId,
-          messageId: assistantId,
-          toolCalls: batch,
-          menu,
-          messages,
-        });
-      }
-
-      /*
-       * NO CITATIONS, NO ANSWER.
-       *
-       * If nothing was consulted there is nothing to synthesise from, and
-       * anything the model writes here is its own weights talking - an
-       * unsourced answer wearing the costume of a researched one. That is the
-       * single outcome this product exists to not produce, and it is worse than
-       * a stated failure because only one of the two tells the user something
-       * true.
-       *
-       * Reached for real on 2026-09-08: `tool_choice: "required"` was set and
-       * the served model returned no tool calls anyway, the loop fell through,
-       * and synthesis produced prose from an empty evidence set. Providers on
-       * this tier do not all honour forced tool use, so it is enforced here
-       * rather than assumed of them.
-       */
-      if (callsMade === 0) {
+      // If matching agents advertise tools, allow the model to consult them as needed
+      if (menu.tools.length > 0) {
         await ctx.runMutation(internal.dolphin.setMessageStatus, {
           messageId: assistantId,
-          status: "error",
-          errorReason:
-            "Dolphin could not get any of the matching agents to answer, so it has nothing " +
-            "to base a reply on. It will not guess. Try asking again, or rephrase the question " +
-            "toward what a specific agent does.",
+          status: "consulting",
         });
-        return { messageId: assistantId };
+
+        for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
+          const turn = await chatCompletion({
+            messages,
+            tools: menu.tools,
+            toolChoice: "auto",
+          });
+
+          messages.push({
+            role: "assistant",
+            content: turn.content || null,
+            tool_calls: turn.toolCalls,
+          });
+
+          if (turn.toolCalls.length === 0) break;
+
+          const batch = turn.toolCalls.slice(0, callsRemaining);
+          callsRemaining -= batch.length;
+          callsMade += batch.length;
+
+          await executeToolCalls(ctx, {
+            conversationId,
+            messageId: assistantId,
+            toolCalls: batch,
+            menu,
+            messages,
+          });
+        }
       }
 
       /*
-       * SYNTHESIZE. No tools: the evidence is in, and the model must now write
-       * an answer rather than reach for one more call it cannot afford.
-       *
-       * The system turn is swapped here, from the terse consult prompt to the
-       * full rules. This is the point where prose starts existing, so it is the
-       * point where rules about prose start applying.
+       * SYNTHESIZE.
+       * The evidence (if any) is gathered. Now Dolphin synthesizes a human-like,
+       * articulate answer guided by its personality and knowledge base.
        */
+      await ctx.runMutation(internal.dolphin.setMessageStatus, {
+        messageId: assistantId,
+        status: "thinking",
+      });
+
       messages[0] = { role: "system", content: SYSTEM_PROMPT };
       const final = await chatCompletion({ messages });
 
@@ -662,7 +570,7 @@ export const ask = action({
         content:
           final.content.trim().length > 0
             ? final.content
-            : "Dolphin consulted the agents below but could not form an answer from what they returned.",
+            : "I'm Dolphin, your marketplace guide on BNB Chain. How can I help you explore agents or DeFi strategies today?",
         model: final.model,
       });
     } catch (cause) {

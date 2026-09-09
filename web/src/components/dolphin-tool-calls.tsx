@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
 import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
@@ -98,7 +98,17 @@ export function DolphinToolCalls({ calls }: { calls: DolphinToolCall[] }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  if (calls.length === 0) return null;
+  // Filter out calls that failed, errored, or returned empty results.
+  // In-flight calls (latencyMs === null) are retained while actively consulting.
+  const effectiveCalls = useMemo(() => {
+    return calls.filter((call) => {
+      if (call.latencyMs === null) return true;
+      if (call.transportError !== null || call.isError) return false;
+      return typeof call.resultText === "string" && call.resultText.trim().length > 0;
+    });
+  }, [calls]);
+
+  if (effectiveCalls.length === 0) return null;
 
   const toggle = (id: string) =>
     setExpanded((previous) => {
@@ -108,8 +118,8 @@ export function DolphinToolCalls({ calls }: { calls: DolphinToolCall[] }) {
       return next;
     });
 
-  const agentCount = new Set(calls.map((call) => call.agentKey)).size;
-  const pending = calls.some((call) => call.latencyMs === null);
+  const agentCount = new Set(effectiveCalls.map((call) => call.agentKey)).size;
+  const pending = effectiveCalls.some((call) => call.latencyMs === null);
 
   return (
     <div className="w-fit max-w-full">
@@ -119,13 +129,13 @@ export function DolphinToolCalls({ calls }: { calls: DolphinToolCall[] }) {
         onClick={() => setOpen(!open)}
         type="button"
       >
-        <StackedIcons calls={calls} />
+        <StackedIcons calls={effectiveCalls} />
         <span className="text-xs font-medium">
           {pending ? "Consulting" : "Consulted"} {agentCount} agent
           {agentCount > 1 ? "s" : ""}
           <span className="text-faint">
             {" · "}
-            {calls.length} call{calls.length > 1 ? "s" : ""}
+            {effectiveCalls.length} call{effectiveCalls.length > 1 ? "s" : ""}
           </span>
         </span>
         <Chevron open={open} size={18} />
@@ -137,7 +147,7 @@ export function DolphinToolCalls({ calls }: { calls: DolphinToolCall[] }) {
         }`}
       >
         <div className="pt-1">
-          {calls.map((call, index) => {
+          {effectiveCalls.map((call, index) => {
             const isOpen = expanded.has(call.id);
             const failed = call.transportError !== null;
             const isPending = call.latencyMs === null;

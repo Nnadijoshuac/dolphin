@@ -711,7 +711,7 @@ export default defineSchema({
      * agents in `dolphinToolCalls`: an agent can be named without being called,
      * which is exactly what happens when a broker recommends one.
      */
-    mentions: v.array(v.object({ label: v.string(), agentKey: v.string() })),
+    mentions: v.optional(v.array(v.object({ label: v.string(), agentKey: v.string() }))),
     createdAt: v.number(),
     completedAt: v.union(v.number(), v.null()),
   })

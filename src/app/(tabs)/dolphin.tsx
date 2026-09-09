@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -6,14 +6,22 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BrandMark } from "@/components/brand-mark";
+import { CategoryGlyph } from "@/components/category-glyph";
+import { DolphinGridBackground } from "@/components/dolphin-grid-background";
+import {
+  DolphinHistoryDrawer,
+  DolphinHistoryPanel,
+} from "@/components/dolphin-history";
+import { DolphinLoader } from "@/components/dolphin-loader";
 import { DolphinTurnView } from "@/components/dolphin-transcript";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
@@ -21,55 +29,42 @@ import {
   useDolphinChat,
   useDolphinConversation,
 } from "@/hooks/use-dolphin-conversation";
-import { useWallet } from "@/wallet/wallet-provider";
+import { useAppStore } from "@/store/use-app-store";
 
 /**
- * DOLPHIN - the in-app agent.
- *
- * See Agent/DOLPHIN-AGENT-SCOPE.md for what this is and why it exists. The
- * short version: 26 of the 28 live agents in this catalog speak MCP and can
- * never be hired through the ERC-8183 path, so the marketplace apparatus
- * reaches 2 of 28. They publish 226 working tools. This screen is how a phone
- * user consumes them.
- *
- * The interface deliberately copies the shape of a familiar AI chat so nobody
- * has to learn anything. What is NOT generic is the citation rows under each
- * answer - see components/dolphin-transcript.tsx.
+ * Dolphin's chat surface. Conversation capability keys are cached only on the
+ * current device; transcripts remain authoritative in Convex.
  */
-
-/**
- * The empty state has to TEACH, not just sit there.
- *
- * project-scope.md §11 requires that someone who has never heard of BNB Agent
- * Studio can use this. A blank chat box is a dead end for that person - they do
- * not know what an agent is, let alone what to ask one.
- *
- * These also carry a second job: they are the prompts to pre-run before a demo,
- * so the obvious path is also the cached one and costs no free-tier model
- * calls. Change them and that caching goes with them.
- */
-const SUGGESTIONS = [
-  "What yield opportunities are on BNB Chain right now?",
-  "Which agents can watch a lending position for me?",
-  "Find me an agent that trades on a price ladder",
-  "What can the agents in this marketplace actually do?",
-];
-
 export default function DolphinScreen() {
   const params = useLocalSearchParams<{ agentKey?: string }>();
   const seedAgentKey = typeof params.agentKey === "string" ? params.agentKey : null;
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
 
   const [draft, setDraft] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
 
-  const { conversationKey, send, reset, isSending, sendError } =
+  const { conversationKey, send, reset, openConversation, isSending, sendError } =
     useDolphinChat(seedAgentKey);
-  const { turns } = useDolphinConversation(conversationKey);
-  const wallet = useWallet();
+  const { exists, isLoading, title, turns } = useDolphinConversation(conversationKey);
+  const history = useAppStore((state) => state.chatHistory);
+  const upsertHistory = useAppStore((state) => state.upsertChatHistory);
+  const removeHistory = useAppStore((state) => state.removeChatHistory);
+  const clearHistory = useAppStore((state) => state.clearChatHistory);
 
-  // Two hex characters off the connected address, matching the web build.
-  // "You" when no wallet is connected, which is a supported way to use this.
-  const initials = wallet.address ? wallet.address.slice(2, 4) : "You";
+  useEffect(() => {
+    if (!conversationKey || turns.length === 0) return;
+    const firstQuestion = turns.find((turn) => turn.role === "user")?.content.trim();
+    const newestTurn = turns[turns.length - 1];
+    upsertHistory({
+      conversationKey,
+      title: title && title !== "New conversation" ? title : firstQuestion || "New conversation",
+      updatedAt: newestTurn.completedAt ?? newestTurn.createdAt,
+    });
+  }, [conversationKey, title, turns, upsertHistory]);
 
   const submit = useCallback(
     (text: string) => {
@@ -81,209 +76,261 @@ export default function DolphinScreen() {
     [isSending, send],
   );
 
+  const startNew = useCallback(() => {
+    reset();
+    setDraft("");
+    setHistoryOpen(false);
+    inputRef.current?.focus();
+  }, [reset]);
+
+  const openSavedConversation = useCallback(
+    (conversationKeyToOpen: string) => {
+      openConversation(conversationKeyToOpen);
+      setDraft("");
+      setHistoryOpen(false);
+    },
+    [openConversation],
+  );
+
+  const removeSavedConversation = useCallback(
+    (conversationKeyToRemove: string) => {
+      removeHistory(conversationKeyToRemove);
+      if (conversationKeyToRemove === conversationKey) reset();
+    },
+    [conversationKey, removeHistory, reset],
+  );
+
   const isEmpty = turns.length === 0;
+  const historyProps = {
+    activeKey: conversationKey,
+    entries: history,
+    onClear: clearHistory,
+    onClose: () => setHistoryOpen(false),
+    onNew: startNew,
+    onOpen: openSavedConversation,
+    onRemove: removeSavedConversation,
+  };
 
   return (
-    <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 10,
-          paddingHorizontal: 20,
-          paddingBottom: 12,
-        }}
-      >
-        <BrandMark size={24} />
-        <Text style={{ flex: 1, fontSize: 20, fontWeight: "800", color: colors.ink }}>
-          Dolphin
-        </Text>
-        {!isEmpty ? (
-          <PressableScale
-            accessibilityLabel="Start a new conversation"
-            onPress={() => {
-              void Haptics.selectionAsync();
-              reset();
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={{ flex: 1, backgroundColor: colors.canvas }}
+    >
+      <DolphinGridBackground />
+
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View
+            style={{
+              minHeight: 56,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.line,
+              backgroundColor: "rgba(251,249,244,0.72)",
             }}
           >
-            <Text style={{ fontSize: 13, fontWeight: "700", color: colors.goldDark }}>
-              New
-            </Text>
-          </PressableScale>
+            <PressableScale
+              accessibilityLabel="Back to Discover"
+              containerStyle={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onPress={() => {
+                void Haptics.selectionAsync();
+                router.back();
+              }}
+            >
+              <CategoryGlyph color="#0F172A" name="chevron-left" size={20} strokeWidth={2.2} />
+            </PressableScale>
+
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              <BrandMark size={20} />
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#0F172A" }}>
+                Dolphin
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+              {!isWide ? (
+                <PressableScale
+                  accessibilityLabel="Open chat history"
+                  containerStyle={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  onPress={() => setHistoryOpen(true)}
+                >
+                  <CategoryGlyph color="#475569" name="clock" size={18} strokeWidth={1.9} />
+                </PressableScale>
+              ) : null}
+              {!isEmpty ? (
+                <PressableScale onPress={startNew} containerStyle={{ padding: 10 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#475569" }}>
+                    New
+                  </Text>
+                </PressableScale>
+              ) : null}
+            </View>
+          </View>
+
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+            style={{ flex: 1 }}
+          >
+            <ScrollView
+              ref={scrollRef}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
+              keyboardShouldPersistTaps="handled"
+              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+              showsVerticalScrollIndicator={false}
+            >
+              {conversationKey && isLoading ? (
+                <View style={{ alignItems: "center", paddingTop: "25%" }}>
+                  <DolphinLoader label="Loading conversation…" />
+                </View>
+              ) : conversationKey && !exists ? (
+                <View style={{ alignItems: "center", paddingTop: "25%", gap: 8 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#0F172A" }}>
+                    Conversation unavailable
+                  </Text>
+                  <Text style={{ fontSize: 13, color: "#64748B", textAlign: "center" }}>
+                    This locally saved chat can no longer be opened.
+                  </Text>
+                </View>
+              ) : isEmpty ? (
+                <View style={{ alignItems: "center", paddingTop: "25%" }}>
+                  <BrandMark size={48} />
+                  <Text
+                    style={{
+                      marginTop: 16,
+                      fontSize: 24,
+                      fontWeight: "800",
+                      color: "#0F172A",
+                      textAlign: "center",
+                    }}
+                  >
+                    Ask the marketplace
+                  </Text>
+                </View>
+              ) : (
+                turns.map((turn) => <DolphinTurnView key={turn.id} turn={turn} />)
+              )}
+
+              {sendError ? (
+                <Text style={{ marginTop: 8, fontSize: 13, color: colors.danger }}>
+                  {sendError}
+                </Text>
+              ) : null}
+            </ScrollView>
+
+            <View
+              pointerEvents="box-none"
+              style={{
+                paddingHorizontal: 16,
+                paddingTop: 8,
+                paddingBottom: isWide ? 20 : 92,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "flex-end",
+                  gap: 8,
+                  padding: 8,
+                  borderRadius: 26,
+                  borderWidth: 1.2,
+                  borderColor: "rgba(148,163,184,0.52)",
+                  backgroundColor:
+                    Platform.OS === "ios" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.96)",
+                  boxShadow: "0 12px 38px rgba(15,23,42,0.12)",
+                  overflow: "hidden",
+                }}
+              >
+                <BlurView
+                  intensity={92}
+                  pointerEvents="none"
+                  style={[StyleSheet.absoluteFill, { zIndex: 0 }]}
+                  tint={
+                    Platform.OS === "ios"
+                      ? "systemThinMaterialLight"
+                      : "systemChromeMaterialLight"
+                  }
+                />
+
+                <TextInput
+                  accessibilityLabel="Message Dolphin"
+                  multiline
+                  onChangeText={setDraft}
+                  placeholder="Ask about an agent, a position, or a yield…"
+                  placeholderTextColor="#94A3B8"
+                  ref={inputRef}
+                  style={{
+                    flex: 1,
+                    maxHeight: 120,
+                    minHeight: 38,
+                    paddingHorizontal: 10,
+                    paddingTop: 9,
+                    paddingBottom: 9,
+                    fontSize: 15,
+                    color: "#0F172A",
+                    position: "relative",
+                    zIndex: 1,
+                    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
+                  }}
+                  value={draft}
+                />
+                <PressableScale
+                  accessibilityLabel="Send"
+                  accessibilityState={{ disabled: draft.trim().length === 0 || isSending }}
+                  disabled={draft.trim().length === 0 || isSending}
+                  containerStyle={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 19,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor:
+                      draft.trim().length > 0 && !isSending ? "#0F172A" : "#CBD5E1",
+                  }}
+                  onPress={() => submit(draft)}
+                  style={{ zIndex: 1 }}
+                >
+                  <Text style={{ fontSize: 17, fontWeight: "700", color: "#FFFFFF" }}>↑</Text>
+                </PressableScale>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+
+        {isWide ? (
+          <View style={{ width: 304 }}>
+            <DolphinHistoryPanel {...historyProps} onClose={undefined} />
+          </View>
         ) : null}
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}
-          keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-          showsVerticalScrollIndicator={false}
-        >
-          {isEmpty ? (
-            <View style={{ paddingTop: 40 }}>
-              <Text
-                style={{
-                  fontSize: 24,
-                  fontWeight: "800",
-                  color: colors.ink,
-                  marginBottom: 8,
-                }}
-              >
-                Ask the marketplace
-              </Text>
-              <Text
-                style={{
-                  fontSize: 14,
-                  lineHeight: 20,
-                  color: colors.inkSecondary,
-                  marginBottom: 24,
-                }}
-              >
-                Dolphin answers by calling the agents listed here and showing you
-                which ones it asked. It never makes a number up — if the agents it
-                can reach do not know, it says so.
-              </Text>
-
-              {SUGGESTIONS.map((suggestion) => (
-                <PressableScale
-                  key={suggestion}
-                  onPress={() => submit(suggestion)}
-                  containerStyle={{
-                    borderWidth: 1,
-                    borderColor: colors.goldBorder,
-                    backgroundColor: colors.goldMuted,
-                    borderRadius: 14,
-                    paddingHorizontal: 14,
-                    paddingVertical: 12,
-                    marginBottom: 10,
-                  }}
-                >
-                  <Text style={{ fontSize: 14, color: colors.ink }}>{suggestion}</Text>
-                </PressableScale>
-              ))}
-            </View>
-          ) : (
-            turns.map((turn) => (
-              <DolphinTurnView initials={initials} key={turn.id} turn={turn} />
-            ))
-          )}
-
-          {/*
-            Only reached when the ACTION itself failed - a dropped connection.
-            Failures inside a turn are written onto the assistant message and
-            render in the transcript where the question was asked.
-          */}
-          {sendError ? (
-            <Text style={{ fontSize: 13, color: "#C0564E", marginTop: 8 }}>
-              {sendError}
-            </Text>
-          ) : null}
-        </ScrollView>
-
-        {/*
-          THE COMPOSER IS AN ISLAND.
-          -------------------------------------------------------------------
-          Same object language as the tab bar in app/(tabs)/_layout.tsx: a
-          translucent, blurred, hairline-bordered capsule that floats clear of
-          the screen edges with a soft shadow under it, rather than a bar welded
-          to the bottom of the viewport.
-
-          Two things this has to get right that the tab island does not:
-
-          It GROWS. A chat composer takes multi-line input, so the capsule's
-          radius is a fixed 26 rather than half its height - a pill that grows
-          to 120pt tall would turn into a lozenge with 60pt ends.
-
-          It STACKS. The tab island is still on screen underneath when the
-          keyboard is closed, so this sits above it; when the keyboard opens the
-          tab island removes itself (it listens for keyboardWillShow) and
-          KeyboardAvoidingView slides this down into the space it left. The two
-          offsets below are that pair of positions.
-        */}
-        <View
-          pointerEvents="box-none"
-          style={{
-            paddingHorizontal: 16,
-            paddingTop: 8,
-            paddingBottom: 92,
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "flex-end",
-              gap: 8,
-              paddingHorizontal: 8,
-              paddingVertical: 8,
-              borderRadius: 26,
-              borderWidth: 1.2,
-              borderColor:
-                Platform.OS === "ios"
-                  ? "rgba(255, 255, 255, 0.75)"
-                  : "rgba(17, 18, 20, 0.08)",
-              backgroundColor:
-                Platform.OS === "ios"
-                  ? "rgba(255, 255, 255, 0.55)"
-                  : "rgba(255, 255, 255, 0.96)",
-              shadowColor: "#111215",
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: 0.16,
-              shadowRadius: 20,
-              elevation: 12,
-              overflow: "hidden",
-            }}
-          >
-            <BlurView
-              intensity={95}
-              style={StyleSheet.absoluteFill}
-              tint={
-                Platform.OS === "ios"
-                  ? "systemThinMaterialLight"
-                  : "systemChromeMaterialLight"
-              }
-            />
-
-            <TextInput
-              multiline
-              onChangeText={setDraft}
-              placeholder="Ask about an agent, a position, a yield…"
-              placeholderTextColor="#9A9C96"
-              style={{
-                flex: 1,
-                maxHeight: 120,
-                minHeight: 38,
-                paddingHorizontal: 10,
-                paddingTop: 9,
-                paddingBottom: 9,
-                fontSize: 15,
-                color: colors.ink,
-              }}
-              value={draft}
-            />
-            <PressableScale
-              accessibilityLabel="Send"
-              onPress={() => submit(draft)}
-              containerStyle={{
-                width: 38,
-                height: 38,
-                borderRadius: 19,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor:
-                  draft.trim().length > 0 && !isSending ? colors.gold : colors.goldBorder,
-              }}
-            >
-              <Text style={{ fontSize: 17, fontWeight: "700", color: colors.ink }}>↑</Text>
-            </PressableScale>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+      {!isWide ? <DolphinHistoryDrawer {...historyProps} visible={historyOpen} /> : null}
     </SafeAreaView>
   );
 }

@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 
 import { AgentIcon } from "@/components/agent-icon";
-import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
 import { PressableScale } from "@/components/pressable-scale";
@@ -241,7 +240,7 @@ function ConsultedAgents({ calls }: { calls: DolphinToolCall[] }) {
   const pending = calls.some((call) => call.latencyMs === null);
 
   return (
-    <View style={{ marginBottom: 8 }}>
+    <View style={{ marginTop: 6 }}>
       <PressableScale
         accessibilityLabel={`${agentCount} agents consulted`}
         onPress={() => {
@@ -279,39 +278,98 @@ function ConsultedAgents({ calls }: { calls: DolphinToolCall[] }) {
   );
 }
 
-function Avatar({ kind, initials }: { kind: "user" | "assistant"; initials: string }) {
-  const base = {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    borderWidth: 1,
-    borderColor: colors.goldBorder,
-  };
+/** Wallet icon avatar — same glyph as the tab bar wallet icon */
+function UserAvatar() {
+  return (
+    <View
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: colors.goldBorder,
+        backgroundColor: colors.surfaceSubtle ?? colors.goldMuted,
+      }}
+    >
+      <CategoryGlyph color={colors.inkSecondary} name="wallet" size={16} strokeWidth={1.8} />
+    </View>
+  );
+}
 
-  if (kind === "assistant") {
+function escapeRegex(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Linkified content — agent names in the response become tappable links
+ * to their marketplace pages.
+ */
+function LinkifiedContent({
+  text,
+  toolCalls,
+}: {
+  text: string;
+  toolCalls: DolphinToolCall[];
+}) {
+  const router = useRouter();
+
+  const agentMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const call of toolCalls) {
+      if (call.agentName && call.agentKey && !map.has(call.agentName)) {
+        map.set(call.agentName, call.agentKey);
+      }
+    }
+    return map;
+  }, [toolCalls]);
+
+  if (agentMap.size === 0) {
     return (
-      <View style={[base, { backgroundColor: colors.goldSoft }]}>
-        <BrandMark size={17} />
-      </View>
+      <Text selectable style={{ fontSize: 14.5, lineHeight: 22, color: colors.ink }}>
+        {text}
+      </Text>
     );
   }
+
+  const names = Array.from(agentMap.keys()).sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(`(${names.map(escapeRegex).join("|")})`, "g");
+  const parts = text.split(pattern);
+
   return (
-    <View style={[base, { backgroundColor: colors.surfaceSubtle ?? colors.goldMuted }]}>
-      <Text style={{ fontSize: 10.5, fontWeight: "700", color: colors.inkSecondary }}>
-        {initials.toUpperCase()}
-      </Text>
-    </View>
+    <Text selectable style={{ fontSize: 14.5, lineHeight: 22, color: colors.ink }}>
+      {parts.map((part, i) => {
+        const agentKey = agentMap.get(part);
+        if (agentKey) {
+          return (
+            <Text
+              key={i}
+              onPress={() => {
+                void Haptics.selectionAsync();
+                router.push({ pathname: "/agent/[id]", params: { id: agentKey } });
+              }}
+              style={{
+                fontWeight: "700",
+                color: colors.goldDark,
+                textDecorationLine: "underline",
+                textDecorationColor: `${colors.goldDark}55`,
+              }}
+            >
+              {part}
+            </Text>
+          );
+        }
+        return <Text key={i}>{part}</Text>;
+      })}
+    </Text>
   );
 }
 
 export function DolphinTurnView({
   turn,
-  initials = "You",
 }: {
   turn: DolphinTurn;
-  initials?: string;
 }) {
   if (turn.role === "user") {
     return (
@@ -338,7 +396,7 @@ export function DolphinTurnView({
             {turn.content}
           </Text>
         </View>
-        <Avatar initials={initials} kind="user" />
+        <UserAvatar />
       </View>
     );
   }
@@ -347,25 +405,19 @@ export function DolphinTurnView({
 
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 8 }}>
-      <Avatar initials="AI" kind="assistant" />
-
       <View style={{ flex: 1, minWidth: 0 }}>
-        {/*
-          Progress and provenance sit ABOVE the answer, in the order they
-          happened: Dolphin picks who to ask, asks them, then writes.
-        */}
-        {working && turn.toolCalls.length === 0 ? (
+        {/* Loading state — the 3D motion rings */}
+        {working && turn.content.length === 0 && turn.toolCalls.length === 0 ? (
           <DolphinLoader
             label={
               turn.status === "thinking"
-                ? "Choosing which agents to ask…"
+                ? "Thinking…"
                 : "Consulting agents…"
             }
           />
         ) : null}
 
-        <ConsultedAgents calls={turn.toolCalls} />
-
+        {/* Error state */}
         {turn.status === "error" ? (
           <View
             style={{
@@ -382,6 +434,7 @@ export function DolphinTurnView({
           </View>
         ) : null}
 
+        {/* The answer bubble — with agent names hyperlinked */}
         {turn.content.length > 0 ? (
           <View
             style={{
@@ -392,23 +445,21 @@ export function DolphinTurnView({
               paddingVertical: 11,
             }}
           >
-            <Text selectable style={{ fontSize: 14.5, lineHeight: 22, color: colors.ink }}>
-              {turn.content}
-            </Text>
+            <LinkifiedContent text={turn.content} toolCalls={turn.toolCalls} />
           </View>
         ) : null}
 
-        {/*
-          WHEN the answer was produced, always shown. A reused answer keeps its
-          ORIGINAL completedAt, so a cached reply must not read as fresh: live
-          metrics restated as current when they were read an hour ago is the
-          fabricated-liveness failure of AGENTS.md §5 wearing a cache as a
-          disguise.
-        */}
+        {/* Working indicator while awaiting content after tool calls */}
+        {working && turn.content.length === 0 && turn.toolCalls.length > 0 ? (
+          <DolphinLoader label="Writing…" />
+        ) : null}
+
+        {/* Consulted agents — BELOW the response bubble */}
+        <ConsultedAgents calls={turn.toolCalls} />
+
         {turn.status === "complete" && turn.completedAt !== null ? (
           <Text style={{ fontSize: 10, color: colors.inkSecondary, marginTop: 6, paddingLeft: 4 }}>
-            Answered {relativeTime(turn.completedAt)}
-            {turn.model ? ` · ${turn.model.split("/").pop()?.replace(":free", "")}` : ""}
+            {relativeTime(turn.completedAt)}
           </Text>
         ) : null}
       </View>

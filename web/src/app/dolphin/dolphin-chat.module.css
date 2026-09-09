@@ -1,0 +1,40 @@
+.shell {
+  isolation: isolate;
+  background: var(--canvas);
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--line, #deddd4) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line, #deddd4) 1px, transparent 1px);
+  background-size: 20px 30px;
+  -webkit-mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 0%,
+    #000 60%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 0%,
+    #000 60%,
+    transparent 100%
+  );
+}
+
+@media (max-width: 63.999rem) {
+  .grid {
+    -webkit-mask-image: radial-gradient(
+      ellipse 105% 55% at 50% 0%,
+      #000 52%,
+      transparent 100%
+    );
+    mask-image: radial-gradient(
+      ellipse 105% 55% at 50% 0%,
+      #000 52%,
+      transparent 100%
+    );
+  }
+}

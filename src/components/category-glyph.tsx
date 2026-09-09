@@ -1,4 +1,6 @@
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react-native";
+import { colors } from "@/constants/theme";
+import type { AgentCategory } from "@/types/agent";
+import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
 import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
 import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
@@ -6,13 +8,15 @@ import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
 import ArrowUpRight01Icon from "@hugeicons/core-free-icons/ArrowUpRight01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
-import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
 import Compass01Icon from "@hugeicons/core-free-icons/Compass01Icon";
 import Copy01Icon from "@hugeicons/core-free-icons/Copy01Icon";
+import Dollar01Icon from "@hugeicons/core-free-icons/Dollar01Icon";
+import FilterHorizontalIcon from "@hugeicons/core-free-icons/FilterHorizontalIcon";
 import GridViewIcon from "@hugeicons/core-free-icons/GridViewIcon";
 import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleIcon";
 import Layers01Icon from "@hugeicons/core-free-icons/Layers01Icon";
 import MoreVerticalIcon from "@hugeicons/core-free-icons/MoreVerticalIcon";
+import PanelLeftIcon from "@hugeicons/core-free-icons/PanelLeftIcon";
 import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
 import Robot01Icon from "@hugeicons/core-free-icons/Robot01Icon";
 import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
@@ -23,11 +27,9 @@ import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import StarIcon from "@hugeicons/core-free-icons/StarIcon";
 import Tick01Icon from "@hugeicons/core-free-icons/Tick01Icon";
 import Wallet01Icon from "@hugeicons/core-free-icons/Wallet01Icon";
-import Dollar01Icon from "@hugeicons/core-free-icons/Dollar01Icon";
 import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react-native";
 import Svg, { Circle, Line, Path, Rect } from "react-native-svg";
-import { colors } from "@/constants/theme";
-import type { AgentCategory } from "@/types/agent";
 
 /**
  * Interface icons come from Hugeicons; the six AGENT CATEGORY glyphs do not.
@@ -68,6 +70,8 @@ export type GlyphName =
   | "wallet"
   | "shield"
   | "clock"
+  | "panel-left"
+  | "add"
   | "revoke"
   | "check"
   | "copy"
@@ -104,6 +108,8 @@ const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
   wallet: Wallet01Icon,
   shield: Shield01Icon,
   clock: Clock01Icon,
+  "panel-left": PanelLeftIcon,
+  add: Add01Icon,
   revoke: ShieldOffIcon,
   check: Tick01Icon,
   copy: Copy01Icon,

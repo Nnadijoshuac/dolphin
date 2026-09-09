@@ -5,12 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/app/dolphin/dolphin-chat.module.css";
 import { BrandMark } from "@/components/brand-mark";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
 import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
 import {
-  useDolphinChat,
-  useDolphinConversation,
-  type DolphinTurn,
+    useDolphinChat,
+    useDolphinConversation,
+    type DolphinTurn,
 } from "@/hooks/use-dolphin-conversation";
 import { useAppStore, type ChatHistoryEntry } from "@/store/use-app-store";
 
@@ -191,7 +192,7 @@ function ChatHistory({
     >
       <div className="flex items-center gap-2 px-2 py-2">
         <div className="grid size-9 place-items-center rounded-xl bg-slate-950 text-white">
-          <HistoryGlyph size={17} />
+          <CategoryGlyph color="#FFFFFF" name="panel-left" size={17} strokeWidth={1.9} />
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-slate-950">Chat history</h2>
@@ -214,7 +215,7 @@ function ChatHistory({
         onClick={onNew}
         type="button"
       >
-        <span aria-hidden className="text-lg leading-none text-white">+</span>
+        <CategoryGlyph color="#FFFFFF" name="add" size={18} strokeWidth={2} />
         <span className="text-white">New conversation</span>
       </button>
 

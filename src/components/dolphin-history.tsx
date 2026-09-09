@@ -58,7 +58,7 @@ export function DolphinHistoryPanel({
             backgroundColor: "#0F172A",
           }}
         >
-          <CategoryGlyph color="#FFFFFF" name="clock" size={17} strokeWidth={1.9} />
+          <CategoryGlyph color="#FFFFFF" name="panel-left" size={17} strokeWidth={1.9} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={{ fontSize: 14, fontWeight: "700", color: "#0F172A" }}>
@@ -98,7 +98,7 @@ export function DolphinHistoryPanel({
         }}
         onPress={onNew}
       >
-        <Text style={{ fontSize: 18, lineHeight: 20, color: "#FFFFFF" }}>+</Text>
+        <CategoryGlyph color="#FFFFFF" name="add" size={18} strokeWidth={2} />
         <Text style={{ fontSize: 14, fontWeight: "700", color: "#FFFFFF" }}>
           New conversation
         </Text>

@@ -1,19 +1,19 @@
+import { Redirect } from "expo-router";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
-  Keyboard,
-  Platform,
-  StyleSheet,
-  useWindowDimensions,
-  View,
+    Keyboard,
+    Platform,
+    StyleSheet,
+    useWindowDimensions,
+    View,
 } from "react-native";
-import { Redirect } from "expo-router";
 // SDK 57: expo-router forked the React Navigation packages it wraps, so
 // @react-navigation/bottom-tabs is no longer installed. Both the Tabs
 // navigator and its tab-bar prop types now come from expo-router/js-tabs -
 // the root `Tabs` export is deprecated in favour of this subpath.
+import * as Haptics from "expo-haptics";
 import { Tabs, type BottomTabBarProps } from "expo-router/js-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
 
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -22,11 +22,11 @@ import { colors } from "@/constants/theme";
 import { useAppStore } from "@/store/use-app-store";
 
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
+    useAnimatedStyle,
+    useSharedValue,
+    withSequence,
+    withSpring,
+    withTiming,
 } from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 

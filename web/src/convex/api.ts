@@ -677,6 +677,7 @@ export const dolphinApi = anyApi as unknown as {
         };
         messages: DolphinMessage[];
         toolCalls: DolphinToolCall[];
+        agentDirectory: Array<{ agentKey: string; name: string }>;
       } | null
     >;
     /**

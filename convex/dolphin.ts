@@ -246,6 +246,11 @@ export const getConversation = query({
       .order("asc")
       .collect();
 
+    const liveAgents = await ctx.db
+      .query("agents")
+      .withIndex("by_status_rank", (q) => q.eq("status", "live"))
+      .take(50);
+
     return {
       conversation: {
         conversationKey: conversation.conversationKey,
@@ -286,6 +291,10 @@ export const getConversation = query({
         transportError: call.transportError,
         latencyMs: call.latencyMs,
         calledAt: call.calledAt,
+      })),
+      agentDirectory: liveAgents.map((agent) => ({
+        agentKey: agent.agentKey,
+        name: agent.name,
       })),
     };
   },

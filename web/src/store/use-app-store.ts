@@ -26,11 +26,32 @@ import { createJSONStorage, persist } from "zustand/middleware";
  */
 interface AppState {
   hasCompletedOnboarding: boolean;
+  chatHistory: ChatHistoryEntry[];
   recentSearches: string[];
   setHasCompletedOnboarding: (isComplete: boolean) => void;
   addRecentSearch: (query: string) => void;
   removeRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
+  upsertChatHistory: (entry: ChatHistoryEntry) => void;
+  removeChatHistory: (conversationKey: string) => void;
+  clearChatHistory: () => void;
+}
+
+export type ChatHistoryEntry = Readonly<{
+  conversationKey: string;
+  title: string;
+  updatedAt: number;
+}>;
+
+function isChatHistoryEntry(value: unknown): value is ChatHistoryEntry {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<ChatHistoryEntry>;
+  return (
+    typeof candidate.conversationKey === "string" &&
+    Boolean(candidate.conversationKey.trim()) &&
+    typeof candidate.title === "string" &&
+    Number.isFinite(candidate.updatedAt)
+  );
 }
 
 function migratePersistedState(persistedState: unknown): Partial<AppState> {
@@ -41,9 +62,13 @@ function migratePersistedState(persistedState: unknown): Partial<AppState> {
           typeof value === "string" && Boolean(value.trim()),
       )
     : [];
+  const chatHistory = Array.isArray(legacy.chatHistory)
+    ? legacy.chatHistory.filter(isChatHistoryEntry).slice(0, 24)
+    : [];
 
   return {
     hasCompletedOnboarding: legacy.hasCompletedOnboarding === true,
+    chatHistory,
     recentSearches,
   };
 }
@@ -52,6 +77,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
       hasCompletedOnboarding: false,
+      chatHistory: [],
       recentSearches: [],
       setHasCompletedOnboarding: (isComplete) =>
         set({ hasCompletedOnboarding: isComplete }),
@@ -71,15 +97,36 @@ export const useAppStore = create<AppState>()(
         }));
       },
       clearRecentSearches: () => set({ recentSearches: [] }),
+      upsertChatHistory: (entry) => {
+        const conversationKey = entry.conversationKey.trim();
+        if (!conversationKey) return;
+        const title = entry.title.trim() || "New conversation";
+        set((state) => ({
+          chatHistory: [
+            { conversationKey, title, updatedAt: entry.updatedAt },
+            ...state.chatHistory.filter((item) => item.conversationKey !== conversationKey),
+          ]
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .slice(0, 24),
+        }));
+      },
+      removeChatHistory: (conversationKey) =>
+        set((state) => ({
+          chatHistory: state.chatHistory.filter(
+            (item) => item.conversationKey !== conversationKey,
+          ),
+        })),
+      clearChatHistory: () => set({ chatHistory: [] }),
     }),
     {
       name: "dolphin-web-app-state-v2",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         hasCompletedOnboarding: state.hasCompletedOnboarding,
+        chatHistory: state.chatHistory,
         recentSearches: state.recentSearches,
       }),
-      version: 2,
+      version: 3,
       migrate: migratePersistedState,
     },
   ),

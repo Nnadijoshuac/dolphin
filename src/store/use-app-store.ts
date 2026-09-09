@@ -10,6 +10,13 @@ export type PreviewHire = Readonly<{
   isOnChain: false;
 }>;
 
+/** A server-issued conversation capability remembered only on this device. */
+export type ChatHistoryEntry = Readonly<{
+  conversationKey: string;
+  title: string;
+  updatedAt: number;
+}>;
+
 interface AppState {
   hasCompletedOnboarding: boolean;
   /**
@@ -20,6 +27,7 @@ interface AppState {
    * "Okay" closes this time; this flag is what "Don't show again" writes.
    */
   hasDismissedUseHint: boolean;
+  chatHistory: ChatHistoryEntry[];
   previewHires: PreviewHire[];
   recentSearches: string[];
   setHasCompletedOnboarding: (isComplete: boolean) => void;
@@ -27,6 +35,9 @@ interface AppState {
   addRecentSearch: (query: string) => void;
   removeRecentSearch: (query: string) => void;
   clearRecentSearches: () => void;
+  upsertChatHistory: (entry: ChatHistoryEntry) => void;
+  removeChatHistory: (conversationKey: string) => void;
+  clearChatHistory: () => void;
   savePreviewHire: (agentId: string) => void;
   removePreviewHire: (agentId: string) => void;
   clearPreviewHires: () => void;
@@ -38,6 +49,7 @@ type LegacyPersistedState = {
   previewHires?: unknown;
   hiredAgents?: unknown;
   recentSearches?: unknown;
+  chatHistory?: unknown;
 };
 
 function isPreviewHire(value: unknown): value is PreviewHire {
@@ -48,6 +60,17 @@ function isPreviewHire(value: unknown): value is PreviewHire {
     typeof candidate.savedAt === "string" &&
     candidate.source === "local_preview" &&
     candidate.isOnChain === false
+  );
+}
+
+function isChatHistoryEntry(value: unknown): value is ChatHistoryEntry {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<ChatHistoryEntry>;
+  return (
+    typeof candidate.conversationKey === "string" &&
+    Boolean(candidate.conversationKey.trim()) &&
+    typeof candidate.title === "string" &&
+    Number.isFinite(candidate.updatedAt)
   );
 }
 
@@ -81,6 +104,9 @@ function migratePersistedState(persistedState: unknown): Partial<AppState> {
           typeof value === "string" && Boolean(value.trim()),
       )
     : [];
+  const chatHistory = Array.isArray(legacy.chatHistory)
+    ? legacy.chatHistory.filter(isChatHistoryEntry).slice(0, 24)
+    : [];
 
   return {
     hasCompletedOnboarding: legacy.hasCompletedOnboarding === true,
@@ -89,6 +115,7 @@ function migratePersistedState(persistedState: unknown): Partial<AppState> {
     hasDismissedUseHint: legacy.hasDismissedUseHint === true,
     previewHires,
     recentSearches,
+    chatHistory,
   };
 }
 
@@ -97,6 +124,7 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       hasCompletedOnboarding: false,
       hasDismissedUseHint: false,
+      chatHistory: [],
       previewHires: [],
       recentSearches: [],
       setHasCompletedOnboarding: (isComplete) =>
@@ -120,6 +148,26 @@ export const useAppStore = create<AppState>()(
       },
       
       clearRecentSearches: () => set({ recentSearches: [] }),
+      upsertChatHistory: (entry) => {
+        const conversationKey = entry.conversationKey.trim();
+        if (!conversationKey) return;
+        const title = entry.title.trim() || "New conversation";
+        set((state) => ({
+          chatHistory: [
+            { conversationKey, title, updatedAt: entry.updatedAt },
+            ...state.chatHistory.filter((item) => item.conversationKey !== conversationKey),
+          ]
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .slice(0, 24),
+        }));
+      },
+      removeChatHistory: (conversationKey) =>
+        set((state) => ({
+          chatHistory: state.chatHistory.filter(
+            (item) => item.conversationKey !== conversationKey,
+          ),
+        })),
+      clearChatHistory: () => set({ chatHistory: [] }),
       savePreviewHire: (agentId) => {
         const normalizedAgentId = agentId.trim();
         if (!normalizedAgentId) return;
@@ -151,8 +199,9 @@ export const useAppStore = create<AppState>()(
         hasDismissedUseHint: state.hasDismissedUseHint,
         previewHires: state.previewHires,
         recentSearches: state.recentSearches,
+        chatHistory: state.chatHistory,
       }),
-      version: 3,
+      version: 4,
       migrate: migratePersistedState,
     },
   ),

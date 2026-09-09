@@ -135,5 +135,12 @@ export function useDolphinChat(seedAgentKey?: string | null) {
     setSendError(null);
   }, []);
 
-  return { conversationKey, send, reset, isSending, sendError };
+  const openConversation = useCallback((key: string) => {
+    const normalizedKey = key.trim();
+    if (!normalizedKey) return;
+    setConversationKey(normalizedKey);
+    setSendError(null);
+  }, []);
+
+  return { conversationKey, send, reset, openConversation, isSending, sendError };
 }

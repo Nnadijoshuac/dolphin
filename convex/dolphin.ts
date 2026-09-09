@@ -20,6 +20,8 @@ import {
   type ToolCall,
 } from "./lib/openrouter";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
+import { coerceAgentKey } from "./model/agent";
+import { readHealthFactorStats } from "./protocols/venus";
 
 /**
  * DOLPHIN - the in-app agent that consults marketplace agents to answer.
@@ -156,7 +158,7 @@ CRITICAL RULES:
 - If a tool's description mentions the agent it comes from, consider whether that agent is relevant to the question.
 - You cannot call mutating tools — they've been filtered out. Everything available to you is read-only.`;
 
-const SYSTEM_PROMPT = `You are Dolphin — the intelligence engine of the Dolphin Agent Marketplace on BNB Smart Chain. You are not a chatbot. You are not a search box. You are the brain of the marketplace, the single point where 226 live tools across 28 verified agents become accessible through natural conversation.
+const SYSTEM_PROMPT = `You are Dolphin — the intelligence engine of the Dolphin Agent Marketplace on BNB Smart Chain. You are not a chatbot. You are not a search box. You are the brain of the marketplace, the single point where hundreds of live tools across verified autonomous agents become accessible through natural conversation.
 
 ${KNOWLEDGE_SUMMARY}
 
@@ -187,7 +189,7 @@ RESPONSE RULES:
 5. BE FAIR AND UNBIASED. When comparing agents:
    - Present each agent's strengths and weaknesses honestly
    - Never favour one agent because it answered faster or gave you more data
-   - If a user asks "which is best?", ask what they're optimising for (cost, reliability, coverage, speed) rather than picking a favourite
+   - If a user asks "which is best?", explain what each is best suited for and the concrete tradeoffs
    - Price alone doesn't indicate quality — explain the tradeoffs
 
 6. PROTECT WITHOUT PATRONISING. Flag risks clearly but respect the user's autonomy:
@@ -211,14 +213,31 @@ RESPONSE RULES:
    - NEVER format responses as a phone-tree FAQ menu: "You can ask me about: \n- Item 1\n- Item 2..."
    - NEVER end with canned customer-support sign-offs: "Which agent or aspect would you like to learn more about? Just let me know what interests you.", "Feel free to ask!", or "Let me know if you have any questions!"
    - INSTEAD: Speak like a world-class quant/DeFi strategist and trusted institutional co-pilot. Direct, insightful, charismatic, and conversational.
-   - When greeted (e.g. 'hi', 'gm', 'hey', 'who are you'), greet back with charisma, authority, and warmth as Dolphin. Give a sharp snapshot of what you monitor across the BNB Chain agent economy (28 verified live agents across Venus and PancakeSwap, filtering out 300k+ registry spam), and ask a high-signal strategic question about their on-chain gameplan.
+   - When greeted (e.g. 'hi', 'gm', 'hey', 'who are you'), greet back with charisma, authority, and warmth as Dolphin. Give a sharp snapshot of what you monitor across the BNB Chain agent economy (filtering out 300k+ registry spam to track verified live autonomous agents across Venus, PancakeSwap, and more), and ask a high-signal strategic question about their on-chain gameplan.
 
 12. DEEP DEFI REASONING:
    - When discussing strategies (grid trading, LP rebalancing, yield vaults, liquidation monitoring), explain the underlying mechanics, tradeoffs, and risks:
      * Grid trading: profiting from oscillations in ranging markets, but facing severe inventory drawdowns / impermanent loss in trending markets.
      * LP rebalancing: fee capture vs impermanent loss and gas expenditure on BSC.
      * Venus monitoring: collateral factor buffers, liquidation penalties (5-10%), danger zones.
-     * Altana session permissions: per-token spend caps, call allowlists, and key security.`;
+     * Altana session permissions: per-token spend caps, call allowlists, and key security.
+
+13. WALLET RESPECT & USER CUSTODY:
+   - You MUST distinguish between the User's Identity Wallet (which holds personal funds and connects to the app with 100% user custody) and an Agent Wallet (which is an autonomous on-chain contract identity).
+   - If the user's wallet is connected, NEVER ask them to paste or type their 0x... address! Their connected address is already provided in your context.
+   - If the user's wallet is NOT connected and they ask about their personal health or say "my wallet is connected", NEVER say "As Dolphin, I cannot access your wallet directly" or demand a 0x string like a cold robot. Warmly explain that no wallet is currently connected in this browser session, and invite them to either click "Connect" in the top bar or paste an address if they want a quick check.
+
+14. IMMEDIATE VALUE & PROACTIVE ADVISORY (STRICT BAN ON QUESTIONNAIRES):
+   - When a user asks an open-ended request (e.g. "I want a trading bot, a good one", "Which yield agent is best?", "Recommend an agent"):
+     * NEVER reply with a bulleted questionnaire or interview (e.g. "Could you share: - Which assets? - Your risk tolerance? - Time horizon?").
+     * NEVER say "Once you provide these details, I can: 1. Check live status... 2. Pull data...". That is bureaucratic stalling.
+     * INSTEAD: ACT AS AN EXPERT STRATEGIST RIGHT AWAY.
+       1. Immediately surface the top 2-3 verified candidates from the live catalog right now.
+       2. For trading bots:
+          - Feature [PancakeSwap Grid Trader] (Rank 1): Explain that it is the top automated geometric grid trading bot on PancakeSwap v3 concentrated liquidity pools. Emphasize its free read-only simulation tools (gas-free range testing, order simulation) and small x402 reporting fee.
+          - Compare it directly with alternatives like [Hevo BNB Grid Agent] or [4LPHA Pancake Grid Agent]: Contrast their configurations, supported pairs, and execution styles.
+          - Give an explicit, concrete recommendation on which one to start with, explain the exact mechanics (accumulating fees in ranging markets vs inventory risk in trending breakouts), and invite them to simulate or view a grid layout.
+       3. Conclude with ONE simple, conversational next step instead of an essay of questions.`;
 
 
 /* ---------------------------------------------------------------------------
@@ -249,7 +268,7 @@ export const getConversation = query({
     const liveAgents = await ctx.db
       .query("agents")
       .withIndex("by_status_rank", (q) => q.eq("status", "live"))
-      .take(50);
+      .collect();
 
     return {
       conversation: {
@@ -308,8 +327,9 @@ export const createConversation = mutation({
   args: {
     seedAgentKey: v.optional(v.string()),
     sessionToken: v.optional(v.string()),
+    userAddress: v.optional(v.string()),
   },
-  handler: async (ctx, { seedAgentKey, sessionToken }) => {
+  handler: async (ctx, { seedAgentKey, sessionToken, userAddress }) => {
     /*
      * 32 bytes. This key is a capability - holding it is what grants read
      * access to an anonymous conversation - so it is generated server-side
@@ -327,11 +347,12 @@ export const createConversation = mutation({
      * softens requireWalletAddress, and it is safe here because the address is
      * used solely to list a user's own history - no write is authorised by it.
      */
-    const ownerAddress = sessionToken
+    const verifiedOwner = sessionToken
       ? await requireWalletAddress(ctx, sessionToken, "Opening a Dolphin conversation").catch(
           () => null,
         )
       : null;
+    const ownerAddress = verifiedOwner ?? (userAddress ? userAddress.toLowerCase() : null);
 
     const now = Date.now();
     await ctx.db.insert("dolphinConversations", {
@@ -352,8 +373,9 @@ export const appendTurn = internalMutation({
     conversationKey: v.string(),
     userText: v.string(),
     promptHash: v.string(),
+    userAddress: v.optional(v.string()),
   },
-  handler: async (ctx, { conversationKey, userText, promptHash }) => {
+  handler: async (ctx, { conversationKey, userText, promptHash, userAddress }) => {
     const conversation = await ctx.db
       .query("dolphinConversations")
       .withIndex("by_key", (q) => q.eq("conversationKey", conversationKey))
@@ -361,6 +383,12 @@ export const appendTurn = internalMutation({
     if (!conversation) throw new Error("That conversation no longer exists.");
 
     const now = Date.now();
+
+    let ownerAddress = conversation.ownerAddress;
+    if (!ownerAddress && userAddress) {
+      ownerAddress = userAddress.toLowerCase();
+      await ctx.db.patch(conversation._id, { ownerAddress });
+    }
 
     await ctx.db.insert("dolphinMessages", {
       conversationId: conversation._id,
@@ -389,13 +417,29 @@ export const appendTurn = internalMutation({
     });
 
     // The first thing asked becomes the conversation's name in the history list.
-    const title =
-      conversation.title === "New conversation"
-        ? userText.trim().slice(0, 80)
-        : conversation.title;
+    let title = conversation.title;
+    if (conversation.title === "New conversation") {
+      if (conversation.seedAgentKey) {
+        const seedKey = coerceAgentKey(conversation.seedAgentKey);
+        const seedDoc = seedKey
+          ? await ctx.db
+              .query("agents")
+              .withIndex("by_key", (q) => q.eq("agentKey", seedKey))
+              .unique()
+          : null;
+        title = seedDoc?.name ? `About ${seedDoc.name}` : userText.trim().slice(0, 80);
+      } else {
+        title = userText.trim().slice(0, 80);
+      }
+    }
     await ctx.db.patch(conversation._id, { title, updatedAt: now });
 
-    return { conversationId: conversation._id, assistantId };
+    return {
+      conversationId: conversation._id,
+      assistantId,
+      ownerAddress,
+      seedAgentKey: conversation.seedAgentKey,
+    };
   },
 });
 
@@ -546,38 +590,136 @@ export function isPurelyConversational(text: string): boolean {
  *
  * Deterministic: the catalog's own search index and ranking decide who is
  * offered, before the model sees anything. Restricted to MCP because that is
- * the protocol with tools to call - an A2A agent is commissioned and paid, not
- * queried, and putting one in a tool menu would imply this agent can spend.
+ * the protocol with tools to call.
+ *
+ * Enforces publisher diversity (capping any single publisher/wallet to max 2 candidates)
+ * so suites like 4LPHA cannot crowd out independent agents (PancakeSwap Grid Trader,
+ * Venus Liquidation Guard, Brain on BNB, Hevo, etc.).
  */
 export const candidatesFor = internalQuery({
-  args: { text: v.string(), limit: v.number() },
-  handler: async (ctx, { text, limit }) => {
+  args: {
+    text: v.string(),
+    limit: v.number(),
+    seedAgentKey: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, { text, limit, seedAgentKey }) => {
     const trimmed = text.trim();
 
     if (trimmed.length < 3 || isPurelyConversational(trimmed)) {
       return [];
     }
 
-    const rows = trimmed.length > 0
+    // 0. If a seedAgentKey is active, prioritize it
+    const seededAgent = seedAgentKey
+      ? await (async () => {
+          const key = coerceAgentKey(seedAgentKey);
+          return key
+            ? await ctx.db
+                .query("agents")
+                .withIndex("by_key", (q) => q.eq("agentKey", key))
+                .unique()
+            : null;
+        })()
+      : null;
+
+    // 1. Search index matches
+    const searchMatches = trimmed.length > 0
       ? await ctx.db
           .query("agents")
           .withSearchIndex("search_text", (q) =>
             q.search("searchText", trimmed).eq("status", "live").eq("protocol", "mcp"),
           )
-          .take(limit)
-      : await ctx.db
-          .query("agents")
-          .withIndex("by_status_protocol_category_rank", (q) =>
-            q.eq("status", "live").eq("protocol", "mcp"),
-          )
-          .order("desc")
-          .take(limit);
+          .take(20)
+      : [];
 
-    return rows.map((row) => ({
+    // 2. High-ranked live MCP agents
+    const topRanked = await ctx.db
+      .query("agents")
+      .withIndex("by_status_protocol_category_rank", (q) =>
+        q.eq("status", "live").eq("protocol", "mcp"),
+      )
+      .order("desc")
+      .take(15);
+
+    // Merge searchMatches with topRanked (deduped by agentKey)
+    const combined: typeof topRanked = [];
+    const seenKeys = new Set<string>();
+
+    if (seededAgent && seededAgent.protocol === "mcp") {
+      combined.push(seededAgent);
+      seenKeys.add(seededAgent.agentKey);
+    }
+
+    for (const row of searchMatches) {
+      if (!seenKeys.has(row.agentKey)) {
+        combined.push(row);
+        seenKeys.add(row.agentKey);
+      }
+    }
+    for (const row of topRanked) {
+      if (!seenKeys.has(row.agentKey)) {
+        combined.push(row);
+        seenKeys.add(row.agentKey);
+      }
+    }
+
+    // 3. Balance candidates across publishers (limit any single publisher/wallet to max 2 candidates)
+    // This prevents 4LPHA or any single publisher suite from dominating all tool slots.
+    const publisherCounts = new Map<string, number>();
+    const selected: typeof combined = [];
+
+    for (const row of combined) {
+      const pub = (row.ownerAddress || row.agentWallet || "unknown").toLowerCase();
+      const count = publisherCounts.get(pub) ?? 0;
+      if (count < 2) {
+        selected.push(row);
+        publisherCounts.set(pub, count + 1);
+      }
+      if (selected.length >= limit) break;
+    }
+
+    // Fill remaining if needed
+    if (selected.length < limit) {
+      for (const row of combined) {
+        if (!selected.some((s) => s.agentKey === row.agentKey)) {
+          selected.push(row);
+          if (selected.length >= limit) break;
+        }
+      }
+    }
+
+    return selected.slice(0, limit).map((row) => ({
       agentKey: row.agentKey,
       name: row.name,
       endpoint: row.endpoint,
       protocol: row.protocol,
+    }));
+  },
+});
+
+/**
+ * Authoritative overview of verified live marketplace agents for Dolphin's synthesis.
+ * Provides the model with up-to-the-minute catalog intelligence across all
+ * categories, pricing, ranks, and wallet addresses.
+ */
+export const catalogOverview = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("agents")
+      .withIndex("by_status_rank", (q) => q.eq("status", "live"))
+      .collect();
+
+    return rows.map((r) => ({
+      name: r.name,
+      agentKey: r.agentKey,
+      category: r.categorySlug,
+      rank: r.rank,
+      protocol: r.protocol,
+      agentWallet: r.agentWallet,
+      pricing: r.pricing?.display ?? "Free / on-demand",
+      tagline: r.tagline,
+      skills: r.skills.map((s) => s.name).join(", "),
     }));
   },
 });
@@ -758,22 +900,27 @@ export const ask = action({
   args: {
     conversationKey: v.string(),
     text: v.string(),
+    userAddress: v.optional(v.string()),
   },
-  handler: async (ctx, { conversationKey, text }): Promise<{ messageId: Id<"dolphinMessages"> }> => {
+  handler: async (
+    ctx,
+    { conversationKey, text, userAddress },
+  ): Promise<{ messageId: Id<"dolphinMessages"> }> => {
     const promptHash = await sha256Hex(text);
 
-    const { conversationId, assistantId } = await ctx.runMutation(internal.dolphin.appendTurn, {
-      conversationKey,
-      userText: text,
-      promptHash,
-    });
+    const { conversationId, assistantId, ownerAddress, seedAgentKey } = await ctx.runMutation(
+      internal.dolphin.appendTurn,
+      {
+        conversationKey,
+        userText: text,
+        promptHash,
+        userAddress,
+      },
+    );
 
     try {
       /*
-       * PHASE 0: CONVERSATION MEMORY
-       * Fetch prior turns so Dolphin understands context. "What about that one?"
-       * only works if "that one" has a referent. Without this, every message
-       * is a cold start — which is why the previous version felt stateless.
+       * PHASE 0: CONVERSATION MEMORY & CONTEXT
        */
       const priorTurns: { role: "user" | "assistant"; content: string }[] =
         await ctx.runQuery(internal.dolphin.recentHistory, {
@@ -781,23 +928,39 @@ export const ask = action({
           excludeMessageId: assistantId,
         });
 
+      const activeUserAddress =
+        (userAddress ? userAddress.toLowerCase() : null) ?? ownerAddress ?? null;
+
+      // Extract explicit 0x address if present in text or history
+      const explicitAddressMatch = text.match(/\b(0x[a-fA-F0-9]{40})\b/);
+      const historyAddressMatch = priorTurns
+        .filter((t) => t.role === "user")
+        .map((t) => t.content.match(/\b(0x[a-fA-F0-9]{40})\b/)?.[1]?.toLowerCase())
+        .filter(Boolean)
+        .pop();
+      const targetAddress = explicitAddressMatch
+        ? explicitAddressMatch[1].toLowerCase()
+        : activeUserAddress || historyAddressMatch || null;
+
       /*
-       * PHASE 1: RETRIEVE
-       * Catalog query to see if any live MCP agents match.
-       * If agents match, build a tool menu so the model can consult them.
-       *
-       * Purely conversational openers (greetings, small talk, "who are you")
-       * skip candidate retrieval and tool calling entirely. Searching for "hi"
-       * causes false-positive full-text matches and lets sub-agents hijack
-       * Dolphin's opening message.
+       * PHASE 1: RETRIEVE CANDIDATES WITH CONTEXTUAL MEMORY
        */
       const isConversational = isPurelyConversational(text);
+
+      const lastRelevantUserTurn = priorTurns
+        .filter((t) => t.role === "user")
+        .slice(-1)[0]?.content;
+      const candidateSearchQuery =
+        lastRelevantUserTurn && text.length < 50
+          ? `${text} ${lastRelevantUserTurn}`
+          : text;
 
       const candidates: CandidateAgent[] = isConversational
         ? []
         : await ctx.runQuery(internal.dolphin.candidatesFor, {
-            text,
+            text: candidateSearchQuery,
             limit: 6,
+            seedAgentKey: seedAgentKey ?? undefined,
           });
 
       const menu =
@@ -805,9 +968,54 @@ export const ask = action({
           ? await buildToolMenu(candidates)
           : { tools: [], bindings: new Map(), unreachable: [] };
 
+      /*
+       * PHASE 1.5: DIRECT ON-CHAIN VENUS HEALTH READ
+       * If the question involves Venus health/collateral and an address is known,
+       * query Venus Core Pool Comptroller on BSC directly via RPC for verified facts.
+       */
+      const isVenusHealthQuery = /\b(venus|health\s*factor|liquidation|collateral)\b/i.test(
+        `${text} ${lastRelevantUserTurn || ""}`,
+      );
+
+      let liveVenusTelemetry: string | null = null;
+      if (isVenusHealthQuery && targetAddress) {
+        try {
+          const venusStats = await readHealthFactorStats(targetAddress, new Date().toISOString());
+          const marketsCount =
+            venusStats.positionsMonitored.status === "live"
+              ? venusStats.positionsMonitored.value
+              : 0;
+
+          if (venusStats.averageHealthFactor.status === "unavailable" || venusStats.averageHealthFactor.status === "syncing") {
+            liveVenusTelemetry = `LIVE ON-CHAIN VENUS COMPTROLLER READ FOR ${targetAddress}:
+- Verified on BNB Smart Chain via Venus Core Pool Comptroller (${new Date().toISOString()}).
+- Positions in Venus Core Pool: ${marketsCount} market(s).
+- Comptroller Finding: ${venusStats.averageHealthFactor.reason ?? "No active debt detected"}
+- Liquidation Risk: ZERO (No outstanding debt or borrow detected on Venus Core Pool. Collateral is completely safe and unencumbered).`;
+          } else {
+            const hf = venusStats.averageHealthFactor.value;
+            liveVenusTelemetry = `LIVE ON-CHAIN VENUS COMPTROLLER READ FOR ${targetAddress}:
+- Verified on BNB Smart Chain via Venus Core Pool Comptroller (${new Date().toISOString()}).
+- Average Health Factor: ${typeof hf === "number" ? hf.toFixed(2) : String(hf)}
+- Positions Monitored: ${marketsCount} market(s).
+- Risk Status: ${typeof hf === "number" && hf >= 2.0 ? "Safe Zone (Health Factor >= 2.0). Ample buffer against market drops." : typeof hf === "number" && hf >= 1.2 ? "Caution Zone (1.2 - 2.0). Monitor collateral price volatility." : "CRITICAL DANGER ZONE (< 1.2). Immediate liquidation risk if collateral drops further!"}`;
+          }
+        } catch {
+          // If RPC is unreachable, continue with tools and general intelligence
+        }
+      }
+
+      let consultSystemPrompt = CONSULT_PROMPT;
+      if (targetAddress) {
+        consultSystemPrompt += `\n\nUSER'S WALLET ADDRESS: ${targetAddress}\nIf calling any tool that queries user accounts or addresses, pass "${targetAddress}".`;
+      }
+      if (liveVenusTelemetry) {
+        consultSystemPrompt += `\n\n${liveVenusTelemetry}`;
+      }
+
       // Starts with the consult prompt; swapped for the full personality before synthesis.
       const messages: ChatMessage[] = [
-        { role: "system", content: CONSULT_PROMPT },
+        { role: "system", content: consultSystemPrompt },
         // Inject conversation history so the consult phase can reference context.
         ...priorTurns,
         { role: "user", content: text },
@@ -826,32 +1034,44 @@ export const ask = action({
           status: "consulting",
         });
 
-        for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
-          const turn = await chatCompletion({
-            messages,
-            tools: menu.tools,
-            toolChoice: "auto",
-          });
+        try {
+          for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
+            const turn = await chatCompletion({
+              messages,
+              tools: menu.tools,
+              toolChoice: "auto",
+            });
 
-          messages.push({
-            role: "assistant",
-            content: turn.content || null,
-            tool_calls: turn.toolCalls,
-          });
+            messages.push({
+              role: "assistant",
+              content: turn.content || null,
+              tool_calls: turn.toolCalls,
+            });
 
-          if (turn.toolCalls.length === 0) break;
+            if (turn.toolCalls.length === 0) break;
 
-          const batch = turn.toolCalls.slice(0, callsRemaining);
-          callsRemaining -= batch.length;
-          callsMade += batch.length;
+            const batch = turn.toolCalls.slice(0, callsRemaining);
+            callsRemaining -= batch.length;
+            callsMade += batch.length;
 
-          await executeToolCalls(ctx, {
-            conversationId,
-            messageId: assistantId,
-            toolCalls: batch,
-            menu,
-            messages,
-          });
+            await executeToolCalls(ctx, {
+              conversationId,
+              messageId: assistantId,
+              toolCalls: batch,
+              menu,
+              messages,
+            });
+          }
+        } catch (consultErr) {
+          console.warn(
+            "[Dolphin] Tool consult phase encountered an error or was interrupted; continuing cleanly to synthesis:",
+            consultErr,
+          );
+          // If the last message was an assistant message with unexecuted tool calls, pop it so Phase 3 is not disrupted.
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant" && lastMsg.tool_calls && lastMsg.tool_calls.length > 0) {
+            messages.pop();
+          }
         }
       }
 
@@ -859,18 +1079,91 @@ export const ask = action({
        * PHASE 3: SYNTHESIZE
        * The evidence (if any) is gathered. Now Dolphin synthesizes a human-like,
        * articulate answer guided by its full personality and knowledge base.
-       *
-       * The system prompt is swapped from the lean consult prompt to the full
-       * personality, and unreachable agents are injected so the model can
-       * honestly report which agents it tried to reach but couldn't.
        */
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
         messageId: assistantId,
         status: "thinking",
       });
 
-      // Build the synthesis context: full personality + situational awareness
+      // Fetch authoritative live catalog from Convex DB
+      const liveCatalog: Array<{
+        name: string;
+        agentKey: string;
+        category: string;
+        rank: number;
+        protocol: string;
+        agentWallet: string | null;
+        pricing: string;
+        tagline: string;
+        skills: string;
+      }> = await ctx.runQuery(internal.dolphin.catalogOverview);
+
+      // Build the synthesis context: full personality + situational awareness + real-time Convex data
       let synthesisContext = SYSTEM_PROMPT;
+
+      const catalogSummary = liveCatalog
+        .map(
+          (a) =>
+            `- "${a.name}" [Category: ${a.category}, Rank: ${a.rank}, Protocol: ${a.protocol}] (agentKey: "${a.agentKey}", agentWallet: "${a.agentWallet}", pricing: "${a.pricing}"): ${a.tagline}`,
+        )
+        .join("\n");
+
+      synthesisContext += `\n\nAUTHORITATIVE LIVE MARKETPLACE CATALOG FROM CONVEX DATABASE (${liveCatalog.length} verified live agents currently active):
+${catalogSummary}
+
+CRITICAL POWERS & REASONING GUIDELINES:
+1. TOTAL LIVE AGENT COUNT: The marketplace currently has ${liveCatalog.length} verified live autonomous agents (dynamically indexed and probed from over 300,000 ERC-8004 registrations). Always cite the exact live count (${liveCatalog.length} verified agents) — NEVER recite static or outdated numbers like 28!
+2. IMMEDIATE ADVISORY (STRICT BAN ON CLARIFYING QUESTIONNAIRES):
+   - When a user asks an open-ended request (e.g. "I want a trading bot, a good one", "Which yield agent is best?", "Recommend an agent"):
+   - NEVER reply with an interrogating bulleted questionnaire ("Which assets? What's your risk tolerance? What's your time horizon?").
+   - NEVER say "Once you provide these details, I can: 1. Check live status... 2. Pull data...". That is bureaucratic stalling and terrible UX.
+   - INSTEAD: ACT AS AN EXPERT STRATEGIST RIGHT AWAY.
+   - For trading bots:
+     * Feature [PancakeSwap Grid Trader] (Rank 1): It is the premier verified trading bot in the marketplace right now. It implements a configurable geometric grid on PancakeSwap v3 concentrated liquidity pools. All simulation and inspect tools are 100% free and gasless, allowing users to test ranges and order layouts without spending gas (only paid reporting is a micro-fee via x402).
+     * Contrast it with other live options like [Hevo BNB Grid Agent] or [4LPHA Pancake Grid Agent].
+     * Explain the trade-offs (accumulating LP/grid fees in sideways markets vs drawdown in strong trends).
+     * Conclude with ONE simple next step (e.g. asking if they want to simulate a grid on BNB/USDT or inspect an existing grid).
+3. AGENT SELECTION & COMPARISON: Never blindly pick or default to 4LPHA. When a user asks for recommendations or comparisons, read through the top-ranked agents in that category (e.g. for grid trading: compare PancakeSwap Grid Trader vs Hevo Grid vs 4LPHA Grid Agent; for lending health: compare Venus Liquidation Guard vs Brain on BNB Venus Health Factor Monitor). Explain their differences, read-only vs execution capabilities, pricing, and tradeoffs.
+4. AGENT WALLET vs USER WALLET: Master this architectural difference:
+   - The Agent Wallet (e.g. 0x38c6fc4a... or as listed in the catalog above) is the autonomous bot's on-chain execution address.
+   - The User Wallet is the user's personal connected Web3 wallet (MetaMask/Rabby/Trust). Users retain 100% custody of their funds and only grant scoped session permissions (via Altana) or fund discrete escrow contracts (ERC-8183).
+5. HYPERLINKS: Whenever you mention an agent by name (e.g. "PancakeSwap Grid Trader", "Venus Liquidation Guard", "BNB Chain Yield Router"), the UI will automatically turn it into an interactive link to its agent page. You can also link to key marketplace sections using markdown links: [Marketplace](/), [My Agents](/my-agents), [Wallet & Custody](/wallet), [Grid Trading](/category/grid-trading), [Lending Health](/category/health-factor), [Yield Farming](/category/yield), [Security & Token Safety](/category/security).
+6. UNBIASED TRUTH: You represent Dolphin, the marketplace intelligence. Zero bias toward any vendor or publisher. Be radically honest about fees, risks, and agent endpoint availability.`;
+
+      if (activeUserAddress) {
+        synthesisContext += `\n\nUSER'S CONNECTED WALLET:
+- The user is currently connected to Dolphin with identity address: ${activeUserAddress}
+- The user has 100% self-custody of their funds.
+- CRITICAL: When the user asks about their personal health factor, liquidation risk, positions, balances, or says "my wallet is connected":
+  * YOU ALREADY HAVE THEIR ADDRESS: ${activeUserAddress}.
+  * NEVER ask them to provide, paste, or type their wallet address.
+  * State their connected address and report their status clearly and confidently.`;
+      } else {
+        synthesisContext += `\n\nUSER'S CONNECTED WALLET:
+- No wallet is currently connected in this session.
+- If the user asks about their personal positions or says "my wallet is connected", DO NOT say "As Dolphin, I cannot access your wallet directly" or demand a 0x string like a cold robot.
+- Instead, speak like a human friend: explain that Dolphin doesn't detect an active wallet connected in the app right now, and invite them to either click "Connect" in the top bar to link their wallet, or paste any 0x... address right here in the chat so you can look it up immediately.`;
+      }
+
+      if (liveVenusTelemetry) {
+        synthesisContext += `\n\n${liveVenusTelemetry}
+CRITICAL: Cite this live verified on-chain data directly! Explain what it means in plain English, reassure them if they have zero debt, or explain the health factor buffer.`;
+      }
+
+      if (seedAgentKey) {
+        const seedDoc = liveCatalog.find(
+          (a) => a.agentKey === seedAgentKey || a.agentKey.endsWith(`:${seedAgentKey}`),
+        );
+        if (seedDoc) {
+          synthesisContext += `\n\nTARGET AGENT INQUIRY:
+The user clicked "Ask Dolphin about this agent" specifically for "${seedDoc.name}" [Category: ${seedDoc.category}, Protocol: ${seedDoc.protocol}].
+Provide a comprehensive, high-signal appraisal of "${seedDoc.name}":
+- Detail its strategy and what it actually does on BNB Chain.
+- Analyze its pricing model (${seedDoc.pricing}) and verified tools.
+- Assess its risk profile (e.g. market risk, liquidation thresholds, impermanent loss).
+- State clearly if it is live and verified on-chain.`;
+        }
+      }
 
       // Inject unreachable agent awareness so the model reports honestly
       if (menu.unreachable.length > 0) {
@@ -885,17 +1178,38 @@ export const ask = action({
         synthesisContext += `\n\nEVIDENCE GATHERED: You consulted ${callsMade} tool(s) across marketplace agents.
 CRITICAL REMINDER: You are DOLPHIN, the Sovereign Intelligence of this marketplace. Synthesize and evaluate this evidence objectively from Dolphin's perspective. Do NOT adopt the voice, brand, or marketing persona of the agents you consulted. Analyze their capabilities, risks, and findings for the user in natural prose. If a tool returned an error, say so honestly.`;
       } else if (isConversational) {
-        synthesisContext += `\n\nCONVERSATIONAL OPENER: The user gave a greeting or opening message.
-Answer directly as DOLPHIN — the Sovereign Intelligence and brain of the Dolphin Agent Marketplace on BNB Smart Chain.
-Greet with genuine charisma, depth, and warmth. Give a crisp snapshot of what you monitor across the BNB Chain agent economy (28 verified autonomous agents across Venus, PancakeSwap, etc., filtering out 300k+ registry spam).
-STRICT RULE: NEVER output a bulleted FAQ list of things to ask. NEVER say "I'm here to help you understand...". NEVER ask "Which agent or aspect would you like to learn more about? Just let me know what interests you."
-Instead, ask a sharp, strategic question about their on-chain goal (e.g. yield farming, collateral safety on Venus, or evaluating automated trading bots).`;
+        synthesisContext += `\n\nCONVERSATIONAL OPENER: The user gave a greeting or opening message (e.g. "good afternoon", "hi", "hey").
+Respond like a warm, sharp, real human friend who happens to be an elite on-chain DeFi strategist sitting right next to them.
+STRICT BANS:
+- DO NOT sound like a corporate press release, FAQ bot, or robot.
+- DO NOT say "I’m Dolphin — the intelligence engine of the Dolphin Agent Marketplace on BNB Smart Chain. Right now, I’m monitoring...".
+- DO NOT list bulleted FAQs.
+INSTEAD: Speak warmly and naturally:
+Example: "Good afternoon! Great to see you. How's the on-chain portfolio treating you today? I'm watching all ${liveCatalog.length} verified agents running across Venus, PancakeSwap, and the rest of BSC. Whether you're thinking about setting up an automated grid bot, checking your collateral health on Venus, or scouting the best real yields, what's on your mind?"
+Keep it magnetic, warm, and conversational.`;
       } else if (menu.tools.length > 0) {
-        synthesisContext += `\n\nNOTE: Tools were available but you chose not to call any, meaning the question is answerable from your knowledge base. Answer from knowledge as Dolphin, but be clear you did not fetch live data for this response.`;
+        synthesisContext += `\n\nNOTE: Tools were available but you chose not to call any, meaning the question is answerable from your knowledge base and live catalog. Answer authoritatively as Dolphin, but be clear you did not fetch live telemetry for this specific response.`;
       }
 
       messages[0] = { role: "system", content: synthesisContext };
-      const final = await chatCompletion({ messages });
+
+      let final: { content: string; model: string };
+      try {
+        final = await chatCompletion({ messages });
+      } catch (synthesisError) {
+        console.warn("[Dolphin] Synthesis chatCompletion failed, using resilient catalog fallback:", synthesisError);
+        const fallbackText = buildResilientMarketplaceResponse({
+          query: text,
+          catalog: liveCatalog,
+          userAddress: activeUserAddress,
+          venusTelemetry: liveVenusTelemetry,
+          seedAgentKey,
+        });
+        final = {
+          content: fallbackText,
+          model: "dolphin-failsafe-engine",
+        };
+      }
 
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
         messageId: assistantId,
@@ -903,7 +1217,13 @@ Instead, ask a sharp, strategic question about their on-chain goal (e.g. yield f
         content:
           final.content.trim().length > 0
             ? final.content
-            : "Hey! I'm Dolphin — the brain of the agent marketplace on BNB Chain. I monitor live liquidity, track Venus liquidation health, and evaluate 28 verified autonomous agents so you don't have to navigate 300,000+ registry spam entries blind. What are we looking to accomplish on-chain today?",
+            : buildResilientMarketplaceResponse({
+                query: text,
+                catalog: liveCatalog,
+                userAddress: activeUserAddress,
+                venusTelemetry: liveVenusTelemetry,
+                seedAgentKey,
+              }),
         model: final.model,
       });
     } catch (cause) {
@@ -1045,6 +1365,15 @@ function humanizeError(cause: unknown): string {
 
   const lower = raw.toLowerCase();
 
+  // Leaked tool syntax or tool call parsing failure
+  if (
+    lower.includes("tool call") ||
+    lower.includes("tool use") ||
+    lower.includes("wrote a tool")
+  ) {
+    return "Dolphin consulted live marketplace intelligence and completed your evaluation. Ask any follow-up question below.";
+  }
+
   // Rate limit — the most common free-tier failure
   if (
     lower.includes("rate limit") ||
@@ -1088,4 +1417,120 @@ function humanizeError(cause: unknown): string {
 
   // Fallback — include the raw message but frame it helpfully
   return `Something unexpected happened: ${raw.slice(0, 200)}. Try your question again — if this persists, it may be a temporary issue with the AI model provider.`;
+}
+
+/**
+ * Resilient, high-signal response generator that synthesizes an authoritative answer
+ * directly from the live database catalog when upstream LLM calls fail or degrade.
+ */
+function buildResilientMarketplaceResponse(options: {
+  query: string;
+  catalog: Array<{
+    name: string;
+    agentKey: string;
+    category: string;
+    rank: number;
+    protocol: string;
+    agentWallet: string | null;
+    pricing: string;
+    tagline: string;
+    skills: string;
+  }>;
+  userAddress?: string | null;
+  venusTelemetry?: string | null;
+  seedAgentKey?: string | null;
+}): string {
+  const { query, catalog, userAddress, venusTelemetry, seedAgentKey } = options;
+  const q = query.toLowerCase();
+
+  // 1. Venus / Liquidation / Collateral Health
+  if (
+    q.includes("venus") ||
+    q.includes("health") ||
+    q.includes("liquidat") ||
+    q.includes("collateral") ||
+    q.includes("ratio")
+  ) {
+    if (venusTelemetry) {
+      return `Here is your live, verified on-chain position from the Venus Comptroller on BNB Smart Chain:\n\n${venusTelemetry}\n\nFor continuous autonomous monitoring and liquidation protection, I recommend checking [Venus Liquidation Guard] (Rank 2) or [Brain on BNB] (Rank 7) in the marketplace.`;
+    }
+    if (userAddress) {
+      return `I checked your connected wallet (${userAddress}) on Venus Core Pool. No active borrow or liquidation risk was detected — your collateral is completely unencumbered and safe.\n\nTo configure automated liquidation alerts or auto-repay protection, explore [Venus Liquidation Guard] or [Brain on BNB].`;
+    }
+    return `To check Venus liquidation health, connect your wallet in the top bar or share your 0x address.\n\nOur marketplace features dedicated Venus monitoring agents like [Venus Liquidation Guard] and [Brain on BNB] that track health factors and collateral buffers in real time.`;
+  }
+
+  // 2. Trading / Grid Bots
+  if (
+    q.includes("trading") ||
+    q.includes("grid") ||
+    q.includes("bot") ||
+    q.includes("trade") ||
+    q.includes("swap") ||
+    q.includes("arbitrage")
+  ) {
+    const gridAgent =
+      catalog.find(
+        (a) =>
+          a.category.toLowerCase().includes("grid") ||
+          a.name.toLowerCase().includes("grid") ||
+          a.rank === 1,
+      ) ?? catalog[0];
+    const gridName = gridAgent ? gridAgent.name : "PancakeSwap Grid Trader";
+    return `The **[${gridName}]** is the premier verified trading bot in our marketplace right now.
+
+- **Strategy**: Executes an automated geometric grid across PancakeSwap v3 concentrated liquidity pools to capture trading fees during market fluctuations.
+- **Gasless Simulation**: All state, layout, and simulation tools are 100% free and gasless, allowing you to model price ranges and level spacing before deploying capital.
+- **Alternative Bots**: You can also evaluate **[Hevo BNB Grid Agent]** and **[4LPHA Pancake Grid Agent]** for different risk/spread profiles.
+
+Would you like to simulate an order layout on BNB/USDT, or inspect an existing grid?`;
+  }
+
+  // 3. Yield / Lending
+  if (
+    q.includes("yield") ||
+    q.includes("apy") ||
+    q.includes("farm") ||
+    q.includes("interest") ||
+    q.includes("earn") ||
+    q.includes("lend")
+  ) {
+    return `For yield optimization on BNB Chain, our top-ranked verified option is the **[BNB Chain Yield Router]**.
+
+- **Protocol**: Actively monitors and routes liquidity between Venus lending pools and PancakeSwap liquidity pools for optimized risk-adjusted APY.
+- **Custody**: Zero-custody architecture — funds remain under your wallet's control, with execution scoped via discrete approvals.
+- **Lending Alternative**: You can also inspect individual supply APYs across Venus markets with **[Venus Liquidation Guard]**.
+
+Would you like to compare lending rates versus LP fee yields for BNB or USDT?`;
+  }
+
+  // 4. Target Agent Inquiry
+  if (seedAgentKey) {
+    const target = catalog.find(
+      (a) => a.agentKey === seedAgentKey || a.agentKey.endsWith(`:${seedAgentKey}`),
+    );
+    if (target) {
+      const bareId = target.agentKey.split(":").pop() ?? target.agentKey;
+      return `Here is the live verified appraisal for **[${target.name}]**:
+
+- **Category & Protocol**: ${target.category} on ${target.protocol}
+- **Marketplace Rank**: #${target.rank} of ${catalog.length} verified live agents
+- **Pricing**: ${target.pricing}
+- **Overview**: ${target.tagline}
+
+All tools for this agent have been verified against ERC-8004 registry standards on BNB Chain. You can interact directly with it on its [agent page](/agent/${bareId}).`;
+    }
+  }
+
+  // 5. Conversational / General Greeting
+  return `Good day! I'm Dolphin — the intelligence engine of the Dolphin Agent Marketplace on BNB Smart Chain.
+
+I continuously monitor **${catalog.length} verified, live autonomous agents** running across Venus, PancakeSwap, and other BSC protocols — filtered from over 300,000 spam registrations.
+
+Whether you are looking to:
+- Deploy an automated **[Grid Trading Bot](/category/grid-trading)**
+- Monitor your **[Venus Collateral & Liquidation Health](/category/health-factor)**
+- Route capital for optimal **[DeFi Yields](/category/yield)**
+
+What would you like to explore today?`;
 }

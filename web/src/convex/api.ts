@@ -663,7 +663,7 @@ export type DolphinMessage = {
 export const dolphinApi = anyApi as unknown as {
   dolphin: {
     createConversation: Mutation<
-      { seedAgentKey?: string; sessionToken?: string },
+      { seedAgentKey?: string; sessionToken?: string; userAddress?: string },
       { conversationKey: string }
     >;
     getConversation: Query<
@@ -685,6 +685,9 @@ export const dolphinApi = anyApi as unknown as {
      * and calls their tools. Progress is NOT in this return value - subscribe to
      * `getConversation` and watch the message status and tool-call rows land.
      */
-    ask: Action<{ conversationKey: string; text: string }, { messageId: string }>;
+    ask: Action<
+      { conversationKey: string; text: string; userAddress?: string },
+      { messageId: string }
+    >;
   };
 };

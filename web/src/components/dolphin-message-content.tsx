@@ -17,7 +17,8 @@ type InlineNode =
   | { type: "text"; text: string }
   | { type: "code"; text: string }
   | { type: "bold"; children: InlineNode[] }
-  | { type: "agent-link"; label: string; agentKey: string };
+  | { type: "agent-link"; label: string; agentKey: string }
+  | { type: "nav-link"; label: string; url: string };
 
 type BlockNode =
   | { type: "header"; text: string; level: number }
@@ -59,12 +60,14 @@ function parseInline(text: string, agentMap: Map<string, string>): InlineNode[] 
     return nodes;
   }
 
-  // Tokenize code spans (`` `code` ``) and bold spans (`**bold**` or `__bold__`)
+  // Tokenize code spans (`code`), bold spans (**bold** or __bold__), and markdown links ([label](url))
   // Regex matches:
-  // 1: `code`
-  // 2: **bold**
-  // 3: __bold__
-  const tokenRegex = /(`([^`]+)`)|(\*\*([^*]+)\*\*)|(__([^_]+)__)/g;
+  // 2: `code`
+  // 4: **bold**
+  // 6: __bold__
+  // 8: [label]
+  // 9: (url)
+  const tokenRegex = /(`([^`]+)`)|(\*\*([^*]+)\*\*)|(__([^_]+)__)|(\[([^\]]+)\]\(([^)]+)\))/g;
   const nodes: InlineNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -89,6 +92,13 @@ function parseInline(text: string, agentMap: Map<string, string>): InlineNode[] 
       nodes.push({
         type: "bold",
         children: parseTextWithAgents(match[6]),
+      });
+    } else if (match[8] !== undefined && match[9] !== undefined) {
+      // Markdown link: [label](url)
+      nodes.push({
+        type: "nav-link",
+        label: match[8],
+        url: match[9],
       });
     }
 
@@ -290,6 +300,17 @@ export function DolphinMessageContent({
             href={`/agent/${encodeURIComponent(node.agentKey)}`}
             key={i}
             title={`View ${node.label} on BNB Chain`}
+          >
+            {node.label}
+          </Link>
+        );
+      }
+      if (node.type === "nav-link") {
+        return (
+          <Link
+            className="inline-flex items-center gap-1 font-semibold text-accent-ink underline decoration-accent-ink/40 underline-offset-2 transition-colors hover:decoration-accent-ink"
+            href={node.url}
+            key={i}
           >
             {node.label}
           </Link>

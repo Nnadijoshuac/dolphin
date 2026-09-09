@@ -25,7 +25,8 @@ type InlineNode =
   | { type: "text"; text: string }
   | { type: "code"; text: string }
   | { type: "bold"; children: InlineNode[] }
-  | { type: "agent-link"; label: string; agentKey: string };
+  | { type: "agent-link"; label: string; agentKey: string }
+  | { type: "nav-link"; label: string; url: string };
 
 type BlockNode =
   | { type: "header"; text: string; level: number }
@@ -67,8 +68,14 @@ function parseInline(text: string, agentMap: Map<string, string>): InlineNode[] 
     return nodes;
   }
 
-  // Tokenize code spans (`code`) and bold spans (**bold** or __bold__)
-  const tokenRegex = /(`([^`]+)`)|(\*\*([^*]+)\*\*)|(__([^_]+)__)/g;
+  // Tokenize code spans (`code`), bold spans (**bold** or __bold__), and markdown links ([label](url))
+  // Regex matches:
+  // 2: `code`
+  // 4: **bold**
+  // 6: __bold__
+  // 8: [label]
+  // 9: (url)
+  const tokenRegex = /(`([^`]+)`)|(\*\*([^*]+)\*\*)|(__([^_]+)__)|(\[([^\]]+)\]\(([^)]+)\))/g;
   const nodes: InlineNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -90,6 +97,12 @@ function parseInline(text: string, agentMap: Map<string, string>): InlineNode[] 
       nodes.push({
         type: "bold",
         children: parseTextWithAgents(match[6]),
+      });
+    } else if (match[8] !== undefined && match[9] !== undefined) {
+      nodes.push({
+        type: "nav-link",
+        label: match[8],
+        url: match[9],
       });
     }
 
@@ -299,6 +312,25 @@ export function DolphinMessageContent({
             onPress={() => {
               void Haptics.selectionAsync();
               router.push({ pathname: "/agent/[id]", params: { id: node.agentKey } });
+            }}
+            style={{
+              fontWeight: "700",
+              color: colors.goldDark,
+              textDecorationLine: "underline",
+              textDecorationColor: `${colors.goldDark}55`,
+            }}
+          >
+            {node.label}
+          </Text>
+        );
+      }
+      if (node.type === "nav-link") {
+        return (
+          <Text
+            key={key}
+            onPress={() => {
+              void Haptics.selectionAsync();
+              router.push(node.url as any);
             }}
             style={{
               fontWeight: "700",

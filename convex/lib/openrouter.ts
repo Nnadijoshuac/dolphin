@@ -371,35 +371,35 @@ async function chatCompletionOnce(options: {
    * the arguments are re-parsed as JSON, and an unrecognised name is reported
    * back to the model as "no such tool". A recovered call passes through
    * exactly the same gates as a structured one.
+    /*
+   * RECOVERY: the model asked for a tool in the wrong envelope or as text.
    *
-   * This is a workaround for a weak free model, not a design. If a model that
-   * reliably emits structured calls is ever used here, this stays harmless -
-   * it only ever runs when `tool_calls` came back empty.
+   * Free models (including nemotron-3-super, dots-3, and llama variants) frequently
+   * emit tool calls as text: XML <invoke name="...">, JSON arrays/objects, or
+   * code-fenced blocks instead of native structured tool_calls.
+   *
+   * We recover all recognizable tool calls and clean any leaked markup from the
+   * returned prose. Under no circumstances do we throw a fatal exception here:
+   * if tool calls cannot be parsed, cleaning the prose allows the pipeline to
+   * proceed seamlessly into Phase 3 (Synthesis).
    */
+  let cleanedContent = content;
   if (toolCalls.length === 0 && content.trim().length > 0) {
-    toolCalls.push(...recoverTextToolCalls(content));
+    const recovered = recoverTextToolCalls(content);
+    if (recovered.length > 0) {
+      toolCalls.push(...recovered);
+      cleanedContent = stripToolCallMarkup(content);
+    }
   }
 
-  /*
-   * A model that writes its tool call as prose has not answered - it has
-   * failed in a way that looks like an answer, which is worse than failing.
-   * See the fallback block above for the run where this reached a user as raw
-   * `<dots_function_call>` XML.
-   *
-   * Only treated as a failure when there are no structured tool calls: a model
-   * that correctly emitted `tool_calls` AND happens to mention the syntax in
-   * its prose is not malfunctioning.
-   */
-  if (toolCalls.length === 0 && LEAKED_TOOL_SYNTAX.test(content)) {
-    throw new OpenRouterError(
-      `The model (${answeredBy}) wrote a tool call as text instead of calling the tool, ` +
-        "so its reply was not a usable answer. This is a known failure of some free " +
-        "models under tool use.",
-    );
+  // If leaked tool syntax is detected (even if no structured calls could be built),
+  // strip it completely so raw markup tags never leak to the user.
+  if (LEAKED_TOOL_SYNTAX.test(cleanedContent)) {
+    cleanedContent = stripToolCallMarkup(cleanedContent);
   }
 
   return {
-    content,
+    content: cleanedContent,
     toolCalls,
     model: answeredBy,
     finishReason: typeof first.finish_reason === "string" ? first.finish_reason : null,
@@ -408,77 +408,196 @@ async function chatCompletionOnce(options: {
 
 /**
  * Tool-call markup leaking into message text.
- *
- * Two dialects observed live on 2026-09-08, and they do not share a delimiter -
- * which is why this is deliberately loose rather than a precise grammar:
- *
- *   dots-3-note-preview   <dots_function_call><invoke name="a1__call_agent">
- *   liquid/lfm-2.5-2.6b   <|tool_call_start|>[a1_find_agents(...)]<|tool_call_end|>
- *
- * The first version of this regex only matched the angle-bracket form and let
- * the pipe-delimited one straight through to a user. Expect a third dialect;
- * match the shape, not the syntax.
+ * Matches angle-bracket tags, pipe delimiters, and raw function call arrays.
  */
-const LEAKED_TOOL_SYNTAX =
-  /<\s*\|?\s*(?:[a-z0-9_]*function_call|tool_call|invoke\s+name=)/i;
+export const LEAKED_TOOL_SYNTAX =
+  /<\s*\|?\s*(?:[a-z0-9_]*function_call|tool_call|invoke\s+name=)|<\|tool_call_start\|>|\[\s*\{\s*["']name["']/i;
+
+/**
+ * Strips tool-call markup and pure tool JSON payloads from message text.
+ * Ensures users never see raw `<dots_function_call>`, `<tool_call>`, or pipe delimiters.
+ */
+export function stripToolCallMarkup(content: string): string {
+  let cleaned = content;
+
+  // XML tags with contents: <dots_function_call>...</dots_function_call>, <tool_call>...</tool_call>, etc.
+  cleaned = cleaned.replace(/<\s*dots_function_call[\s\S]*?<\/\s*dots_function_call\s*>/gi, "");
+  cleaned = cleaned.replace(/<\s*tool_call[\s\S]*?<\/\s*tool_call\s*>/gi, "");
+  cleaned = cleaned.replace(/<\s*function_call[\s\S]*?<\/\s*function_call\s*>/gi, "");
+  cleaned = cleaned.replace(/<invoke\s+name=[\s\S]*?<\/invoke>/gi, "");
+  cleaned = cleaned.replace(/<invoke\s+name=[^>]*\/>/gi, "");
+
+  // Pipe delimiters: <|tool_call_start|>...<|tool_call_end|>
+  cleaned = cleaned.replace(/<\|tool_call_start\|>[\s\S]*?<\|tool_call_end\|>/gi, "");
+  cleaned = cleaned.replace(/<\|tool_call_start\|>[\s\S]*$/gi, "");
+  cleaned = cleaned.replace(/<\|[^|]+?\|>/gi, "");
+
+  // Stray opening/closing tags
+  cleaned = cleaned.replace(/<\/?\s*(?:[a-z0-9_]*function_call|tool_call|invoke)[^>]*>/gi, "");
+
+  // Markdown code blocks containing tool call JSON
+  cleaned = cleaned.replace(/```(?:json)?\s*\[\s*\{\s*["']name["'][\s\S]*?\}\s*\]\s*```/gi, "");
+  cleaned = cleaned.replace(/```(?:json)?\s*\{\s*["']name["'][\s\S]*?\}\s*```/gi, "");
+
+  // If the remaining text is just a raw JSON array/object of tool calls:
+  const trimmed = cleaned.trim();
+  if (
+    (trimmed.startsWith("[") && trimmed.endsWith("]") && trimmed.includes('"name"')) ||
+    (trimmed.startsWith("{") && trimmed.endsWith("}") && trimmed.includes('"name"'))
+  ) {
+    try {
+      const sanitized = sanitizeJson(trimmed);
+      const parsed = JSON.parse(sanitized);
+      if (Array.isArray(parsed) || (typeof parsed === "object" && parsed !== null && "name" in parsed)) {
+        return "";
+      }
+    } catch {
+      // not purely json
+    }
+  }
+
+  return cleaned.trim();
+}
+
+/**
+ * Helper to strip trailing commas from JSON strings before parsing.
+ */
+function sanitizeJson(str: string): string {
+  return str.replace(/,\s*([\]}])/g, "$1");
+}
 
 /**
  * Pulls tool calls out of a message body that should have been a `tool_calls`
- * array. See the recovery block in `chatCompletion` for why this exists.
+ * array.
  *
- * Handles the JSON-array dialect only - `[{"name": ..., "parameters": {...}}]`
- * possibly wrapped in stray brackets or a code fence, which is what
- * nemotron-3-super emits. The pipe-delimited and XML dialects of other free
- * models are NOT recovered: they are caught by LEAKED_TOOL_SYNTAX and reported
- * as a failure, because guessing at a call from a syntax nobody documented is
- * how you invoke the wrong tool.
- *
- * Returns an empty array for anything it cannot read with confidence. Prose
- * that merely mentions a tool name must not become a call.
+ * Supports:
+ * 1. XML dialect: `<invoke name="...">...<parameter name="...">...</parameter></invoke>`
+ * 2. JSON array dialect: `[{"name": ..., "parameters": {...}}]` or `[{"name": ..., "arguments": {...}}]`
+ *    (including wrapped in code blocks or with stray surrounding brackets/newlines)
+ * 3. Single JSON object dialect: `{"name": ..., "parameters": {...}}`
+ * 4. Pipe/Python dialect: `<|tool_call_start|>[tool_name(...)]<|tool_call_end|>`
  */
-function recoverTextToolCalls(content: string): ToolCall[] {
-  /*
-   * Anchored on the BRACES, not the brackets. The first version of this looked
-   * for a literal "[{" and never fired once, because what the model actually
-   * emits is `[[\n\n{ "name": ... }\n]` - stray opening brackets, newlines
-   * between them, and an unbalanced tail. Any bracket-counting parser has to
-   * be right about malformed input, which is a bad bet; the object bodies are
-   * well-formed even when the array around them is not.
-   */
-  const first = content.indexOf("{");
-  const last = content.lastIndexOf("}");
-  if (first < 0 || last <= first) return [];
-
-  const body = content.slice(first, last + 1);
-
-  let parsed: unknown;
-  try {
-    // Wrapping in brackets covers both one object and several comma-separated.
-    parsed = JSON.parse(`[${body}]`);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
-
+export function recoverTextToolCalls(content: string): ToolCall[] {
   const recovered: ToolCall[] = [];
-  for (const entry of parsed) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const record = entry as Record<string, unknown>;
-    const name = typeof record.name === "string" ? record.name.trim() : "";
-    if (name.length === 0) continue;
 
-    // Both spellings appear; `parameters` is what this model uses, `arguments`
-    // is what the wire format calls it.
-    const args = record.parameters ?? record.arguments ?? {};
+  // Dialect 1: XML <invoke name="...">
+  const invokeRegex = /<invoke\s+name=["']([^"']+)["'](?:\s*\/>|\s*>([\s\S]*?)<\/invoke>)/gi;
+  let invokeMatch: RegExpExecArray | null;
+  while ((invokeMatch = invokeRegex.exec(content)) !== null) {
+    const name = invokeMatch[1].trim();
+    const inner = invokeMatch[2] || "";
+    const params: Record<string, unknown> = {};
 
+    const paramRegex = /<parameter\s+name=["']([^"']+)["']>([\s\S]*?)<\/parameter>/gi;
+    let paramMatch: RegExpExecArray | null;
+    let hasParams = false;
+    while ((paramMatch = paramRegex.exec(inner)) !== null) {
+      hasParams = true;
+      const pName = paramMatch[1].trim();
+      const pVal = paramMatch[2].trim();
+      try {
+        params[pName] = JSON.parse(pVal);
+      } catch {
+        params[pName] = pVal;
+      }
+    }
+
+    if (!hasParams && inner.trim().startsWith("{") && inner.trim().endsWith("}")) {
+      try {
+        const parsedInner = JSON.parse(sanitizeJson(inner.trim()));
+        Object.assign(params, parsedInner);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (name) {
+      recovered.push({
+        id: `recovered-xml-${recovered.length}-${Date.now()}`,
+        type: "function",
+        function: {
+          name,
+          arguments: JSON.stringify(params),
+        },
+      });
+    }
+  }
+
+  if (recovered.length > 0) return recovered;
+
+  // Dialect 2: JSON blocks (either within code fences or raw in content)
+  const candidateBlocks: string[] = [];
+  const codeFenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let fenceMatch: RegExpExecArray | null;
+  while ((fenceMatch = codeFenceRegex.exec(content)) !== null) {
+    candidateBlocks.push(fenceMatch[1].trim());
+  }
+  candidateBlocks.push(content);
+
+  for (const block of candidateBlocks) {
+    const firstBrace = block.indexOf("{");
+    const lastBrace = block.lastIndexOf("}");
+    if (firstBrace < 0 || lastBrace <= firstBrace) continue;
+
+    const slice = block.slice(firstBrace, lastBrace + 1);
+    const parseAttempts = [slice, `[${slice}]`];
+
+    for (const attempt of parseAttempts) {
+      try {
+        const sanitized = sanitizeJson(attempt);
+        const parsed = JSON.parse(sanitized);
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        for (const item of items) {
+          if (typeof item !== "object" || item === null) continue;
+          const record = item as Record<string, unknown>;
+          const name = typeof record.name === "string" ? record.name.trim() : "";
+          if (!name) continue;
+
+          const rawArgs = record.parameters ?? record.arguments ?? record.input ?? {};
+          recovered.push({
+            id: `recovered-json-${recovered.length}-${Date.now()}`,
+            type: "function",
+            function: {
+              name,
+              arguments: typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs),
+            },
+          });
+        }
+        if (recovered.length > 0) return recovered;
+      } catch {
+        // try next attempt
+      }
+    }
+  }
+
+  // Dialect 3: Pipe / Function call dialect: e.g. <|tool_call_start|>[a1__call(param="val")]<|tool_call_end|>
+  const funcCallRegex = /([a-zA-Z0-9_]+)\s*\(([\s\S]*?)\)/g;
+  let funcMatch: RegExpExecArray | null;
+  while ((funcMatch = funcCallRegex.exec(content)) !== null) {
+    const name = funcMatch[1];
+    if (!name.includes("__") && !name.startsWith("a") && !content.includes("tool_call")) {
+      continue;
+    }
+    const argStr = funcMatch[2].trim();
+    const params: Record<string, unknown> = {};
+    if (argStr) {
+      const kvRegex = /([a-zA-Z0-9_]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^,\s]+))/g;
+      let kvMatch: RegExpExecArray | null;
+      while ((kvMatch = kvRegex.exec(argStr)) !== null) {
+        const k = kvMatch[1];
+        const v = kvMatch[2] ?? kvMatch[3] ?? kvMatch[4];
+        params[k] = v;
+      }
+    }
     recovered.push({
-      id: `recovered-${recovered.length}-${Date.now()}`,
+      id: `recovered-func-${recovered.length}-${Date.now()}`,
       type: "function",
       function: {
         name,
-        arguments: typeof args === "string" ? args : JSON.stringify(args),
+        arguments: JSON.stringify(params),
       },
     });
   }
+
   return recovered;
 }

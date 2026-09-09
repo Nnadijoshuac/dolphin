@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 
 import { api } from "../../convex/_generated/api";
+import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
 
 /**
@@ -116,7 +117,9 @@ export function useDolphinChat(seedAgentKey?: string | null) {
 
   const createConversation = useMutation(api.dolphin.createConversation);
   const ask = useAction(api.dolphin.ask);
+  const wallet = useWallet();
   const session = useWalletSession();
+  const userAddress = (wallet.address ?? session.address ?? undefined)?.toLowerCase();
 
   const send = useCallback(
     async (text: string) => {
@@ -133,11 +136,16 @@ export function useDolphinChat(seedAgentKey?: string | null) {
             // Binds the conversation to the wallet when signed in, so it shows
             // up in history. Anonymous is permitted and is not an error.
             ...(session.sessionToken ? { sessionToken: session.sessionToken } : {}),
+            ...(userAddress ? { userAddress } : {}),
           });
           key = created.conversationKey;
           setConversationKey(key);
         }
-        await ask({ conversationKey: key, text: trimmed });
+        await ask({
+          conversationKey: key,
+          text: trimmed,
+          ...(userAddress ? { userAddress } : {}),
+        });
       } catch (cause) {
         /*
          * Only reached when the ACTION ITSELF failed - a network drop, or the
@@ -152,7 +160,7 @@ export function useDolphinChat(seedAgentKey?: string | null) {
         setIsSending(false);
       }
     },
-    [ask, conversationKey, createConversation, isSending, seedAgentKey, session.sessionToken],
+    [ask, conversationKey, createConversation, isSending, seedAgentKey, session.sessionToken, userAddress],
   );
 
   const reset = useCallback(() => {

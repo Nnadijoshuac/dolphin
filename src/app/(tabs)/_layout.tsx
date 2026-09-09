@@ -28,10 +28,13 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
 const TAB_BAR_MAX_WIDTH = 350;
 const TAB_BAR_GUTTER = 24;
 const ACTIVE_INDICATOR_SIZE = 48;
+const TAB_BAR_PATH =
+  "M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z";
 
 function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -227,10 +230,45 @@ function SculptedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             width: "100%",
             height: "100%",
             borderRadius: 32,
-            backgroundColor: "#000000",
+            backgroundColor: "transparent",
             overflow: "hidden",
           }}
         >
+          <Svg
+            height={64}
+            preserveAspectRatio="none"
+            style={StyleSheet.absoluteFill}
+            viewBox="0 0 350 64"
+            width={tabBarWidth}
+          >
+            <Defs>
+              <LinearGradient id="pearl-base" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0%" stopColor="#0a0a0c" />
+                <Stop offset="25%" stopColor="#040405" />
+                <Stop offset="75%" stopColor="#000000" />
+                <Stop offset="100%" stopColor="#060608" />
+              </LinearGradient>
+              <LinearGradient id="pearl-rim" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0%" stopColor="rgba(255, 255, 255, 0.16)" />
+                <Stop offset="20%" stopColor="rgba(255, 231, 255, 0.08)" />
+                <Stop offset="80%" stopColor="rgba(0, 0, 0, 0.8)" />
+                <Stop offset="100%" stopColor="rgba(255, 231, 255, 0.1)" />
+              </LinearGradient>
+              <LinearGradient id="pearl-gloss" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0%" stopColor="rgba(255, 255, 255, 0.1)" />
+                <Stop offset="35%" stopColor="rgba(255, 231, 255, 0.03)" />
+                <Stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
+              </LinearGradient>
+            </Defs>
+            <Path
+              d={TAB_BAR_PATH}
+              fill="url(#pearl-base)"
+              stroke="url(#pearl-rim)"
+              strokeWidth={1.2}
+            />
+            <Path d={TAB_BAR_PATH} fill="url(#pearl-gloss)" opacity={0.4} />
+          </Svg>
+
           {/* The capsule clips the active circle; its outer wrapper owns the
               shadow so clipping does not flatten the floating bar. */}
           <Animated.View

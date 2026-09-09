@@ -62,12 +62,19 @@
     width: min(350px, calc(100vw - 24px));
     height: 64px;
     border-radius: 32px;
-    background: #000;
+    background: transparent;
     pointer-events: auto;
     filter: drop-shadow(0 14px 24px rgba(17, 18, 20, 0.32)) drop-shadow(0 3px 8px rgba(17, 18, 20, 0.28));
     user-select: none;
     -webkit-user-select: none;
     overflow: hidden;
+  }
+  .mobile-sculpted-nav__bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
   }
   .mobile-sculpted-nav__track {
     position: relative;

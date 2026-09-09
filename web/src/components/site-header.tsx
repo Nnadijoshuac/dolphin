@@ -139,6 +139,47 @@ export function SiteHeader() {
           ref={mobileNav}
         >
           <div className="mobile-sculpted-nav">
+            <svg
+              aria-hidden="true"
+              className="mobile-sculpted-nav__bg"
+              fill="none"
+              preserveAspectRatio="none"
+              shapeRendering="geometricPrecision"
+              viewBox="0 0 350 64"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <defs>
+                <linearGradient id="pearl-base" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#0a0a0c" />
+                  <stop offset="25%" stopColor="#040405" />
+                  <stop offset="75%" stopColor="#000000" />
+                  <stop offset="100%" stopColor="#060608" />
+                </linearGradient>
+                <linearGradient id="pearl-rim" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.16)" />
+                  <stop offset="20%" stopColor="rgba(255, 231, 255, 0.08)" />
+                  <stop offset="80%" stopColor="rgba(0, 0, 0, 0.8)" />
+                  <stop offset="100%" stopColor="rgba(255, 231, 255, 0.1)" />
+                </linearGradient>
+                <linearGradient id="pearl-gloss" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.1)" />
+                  <stop offset="35%" stopColor="rgba(255, 231, 255, 0.03)" />
+                  <stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
+                fill="url(#pearl-base)"
+                stroke="url(#pearl-rim)"
+                strokeWidth="1.2"
+              />
+              <path
+                d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
+                fill="url(#pearl-gloss)"
+                opacity="0.4"
+              />
+            </svg>
+
             {/* Percentage positioning keeps the highlight aligned as the cage scales. */}
             {activeIndex !== -1 && (
               <div

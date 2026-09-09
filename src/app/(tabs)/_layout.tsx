@@ -360,6 +360,8 @@ export default function TabsLayout() {
         name="dolphin"
         options={{
           title: "Dolphin",
+          tabBarStyle: { display: "none" },
+          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen

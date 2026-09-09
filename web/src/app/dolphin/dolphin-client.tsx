@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
@@ -177,13 +178,24 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
   const isEmpty = turns.length === 0;
 
   return (
-    <div className="relative flex h-[calc(100dvh-4rem)] flex-col">
-      {/* Mobile top bar matching src/app/(tabs)/dolphin.tsx */}
-      <div className="mobile-only flex items-center justify-between gap-2.5 px-5 pb-3 pt-2">
-        <div className="flex items-center gap-2.5">
-          <BrandMark size={24} />
-          <h1 className="text-[20px] font-extrabold text-ink">Dolphin</h1>
-        </div>
+    <div className="relative flex h-[calc(100dvh-4rem)] flex-col dolphin-chat-page">
+      {/* Mobile top bar — chevron back + New conversation */}
+      <div className="mobile-only flex items-center justify-between gap-2.5 px-4 pb-2 pt-3">
+        <Link
+          href="/"
+          aria-label="Back to Discover"
+          className="grid size-10 place-items-center rounded-full text-ink no-underline hover:bg-paper-muted transition-colors"
+        >
+          <svg aria-hidden fill="none" height="20" viewBox="0 0 24 24" width="20">
+            <path
+              d="M15 19l-7-7 7-7"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2.2"
+            />
+          </svg>
+        </Link>
         {!isEmpty ? (
           <button
             className="text-[13px] font-bold text-accent-ink hover:underline"
@@ -206,21 +218,13 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
         */}
         <div className="mx-auto w-full max-w-[46rem] px-5 pb-36 pt-8">
           {isEmpty ? (
-            <div className="pt-[6vh]">
-              <div className="mb-6 flex items-center gap-3">
-                <BrandMark size={30} />
-                <h1 className="text-[1.6rem] font-semibold tracking-tight text-ink">
-                  Ask the marketplace
-                </h1>
-              </div>
-              <p className="mb-8 max-w-[34rem] text-[0.92rem] leading-relaxed text-muted">
-                Dolphin answers by calling the agents listed here and showing you
-                which ones it asked, what it asked them, and what each one said
-                back. It never makes a number up — if the agents it can reach do
-                not know, it says so.
-              </p>
+            <div className="dolphin-empty-hero flex flex-col items-center pt-[12vh]">
+              <BrandMark size={48} />
+              <h1 className="mt-4 text-[1.6rem] font-semibold tracking-tight text-ink text-center">
+                Ask the marketplace
+              </h1>
 
-              <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className="mt-10 grid w-full gap-2.5 sm:grid-cols-2">
                 {SUGGESTIONS.map((suggestion) => (
                   <button
                     className="rounded-xl border border-line bg-paper-strong p-4 text-left transition-colors hover:border-line-strong hover:bg-paper-muted"

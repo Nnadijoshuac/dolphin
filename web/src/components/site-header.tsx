@@ -37,7 +37,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   const wallet = useWallet();
   const mobileNav = useRef<HTMLElement>(null);
-  const isTabPage = navigation.some((item) => item.path === pathname);
+  const isTabPage = navigation.some((item) => item.path === pathname) && pathname !== "/dolphin";
   const activeIndex = navigation.findIndex((item) => isActiveRoute(pathname, item.path));
 
   useEffect(() => {
@@ -142,7 +142,7 @@ export function SiteHeader() {
             {/* The exact 3-lobed metaball SVG background with continuous curvature & deep obsidian pearl material */}
             <svg
               aria-hidden="true"
-              className="mobile-sculpted-nav__bg"
+              className="hidden"
               fill="none"
               preserveAspectRatio="none"
               shapeRendering="geometricPrecision"

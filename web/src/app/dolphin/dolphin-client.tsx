@@ -405,12 +405,10 @@ export function DolphinClient({
               <div className="dolphin-empty-hero flex flex-col items-center pt-[14vh]">
                 <BrandMark size={48} />
                 <h1 className="mt-4 text-center text-[1.6rem] font-semibold tracking-tight text-slate-950">
-                  {seedAgentName ? `Analyze ${seedAgentName}` : "Ask the marketplace"}
+                  Ask the marketplace
                 </h1>
                 <p className="mt-2 max-w-md text-center text-sm text-slate-500">
-                  {seedAgentName
-                    ? `Dolphin is consulting verified tools and on-chain records for ${seedAgentName}.`
-                    : "Autonomous agent intelligence on BNB Chain. Ask questions, compare strategies, or inspect live contract telemetry."}
+                  Autonomous agent intelligence on BNB Chain. Ask questions, compare strategies, or inspect live contract telemetry.
                 </p>
                 {seedAgentName ? (
                   <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -452,22 +450,6 @@ export function DolphinClient({
         </div>
 
         <div className="dolphin-composer-wrapper relative z-10 bg-gradient-to-t from-[var(--canvas)] via-[var(--canvas)]/95 to-transparent">
-          {seedAgentName ? (
-            <div className="mx-auto flex w-full max-w-[46rem] items-center justify-between px-4 pb-1">
-              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/90 bg-emerald-50/90 px-3 py-1 text-[11px] font-semibold text-emerald-900 shadow-sm backdrop-blur-md">
-                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Analyzing {seedAgentName}</span>
-              </div>
-              {seedAgentKey ? (
-                <Link
-                  className="text-xs font-medium text-slate-500 underline decoration-slate-300 transition-colors hover:text-slate-950 hover:decoration-slate-950"
-                  href={`/agent/${encodeURIComponent(seedAgentKey.includes(":") ? seedAgentKey.split(":").pop()! : seedAgentKey)}`}
-                >
-                  View Profile →
-                </Link>
-              ) : null}
-            </div>
-          ) : null}
           <form
             className="mx-auto w-full max-w-[46rem] px-4 pb-5 pt-3"
             onSubmit={(event) => {

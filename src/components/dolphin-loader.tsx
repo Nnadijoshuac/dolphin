@@ -45,9 +45,9 @@ function MatrixDigit({ digit, index }: { digit: string; index: number }) {
       ? []
       : [
           {
-            translateY: interpolate(progress.value, [0, 0.2, 0.8, 1], [-16, 0, 0, 16]),
+            translateY: interpolate(progress.value, [0, 0.2, 0.8, 1], [-8, 0, 0, 8]),
           },
-          { perspective: 180 },
+          { perspective: 90 },
           {
             rotateX: `${interpolate(progress.value, [0, 0.2, 0.8, 1], [90, 0, 0, -90])}deg`,
           },
@@ -58,16 +58,16 @@ function MatrixDigit({ digit, index }: { digit: string; index: number }) {
     <Animated.Text
       style={[
         {
-          width: 24,
+          width: 12,
           color: "#00C96F",
           fontFamily: "monospace",
-          fontSize: 12,
+          fontSize: 6.5,
           fontWeight: "700",
-          lineHeight: 16,
+          lineHeight: 10,
           textAlign: "center",
           textShadowColor: "rgba(0, 255, 136, 0.72)",
           textShadowOffset: { width: 0, height: 0 },
-          textShadowRadius: 6,
+          textShadowRadius: 3,
         },
         animatedStyle,
       ]}
@@ -100,8 +100,8 @@ function MatrixGlow() {
       style={[
         {
           position: "absolute",
-          inset: 2,
-          borderRadius: 36,
+          inset: 1,
+          borderRadius: 18,
           backgroundColor: "rgba(0, 255, 136, 0.11)",
         },
         animatedStyle,
@@ -115,12 +115,12 @@ export function DolphinLoader({ label }: { label: string }) {
     <View
       accessibilityLabel={label}
       accessibilityRole="progressbar"
-      style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+      style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
     >
       <View
         style={{
-          width: 72,
-          height: 66,
+          width: 36,
+          height: 33,
           flexDirection: "row",
           flexWrap: "wrap",
           alignContent: "center",

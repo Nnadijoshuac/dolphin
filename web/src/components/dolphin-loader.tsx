@@ -4,7 +4,7 @@ const DIGITS = ["0", "1", "0", "1", "1", "0", "0", "1"] as const;
 
 export function DolphinLoader({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-3" role="status">
+    <div className="flex items-center gap-2.5" role="status">
       <div aria-hidden className={styles.matrix}>
         {DIGITS.map((digit, index) => (
           <span className={styles.digit} key={`${digit}-${index}`}>

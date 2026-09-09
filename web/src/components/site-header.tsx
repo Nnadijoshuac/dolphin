@@ -37,8 +37,7 @@ export function SiteHeader() {
   const pathname = usePathname();
   const wallet = useWallet();
   const mobileNav = useRef<HTMLElement>(null);
-  const isTabPage = navigation.some((item) => item.path === pathname) && pathname !== "/dolphin";
-  const activeIndex = navigation.findIndex((item) => isActiveRoute(pathname, item.path));
+  const isDolphinPath = pathname === "/dolphin" || pathname.startsWith("/dolphin/");
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -57,6 +56,13 @@ export function SiteHeader() {
       document.removeEventListener("focusout", update);
     };
   }, []);
+
+  if (isDolphinPath) {
+    return null;
+  }
+
+  const isTabPage = navigation.some((item) => item.path === pathname) && pathname !== "/dolphin";
+  const activeIndex = navigation.findIndex((item) => isActiveRoute(pathname, item.path));
 
   return (
     <>

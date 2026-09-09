@@ -74,6 +74,7 @@ export function useDolphinConversation(conversationKey: string | null) {
     title: data?.conversation.title ?? null,
     seedAgentKey: data?.conversation.seedAgentKey ?? null,
     turns,
+    agentDirectory: data?.agentDirectory ?? [],
   };
 }
 

@@ -95,6 +95,9 @@ export function useDolphinConversation(conversationKey: string | null) {
     title: data?.conversation.title ?? null,
     seedAgentKey: data?.conversation.seedAgentKey ?? null,
     turns,
+    agentDirectory:
+      (data as unknown as { agentDirectory?: Array<{ agentKey: string; name: string }> })
+        ?.agentDirectory ?? [],
   };
 }
 

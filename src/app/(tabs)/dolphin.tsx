@@ -49,7 +49,8 @@ export default function DolphinScreen() {
 
   const { conversationKey, send, reset, openConversation, isSending, sendError } =
     useDolphinChat(seedAgentKey);
-  const { exists, isLoading, title, turns } = useDolphinConversation(conversationKey);
+  const { exists, isLoading, title, turns, agentDirectory } =
+    useDolphinConversation(conversationKey);
   const history = useAppStore((state) => state.chatHistory);
   const upsertHistory = useAppStore((state) => state.upsertChatHistory);
   const removeHistory = useAppStore((state) => state.removeChatHistory);
@@ -234,7 +235,14 @@ export default function DolphinScreen() {
                   </Text>
                 </View>
               ) : (
-                turns.map((turn) => <DolphinTurnView key={turn.id} turn={turn} />)
+                turns.map((turn) => (
+                  <DolphinTurnView
+                    dynamicAgents={agentDirectory}
+                    key={turn.id}
+                    onSelectPrompt={(prompt) => submit(prompt)}
+                    turn={turn}
+                  />
+                ))
               )}
 
               {sendError ? (

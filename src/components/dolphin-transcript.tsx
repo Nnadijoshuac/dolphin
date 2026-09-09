@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
+import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { PressableScale } from "@/components/pressable-scale";
 import { colors } from "@/constants/theme";
 import type { DolphinToolCall, DolphinTurn } from "@/hooks/use-dolphin-conversation";
@@ -309,78 +310,14 @@ function UserAvatar() {
   );
 }
 
-function escapeRegex(str: string) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * Linkified content — agent names in the response become tappable links
- * to their marketplace pages.
- */
-function LinkifiedContent({
-  text,
-  toolCalls,
-}: {
-  text: string;
-  toolCalls: DolphinToolCall[];
-}) {
-  const router = useRouter();
-
-  const agentMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const call of toolCalls) {
-      if (call.agentName && call.agentKey && !map.has(call.agentName)) {
-        map.set(call.agentName, call.agentKey);
-      }
-    }
-    return map;
-  }, [toolCalls]);
-
-  if (agentMap.size === 0) {
-    return (
-      <Text selectable style={{ fontSize: 14.5, lineHeight: 22, color: colors.ink }}>
-        {text}
-      </Text>
-    );
-  }
-
-  const names = Array.from(agentMap.keys()).sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(`(${names.map(escapeRegex).join("|")})`, "g");
-  const parts = text.split(pattern);
-
-  return (
-    <Text selectable style={{ fontSize: 14.5, lineHeight: 22, color: colors.ink }}>
-      {parts.map((part, i) => {
-        const agentKey = agentMap.get(part);
-        if (agentKey) {
-          return (
-            <Text
-              key={i}
-              onPress={() => {
-                void Haptics.selectionAsync();
-                router.push({ pathname: "/agent/[id]", params: { id: agentKey } });
-              }}
-              style={{
-                fontWeight: "700",
-                color: colors.goldDark,
-                textDecorationLine: "underline",
-                textDecorationColor: `${colors.goldDark}55`,
-              }}
-            >
-              {part}
-            </Text>
-          );
-        }
-        return <Text key={i}>{part}</Text>;
-      })}
-    </Text>
-  );
-}
-
 export function DolphinTurnView({
   turn,
+  dynamicAgents,
+  onSelectPrompt,
 }: {
   turn: DolphinTurn;
+  dynamicAgents?: Array<{ name: string; agentKey: string }>;
+  onSelectPrompt?: (prompt: string) => void;
 }) {
   if (turn.role === "user") {
     return (
@@ -445,7 +382,7 @@ export function DolphinTurnView({
           </View>
         ) : null}
 
-        {/* The answer bubble — with agent names hyperlinked */}
+        {/* The answer bubble — with rich markdown and agent names hyperlinked */}
         {turn.content.length > 0 ? (
           <View
             style={{
@@ -456,7 +393,12 @@ export function DolphinTurnView({
               paddingVertical: 11,
             }}
           >
-            <LinkifiedContent text={turn.content} toolCalls={turn.toolCalls} />
+            <DolphinMessageContent
+              content={turn.content}
+              dynamicAgents={dynamicAgents}
+              onSelectPrompt={onSelectPrompt}
+              toolCalls={turn.toolCalls}
+            />
           </View>
         ) : null}
 

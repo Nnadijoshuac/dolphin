@@ -361,7 +361,6 @@ export default function TabsLayout() {
         options={{
           title: "Dolphin",
           tabBarStyle: { display: "none" },
-          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen

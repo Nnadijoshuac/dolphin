@@ -294,10 +294,13 @@ export function DolphinMessageContent({
         );
       }
       if (node.type === "agent-link") {
+        const tokenId = node.agentKey.includes(":")
+          ? node.agentKey.split(":").pop()!
+          : node.agentKey;
         return (
           <Link
             className="inline-flex items-center gap-1 font-semibold text-accent-ink underline decoration-accent-ink/40 underline-offset-2 transition-colors hover:decoration-accent-ink"
-            href={`/agent/${encodeURIComponent(node.agentKey)}`}
+            href={`/agent/${encodeURIComponent(tokenId)}`}
             key={i}
             title={`View ${node.label} on BNB Chain`}
           >
@@ -306,10 +309,17 @@ export function DolphinMessageContent({
         );
       }
       if (node.type === "nav-link") {
+        let url = node.url;
+        const agentPathMatch = url.match(/^(\/agent\/)(.+)$/);
+        if (agentPathMatch) {
+          const rawId = decodeURIComponent(agentPathMatch[2]);
+          const tokenId = rawId.includes(":") ? rawId.split(":").pop()! : rawId;
+          url = `/agent/${encodeURIComponent(tokenId)}`;
+        }
         return (
           <Link
             className="inline-flex items-center gap-1 font-semibold text-accent-ink underline decoration-accent-ink/40 underline-offset-2 transition-colors hover:decoration-accent-ink"
-            href={node.url}
+            href={url}
             key={i}
           >
             {node.label}

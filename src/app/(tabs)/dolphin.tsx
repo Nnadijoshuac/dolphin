@@ -35,9 +35,10 @@ import { useAppStore } from "@/store/use-app-store";
  * Dolphin's chat surface. Conversation capability keys are cached only on the
  * current device; transcripts remain authoritative in Convex.
  */
-export default function DolphinScreen() {
-  const params = useLocalSearchParams<{ agentKey?: string }>();
+  const params = useLocalSearchParams<{ agentKey?: string; agentName?: string; ask?: string }>();
   const seedAgentKey = typeof params.agentKey === "string" ? params.agentKey : null;
+  const seedAgentName = typeof params.agentName === "string" ? params.agentName : null;
+  const autoAsk = params.ask === "1" || params.ask === "true";
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
@@ -46,6 +47,7 @@ export default function DolphinScreen() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
+  const hasAutoAskedRef = useRef(false);
 
   const { conversationKey, send, reset, openConversation, isSending, sendError } =
     useDolphinChat(seedAgentKey);
@@ -76,6 +78,21 @@ export default function DolphinScreen() {
     },
     [isSending, send],
   );
+
+  useEffect(() => {
+    if (!seedAgentKey || hasAutoAskedRef.current) return;
+    if (autoAsk) {
+      hasAutoAskedRef.current = true;
+      const agentDisplayName = seedAgentName ? seedAgentName.trim() : "this agent";
+      const prompt = `Can you analyze ${agentDisplayName}? What strategy does it run, what are its live on-chain metrics, and is it safe to use?`;
+      const timer = setTimeout(() => {
+        void submit(prompt);
+      }, 150);
+      return () => clearTimeout(timer);
+    } else if (seedAgentName) {
+      setDraft(`Tell me about ${seedAgentName.trim()} — what strategy does it run?`);
+    }
+  }, [seedAgentKey, seedAgentName, autoAsk, submit]);
 
   const startNew = useCallback(() => {
     reset();

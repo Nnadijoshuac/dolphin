@@ -218,7 +218,10 @@ function ToolCallRow({ call, isLast }: { call: DolphinToolCall; isLast: boolean 
             <PressableScale
               onPress={() => {
                 void Haptics.selectionAsync();
-                router.push({ pathname: "/agent/[id]", params: { id: call.agentKey } });
+                const tokenId = call.agentKey.includes(":")
+                  ? call.agentKey.split(":").pop()!
+                  : call.agentKey;
+                router.push({ pathname: "/agent/[id]", params: { id: tokenId } });
               }}
               containerStyle={{ alignSelf: "flex-start" }}
             >

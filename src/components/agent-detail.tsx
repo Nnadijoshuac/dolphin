@@ -676,7 +676,14 @@ export function AgentDetail({
              * not a member of that union - the params go in their own object
              * and the router encodes them.
              */
-            router.push({ pathname: "/dolphin", params: { agentKey: agent.id } });
+            router.push({
+              pathname: "/dolphin",
+              params: {
+                agentKey: agent.id,
+                agentName: agent.name,
+                ask: "1",
+              },
+            });
           }}
         >
           <CategoryGlyph color={colors.goldDark} name="sparkle" size={15} strokeWidth={2.2} />

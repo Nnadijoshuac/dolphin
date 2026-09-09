@@ -28,7 +28,7 @@ export function MobileAgentRow({ agent, signals, surface = "search", onOpen }: {
   return (
     <Link
       className="mobile-agent-row"
-      href={`/agent/${encodeURIComponent(agent.agentKey)}`}
+      href={`/agent/${encodeURIComponent(agent.tokenId ?? (agent.agentKey.includes(":") ? agent.agentKey.split(":").pop()! : agent.agentKey))}`}
       onClick={() => {
         onOpen?.();
         track("agent_card_opened", { agentKey: agent.agentKey, category: agent.category, surface });

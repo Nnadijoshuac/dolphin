@@ -219,7 +219,11 @@ export function DolphinToolCalls({ calls }: { calls: DolphinToolCall[] }) {
 
                       <Link
                         className="inline-block font-semibold text-accent-ink hover:underline"
-                        href={`/agent/${encodeURIComponent(call.agentKey)}`}
+                        href={`/agent/${encodeURIComponent(
+                          call.agentKey.includes(":")
+                            ? call.agentKey.split(":").pop()!
+                            : call.agentKey
+                        )}`}
                       >
                         View {call.agentName} →
                       </Link>

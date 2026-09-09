@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { DolphinClient } from "@/app/dolphin/dolphin-client";
+import { fetchAgent } from "@/server/convex";
 
 /**
  * The server shell around the Dolphin agent.
@@ -49,8 +50,30 @@ export default async function DolphinPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const agent = (await searchParams).agent;
+  const sp = await searchParams;
+  const agent = sp.agent;
+  let name = typeof sp.name === "string" ? sp.name : null;
+  const ask = sp.ask;
   const seedAgentKey = typeof agent === "string" && agent.length > 0 ? agent : null;
 
-  return <DolphinClient seedAgentKey={seedAgentKey} />;
+  if (seedAgentKey && !name) {
+    try {
+      const agentDoc = await fetchAgent(seedAgentKey);
+      if (agentDoc?.name) {
+        name = agentDoc.name;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const autoAsk = ask === "1" || ask === "true" || (seedAgentKey !== null && ask !== "0");
+
+  return (
+    <DolphinClient
+      autoAsk={autoAsk}
+      seedAgentKey={seedAgentKey}
+      seedAgentName={name}
+    />
+  );
 }

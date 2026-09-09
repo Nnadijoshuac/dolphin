@@ -37,9 +37,7 @@ Let me know whether you’d like me to verify the agent’s liveness first, or s
 
   it("hyperlinks 'The PancakeSwap Grid Trader' to its agent page", () => {
     const html = renderToStaticMarkup(<DolphinMessageContent content={sampleMessage} />);
-    expect(html).toContain(
-      `href="/agent/${encodeURIComponent("56:0x8004a169fb4a3325136eb29fa0ceb6d2e539a432:338477")}"`
-    );
+    expect(html).toContain('href="/agent/338477"');
     expect(html).toContain("The PancakeSwap Grid Trader</a>");
   });
 

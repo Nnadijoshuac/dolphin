@@ -444,7 +444,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           */}
           <Link
             className="flex items-center justify-center gap-2 rounded-xl border border-line bg-paper-strong px-4 py-3 text-sm font-semibold text-ink transition-colors hover:border-line-strong hover:bg-paper-muted"
-            href={`/dolphin?agent=${encodeURIComponent(agent.id)}`}
+            href={`/dolphin?agent=${encodeURIComponent(agent.id)}&name=${encodeURIComponent(agent.name)}&ask=1`}
           >
             <CategoryGlyph name="sparkle" size={16} />
             Ask Dolphin about this agent

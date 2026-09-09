@@ -306,12 +306,15 @@ export function DolphinMessageContent({
         );
       }
       if (node.type === "agent-link") {
+        const tokenId = node.agentKey.includes(":")
+          ? node.agentKey.split(":").pop()!
+          : node.agentKey;
         return (
           <Text
             key={key}
             onPress={() => {
               void Haptics.selectionAsync();
-              router.push({ pathname: "/agent/[id]", params: { id: node.agentKey } });
+              router.push({ pathname: "/agent/[id]", params: { id: tokenId } });
             }}
             style={{
               fontWeight: "700",
@@ -325,12 +328,20 @@ export function DolphinMessageContent({
         );
       }
       if (node.type === "nav-link") {
+        let targetUrl = node.url;
+        const agentMatch = targetUrl.match(/^\/agent\/(.+)$/);
         return (
           <Text
             key={key}
             onPress={() => {
               void Haptics.selectionAsync();
-              router.push(node.url as any);
+              if (agentMatch) {
+                const rawId = decodeURIComponent(agentMatch[1]);
+                const tokenId = rawId.includes(":") ? rawId.split(":").pop()! : rawId;
+                router.push({ pathname: "/agent/[id]", params: { id: tokenId } });
+              } else {
+                router.push(targetUrl as any);
+              }
             }}
             style={{
               fontWeight: "700",

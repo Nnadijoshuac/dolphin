@@ -25,7 +25,7 @@ export function MobileDiscoverHero({ agents }: { agents: Agent[] }) {
         {promos.map((promo) => {
           const tokenId = "tokenId" in promo ? promo.tokenId : null;
           const target = agents.find((agent) => tokenId ? agent.tokenId === tokenId : agent.category === promo.category);
-          const href = target ? `/agent/${encodeURIComponent(target.agentKey)}` : tokenId ? `/agent/${tokenId}` : `/search?category=${promo.category}`;
+          const href = target ? `/agent/${encodeURIComponent(target.tokenId)}` : tokenId ? `/agent/${tokenId}` : `/search?category=${promo.category}`;
           return (
             <Link className="mobile-promo-card" href={href} key={promo.image} style={{ backgroundImage: `linear-gradient(#0006, #0006), url(/promos/${promo.image}.jpg)` }}>
               <div>

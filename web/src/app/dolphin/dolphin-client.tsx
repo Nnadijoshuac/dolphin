@@ -246,11 +246,20 @@ function ChatHistory({
   );
 }
 
-export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null }) {
+export function DolphinClient({
+  seedAgentKey,
+  seedAgentName,
+  autoAsk,
+}: {
+  seedAgentKey: string | null;
+  seedAgentName?: string | null;
+  autoAsk?: boolean;
+}) {
   const [draft, setDraft] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hasAutoAskedRef = useRef(false);
 
   const { conversationKey, send, reset, openConversation, isSending, sendError } =
     useDolphinChat(seedAgentKey);
@@ -285,6 +294,21 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
     },
     [isSending, send],
   );
+
+  useEffect(() => {
+    if (!seedAgentKey || hasAutoAskedRef.current) return;
+    if (autoAsk) {
+      hasAutoAskedRef.current = true;
+      const agentDisplayName = seedAgentName ? seedAgentName.trim() : "this agent";
+      const prompt = `Can you analyze ${agentDisplayName}? What strategy does it run, what are its live on-chain metrics, and is it safe to use?`;
+      const timer = setTimeout(() => {
+        void submit(prompt);
+      }, 120);
+      return () => clearTimeout(timer);
+    } else if (seedAgentName) {
+      setDraft(`Tell me about ${seedAgentName.trim()} — what strategy does it run?`);
+    }
+  }, [seedAgentKey, seedAgentName, autoAsk, submit]);
 
   const startNew = useCallback(() => {
     reset();
@@ -378,11 +402,34 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
                 </p>
               </div>
             ) : isEmpty ? (
-              <div className="dolphin-empty-hero flex flex-col items-center pt-[16vh]">
+              <div className="dolphin-empty-hero flex flex-col items-center pt-[14vh]">
                 <BrandMark size={48} />
                 <h1 className="mt-4 text-center text-[1.6rem] font-semibold tracking-tight text-slate-950">
-                  Ask the marketplace
+                  {seedAgentName ? `Analyze ${seedAgentName}` : "Ask the marketplace"}
                 </h1>
+                <p className="mt-2 max-w-md text-center text-sm text-slate-500">
+                  {seedAgentName
+                    ? `Dolphin is consulting verified tools and on-chain records for ${seedAgentName}.`
+                    : "Autonomous agent intelligence on BNB Chain. Ask questions, compare strategies, or inspect live contract telemetry."}
+                </p>
+                {seedAgentName ? (
+                  <div className="mt-6 flex flex-wrap justify-center gap-2">
+                    {[
+                      `What strategy does ${seedAgentName} run?`,
+                      `Check live health for ${seedAgentName}`,
+                      `Is ${seedAgentName} verified and safe?`,
+                    ].map((samplePrompt) => (
+                      <button
+                        className="rounded-full border border-slate-300/80 bg-white/75 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-white hover:text-slate-950"
+                        key={samplePrompt}
+                        onClick={() => submit(samplePrompt)}
+                        type="button"
+                      >
+                        {samplePrompt}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div>
@@ -405,6 +452,22 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
         </div>
 
         <div className="dolphin-composer-wrapper relative z-10 bg-gradient-to-t from-[var(--canvas)] via-[var(--canvas)]/95 to-transparent">
+          {seedAgentName ? (
+            <div className="mx-auto flex w-full max-w-[46rem] items-center justify-between px-4 pb-1">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/90 bg-emerald-50/90 px-3 py-1 text-[11px] font-semibold text-emerald-900 shadow-sm backdrop-blur-md">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Analyzing {seedAgentName}</span>
+              </div>
+              {seedAgentKey ? (
+                <Link
+                  className="text-xs font-medium text-slate-500 underline decoration-slate-300 transition-colors hover:text-slate-950 hover:decoration-slate-950"
+                  href={`/agent/${encodeURIComponent(seedAgentKey.includes(":") ? seedAgentKey.split(":").pop()! : seedAgentKey)}`}
+                >
+                  View Profile →
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
           <form
             className="mx-auto w-full max-w-[46rem] px-4 pb-5 pt-3"
             onSubmit={(event) => {

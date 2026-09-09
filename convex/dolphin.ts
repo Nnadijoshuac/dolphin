@@ -44,6 +44,22 @@ const MAX_STORED_RESULT_CHARS = 4_000;
 const MAX_MODEL_RESULT_CHARS = 6_000;
 
 /**
+ * How many prior conversation turns to feed into the synthesis prompt.
+ *
+ * Conversation memory is what separates an intelligent assistant from a
+ * stateless Q&A box. Without it, every message is a cold start — the model
+ * can't refer to something discussed earlier, can't track a line of reasoning,
+ * and can't notice when the user changes their mind. With it, Dolphin
+ * understands context: "what about that one?" resolves correctly, follow-up
+ * questions build on earlier answers, and the conversation feels coherent.
+ *
+ * Limited to recent turns to stay within the free model's context budget.
+ * Each turn is truncated to keep the total injection bounded.
+ */
+const MAX_HISTORY_TURNS = 6;
+const MAX_HISTORY_CHARS_PER_MESSAGE = 1_500;
+
+/**
  * ---------------------------------------------------------------------------
  * KNOWLEDGE SYNTHESIS
  * ---------------------------------------------------------------------------
@@ -455,6 +471,49 @@ export const candidatesFor = internalQuery({
 });
 
 /**
+ * Prior conversation turns for context memory.
+ *
+ * Returns the most recent completed turns (user + assistant pairs) so the
+ * synthesis phase can reference earlier discussion. Without this, every
+ * message is a cold start and "what about that one?" has no referent.
+ *
+ * Only completed messages with real content are included — thinking/error
+ * states and empty placeholders are noise in this context.
+ */
+export const recentHistory = internalQuery({
+  args: { conversationKey: v.string(), excludeMessageId: v.id("dolphinMessages") },
+  handler: async (ctx, { conversationKey, excludeMessageId }) => {
+    const conversation = await ctx.db
+      .query("dolphinConversations")
+      .withIndex("by_key", (q) => q.eq("conversationKey", conversationKey))
+      .unique();
+    if (!conversation) return [];
+
+    const messages = await ctx.db
+      .query("dolphinMessages")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id))
+      .order("desc")
+      // Take more than we need, then filter — some will be the current turn's
+      // placeholder or error states.
+      .take(MAX_HISTORY_TURNS * 3)
+
+    return messages
+      .filter(
+        (m) =>
+          m._id !== excludeMessageId &&
+          m.status === "complete" &&
+          m.content.trim().length > 0,
+      )
+      .slice(0, MAX_HISTORY_TURNS * 2) // user + assistant = 2 messages per turn
+      .reverse() // chronological order
+      .map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content.slice(0, MAX_HISTORY_CHARS_PER_MESSAGE),
+      }));
+  },
+});
+
+/**
  * What the model budget actually looks like right now, and whether the model
  * this agent depends on will answer a tool call.
  *
@@ -599,7 +658,20 @@ export const ask = action({
 
     try {
       /*
-       * RETRIEVE - catalog query to see if any live MCP agents match.
+       * PHASE 0: CONVERSATION MEMORY
+       * Fetch prior turns so Dolphin understands context. "What about that one?"
+       * only works if "that one" has a referent. Without this, every message
+       * is a cold start — which is why the previous version felt stateless.
+       */
+      const priorTurns: { role: "user" | "assistant"; content: string }[] =
+        await ctx.runQuery(internal.dolphin.recentHistory, {
+          conversationKey,
+          excludeMessageId: assistantId,
+        });
+
+      /*
+       * PHASE 1: RETRIEVE
+       * Catalog query to see if any live MCP agents match.
        * If agents match, build a tool menu so the model can consult them.
        */
       const candidates: CandidateAgent[] = await ctx.runQuery(internal.dolphin.candidatesFor, {
@@ -612,16 +684,21 @@ export const ask = action({
           ? await buildToolMenu(candidates)
           : { tools: [], bindings: new Map(), unreachable: [] };
 
-      // Starts with the consult prompt; swapped for the full rules before synthesis.
+      // Starts with the consult prompt; swapped for the full personality before synthesis.
       const messages: ChatMessage[] = [
         { role: "system", content: CONSULT_PROMPT },
+        // Inject conversation history so the consult phase can reference context.
+        ...priorTurns,
         { role: "user", content: text },
       ];
 
       let callsRemaining = MAX_TOOL_CALLS_PER_TURN;
       let callsMade = 0;
 
-      // If matching agents advertise tools, allow the model to consult them as needed
+      /*
+       * PHASE 2: CONSULT
+       * If matching agents advertise tools, allow the model to consult them.
+       */
       if (menu.tools.length > 0) {
         await ctx.runMutation(internal.dolphin.setMessageStatus, {
           messageId: assistantId,
@@ -658,16 +735,38 @@ export const ask = action({
       }
 
       /*
-       * SYNTHESIZE.
+       * PHASE 3: SYNTHESIZE
        * The evidence (if any) is gathered. Now Dolphin synthesizes a human-like,
-       * articulate answer guided by its personality and knowledge base.
+       * articulate answer guided by its full personality and knowledge base.
+       *
+       * The system prompt is swapped from the lean consult prompt to the full
+       * personality, and unreachable agents are injected so the model can
+       * honestly report which agents it tried to reach but couldn't.
        */
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
         messageId: assistantId,
         status: "thinking",
       });
 
-      messages[0] = { role: "system", content: SYSTEM_PROMPT };
+      // Build the synthesis context: full personality + situational awareness
+      let synthesisContext = SYSTEM_PROMPT;
+
+      // Inject unreachable agent awareness so the model reports honestly
+      if (menu.unreachable.length > 0) {
+        const unreachableNote = menu.unreachable
+          .map((u) => `- ${u.agentName}: ${u.reason}`)
+          .join("\n");
+        synthesisContext += `\n\nAGENTS THAT COULD NOT BE REACHED (report this honestly — "three answered and one was down" is different from "three answered"):\n${unreachableNote}`;
+      }
+
+      // Note how many tools were called so the model has self-awareness
+      if (callsMade > 0) {
+        synthesisContext += `\n\nEVIDENCE GATHERED: You consulted ${callsMade} tool(s) across the agents above. Base your answer on what they returned. If a tool returned an error, say so.`;
+      } else if (menu.tools.length > 0) {
+        synthesisContext += `\n\nNOTE: Tools were available but you chose not to call any, meaning the question is answerable from your knowledge base. Answer from knowledge, but be clear you did not fetch live data for this response.`;
+      }
+
+      messages[0] = { role: "system", content: synthesisContext };
       const final = await chatCompletion({ messages });
 
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
@@ -676,18 +775,17 @@ export const ask = action({
         content:
           final.content.trim().length > 0
             ? final.content
-            : "I'm Dolphin, your marketplace guide on BNB Chain. How can I help you explore agents or DeFi strategies today?",
+            : "Hey there! I'm Dolphin — the intelligence engine behind this marketplace. I can help you discover and evaluate AI agents on BNB Chain, check live DeFi data through agent consultations, and explain how everything works. What would you like to explore?",
         model: final.model,
       });
     } catch (cause) {
-      // A reason a person can read. `isRateLimit` matters: "we are out of free
-      // calls today" and "the agent is broken" are different facts.
-      const reason =
-        cause instanceof OpenRouterError
-          ? cause.message
-          : cause instanceof Error
-            ? cause.message
-            : String(cause);
+      /*
+       * Human-readable error messages.
+       *
+       * "we are out of free calls today" and "the agent is broken" are different
+       * facts, and only one is true. The person reading this needs to know which.
+       */
+      const reason = humanizeError(cause);
 
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
         messageId: assistantId,
@@ -795,4 +893,71 @@ async function executeToolCalls(
       });
     }
   }
+}
+
+/**
+ * Translates raw errors into messages a person can understand and act on.
+ *
+ * The free model tier fails in ways that look like application bugs:
+ * - A rate limit arrives as "429 Too Many Requests" or as a mid-stream
+ *   `finish_reason: "error"` with no HTTP error at all
+ * - A context-length overflow says "maximum context length exceeded"
+ * - A model being down says "502 Bad Gateway" or "503 Service Unavailable"
+ *
+ * A person reading "429 Too Many Requests" does not know whether to wait 60
+ * seconds or come back tomorrow. These translations tell them.
+ */
+function humanizeError(cause: unknown): string {
+  const raw =
+    cause instanceof OpenRouterError
+      ? cause.message
+      : cause instanceof Error
+        ? cause.message
+        : String(cause);
+
+  const lower = raw.toLowerCase();
+
+  // Rate limit — the most common free-tier failure
+  if (
+    lower.includes("rate limit") ||
+    lower.includes("429") ||
+    lower.includes("too many requests") ||
+    lower.includes("quota")
+  ) {
+    return "Dolphin is running on a free model tier and has temporarily hit its rate limit. This usually resets within a minute or two — try your question again shortly.";
+  }
+
+  // Model overloaded or unavailable
+  if (
+    lower.includes("502") ||
+    lower.includes("503") ||
+    lower.includes("overloaded") ||
+    lower.includes("service unavailable") ||
+    lower.includes("bad gateway")
+  ) {
+    return "The AI model Dolphin uses is temporarily overloaded. This is a provider-side issue, not a bug in the marketplace. Try again in a moment.";
+  }
+
+  // Context too long — shouldn't happen with our limits, but defensive
+  if (lower.includes("context length") || lower.includes("token limit")) {
+    return "That question generated too much context for the model to process. Try asking something more specific, or start a new conversation.";
+  }
+
+  // Network / timeout
+  if (
+    lower.includes("timeout") ||
+    lower.includes("econnrefused") ||
+    lower.includes("fetch failed") ||
+    lower.includes("network")
+  ) {
+    return "A network issue prevented Dolphin from reaching the AI model. Check your connection and try again.";
+  }
+
+  // Conversation not found
+  if (lower.includes("no longer exists") || lower.includes("conversation")) {
+    return raw; // Already human-readable from our own code
+  }
+
+  // Fallback — include the raw message but frame it helpfully
+  return `Something unexpected happened: ${raw.slice(0, 200)}. Try your question again — if this persists, it may be a temporary issue with the AI model provider.`;
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -18,6 +18,10 @@ import { SiteHeader } from "@/components/site-header";
  */
 const FULL_HEIGHT_ROUTES = ["/dolphin"];
 
+export function isDolphinRoute(pathname: string) {
+  return pathname === "/dolphin" || pathname.startsWith("/dolphin/");
+}
+
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isFullHeight = FULL_HEIGHT_ROUTES.some(
@@ -29,7 +33,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <SiteHeader />
+      {isDolphinRoute(pathname) ? null : <SiteHeader />}
       <main className="min-w-0 flex-1" id="main-content">
         {children}
       </main>

@@ -11,6 +11,7 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
     /* Needed since the SDK 57 upgrade brought TypeScript 6, which no longer
      * pulls in every @types/* package automatically the way TS 5 did. Without
      * this, `npx convex dev` fails its pre-push typecheck with ten

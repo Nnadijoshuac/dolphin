@@ -3,73 +3,96 @@ import { Text, View } from "react-native";
 import Animated, {
   Easing,
   cancelAnimation,
+  interpolate,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
+  withDelay,
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
 
 import { colors } from "@/constants/theme";
 
-/**
- * Dolphin is working.
- *
- * The web build of this (web/src/components/dolphin-loader.module.css) is three
- * nested rings tumbling in perspective, each a beat behind the last. This is
- * the same design expressed in Reanimated, which is the stack's animation
- * library - the CSS version cannot cross over, but the motion can.
- *
- * Deliberately NOT an ActivityIndicator. A spinner says "something is
- * happening"; this is shown while Dolphin is doing something specific and
- * comparatively slow - waiting on strangers' servers - and the label says
- * which. Three rings turning at three speeds reads as work rather than a wait.
- */
+const DIGITS = ["0", "1", "0", "1", "1", "0", "0", "1"] as const;
 
-const RINGS = [
-  { size: 30, border: 10, color: colors.goldDark, delay: 0 },
-  { size: 38, border: 7, color: colors.goldHover, delay: 75 },
-  { size: 46, border: 5, color: colors.gold, delay: 150 },
-] as const;
-
-function Ring({
-  size,
-  border,
-  color,
-  delay,
-}: {
-  size: number;
-  border: number;
-  color: string;
-  delay: number;
-}) {
+function MatrixDigit({ digit, index }: { digit: string; index: number }) {
   const progress = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
-    // The stagger is what makes this read as one object tumbling rather than
-    // three rings spinning independently.
-    const timer = setTimeout(() => {
-      progress.value = withRepeat(
-        withTiming(1, { duration: 1000, easing: Easing.bezier(0.49, 0.06, 0.43, 0.85) }),
+    if (reduceMotion) return;
+    progress.value = withDelay(
+      80 + index * 160,
+      withRepeat(
+        withTiming(1, { duration: 1800, easing: Easing.linear }),
         -1,
-        true,
-      );
-    }, delay);
+        false,
+      ),
+    );
+    return () => cancelAnimation(progress);
+  }, [index, progress, reduceMotion]);
 
-    return () => {
-      clearTimeout(timer);
-      cancelAnimation(progress);
-    };
-  }, [delay, progress]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: reduceMotion
+      ? 0.62
+      : interpolate(
+          progress.value,
+          [0, 0.2, 0.48, 0.5, 0.8, 1],
+          [0, 0.82, 0.82, 0.24, 0.82, 0],
+        ),
+    transform: reduceMotion
+      ? []
+      : [
+          {
+            translateY: interpolate(progress.value, [0, 0.2, 0.8, 1], [-16, 0, 0, 16]),
+          },
+          { perspective: 180 },
+          {
+            rotateX: `${interpolate(progress.value, [0, 0.2, 0.8, 1], [90, 0, 0, -90])}deg`,
+          },
+        ],
+  }));
 
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      // Perspective must come FIRST in a React Native transform array or the
-      // rotations are applied flat and the whole 3D effect disappears.
-      { perspective: 220 },
-      { rotateX: `${24 - 4 * progress.value}deg` },
-      { rotateY: "20deg" },
-      { rotateZ: `${50 * progress.value}deg` },
-    ],
+  return (
+    <Animated.Text
+      style={[
+        {
+          width: 24,
+          color: "#00C96F",
+          fontFamily: "monospace",
+          fontSize: 12,
+          fontWeight: "700",
+          lineHeight: 16,
+          textAlign: "center",
+          textShadowColor: "rgba(0, 255, 136, 0.72)",
+          textShadowOffset: { width: 0, height: 0 },
+          textShadowRadius: 6,
+        },
+        animatedStyle,
+      ]}
+    >
+      {digit}
+    </Animated.Text>
+  );
+}
+
+function MatrixGlow() {
+  const progress = useSharedValue(0.28);
+  const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    progress.value = withRepeat(
+      withTiming(0.72, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+    return () => cancelAnimation(progress);
+  }, [progress, reduceMotion]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: reduceMotion ? 0.36 : progress.value,
   }));
 
   return (
@@ -77,17 +100,11 @@ function Ring({
       style={[
         {
           position: "absolute",
-          width: size,
-          height: size,
-          marginTop: -size / 2,
-          marginLeft: -size / 2,
-          top: "50%",
-          left: "50%",
-          borderRadius: size,
-          borderWidth: border,
-          borderColor: color,
+          inset: 2,
+          borderRadius: 36,
+          backgroundColor: "rgba(0, 255, 136, 0.11)",
         },
-        style,
+        animatedStyle,
       ]}
     />
   );
@@ -96,19 +113,23 @@ function Ring({
 export function DolphinLoader({ label }: { label: string }) {
   return (
     <View
-      accessibilityRole="progressbar"
       accessibilityLabel={label}
+      accessibilityRole="progressbar"
       style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
     >
-      <View style={{ width: 52, height: 52 }}>
-        {RINGS.map((ring) => (
-          <Ring
-            border={ring.border}
-            color={ring.color}
-            delay={ring.delay}
-            key={ring.size}
-            size={ring.size}
-          />
+      <View
+        style={{
+          width: 72,
+          height: 66,
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignContent: "center",
+          position: "relative",
+        }}
+      >
+        <MatrixGlow />
+        {DIGITS.map((digit, index) => (
+          <MatrixDigit digit={digit} index={index} key={`${digit}-${index}`} />
         ))}
       </View>
       <Text style={{ fontSize: 13, color: colors.inkSecondary, flexShrink: 1 }}>

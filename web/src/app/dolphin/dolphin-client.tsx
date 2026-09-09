@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import { DolphinLoader } from "@/components/dolphin-loader";
@@ -29,35 +29,6 @@ import { useWallet } from "@/wallet/wallet-provider";
  * all. Reading the param on the server keeps the HTML complete.
  */
 
-/**
- * The empty state has to TEACH.
- *
- * project-scope.md §11 requires that someone who has never heard of BNB Agent
- * Studio can use this, and a blank chat box is a dead end for that person.
- *
- * These are also the prompts to pre-run before a demo, so the obvious path is
- * the cached one and costs no free-tier model calls. Change them and that
- * caching goes with them.
- */
-const SUGGESTIONS = [
-  {
-    title: "Find yield",
-    prompt: "What yield opportunities are on BNB Chain right now?",
-  },
-  {
-    title: "Watch a position",
-    prompt: "Which agents can watch a lending position for me?",
-  },
-  {
-    title: "Compare agents",
-    prompt: "Which agents here can analyse a liquidity pool, and how do they differ?",
-  },
-  {
-    title: "Understand the market",
-    prompt: "What can the agents in this marketplace actually do?",
-  },
-];
-
 function relativeTime(timestamp: number): string {
   const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
   if (seconds < 60) return `${seconds}s ago`;
@@ -68,29 +39,106 @@ function relativeTime(timestamp: number): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function Avatar({ kind, initials }: { kind: "user" | "assistant"; initials: string }) {
-  if (kind === "assistant") {
-    return (
-      <div className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft ring-1 ring-line">
-        <BrandMark size={17} />
-      </div>
-    );
-  }
+/** Wallet profile icon — same glyph used in the tab bar */
+function UserAvatar() {
   return (
-    <div className="grid size-8 shrink-0 place-items-center rounded-full bg-paper-muted text-[0.65rem] font-semibold uppercase text-muted ring-1 ring-line">
-      {initials}
+    <div className="grid size-8 shrink-0 place-items-center rounded-full bg-paper-muted ring-1 ring-line">
+      <svg aria-hidden fill="none" height="16" viewBox="0 0 24 24" width="16">
+        <path
+          d="M17 20.5H7c-3 0-5-2-5-5v-7c0-3 2-5 5-5h10c3 0 5 2 5 5v7c0 3-2 5-5 5Z"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.5"
+        />
+        <path
+          d="M2 13h3.76c.78 0 1.49.44 1.84 1.14l.75 1.52c.5 1 1.41 1.34 1.91 1.34h3.48c.5 0 1.41-.34 1.91-1.34l.75-1.52c.35-.7 1.06-1.14 1.84-1.14H22"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.5"
+        />
+      </svg>
     </div>
   );
 }
 
-function Turn({ turn, initials }: { turn: DolphinTurn; initials: string }) {
+function AssistantAvatar() {
+  return (
+    <div className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-soft ring-1 ring-line">
+      <BrandMark size={17} />
+    </div>
+  );
+}
+
+/**
+ * Linkify agent names in the response text.
+ *
+ * Takes the raw text from the model and the tool calls that produced it, then
+ * replaces every occurrence of a consulted agent's name with a clickable link
+ * to its marketplace page. The model frequently mentions the agents it called
+ * by name, and making those names tappable is what turns a chat into a
+ * discovery surface.
+ */
+function LinkifiedContent({
+  text,
+  toolCalls,
+}: {
+  text: string;
+  toolCalls: DolphinTurn["toolCalls"];
+}) {
+  const agentMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const call of toolCalls) {
+      if (call.agentName && call.agentKey && !map.has(call.agentName)) {
+        map.set(call.agentName, call.agentKey);
+      }
+    }
+    return map;
+  }, [toolCalls]);
+
+  if (agentMap.size === 0) {
+    return <>{text}</>;
+  }
+
+  // Build a regex that matches any agent name (longest first to avoid partial matches)
+  const names = Array.from(agentMap.keys()).sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(`(${names.map(escapeRegex).join("|")})`, "g");
+  const parts = text.split(pattern);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        const agentKey = agentMap.get(part);
+        if (agentKey) {
+          return (
+            <Link
+              className="font-semibold text-accent-ink underline decoration-accent-ink/30 underline-offset-2 hover:decoration-accent-ink"
+              href={`/agent/${encodeURIComponent(agentKey)}`}
+              key={i}
+            >
+              {part}
+            </Link>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
+function escapeRegex(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function Turn({ turn }: { turn: DolphinTurn }) {
   if (turn.role === "user") {
     return (
       <div className="flex w-full items-end justify-end gap-2 py-3">
         <div className="max-w-[80%] overflow-hidden rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5 text-[0.92rem] leading-relaxed text-ink">
           {turn.content}
         </div>
-        <Avatar initials={initials} kind="user" />
+        <UserAvatar />
       </div>
     );
   }
@@ -99,26 +147,21 @@ function Turn({ turn, initials }: { turn: DolphinTurn; initials: string }) {
 
   return (
     <div className="flex w-full items-start gap-2 py-3">
-      <Avatar initials="AI" kind="assistant" />
+      <AssistantAvatar />
 
       <div className="min-w-0 max-w-[85%] flex-1 space-y-2">
-        {/*
-          Progress and provenance sit ABOVE the answer, in the order they
-          happened: Dolphin picks who to ask, asks them, then writes. Watching
-          the consulted-agent rows land one by one is the demo.
-        */}
-        {working && turn.toolCalls.length === 0 ? (
+        {/* Loading state — the 3D motion rings */}
+        {working && turn.content.length === 0 && turn.toolCalls.length === 0 ? (
           <DolphinLoader
             label={
               turn.status === "thinking"
-                ? "Choosing which agents to ask…"
+                ? "Thinking…"
                 : "Consulting agents…"
             }
           />
         ) : null}
 
-        <DolphinToolCalls calls={turn.toolCalls} />
-
+        {/* The answer bubble — shown as soon as content arrives */}
         {turn.status === "error" ? (
           <div className="rounded-2xl rounded-bl-md bg-paper-muted px-4 py-3 text-[0.92rem] leading-relaxed text-ink">
             {turn.errorReason ?? "Dolphin could not answer that."}
@@ -127,21 +170,21 @@ function Turn({ turn, initials }: { turn: DolphinTurn; initials: string }) {
 
         {turn.content.length > 0 ? (
           <div className="overflow-hidden whitespace-pre-wrap rounded-2xl rounded-bl-md bg-paper-muted px-4 py-3 text-[0.92rem] leading-[1.7] text-ink">
-            {turn.content}
+            <LinkifiedContent text={turn.content} toolCalls={turn.toolCalls} />
           </div>
         ) : null}
 
-        {/*
-          WHEN the answer was produced, always shown. A reused answer keeps its
-          ORIGINAL completedAt, so a cached reply must not read as fresh: live
-          metrics restated as current when they were read an hour ago is the
-          fabricated-liveness failure of AGENTS.md §5 wearing a cache as a
-          disguise.
-        */}
+        {/* Working indicator while content streams */}
+        {working && turn.content.length === 0 && turn.toolCalls.length > 0 ? (
+          <DolphinLoader label="Writing…" />
+        ) : null}
+
+        {/* Consulted agents — BELOW the response bubble */}
+        <DolphinToolCalls calls={turn.toolCalls} />
+
         {turn.status === "complete" && turn.completedAt !== null ? (
           <p className="pl-1 text-[0.68rem] text-faint">
-            Answered {relativeTime(turn.completedAt)}
-            {turn.model ? ` · ${turn.model.split("/").pop()?.replace(":free", "")}` : ""}
+            {relativeTime(turn.completedAt)}
           </p>
         ) : null}
       </div>
@@ -158,8 +201,6 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
     useDolphinChat(seedAgentKey);
   const { turns } = useDolphinConversation(conversationKey);
   const wallet = useWallet();
-
-  const initials = wallet.address ? wallet.address.slice(2, 4) : "You";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -211,50 +252,22 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {/*
-          `pb-36` is the composer island's landing space. The island is
-          positioned over this scroll area rather than beside it, so without
-          that padding the last turn ends up underneath it and unreadable.
-        */}
         <div className="mx-auto w-full max-w-[46rem] px-5 pb-36 pt-8">
           {isEmpty ? (
-            <div className="dolphin-empty-hero flex flex-col items-center pt-[12vh]">
+            <div className="dolphin-empty-hero flex flex-col items-center pt-[18vh]">
               <BrandMark size={48} />
               <h1 className="mt-4 text-[1.6rem] font-semibold tracking-tight text-ink text-center">
                 Ask the marketplace
               </h1>
-
-              <div className="mt-10 grid w-full gap-2.5 sm:grid-cols-2">
-                {SUGGESTIONS.map((suggestion) => (
-                  <button
-                    className="rounded-xl border border-line bg-paper-strong p-4 text-left transition-colors hover:border-line-strong hover:bg-paper-muted"
-                    key={suggestion.title}
-                    onClick={() => submit(suggestion.prompt)}
-                    type="button"
-                  >
-                    <span className="block text-[0.8rem] font-semibold text-ink">
-                      {suggestion.title}
-                    </span>
-                    <span className="mt-1 block text-[0.8rem] leading-snug text-muted">
-                      {suggestion.prompt}
-                    </span>
-                  </button>
-                ))}
-              </div>
             </div>
           ) : (
             <div>
               {turns.map((turn) => (
-                <Turn initials={initials} key={turn.id} turn={turn} />
+                <Turn key={turn.id} turn={turn} />
               ))}
             </div>
           )}
 
-          {/*
-            Only reached when the ACTION itself failed - a dropped connection.
-            Failures inside a turn render in the transcript, where the question
-            was asked.
-          */}
           {sendError ? (
             <p className="mt-4 text-[0.85rem] text-ink">{sendError}</p>
           ) : null}
@@ -263,18 +276,7 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
         </div>
       </div>
 
-      {/*
-        THE COMPOSER IS AN ISLAND.
-        ---------------------------------------------------------------------
-        Same object language as the app's floating tab bar: a capsule that sits
-        clear of the edges with a soft shadow under it, rather than a bar welded
-        to the bottom of the viewport by a full-bleed border.
-
-        `pointer-events-none` on the wrapper with `pointer-events-auto` on the
-        island itself is what lets the transcript keep scrolling in the gutter
-        either side of it - an island floating over content should not capture
-        clicks in the water around it.
-      */}
+      {/* THE COMPOSER ISLAND */}
       <div className="dolphin-composer-wrapper pointer-events-none absolute inset-x-0 bottom-0 z-10">
         <div className="mx-auto w-full max-w-[46rem] px-4 pb-5 pt-2">
           <div className="pointer-events-auto flex w-full flex-col items-end rounded-3xl border border-line bg-paper-strong/90 p-2 shadow-[0_8px_28px_rgba(17,18,20,0.12)] backdrop-blur-xl transition-shadow focus-within:border-line-strong focus-within:shadow-[0_10px_34px_rgba(17,18,20,0.17)]">
@@ -282,13 +284,10 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
               className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2 py-1.5 text-[0.92rem] leading-relaxed text-ink outline-none placeholder:text-faint-mark"
               onChange={(event) => {
                 setDraft(event.target.value);
-                // Grow with the content, the way a chat composer should.
                 event.target.style.height = "auto";
                 event.target.style.height = `${Math.min(event.target.scrollHeight, 400)}px`;
               }}
               onKeyDown={(event) => {
-                // Enter sends, Shift+Enter makes a newline - the convention
-                // every chat interface shares.
                 if (event.key === "Enter" && !event.shiftKey) {
                   if (draft.trim().length === 0) return;
                   event.preventDefault();
@@ -318,25 +317,6 @@ export function DolphinClient({ seedAgentKey }: { seedAgentKey: string | null })
               </svg>
             </button>
           </div>
-
-          <p className="pointer-events-auto mt-2 text-center text-[0.68rem] text-faint">
-            {isSending ? (
-              <>Consulting agents — this can take up to a minute.</>
-            ) : isEmpty ? (
-              <>Dolphin calls real agents on BNB Chain. Every answer cites what it asked.</>
-            ) : (
-              <button
-                className="hover:underline"
-                onClick={() => {
-                  reset();
-                  setDraft("");
-                }}
-                type="button"
-              >
-                Start a new conversation
-              </button>
-            )}
-          </p>
         </div>
       </div>
     </div>

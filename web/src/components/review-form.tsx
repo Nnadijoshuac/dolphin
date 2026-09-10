@@ -338,6 +338,7 @@ function PublishOnChain({
   const publish = usePublishReviewOnChain();
   const [status, setStatus] = useState<"idle" | "publishing">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
 
   if (existingTxHash) {
     return (
@@ -384,13 +385,26 @@ function PublishOnChain({
           setStatus("publishing");
           setError(null);
           try {
-            await publish({ agentKey, outcome, wouldHireAgain });
+            await publish({
+              agentKey,
+              outcome,
+              wouldHireAgain,
+              transactionHash: pendingTxHash ?? undefined,
+            });
+            setPendingTxHash(null);
             track("review_published_onchain", { agentKey });
           } catch (cause) {
+            const transactionHash =
+              cause instanceof Error
+                ? (cause as Error & { transactionHash?: string }).transactionHash ?? null
+                : null;
+            setPendingTxHash(transactionHash);
             setError(
               toUserMessage(
                 cause,
-                "The review was not published. Nothing was recorded.",
+                transactionHash
+                  ? "The transaction was sent, but BNB Chain has not confirmed it yet. Wait a moment, then re-check it here."
+                  : "The review was not published. Nothing was recorded.",
               ),
             );
           } finally {
@@ -399,13 +413,29 @@ function PublishOnChain({
         }}
         type="button"
       >
-        {status === "publishing" ? "Check your wallet…" : "Publish on-chain"}
+        {status === "publishing"
+          ? pendingTxHash
+            ? "Waiting for BSC..."
+            : "Check your wallet..."
+          : pendingTxHash
+            ? "Re-check transaction"
+            : "Publish on-chain"}
       </button>
 
       {error ? (
         <p className="mt-3 text-xs leading-5 text-danger" role="alert">
           {error}
         </p>
+      ) : null}
+      {pendingTxHash ? (
+        <a
+          className="interactive mt-2 inline-block break-all font-mono text-xs text-muted underline-offset-4 hover:text-ink hover:underline"
+          href={`https://bscscan.com/tx/${pendingTxHash}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {pendingTxHash}
+        </a>
       ) : null}
     </div>
   );

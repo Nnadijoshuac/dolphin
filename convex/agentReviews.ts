@@ -9,7 +9,7 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { BSC_CHAIN_ID, bscPublicClient } from "./lib/bscClient";
+import { bscPublicClient } from "./lib/bscClient";
 import { parseAgentKey } from "./model/agent";
 import {
   REPUTATION_REGISTRY_ABI,
@@ -80,6 +80,7 @@ export const REVIEW_COMMENT_MAX_LENGTH = 280;
  * hire again" over one review is true arithmetic and a false impression.
  */
 const MIN_DENOMINATOR = 5;
+const REVIEW_ATTESTATION_RECEIPT_TIMEOUT_MS = 45_000;
 
 const outcomeValidator = v.union(
   v.literal("yes"),
@@ -307,7 +308,21 @@ export const attestReviewOnChain = action({
     }
     const hash = transactionHash as `0x${string}`;
 
-    const receipt = await bscPublicClient.getTransactionReceipt({ hash });
+    let receipt;
+    try {
+      receipt = await bscPublicClient.waitForTransactionReceipt({
+        hash,
+        pollingInterval: 1_000,
+        timeout: REVIEW_ATTESTATION_RECEIPT_TIMEOUT_MS,
+      });
+    } catch (cause) {
+      throw new Error(
+        "BNB Chain has not confirmed that review transaction yet. Wait a moment, then press " +
+          `"Publish on-chain" again - Dolphin will re-check ${hash} and will not ask you to pay twice. ` +
+          `Explorer: https://bscscan.com/tx/${hash}`,
+        { cause },
+      );
+    }
     if (receipt.status !== "success") {
       throw new Error(
         "That transaction reverted, so nothing was published to the registry. Nothing has been recorded.",

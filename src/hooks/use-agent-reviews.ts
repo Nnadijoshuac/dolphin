@@ -113,36 +113,48 @@ export function usePublishReviewOnChain() {
     agentKey: string;
     outcome: ReviewOutcome;
     wouldHireAgain: boolean;
+    transactionHash?: string;
   }) => {
     const sessionToken = requireSessionToken(session);
 
-    /*
-     * Parsed BEFORE the wallet is opened, so a malformed key fails with a
-     * readable message instead of after the user has approved a transaction.
-     */
-    const agentId = tokenIdFromAgentKey(input.agentKey);
+    let transactionHash = input.transactionHash;
+    if (!transactionHash) {
+      /*
+       * Parsed BEFORE the wallet is opened, so a malformed key fails with a
+       * readable message instead of after the user has approved a transaction.
+       */
+      const agentId = tokenIdFromAgentKey(input.agentKey);
 
-    const tags = feedbackTagsFor(input.outcome, input.wouldHireAgain);
-    const transactionHash = await wallet.writeContract({
-      address: REPUTATION_REGISTRY_ADDRESS,
-      abi: REPUTATION_REGISTRY_ABI,
-      functionName: "giveFeedback",
-      args: [
-        agentId,
-        BigInt(feedbackValueFor(input.outcome, input.wouldHireAgain)),
-        FEEDBACK_VALUE_DECIMALS,
-        tags.tag1,
-        tags.tag2,
-        EMPTY_ENDPOINT,
-        EMPTY_FEEDBACK_URI,
-        EMPTY_FEEDBACK_HASH,
-      ],
-      chainId: BSC_CHAIN_ID,
-    });
+      const tags = feedbackTagsFor(input.outcome, input.wouldHireAgain);
+      transactionHash = await wallet.writeContract({
+        address: REPUTATION_REGISTRY_ADDRESS,
+        abi: REPUTATION_REGISTRY_ABI,
+        functionName: "giveFeedback",
+        args: [
+          agentId,
+          BigInt(feedbackValueFor(input.outcome, input.wouldHireAgain)),
+          FEEDBACK_VALUE_DECIMALS,
+          tags.tag1,
+          tags.tag2,
+          EMPTY_ENDPOINT,
+          EMPTY_FEEDBACK_URI,
+          EMPTY_FEEDBACK_HASH,
+        ],
+        chainId: BSC_CHAIN_ID,
+      });
+    }
 
     // The hash alone proves nothing - the backend re-reads it before the review
     // is allowed to claim it was published.
-    await attest({ sessionToken, agentKey: input.agentKey, transactionHash });
+    try {
+      await attest({ sessionToken, agentKey: input.agentKey, transactionHash });
+    } catch (cause) {
+      const error = new Error(
+        cause instanceof Error ? cause.message : "Dolphin could not verify that review transaction yet.",
+      );
+      (error as Error & { transactionHash?: string }).transactionHash = transactionHash;
+      throw error;
+    }
     return transactionHash;
   };
 }

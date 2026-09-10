@@ -285,6 +285,7 @@ function PublishOnChain({
   const publish = usePublishReviewOnChain();
   const [status, setStatus] = useState<"idle" | "publishing">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [pendingTxHash, setPendingTxHash] = useState<string | null>(null);
 
   if (existingTxHash) {
     return (
@@ -320,9 +321,20 @@ function PublishOnChain({
     setStatus("publishing");
     setError(null);
     try {
-      await publish({ agentKey, outcome, wouldHireAgain });
+      await publish({
+        agentKey,
+        outcome,
+        wouldHireAgain,
+        transactionHash: pendingTxHash ?? undefined,
+      });
+      setPendingTxHash(null);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (cause) {
+      const transactionHash =
+        cause instanceof Error
+          ? (cause as Error & { transactionHash?: string }).transactionHash ?? null
+          : null;
+      setPendingTxHash(transactionHash);
       setError(toUserMessage(cause, "Could not publish this review on-chain."));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
@@ -353,11 +365,34 @@ function PublishOnChain({
           {error}
         </Text>
       ) : null}
+      {pendingTxHash ? (
+        <PressableScale
+          accessibilityLabel="View the pending review transaction on BscScan"
+          accessibilityRole="button"
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            void Linking.openURL(`https://bscscan.com/tx/${pendingTxHash}`);
+          }}
+          containerStyle={{ marginTop: 8 }}
+        >
+          <Text className="text-[11px] font-bold" style={{ color: colors.muted }}>
+            View pending transaction
+          </Text>
+        </PressableScale>
+      ) : null}
 
       <View className="mt-3">
         <Button
           disabled={status === "publishing"}
-          label={status === "publishing" ? "Confirm in your wallet…" : "Publish on-chain"}
+          label={
+            status === "publishing"
+              ? pendingTxHash
+                ? "Waiting for BSC..."
+                : "Confirm in your wallet..."
+              : pendingTxHash
+                ? "Re-check transaction"
+                : "Publish on-chain"
+          }
           loading={status === "publishing"}
           onPress={() => void handlePublish()}
           variant="secondary"

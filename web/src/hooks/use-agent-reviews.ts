@@ -153,30 +153,43 @@ export function usePublishReviewOnChain() {
     agentKey: string;
     outcome: ReviewOutcome;
     wouldHireAgain: boolean;
+    transactionHash?: string;
   }) => {
     const sessionToken = requireSessionToken(session);
-    const tags = feedbackTagsFor(input.outcome, input.wouldHireAgain);
-    /* Parsed before the wallet opens, so a bad key costs no gas and no approval. */
-    const agentId = tokenIdFromAgentKey(input.agentKey);
 
-    const transactionHash = await wallet.writeContract({
-      address: REPUTATION_REGISTRY_ADDRESS,
-      abi: REPUTATION_REGISTRY_ABI,
-      functionName: "giveFeedback",
-      args: [
-        agentId,
-        BigInt(feedbackValueFor(input.outcome, input.wouldHireAgain)),
-        FEEDBACK_VALUE_DECIMALS,
-        tags.tag1,
-        tags.tag2,
-        EMPTY_ENDPOINT,
-        EMPTY_FEEDBACK_URI,
-        EMPTY_FEEDBACK_HASH,
-      ],
-      chainId: BSC_CHAIN_ID,
-    });
+    let transactionHash = input.transactionHash;
+    if (!transactionHash) {
+      const tags = feedbackTagsFor(input.outcome, input.wouldHireAgain);
+      /* Parsed before the wallet opens, so a bad key costs no gas and no approval. */
+      const agentId = tokenIdFromAgentKey(input.agentKey);
 
-    await attest({ sessionToken, agentKey: input.agentKey, transactionHash });
+      transactionHash = await wallet.writeContract({
+        address: REPUTATION_REGISTRY_ADDRESS,
+        abi: REPUTATION_REGISTRY_ABI,
+        functionName: "giveFeedback",
+        args: [
+          agentId,
+          BigInt(feedbackValueFor(input.outcome, input.wouldHireAgain)),
+          FEEDBACK_VALUE_DECIMALS,
+          tags.tag1,
+          tags.tag2,
+          EMPTY_ENDPOINT,
+          EMPTY_FEEDBACK_URI,
+          EMPTY_FEEDBACK_HASH,
+        ],
+        chainId: BSC_CHAIN_ID,
+      });
+    }
+
+    try {
+      await attest({ sessionToken, agentKey: input.agentKey, transactionHash });
+    } catch (cause) {
+      const error = new Error(
+        cause instanceof Error ? cause.message : "Dolphin could not verify that review transaction yet.",
+      );
+      (error as Error & { transactionHash?: string }).transactionHash = transactionHash;
+      throw error;
+    }
     return transactionHash;
   };
 }

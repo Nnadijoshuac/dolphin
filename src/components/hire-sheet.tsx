@@ -11,7 +11,8 @@ import { colors, radii, shadows } from "@/constants/theme";
 import { useHireReadOnlyAgent } from "@/hooks/use-hire-read-only-agent";
 import type { Agent } from "@/types/agent";
 import { useAltanaWallet } from "@/wallet/altana-provider";
-import type { AgentQuote } from "@/wallet/altana-types";
+import { formatBnb } from "@/wallet/altana-policy";
+import type { AgentQuote, BnbConversionQuote } from "@/wallet/altana-types";
 import {
   defaultTaskDescription,
   formatTokenAmount,
@@ -53,8 +54,14 @@ import { useWalletSession } from "@/wallet/wallet-session";
 type Stage =
   | { kind: "idle" }
   | { kind: "quoting" }
-  | { kind: "quoted"; quote: AgentQuote; balanceRaw: bigint | null }
-  | { kind: "paying"; quote: AgentQuote }
+  | {
+      kind: "quoted";
+      quote: AgentQuote;
+      balanceRaw: bigint | null;
+      bnbQuote: BnbConversionQuote | null;
+      bnbQuoteError: string | null;
+    }
+  | { kind: "paying"; quote: AgentQuote; payingWithBnb: boolean }
   | { kind: "done" };
 
 export function HireSheet({
@@ -109,7 +116,25 @@ export function HireSheet({
         balanceRaw = null;
       }
 
-      setStage({ kind: "quoted", quote, balanceRaw });
+      let bnbQuote: BnbConversionQuote | null = null;
+      let bnbQuoteError: string | null = null;
+      if (balanceRaw === null || balanceRaw < BigInt(quote.priceRaw)) {
+        try {
+          bnbQuote = await altana.quoteBnbPayment({
+            agentKey: agent.agentKey,
+            category: agent.category,
+            quote,
+            hirerWalletAddress: wallet.address,
+          });
+        } catch (cause) {
+          bnbQuoteError = toUserMessage(
+            cause,
+            "Dolphin could not find a BNB conversion route for this payment.",
+          );
+        }
+      }
+
+      setStage({ kind: "quoted", quote, balanceRaw, bnbQuote, bnbQuoteError });
     } catch (cause) {
       setStage({ kind: "idle" });
       setError(toUserMessage(cause, "Could not get a price from this agent."));
@@ -117,7 +142,7 @@ export function HireSheet({
   };
 
   const handlePay = async (quote: AgentQuote) => {
-    setStage({ kind: "paying", quote });
+    setStage({ kind: "paying", quote, payingWithBnb: false });
     setError(null);
     try {
       const job = await altana.payForAgent({
@@ -134,7 +159,28 @@ export function HireSheet({
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStage({ kind: "done" });
     } catch (cause) {
-      setStage({ kind: "quoted", quote, balanceRaw: null });
+      setStage({ kind: "quoted", quote, balanceRaw: null, bnbQuote: null, bnbQuoteError: null });
+      setError(toUserMessage(cause, "The payment could not be completed."));
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  const handlePayWithBnb = async (quote: AgentQuote, bnbQuote: BnbConversionQuote) => {
+    setStage({ kind: "paying", quote, payingWithBnb: true });
+    setError(null);
+    try {
+      const job = await altana.payForAgentWithBnb({
+        agentKey: agent.agentKey,
+        category: agent.category,
+        quote,
+        hirerWalletAddress: wallet.address,
+        maxBnbInWei: bnbQuote.maxBnbWei,
+      });
+      await hireAgent(agent.tokenId, agent.category, priceModel, job.jobId);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setStage({ kind: "done" });
+    } catch (cause) {
+      setStage({ kind: "quoted", quote, balanceRaw: null, bnbQuote, bnbQuoteError: null });
       setError(toUserMessage(cause, "The payment could not be completed."));
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
@@ -190,6 +236,7 @@ export function HireSheet({
             router.push("/(tabs)/wallet");
           }}
           onPay={handlePay}
+          onPayWithBnb={handlePayWithBnb}
           onQuote={handleQuote}
           session={session}
           setTask={setTask}
@@ -219,6 +266,7 @@ function Body({
   error,
   onQuote,
   onPay,
+  onPayWithBnb,
   onOpenWallet,
   onOpenManage,
   onClose,
@@ -235,6 +283,7 @@ function Body({
   error: string | null;
   onQuote: () => Promise<void>;
   onPay: (quote: AgentQuote) => Promise<void>;
+  onPayWithBnb: (quote: AgentQuote, bnbQuote: BnbConversionQuote) => Promise<void>;
   onOpenWallet: () => void;
   onOpenManage: () => void;
   onClose: () => void;
@@ -303,9 +352,21 @@ function Body({
     const { quote } = stage;
     const price = `${formatTokenAmount(quote.priceRaw, quote.paymentTokenDecimals)} ${quote.paymentTokenSymbol}`;
     const balanceRaw = stage.kind === "quoted" ? stage.balanceRaw : null;
+    const bnbQuote = stage.kind === "quoted" ? stage.bnbQuote : null;
+    const bnbQuoteError = stage.kind === "quoted" ? stage.bnbQuoteError : null;
     const canAfford = balanceRaw !== null && balanceRaw >= BigInt(quote.priceRaw);
     const shortBy =
       balanceRaw !== null && !canAfford ? BigInt(quote.priceRaw) - balanceRaw : null;
+    const canPayWithBnb =
+      !canAfford &&
+      bnbQuote !== null &&
+      altana.balanceWei !== null &&
+      altana.balanceWei >= BigInt(bnbQuote.maxBnbWei);
+    const bnbShortBy =
+      bnbQuote !== null && altana.balanceWei !== null && !canPayWithBnb
+        ? BigInt(bnbQuote.maxBnbWei) - altana.balanceWei
+        : null;
+    const isPayingWithBnb = stage.kind === "paying" && stage.payingWithBnb;
 
     return (
       <Layout title={agent.name} body={quote.deliverables ?? task}>
@@ -328,8 +389,34 @@ function Body({
         {shortBy !== null ? (
           <Text className="mb-3 text-[12px] leading-4" style={{ color: colors.danger }}>
             You need {formatTokenAmount(shortBy, quote.paymentTokenDecimals)} more{" "}
-            {quote.paymentTokenSymbol}.{" "}
-            {fundingHint(quote.paymentTokenSymbol, altana.address)}
+            {quote.paymentTokenSymbol}.
+          </Text>
+        ) : null}
+
+        {!canAfford && bnbQuote ? (
+          <Text className="mb-3 text-[12px] leading-4" style={{ color: colors.inkSecondary }}>
+            Dolphin can convert up to {formatBnb(BigInt(bnbQuote.maxBnbWei))} BNB
+            plus network gas, then fund escrow with {quote.paymentTokenSymbol}.
+          </Text>
+        ) : null}
+
+        {!canAfford && bnbQuote && altana.balanceWei === null ? (
+          <Text className="mb-3 text-[12px] leading-4" style={{ color: colors.danger }}>
+            Dolphin could not read the BNB balance in your Dolphin Wallet.
+            {altana.balanceError ? ` ${altana.balanceError}` : ""}
+          </Text>
+        ) : null}
+
+        {!canAfford && bnbQuote === null && bnbQuoteError ? (
+          <Text className="mb-3 text-[12px] leading-4" style={{ color: colors.danger }}>
+            {bnbQuoteError} {fundingHint(quote.paymentTokenSymbol, altana.address)}
+          </Text>
+        ) : null}
+
+        {bnbShortBy !== null ? (
+          <Text className="mb-3 text-[12px] leading-4" style={{ color: colors.danger }}>
+            Send at least {formatBnb(bnbShortBy)} more BNB, plus network gas, to
+            your Dolphin Wallet before paying with BNB.
           </Text>
         ) : null}
 
@@ -339,12 +426,23 @@ function Body({
           </Text>
         ) : null}
 
-        <Button
-          disabled={!canAfford || stage.kind === "paying" || altana.isBusy}
-          label={stage.kind === "paying" ? "Confirm with Face ID…" : `Pay ${price}`}
-          loading={stage.kind === "paying"}
-          onPress={() => void onPay(quote)}
-        />
+        {canAfford ? (
+          <Button
+            disabled={stage.kind === "paying" || altana.isBusy}
+            label={stage.kind === "paying" ? "Confirm with Face ID…" : `Pay ${price}`}
+            loading={stage.kind === "paying"}
+            onPress={() => void onPay(quote)}
+          />
+        ) : (
+          <Button
+            disabled={!canPayWithBnb || stage.kind === "paying" || altana.isBusy}
+            label={isPayingWithBnb ? "Convert and pay…" : "Pay with BNB"}
+            loading={stage.kind === "paying"}
+            onPress={() => {
+              if (bnbQuote) void onPayWithBnb(quote, bnbQuote);
+            }}
+          />
+        )}
       </Layout>
     );
   }

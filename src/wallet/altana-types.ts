@@ -2,6 +2,8 @@ import type { AgentCategory } from "@/types/agent";
 import type { RecoverabilityState } from "./altana-policy";
 import type { BnbConversionQuote } from "./pancakeswap-bnb-swap";
 
+export type { BnbConversionQuote } from "./pancakeswap-bnb-swap";
+
 /**
  * Shared shape for the Altana wallet across both Expo targets, so the web
  * implementation and the native "not here" state cannot drift apart. Mirrors

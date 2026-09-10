@@ -1,20 +1,21 @@
 "use client";
 
-import { useMutation } from "convex/react";
+import { useAction, useMutation, useQuery as useConvexQuery } from "convex/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { JobDeliveryStatus } from "@/components/job-delivery-status";
-import { PaymentAction } from "@/components/payment-action";
 import { PearlButton } from "@/components/pearl-button";
-import { agentHiresApi } from "@/convex/api";
+import { agentHiresApi, agentPaymentsApi, type AgentQuote } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent } from "@/types/agent";
 import { track } from "@/lib/analytics";
 import { toUserMessage } from "@/wallet/wallet-errors";
-import { canNegotiate, formatTokenAmount } from "@/wallet/erc8183-policy";
+import { defaultTaskDescription, formatTokenAmount } from "@/wallet/erc8183-policy";
+import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
@@ -59,22 +60,25 @@ function shortAddress(value: string | null) {
  */
 
 export function HireAction({ agent }: { agent: Agent }) {
+  const router = useRouter();
   const wallet = useWallet();
   const session = useWalletSession();
+  const altana = useAltanaWallet();
   const hire = useMutation(agentHiresApi.agentHires.hireReadOnlyAgent);
+  const requestQuote = useAction(agentPaymentsApi.agentPayments.requestQuote);
   const hiredAgents = useHiredAgents(wallet.address);
 
   const [state, setState] = useState<
     | { kind: "idle" }
-    | { kind: "hiring" }
+    | { kind: "hiring"; label: string }
     | { kind: "done"; id: string }
     | { kind: "error"; message: string }
   >({ kind: "idle" });
 
   /**
-   * The verified ERC-8183 job that paid for this hire, once PaymentAction has
-   * one. Held here rather than read back from Convex so the hire completes in
-   * the same interaction the payment finished in.
+   * The verified ERC-8183 job that paid for this hire. Held here rather than
+   * waiting for a Convex query round trip so the hire completes in the same
+   * interaction the payment finished in.
    */
   const [paidJobId, setPaidJobId] = useState<string | null>(null);
 
@@ -121,13 +125,108 @@ export function HireAction({ agent }: { agent: Agent }) {
       ? Number(agent.pricing.amountRaw) === 0
       : priceModel === null || Number(priceModel.amount) === 0);
   const priceRequiresPayment = !priceIsFree;
-  const paymentOutstanding = priceRequiresPayment && paidJobId === null;
+  const paidJobs = useConvexQuery(
+    agentPaymentsApi.agentPayments.getJobsForAgent,
+    altana.address ? { agentKey: agent.agentKey, altanaWalletAddress: altana.address } : "skip",
+  );
+  const settledPaymentJobId = paidJobId ?? paidJobs?.[0]?.jobId ?? null;
+  const paymentOutstanding = priceRequiresPayment && settledPaymentJobId === null;
   const alreadyHired =
     hiredAgents?.some((record) => record.agentKey === agent.agentKey) ?? false;
   const showMyAgents = alreadyHired || state.kind === "done";
-  // Offered for a real catalog price, or for an agent Dolphin could ask.
-  const showPaymentStep =
-    !showMyAgents && (priceRequiresPayment || canNegotiate(agent.services));
+
+  async function ensureIdentity(): Promise<{ address: string; sessionToken: string } | null> {
+    let address = wallet.address;
+    if (!address) {
+      setState({ kind: "hiring", label: "Check your wallet…" });
+      address = await wallet.connect();
+      if (!address) {
+        setState({ kind: "idle" });
+        track("hire_failed", { agentKey: agent.agentKey, reason: "declined" });
+        return null;
+      }
+      track("wallet_connected", { connector: "identity", surface: "agent" });
+    }
+
+    let sessionToken = session.sessionToken;
+    if (!sessionToken) {
+      setState({ kind: "hiring", label: "Sign the message…" });
+      sessionToken = await session.signIn(address);
+      if (!sessionToken) {
+        setState({ kind: "idle" });
+        track("hire_failed", { agentKey: agent.agentKey, reason: "declined" });
+        return null;
+      }
+      track("wallet_signed_in", { surface: "agent" });
+    }
+
+    return { address, sessionToken };
+  }
+
+  async function recordHire(sessionToken: string, jobId: string | null) {
+    setState({ kind: "hiring", label: "Recording hire…" });
+    const id = await hire({
+      agentKey: agent.agentKey,
+      sessionToken,
+      priceModel,
+      paymentJobId: jobId,
+    });
+    setState({ kind: "done", id: String(id) });
+    track("hire_completed", {
+      agentKey: agent.agentKey,
+      category: agent.category,
+      paid: jobId !== null,
+    });
+  }
+
+  async function payForHire(hirerWalletAddress: string): Promise<PaidJob> {
+    if (altana.status !== "connected") {
+      if (altana.status === "no-wallet") {
+        router.push("/wallet");
+        throw new Error("Set up your Dolphin Wallet, fund it with BNB, then come back and press Hire.");
+      }
+      throw new Error(
+        altana.unsupportedReason ??
+          "Your Dolphin Wallet is still loading. Try again once it appears.",
+      );
+    }
+
+    setState({ kind: "hiring", label: "Getting price…" });
+    const quote = (await requestQuote({
+      agentKey: agent.agentKey,
+      taskDescription: defaultTaskDescription(agent.category, altana.address),
+    })) as AgentQuote;
+
+    setState({ kind: "hiring", label: "Checking funds…" });
+    const conversion = await altana.quoteBnbPayment({
+      agentKey: agent.agentKey,
+      category: agent.category,
+      quote,
+      hirerWalletAddress,
+    });
+
+    setState({
+      kind: "hiring",
+      label: conversion ? "Converting and funding escrow…" : "Funding escrow…",
+    });
+
+    if (conversion) {
+      return altana.payForAgentWithBnb({
+        agentKey: agent.agentKey,
+        category: agent.category,
+        quote,
+        hirerWalletAddress,
+        maxBnbInWei: conversion.maxBnbWei,
+      });
+    }
+
+    return altana.payForAgent({
+      agentKey: agent.agentKey,
+      category: agent.category,
+      quote,
+      hirerWalletAddress,
+    });
+  }
 
   /**
    * The whole hire, from whatever state the user is currently in.
@@ -144,47 +243,24 @@ export function HireAction({ agent }: { agent: Agent }) {
    * quietly instead of stacking a second message on top of the real one.
    */
   async function runHire(jobId: string | null) {
-    setState({ kind: "hiring" });
+    setState({ kind: "hiring", label: "Hiring…" });
     track("hire_started", {
       agentKey: agent.agentKey,
       category: agent.category,
       requiresPayment: priceRequiresPayment,
     });
     try {
-      let address = wallet.address;
-      if (!address) {
-        address = await wallet.connect();
-        if (!address) {
-          setState({ kind: "idle" });
-          track("hire_failed", { agentKey: agent.agentKey, reason: "declined" });
-          return;
-        }
-        track("wallet_connected", { connector: "identity", surface: "agent" });
+      const identity = await ensureIdentity();
+      if (!identity) return;
+
+      let paymentJobId = jobId;
+      if (priceRequiresPayment && paymentJobId === null) {
+        const paid = await payForHire(identity.address);
+        paymentJobId = paid.jobId;
+        setPaidJobId(paid.jobId);
       }
 
-      let token = session.sessionToken;
-      if (!token) {
-        token = await session.signIn(address);
-        if (!token) {
-          setState({ kind: "idle" });
-          track("hire_failed", { agentKey: agent.agentKey, reason: "declined" });
-          return;
-        }
-        track("wallet_signed_in", { surface: "agent" });
-      }
-
-      const id = await hire({
-        agentKey: agent.agentKey,
-        sessionToken: token,
-        priceModel,
-        paymentJobId: jobId,
-      });
-      setState({ kind: "done", id: String(id) });
-      track("hire_completed", {
-        agentKey: agent.agentKey,
-        category: agent.category,
-        paid: jobId !== null,
-      });
+      await recordHire(identity.sessionToken, paymentJobId);
     } catch (cause) {
       setState({
         kind: "error",
@@ -205,13 +281,10 @@ export function HireAction({ agent }: { agent: Agent }) {
    */
   const label = (() => {
     if (state.kind === "hiring") {
-      if (wallet.isConnecting) return "Check your wallet…";
-      if (session.isSigningIn) return "Sign the message…";
-      return "Hiring…";
+      return state.label;
     }
     if (priceModel === null) return "Price unavailable";
-    if (paymentOutstanding) return "Pay to hire";
-    return "Hire agent";
+    return "Hire";
   })();
 
   /**
@@ -225,7 +298,13 @@ export function HireAction({ agent }: { agent: Agent }) {
       return "Dolphin will not assume a price while this agent's catalog value is unresolved, so it cannot record a hire yet.";
     }
     if (paymentOutstanding) {
-      return `This agent charges ${priceText}. Settle it below — Dolphin verifies the escrow on-chain, and the hire is recorded the moment it does.`;
+      if (altana.status !== "connected") {
+        return `This agent charges ${priceText}. Hire uses your Dolphin Wallet for escrow, so set it up and fund it with BNB before paying.`;
+      }
+      return `This agent charges ${priceText}. Press Hire and Dolphin will quote the agent, convert BNB if needed, fund escrow, then record the hire.`;
+    }
+    if (priceRequiresPayment && settledPaymentJobId !== null) {
+      return "Escrow is already funded for this agent. Press Hire to attach it to your hire record.";
     }
     return null;
   })();
@@ -276,8 +355,8 @@ export function HireAction({ agent }: { agent: Agent }) {
         ) : (
           <PearlButton
             aria-busy={busy}
-            disabled={busy || priceModel === null || paymentOutstanding}
-            onClick={() => void runHire(paidJobId)}
+            disabled={busy || priceModel === null}
+            onClick={() => void runHire(settledPaymentJobId)}
             type="button"
           >
             {label}
@@ -311,38 +390,10 @@ export function HireAction({ agent }: { agent: Agent }) {
         ) : null}
       </div>
 
-      {/* The payment step. Offered when the catalog carries a real price OR
-          when the agent publishes an endpoint that can be asked for one - see
-          the decision note in erc8183-policy.ts for why the second condition is
-          not a way of inventing a price but the opposite of one. */}
-      {showPaymentStep ? (
-        <div className="mt-7 border-t border-line pt-6">
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-            {priceRequiresPayment ? "Payment · required" : "Buy a task · optional"}
-          </p>
-          <PaymentAction
-            agent={agent}
-            /*
-             * Paying IS hiring. The hire is recorded here, off the settled
-             * escrow, instead of behind a second button the user had to find
-             * after their money had already moved.
-             */
-            onPaid={(job) => {
-              setPaidJobId(job.jobId);
-              void runHire(job.jobId);
-            }}
-            priceAmount={priceModel?.amount ?? null}
-            priceToken={priceModel?.token ?? null}
-          />
-        </div>
-      ) : null}
-
       {/*
-       * What happened after the money moved. Placed directly under the payment
-       * step on purpose: this is where someone is standing the moment they pay,
-       * so the waiting state has to appear here without any navigation. It
-       * renders nothing at all when there is no paid job for this agent, so the
-       * free-hire path is untouched.
+       * What happened after the money moved. The main Hire button now owns
+       * payment and hire recording, so the delivery state stays directly under
+       * that control instead of living in a separate payment panel.
        */}
       <JobDeliveryStatus agentKey={agent.agentKey} />
 

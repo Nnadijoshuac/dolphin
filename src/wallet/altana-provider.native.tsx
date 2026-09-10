@@ -35,6 +35,7 @@ import {
   KEYSTORE_REGISTRATION_FEE_ABI,
   buildSessionPermissions,
   expiryFromNow,
+  formatBnb,
   sessionPolicyFor,
   type RecoverabilityState,
 } from "./altana-policy";
@@ -723,9 +724,11 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           chainId: ALTANA_NETWORK.chainId,
         });
         if (nativeBalance.native < maxBnbWei) {
+          const shortfall = maxBnbWei - nativeBalance.native;
           throw new Error(
-            `This Dolphin Wallet needs up to ${conversion.maxBnbWei} wei of BNB for the token conversion, ` +
-              `but holds ${nativeBalance.native.toString()} wei.`,
+            `You need ${formatBnb(maxBnbWei)} BNB in your Dolphin Wallet to fund this agent. ` +
+              `It has ${formatBnb(nativeBalance.native)} BNB right now. Add at least ` +
+              `${formatBnb(shortfall)} BNB plus a little extra for network gas.`,
           );
         }
 

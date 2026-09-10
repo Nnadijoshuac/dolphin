@@ -13,7 +13,9 @@ import {
   formatTokenAmount,
   fundingHint,
 } from "@/wallet/erc8183-policy";
+import { formatBnb } from "@/wallet/altana-policy";
 import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
+import type { BnbConversionQuote } from "@/wallet/pancakeswap-bnb-swap";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
 
@@ -40,8 +42,15 @@ function shortAddress(value: string | null) {
 type Phase =
   | { kind: "idle" }
   | { kind: "quoting" }
-  | { kind: "quoted"; quote: AgentQuote; balanceRaw: bigint | null; balanceError: string | null }
-  | { kind: "paying"; quote: AgentQuote }
+  | {
+      kind: "quoted";
+      quote: AgentQuote;
+      balanceRaw: bigint | null;
+      balanceError: string | null;
+      bnbQuote: BnbConversionQuote | null;
+      bnbQuoteError: string | null;
+    }
+  | { kind: "paying"; quote: AgentQuote; payingWithBnb: boolean }
   | { kind: "paid"; job: PaidJob; quote: AgentQuote }
   | { kind: "error"; message: string };
 
@@ -182,7 +191,24 @@ export function PaymentAction({
       } catch (cause) {
         balanceError = toUserMessage(cause, "The payment step could not be completed. Try again.");
       }
-      setPhase({ kind: "quoted", quote, balanceRaw, balanceError });
+      let bnbQuote: BnbConversionQuote | null = null;
+      let bnbQuoteError: string | null = null;
+      if (balanceRaw === null || balanceRaw < BigInt(quote.priceRaw)) {
+        try {
+          bnbQuote = await altana.quoteBnbPayment({
+            agentKey: agent.agentKey,
+            category: agent.category,
+            quote,
+            hirerWalletAddress: hirer.address,
+          });
+        } catch (cause) {
+          bnbQuoteError = toUserMessage(
+            cause,
+            "Dolphin could not find a BNB conversion route for this payment.",
+          );
+        }
+      }
+      setPhase({ kind: "quoted", quote, balanceRaw, balanceError, bnbQuote, bnbQuoteError });
     } catch (cause) {
       setPhase({
         kind: "error",
@@ -192,13 +218,33 @@ export function PaymentAction({
   }
 
   async function onPay(quote: AgentQuote) {
-    setPhase({ kind: "paying", quote });
+    setPhase({ kind: "paying", quote, payingWithBnb: false });
     try {
       const job = await altana.payForAgent({
         agentKey: agent.agentKey,
         category: agent.category,
         quote,
         hirerWalletAddress: hirer.address,
+      });
+      setPhase({ kind: "paid", job, quote });
+      onPaid(job);
+    } catch (cause) {
+      setPhase({
+        kind: "error",
+        message: toUserMessage(cause, "The payment step could not be completed. Try again."),
+      });
+    }
+  }
+
+  async function onPayWithBnb(quote: AgentQuote, bnbQuote: BnbConversionQuote) {
+    setPhase({ kind: "paying", quote, payingWithBnb: true });
+    try {
+      const job = await altana.payForAgentWithBnb({
+        agentKey: agent.agentKey,
+        category: agent.category,
+        quote,
+        hirerWalletAddress: hirer.address,
+        maxBnbInWei: bnbQuote.maxBnbWei,
       });
       setPhase({ kind: "paid", job, quote });
       onPaid(job);
@@ -240,9 +286,21 @@ export function PaymentAction({
     const quote = phase.quote;
     const balanceRaw = phase.kind === "quoted" ? phase.balanceRaw : null;
     const balanceError = phase.kind === "quoted" ? phase.balanceError : null;
+    const bnbQuote = phase.kind === "quoted" ? phase.bnbQuote : null;
+    const bnbQuoteError = phase.kind === "quoted" ? phase.bnbQuoteError : null;
     const price = BigInt(quote.priceRaw);
     const canAfford = balanceRaw !== null && balanceRaw >= price;
     const shortBy = balanceRaw !== null && !canAfford ? price - balanceRaw : null;
+    const canPayWithBnb =
+      !canAfford &&
+      bnbQuote !== null &&
+      altana.balanceWei !== null &&
+      altana.balanceWei >= BigInt(bnbQuote.maxBnbWei);
+    const bnbShortBy =
+      bnbQuote !== null && altana.balanceWei !== null && !canPayWithBnb
+        ? BigInt(bnbQuote.maxBnbWei) - altana.balanceWei
+        : null;
+    const isPayingWithBnb = phase.kind === "paying" && phase.payingWithBnb;
 
     return (
       <div className="mt-4">
@@ -312,22 +370,66 @@ export function PaymentAction({
             </p>
             <p className="mt-1 text-[0.7rem] leading-5 text-danger">
               You need {formatTokenAmount(shortBy, quote.paymentTokenDecimals)} more{" "}
-              {quote.paymentTokenSymbol}.{" "}
-              {fundingHint(quote.paymentTokenSymbol, altana.address)}
+              {quote.paymentTokenSymbol}.
             </p>
           </div>
         ) : null}
 
-        <button
-          className="interactive mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-xs font-semibold text-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-paper-muted disabled:text-faint"
-          disabled={phase.kind === "paying" || !canAfford || altana.isBusy}
-          onClick={() => void onPay(quote)}
-          type="button"
-        >
-          {phase.kind === "paying"
-            ? "Confirm with passkey…"
-            : `Pay ${formatTokenAmount(quote.priceRaw, quote.paymentTokenDecimals)} ${quote.paymentTokenSymbol}`}
-        </button>
+        {!canAfford && bnbQuote ? (
+          <div className="mt-3 border-l-2 border-accent bg-accent-soft p-3">
+            <p className="text-[0.7rem] font-semibold leading-5 text-ink">
+              Pay from BNB instead
+            </p>
+            <p className="mt-1 text-[0.7rem] leading-5 text-muted">
+              Dolphin can convert up to {formatBnb(BigInt(bnbQuote.maxBnbWei))} BNB
+              plus network gas, then fund ERC-8183 escrow with {quote.paymentTokenSymbol}.
+            </p>
+          </div>
+        ) : null}
+
+        {!canAfford && bnbQuote && altana.balanceWei === null ? (
+          <p className="mt-3 border-l-2 border-danger bg-danger-soft p-3 text-[0.7rem] font-medium leading-5 text-danger">
+            Dolphin could not read the BNB balance in your Dolphin Wallet.
+            {altana.balanceError ? ` ${altana.balanceError}` : ""}
+          </p>
+        ) : null}
+
+        {!canAfford && bnbQuote === null && bnbQuoteError ? (
+          <p className="mt-3 border-l-2 border-danger bg-danger-soft p-3 text-[0.7rem] font-medium leading-5 text-danger">
+            {bnbQuoteError} {fundingHint(quote.paymentTokenSymbol, altana.address)}
+          </p>
+        ) : null}
+
+        {bnbShortBy !== null ? (
+          <p className="mt-3 border-l-2 border-danger bg-danger-soft p-3 text-[0.7rem] font-medium leading-5 text-danger">
+            Send at least {formatBnb(bnbShortBy)} more BNB, plus network gas, to
+            your Dolphin Wallet before paying with BNB.
+          </p>
+        ) : null}
+
+        {canAfford ? (
+          <button
+            className="interactive mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-xs font-semibold text-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-paper-muted disabled:text-faint"
+            disabled={phase.kind === "paying" || altana.isBusy}
+            onClick={() => void onPay(quote)}
+            type="button"
+          >
+            {phase.kind === "paying"
+              ? "Confirm with passkey…"
+              : `Pay ${formatTokenAmount(quote.priceRaw, quote.paymentTokenDecimals)} ${quote.paymentTokenSymbol}`}
+          </button>
+        ) : (
+          <button
+            className="interactive mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-xs font-semibold text-ink hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-paper-muted disabled:text-faint"
+            disabled={phase.kind === "paying" || !canPayWithBnb || altana.isBusy}
+            onClick={() => {
+              if (bnbQuote) void onPayWithBnb(quote, bnbQuote);
+            }}
+            type="button"
+          >
+            {isPayingWithBnb ? "Convert and pay…" : "Pay with BNB"}
+          </button>
+        )}
 
         <p className="mt-3 text-center text-[0.68rem] leading-5 text-faint">
           Payment funds an on-chain ERC-8183 escrow. The agent is only paid once it

@@ -35,6 +35,7 @@ import { useAppStore } from "@/store/use-app-store";
  * Dolphin's chat surface. Conversation capability keys are cached only on the
  * current device; transcripts remain authoritative in Convex.
  */
+export default function DolphinScreen() {
   const params = useLocalSearchParams<{ agentKey?: string; agentName?: string; ask?: string }>();
   const seedAgentKey = typeof params.agentKey === "string" ? params.agentKey : null;
   const seedAgentName = typeof params.agentName === "string" ? params.agentName : null;
@@ -90,7 +91,10 @@ import { useAppStore } from "@/store/use-app-store";
       }, 150);
       return () => clearTimeout(timer);
     } else if (seedAgentName) {
-      setDraft(`Tell me about ${seedAgentName.trim()} — what strategy does it run?`);
+      const timer = setTimeout(() => {
+        setDraft(`Tell me about ${seedAgentName.trim()} — what strategy does it run?`);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [seedAgentKey, seedAgentName, autoAsk, submit]);
 

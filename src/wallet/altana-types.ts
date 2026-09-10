@@ -1,5 +1,6 @@
 import type { AgentCategory } from "@/types/agent";
 import type { RecoverabilityState } from "./altana-policy";
+import type { BnbConversionQuote } from "./pancakeswap-bnb-swap";
 
 /**
  * Shared shape for the Altana wallet across both Expo targets, so the web
@@ -88,6 +89,17 @@ export type PayForAgentInput = Readonly<{
   quote: AgentQuote;
   hirerWalletAddress: string | null;
 }>;
+
+export type QuoteBnbPaymentInput = PayForAgentInput &
+  Readonly<{
+    slippageBps?: number;
+  }>;
+
+export type PayForAgentWithBnbInput = QuoteBnbPaymentInput &
+  Readonly<{
+    /** Optional final guard from the UI's last displayed quote. */
+    maxBnbInWei?: string;
+  }>;
 
 export type PaidJob = Readonly<{
   jobId: string;
@@ -178,11 +190,24 @@ export type AltanaWalletValue = Readonly<{
   readTokenBalance: (token: string) => Promise<TokenHolding>;
 
   /**
+   * Quotes the BNB needed to acquire any missing payment token through
+   * PancakeSwap before the ERC-8183 escrow payment. Null means this wallet
+   * already has enough of the seller's quoted token.
+   */
+  quoteBnbPayment: (input: QuoteBnbPaymentInput) => Promise<BnbConversionQuote | null>;
+
+  /**
    * Pays an agent's published price by funding an ERC-8183 escrow job, then
    * has Dolphin verify that job on-chain and tell the seller to start work.
    * Signed here, by the passkey - never on a server.
    */
   payForAgent: (input: PayForAgentInput) => Promise<PaidJob>;
+
+  /**
+   * Converts BNB held by the Dolphin Wallet into the quoted token through
+   * PancakeSwap, then runs the normal ERC-8183 escrow payment.
+   */
+  payForAgentWithBnb: (input: PayForAgentWithBnbInput) => Promise<PaidJob>;
 }>;
 
 /**

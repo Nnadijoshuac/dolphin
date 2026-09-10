@@ -33,11 +33,12 @@ import { useWallet } from "@/wallet/wallet-provider";
  *               payment time, so the name shown is the name that was shown when
  *               the money moved - not whatever the directory says today.
  *
- *   agentHires  free read-only hires, keyed by the IDENTITY wallet
- *               (convex/agentHires.ts getHiredAgentsForWallet). These moved no
- *               funds, so they render with no amount rather than a zero - a
- *               zero would read as "cost nothing to me" the same way a failed
- *               balance read does, and the two must not look alike.
+ *   agentHires  hire records, keyed by the IDENTITY wallet
+ *               (convex/agentHires.ts getHiredAgentsForWallet). A paid hire
+ *               points back to its ERC-8183 job; a free hire has no amount, so
+ *               it renders with no figure rather than a zero - a zero would
+ *               read as "cost nothing to me" the same way a failed balance read
+ *               does, and the two must not look alike.
  *
  * The two are keyed by DIFFERENT wallets, which is the whole reason this
  * component reads both rather than one: Dolphin pays from the passkey account
@@ -250,7 +251,10 @@ export function AgentActivity({ hidden }: { hidden: boolean }) {
       category: agent?.category ?? null,
       iconUrl: agent?.iconUrl ?? null,
       iconSeed: agent?.iconSeed ?? null,
-      detail: ["Hired · no payment", date].filter(Boolean).join(" · "),
+      detail: [
+        hire.paymentJobId ? "Hired - paid" : "Hired - no payment",
+        date,
+      ].filter(Boolean).join(" - "),
       amount: null,
       sortAt: Date.parse(hire.hiredAt) || 0,
       onPress: () => {

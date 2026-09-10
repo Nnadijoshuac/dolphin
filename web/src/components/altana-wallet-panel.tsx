@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useBalance } from "wagmi";
 
+import { AgentActivity } from "@/components/agent-activity";
 import { BnbLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { StatePanel } from "@/components/state-panel";
@@ -582,6 +583,8 @@ function ConnectedWallet() {
 
       {wallet.error && <p className="wallet-error-banner">{wallet.error}</p>}
 
+      <AgentActivity />
+
       <RecoverabilityPanel />
 
       {/*
@@ -780,6 +783,8 @@ export function AltanaWalletPanel() {
         <AgentWalletCard />
         <IdentityWalletCard />
       </section>
+
+      <AgentActivity />
     </div>
   );
 }

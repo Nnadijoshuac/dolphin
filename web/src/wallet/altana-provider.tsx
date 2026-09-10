@@ -52,6 +52,11 @@ import {
   saveWallet,
   subscribeToAltanaStorage,
 } from "./altana-storage";
+import {
+  buildBnbConversionCall,
+  quoteBnbForExactTokenOutput,
+  type BnbConversionQuote,
+} from "./pancakeswap-bnb-swap";
 import { toUserMessage } from "./wallet-errors";
 import { requireSessionToken, useWalletSession } from "./wallet-session";
 
@@ -171,6 +176,15 @@ export type PayForAgentInput = {
   hirerWalletAddress: string | null;
 };
 
+export type QuoteBnbPaymentInput = PayForAgentInput & {
+  slippageBps?: number;
+};
+
+export type PayForAgentWithBnbInput = QuoteBnbPaymentInput & {
+  /** Optional final guard from the UI's last displayed quote. */
+  maxBnbInWei?: string;
+};
+
 export type PaidJob = {
   jobId: string;
   transactionHash: string | null;
@@ -257,11 +271,24 @@ export type AltanaWalletValue = Readonly<{
   readTokenBalance: (token: string) => Promise<TokenHolding>;
 
   /**
+   * Quotes the BNB needed to acquire any missing payment token through
+   * PancakeSwap before the ERC-8183 escrow payment. Null means this wallet
+   * already has enough of the seller's quoted token.
+   */
+  quoteBnbPayment: (input: QuoteBnbPaymentInput) => Promise<BnbConversionQuote | null>;
+
+  /**
    * Pays an agent's published price by funding an ERC-8183 escrow job, then
    * has Dolphin verify that job on-chain and tell the seller to start work.
    * Signed here, in the browser, by the passkey - never on a server.
    */
   payForAgent: (input: PayForAgentInput) => Promise<PaidJob>;
+
+  /**
+   * Converts BNB held by the Dolphin Wallet into the quoted token through
+   * PancakeSwap, then runs the normal ERC-8183 escrow payment.
+   */
+  payForAgentWithBnb: (input: PayForAgentWithBnbInput) => Promise<PaidJob>;
 }>;
 
 const AltanaContext = createContext<AltanaWalletValue | null>(null);
@@ -648,6 +675,26 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  const quoteBnbPayment = useCallback(
+    async (input: QuoteBnbPaymentInput) => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("Create a Dolphin Wallet before paying for a hire.");
+
+      const holding = await readTokenBalance(input.quote.paymentToken);
+      const price = BigInt(input.quote.priceRaw);
+      if (holding.raw >= price) return null;
+
+      return quoteBnbForExactTokenOutput({
+        publicClient: keystoreReader,
+        account: wallet.address,
+        quote: input.quote,
+        tokenShortfallRaw: price - holding.raw,
+        slippageBps: input.slippageBps,
+      });
+    },
+    [readTokenBalance],
+  );
+
   const payForAgent = useCallback(
     async (input: PayForAgentInput): Promise<PaidJob> => {
       const wallet = getAltanaSnapshot();
@@ -785,6 +832,97 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     ],
   );
 
+  const payForAgentWithBnb = useCallback(
+    async (input: PayForAgentWithBnbInput): Promise<PaidJob> => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) {
+        throw new Error("Create a Dolphin Wallet before paying for a hire.");
+      }
+      if (sessionsUnavailable) {
+        throw new Error(
+          "Dolphin's backend is not configured, so a payment could not be verified or recorded " +
+            "anywhere. Refusing to spend from your wallet with no record of what it bought.",
+        );
+      }
+      if (input.quote.verifyingContract.toLowerCase() !== ERC8183.commerce.toLowerCase()) {
+        throw new Error(
+          `This agent asked for payment into ${input.quote.verifyingContract}, but the ERC-8183 escrow ` +
+            `kernel on this chain is ${ERC8183.commerce}. Dolphin will not fund an escrow contract ` +
+            "the SDK's own deployment record does not recognise.",
+        );
+      }
+      if (input.quote.paymentToken.toLowerCase() !== ERC8183.paymentToken.toLowerCase()) {
+        throw new Error(
+          `This agent quoted in token ${input.quote.paymentToken}, but the ERC-8183 kernel settles in ` +
+            `${ERC8183.paymentToken}. A job funded in a different token would not pay this agent.`,
+        );
+      }
+      if (input.quote.chainId !== ALTANA_NETWORK.chainId) {
+        throw new Error(
+          `This agent quoted on chain ${input.quote.chainId}; your Dolphin Wallet holds funds on chain ` +
+            `${ALTANA_NETWORK.chainId}.`,
+        );
+      }
+
+      const conversion = await quoteBnbPayment(input);
+      if (conversion) {
+        const maxBnbWei = BigInt(conversion.maxBnbWei);
+        if (input.maxBnbInWei && maxBnbWei > BigInt(input.maxBnbInWei)) {
+          throw new Error(
+            "The BNB conversion price moved above the amount shown on screen. Refresh the quote and try again.",
+          );
+        }
+
+        const nativeBalance = await altanaClient().balances({
+          wallet: { address: wallet.address },
+          chainId: ALTANA_NETWORK.chainId,
+        });
+        if (nativeBalance.native < maxBnbWei) {
+          throw new Error(
+            `This Dolphin Wallet needs up to ${conversion.maxBnbWei} wei of BNB for the token conversion, ` +
+              `but holds ${nativeBalance.native.toString()} wei.`,
+          );
+        }
+
+        setIsBusy(true);
+        setError(null);
+        try {
+          const swapCall = buildBnbConversionCall({
+            quote: input.quote,
+            conversion,
+            recipient: wallet.address,
+          });
+          const swapped = await altanaClient().execute({
+            wallet: { address: wallet.address },
+            signer: adminSigner(),
+            calls: swapCall,
+            chainId: ALTANA_NETWORK.chainId,
+          });
+          if (swapped.status !== "CONFIRMED") {
+            throw new Error(`PancakeSwap conversion returned ${swapped.status}.`);
+          }
+          refreshBalance();
+          refreshRecoverability();
+        } catch (cause) {
+          setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
+          throw cause;
+        } finally {
+          setIsBusy(false);
+        }
+      }
+
+      return payForAgent(input);
+    },
+    [
+      adminSigner,
+      payForAgent,
+      quoteBnbPayment,
+      refreshBalance,
+      refreshRecoverability,
+      sessionsUnavailable,
+    ],
+  );
+
   const value = useMemo<AltanaWalletValue>(() => {
     const status: AltanaWalletStatus = !isClient
       ? "loading"
@@ -843,7 +981,9 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       grantSession,
       revokeSession,
       readTokenBalance,
+      quoteBnbPayment,
       payForAgent,
+      payForAgentWithBnb,
     };
   }, [
     balanceQuery.data,
@@ -858,6 +998,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     liveSessions,
     now,
     payForAgent,
+    payForAgentWithBnb,
+    quoteBnbPayment,
     readTokenBalance,
     recoverWallet,
     recoverabilityQuery.data,

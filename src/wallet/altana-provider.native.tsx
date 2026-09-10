@@ -22,7 +22,7 @@ import {
   useSyncExternalStore,
   type PropsWithChildren,
 } from "react";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, type Address } from "viem";
 
 import { api } from "../../convex/_generated/api";
 import { convexClient } from "@/providers/convex-provider";
@@ -40,6 +40,10 @@ import {
 } from "./altana-policy";
 import { ALTANA_RP_ID } from "./altana-rp-id";
 import { ERC8183_CHAIN_ID, JOB_DEADLINE_SECONDS } from "./erc8183-policy";
+import {
+  buildBnbConversionCall,
+  quoteBnbForExactTokenOutput,
+} from "./pancakeswap-bnb-swap";
 import { toUserMessage } from "./wallet-errors";
 import { requireSessionToken, useWalletSession } from "./wallet-session";
 import {
@@ -50,6 +54,8 @@ import {
   type GrantSessionInput,
   type PaidJob,
   type PayForAgentInput,
+  type PayForAgentWithBnbInput,
+  type QuoteBnbPaymentInput,
   type TokenHolding,
 } from "./altana-types";
 
@@ -527,6 +533,26 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  const quoteBnbPayment = useCallback(
+    async (input: QuoteBnbPaymentInput) => {
+      const current = getStoredSnapshot();
+      if (!current) throw new Error("Create a Dolphin Wallet before paying for a hire.");
+
+      const holding = await readTokenBalance(input.quote.paymentToken);
+      const price = BigInt(input.quote.priceRaw);
+      if (holding.raw >= price) return null;
+
+      return quoteBnbForExactTokenOutput({
+        publicClient: keystoreReader,
+        account: current.address as Address,
+        quote: input.quote,
+        tokenShortfallRaw: price - holding.raw,
+        slippageBps: input.slippageBps,
+      });
+    },
+    [readTokenBalance],
+  );
+
   const payForAgent = useCallback(
     async (input: PayForAgentInput): Promise<PaidJob> => {
       const current = getStoredSnapshot();
@@ -653,6 +679,95 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     ],
   );
 
+  const payForAgentWithBnb = useCallback(
+    async (input: PayForAgentWithBnbInput): Promise<PaidJob> => {
+      const current = getStoredSnapshot();
+      if (!current) throw new Error("Create a Dolphin Wallet before paying for a hire.");
+      if (sessionsUnavailable) {
+        throw new Error(
+          "Dolphin's backend is not configured, so a payment could not be verified or recorded " +
+            "anywhere. Refusing to spend from your wallet with no record of what it bought.",
+        );
+      }
+      if (input.quote.verifyingContract.toLowerCase() !== ERC8183.commerce.toLowerCase()) {
+        throw new Error(
+          `This agent asked for payment into ${input.quote.verifyingContract}, but the ERC-8183 escrow ` +
+            `kernel on this chain is ${ERC8183.commerce}. Dolphin will not fund an escrow contract ` +
+            "the SDK's own deployment record does not recognise.",
+        );
+      }
+      if (input.quote.paymentToken.toLowerCase() !== ERC8183.paymentToken.toLowerCase()) {
+        throw new Error(
+          `This agent quoted in token ${input.quote.paymentToken}, but the ERC-8183 kernel settles in ` +
+            `${ERC8183.paymentToken}. A job funded in a different token would not pay this agent.`,
+        );
+      }
+      if (input.quote.chainId !== ALTANA_NETWORK.chainId) {
+        throw new Error(
+          `This agent quoted on chain ${input.quote.chainId}; your Dolphin Wallet holds funds on chain ` +
+            `${ALTANA_NETWORK.chainId}.`,
+        );
+      }
+
+      const conversion = await quoteBnbPayment(input);
+      if (conversion) {
+        const maxBnbWei = BigInt(conversion.maxBnbWei);
+        if (input.maxBnbInWei && maxBnbWei > BigInt(input.maxBnbInWei)) {
+          throw new Error(
+            "The BNB conversion price moved above the amount shown on screen. Refresh the quote and try again.",
+          );
+        }
+
+        const nativeBalance = await altanaClient().balances({
+          wallet: { address: current.address as Address },
+          chainId: ALTANA_NETWORK.chainId,
+        });
+        if (nativeBalance.native < maxBnbWei) {
+          throw new Error(
+            `This Dolphin Wallet needs up to ${conversion.maxBnbWei} wei of BNB for the token conversion, ` +
+              `but holds ${nativeBalance.native.toString()} wei.`,
+          );
+        }
+
+        setIsBusy(true);
+        setError(null);
+        try {
+          const swapCall = buildBnbConversionCall({
+            quote: input.quote,
+            conversion,
+            recipient: current.address as Address,
+          });
+          const swapped = await altanaClient().execute({
+            wallet: { address: current.address as Address },
+            signer: adminSigner(),
+            calls: swapCall,
+            chainId: ALTANA_NETWORK.chainId,
+          });
+          if (swapped.status !== "CONFIRMED") {
+            throw new Error(`PancakeSwap conversion returned ${swapped.status}.`);
+          }
+          refreshBalance();
+          refreshRecoverability();
+        } catch (cause) {
+          setError(toUserMessage(cause, "Your wallet could not complete that action. Try again."));
+          throw cause;
+        } finally {
+          setIsBusy(false);
+        }
+      }
+
+      return payForAgent(input);
+    },
+    [
+      adminSigner,
+      payForAgent,
+      quoteBnbPayment,
+      refreshBalance,
+      refreshRecoverability,
+      sessionsUnavailable,
+    ],
+  );
+
   const value = useMemo<AltanaWalletValue>(() => {
     const status: AltanaWalletStatus = !supported
       ? "unsupported"
@@ -693,7 +808,9 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       grantSession,
       revokeSession,
       readTokenBalance,
+      quoteBnbPayment,
       payForAgent,
+      payForAgentWithBnb,
     };
   }, [
     address,
@@ -709,6 +826,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     isReadingBalance,
     liveSessions,
     payForAgent,
+    payForAgentWithBnb,
+    quoteBnbPayment,
     readTokenBalance,
     recoverWallet,
     recoverability,

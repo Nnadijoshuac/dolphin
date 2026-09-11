@@ -1,6 +1,6 @@
 "use client";
 
-import { AltanaWalletPanel } from "@/components/altana-wallet-panel";
+import { AltanaWalletPanel, RecoverabilityPanel } from "@/components/altana-wallet-panel";
 import { IdentityWalletSection } from "@/components/identity-wallet-section";
 import { MobileWallet } from "@/components/mobile-wallet";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
@@ -10,6 +10,9 @@ export function WalletClient() {
   if (isMobile) return <MobileWallet />;
   return (
     <div className="site-frame" style={{ paddingBlock: "clamp(2rem, 5vw, 4rem)" }}>
+      {/* Recoverability warning — top of page */}
+      <RecoverabilityPanel />
+
       {/* Dolphin (Altana passkey) wallet — top priority */}
       <AltanaWalletPanel />
 

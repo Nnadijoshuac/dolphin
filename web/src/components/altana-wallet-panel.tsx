@@ -120,7 +120,7 @@ function SessionRow({
 
 /* ─────────────── recoverability ─────────────── */
 
-function RecoverabilityPanel() {
+export function RecoverabilityPanel() {
   const wallet = useAltanaWallet();
   const [state, setState] = useState<
     { kind: "idle" } | { kind: "registering" } | { kind: "error"; message: string }
@@ -584,8 +584,6 @@ function ConnectedWallet() {
       {wallet.error && <p className="wallet-error-banner">{wallet.error}</p>}
 
       <AgentActivity />
-
-      <RecoverabilityPanel />
 
       {/*
        * ── Active permissions ──

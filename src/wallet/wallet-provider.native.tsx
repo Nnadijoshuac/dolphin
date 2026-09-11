@@ -155,23 +155,28 @@ const reownSetup =
         const appKit = createAppKit({
           projectId,
           /*
-           * NO `logger` OPTION HERE, DELIBERATELY.
+           * Keep WalletConnect's own logger silent in the app.
            *
-           * AppKit RN 2.0.6 does accept one and forwards it to
-           * `@walletconnect/universal-provider` and on to the Core (AppKit.js
-           * :282/300, connectors/WalletConnectConnector.js:72). It was briefly
-           * set to "debug" under __DEV__ and removed on request: at that level
-           * it floods the Metro console on every render, which makes the app's
-           * own logs unreadable.
+           * AppKit RN 2.0.6 forwards this to `@walletconnect/universal-provider`
+           * and on to the Core (verified in the installed package and Reown's
+           * RN options docs). The SDK defaults to `error`, which reports known
+           * late relay responses as Metro errors:
            *
-           * If a relay problem ever needs diagnosing again, add
-           * `logger: "debug"` back on this line for one run - it names the
-           * transport error directly instead of surfacing it as a sixty-second
-           * publish timeout against the wrong layer. It is one line, and this
-           * comment is here so nobody has to rediscover that it exists.
+           *   emitting session_request:1788823707071001 without any listeners
+           *
+           * That condition is already handled at our boundary by
+           * withWalletTimeout below, where the user gets an actionable retry
+           * message instead of an indefinite spinner. Leaving the core logger
+           * at `error` makes the handled relay orphan look like an unhandled app
+           * exception.
+           *
+           * If a relay problem needs diagnosing again, change this to "debug"
+           * for one full reload - it names the transport error directly instead
+           * of surfacing it as a publish timeout against the wrong layer.
            * Remember createAppKit is a singleton (see below): it needs a full
            * reload, not a Fast Refresh.
            */
+          logger: "silent",
           metadata: {
             name: "Dolphin",
             description: "BSC agent marketplace",

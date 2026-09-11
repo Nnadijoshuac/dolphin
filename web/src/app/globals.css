@@ -627,6 +627,14 @@ textarea:focus-visible {
   text-decoration: none;
 }
 .wallet-activity-row:last-child { border-bottom: 0; }
+.wallet-activity-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+.wallet-activity-icon > [aria-hidden="true"] {
+  border-radius: 999px;
+}
 .wallet-activity-row > div {
   min-width: 0;
   flex: 1;
@@ -666,7 +674,7 @@ textarea:focus-visible {
   height: 3rem;
   margin: 0 auto 0.75rem;
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: 999px;
   background: var(--canvas);
   color: var(--ink);
 }

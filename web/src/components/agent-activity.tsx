@@ -84,12 +84,14 @@ function ActivityRow({
 }) {
   const body = (
     <>
-      <AgentIcon
-        category={item.category ?? "monitoring"}
-        seed={item.iconSeed}
-        size={mobile ? 48 : 44}
-        uri={item.iconUrl}
-      />
+      <span className={mobile ? "mobile-activity-icon" : "wallet-activity-icon"}>
+        <AgentIcon
+          category={item.category ?? "monitoring"}
+          seed={item.iconSeed}
+          size={mobile ? 48 : 44}
+          uri={item.iconUrl}
+        />
+      </span>
       <div>
         <h3>{item.title}</h3>
         <p>{item.detail}</p>

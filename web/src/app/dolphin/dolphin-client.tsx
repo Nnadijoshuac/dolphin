@@ -153,10 +153,44 @@ function Turn({
           />
         ) : null}
 
+        {/*
+          * AN ERROR MUST NOT LOOK LIKE AN ANSWER. (2026-09-12)
+          *
+          * Every error turn rendered in `bg-paper-muted` with the same radius
+          * and type as a reply, so "Dolphin is out of free model calls" was
+          * visually indistinguishable from Dolphin having said something - and
+          * equally indistinguishable from a crash. Those are three different
+          * facts and only one means the product is broken.
+          *
+          * `capacity` is the common one and it is NOT a fault: the free tier
+          * is spent, the rest of the product is unaffected, and it resets on
+          * its own. It gets the informational treatment and says so. Anything
+          * else is a real failure and reads as one.
+          */}
         {turn.status === "error" ? (
-          <div className="rounded-2xl rounded-bl-md bg-paper-muted px-4 py-3 text-[0.92rem] leading-relaxed text-ink">
-            {turn.errorReason ?? "Dolphin could not answer that."}
-          </div>
+          turn.errorKind === "capacity" ? (
+            <div className="rounded-2xl border border-info/25 bg-info-soft px-4 py-3">
+              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-info">
+                Out of model calls
+              </p>
+              <p className="mt-1.5 text-[0.9rem] leading-relaxed text-ink-soft">
+                {turn.errorReason}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-danger/25 bg-danger-soft px-4 py-3">
+              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-danger">
+                {turn.errorKind === "provider"
+                  ? "Model provider unavailable"
+                  : turn.errorKind === "input"
+                    ? "Could not process that"
+                    : "Dolphin failed"}
+              </p>
+              <p className="mt-1.5 text-[0.9rem] leading-relaxed text-ink-soft">
+                {turn.errorReason ?? "Dolphin could not answer that."}
+              </p>
+            </div>
+          )
         ) : null}
 
         {turn.content.length > 0 ? (

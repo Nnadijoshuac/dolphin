@@ -637,6 +637,12 @@ export type DolphinMessage = {
   content: string;
   status: "thinking" | "consulting" | "complete" | "error";
   errorReason: string | null;
+  /**
+   * Which kind of failure, when status is "error". See the note on `errorKind`
+   * in convex/schema.ts: "out of free model calls" is not a fault and must not
+   * render like one. Null on rows written before 2026-09-12.
+   */
+  errorKind: "capacity" | "provider" | "input" | "fault" | null;
   model: string | null;
   createdAt: number;
   completedAt: number | null;

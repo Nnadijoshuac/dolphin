@@ -693,6 +693,33 @@ export default defineSchema({
     ),
     /** Populated when status is "error". Never a stack trace. */
     errorReason: v.union(v.string(), v.null()),
+    /**
+     * WHICH KIND OF FAILURE, so the UI can stop rendering them all alike.
+     *
+     * Every error turn used to render in the same bubble, with the same
+     * styling as an answer - so "Dolphin is out of free model calls" looked
+     * exactly like a reply, and exactly like a crash. Those are three
+     * different things and only one of them means the product is broken.
+     *
+     * - `capacity` - the free tier is exhausted. Nothing is wrong; the rest of
+     *   the product is unaffected and this resets on its own. This is the case
+     *   that most needed separating, because it is the most common one and the
+     *   one most likely to be read as a fault.
+     * - `provider` - the model host is down or unreachable. Upstream.
+     * - `input`   - the question could not be processed as asked.
+     * - `fault`   - something in Dolphin went wrong.
+     *
+     * Optional because rows written before 2026-09-12 do not carry it.
+     */
+    errorKind: v.optional(
+      v.union(
+        v.literal("capacity"),
+        v.literal("provider"),
+        v.literal("input"),
+        v.literal("fault"),
+        v.null(),
+      ),
+    ),
     /** SHA-256 of the normalized user prompt. Null on assistant turns. */
     promptHash: v.union(v.string(), v.null()),
     /** Which OpenRouter model answered. Null until one has. */

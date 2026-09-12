@@ -338,6 +338,7 @@ export const getConversation = query({
         content: message.content,
         status: message.status,
         errorReason: message.errorReason,
+        errorKind: message.errorKind ?? null,
         model: message.model,
         createdAt: message.createdAt,
         completedAt: message.completedAt,
@@ -509,12 +510,22 @@ export const setMessageStatus = internalMutation({
     ),
     content: v.optional(v.string()),
     errorReason: v.optional(v.union(v.string(), v.null())),
+    errorKind: v.optional(
+      v.union(
+        v.literal("capacity"),
+        v.literal("provider"),
+        v.literal("input"),
+        v.literal("fault"),
+        v.null(),
+      ),
+    ),
     model: v.optional(v.union(v.string(), v.null())),
   },
-  handler: async (ctx, { messageId, status, content, errorReason, model }) => {
+  handler: async (ctx, { messageId, status, content, errorReason, errorKind, model }) => {
     const patch: Partial<Doc<"dolphinMessages">> = { status };
     if (content !== undefined) patch.content = content;
     if (errorReason !== undefined) patch.errorReason = errorReason;
+    if (errorKind !== undefined) patch.errorKind = errorKind;
     if (model !== undefined) patch.model = model;
     if (status === "complete" || status === "error") patch.completedAt = Date.now();
     await ctx.db.patch(messageId, patch);
@@ -1326,7 +1337,8 @@ Keep it magnetic, warm, and conversational.`;
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
         messageId: assistantId,
         status: "error",
-        errorReason: reason,
+        errorReason: reason.message,
+        errorKind: reason.kind,
       });
     }
 
@@ -1443,7 +1455,17 @@ async function executeToolCalls(
  * A person reading "429 Too Many Requests" does not know whether to wait 60
  * seconds or come back tomorrow. These translations tell them.
  */
-function humanizeError(cause: unknown): string {
+/**
+ * WHAT KIND OF FAILURE THIS WAS.
+ *
+ * The client renders `capacity` differently from everything else, because
+ * "Dolphin has no model calls left right now" and "Dolphin is broken" are
+ * different facts and only one of them is worth waiting out. See the note on
+ * `errorKind` in schema.ts.
+ */
+export type DolphinErrorKind = "capacity" | "provider" | "input" | "fault";
+
+function humanizeError(cause: unknown): { message: string; kind: DolphinErrorKind } {
   const raw =
     cause instanceof OpenRouterError
       ? cause.message
@@ -1453,13 +1475,26 @@ function humanizeError(cause: unknown): string {
 
   const lower = raw.toLowerCase();
 
-  // Leaked tool syntax or tool call parsing failure
+  /*
+   * Leaked tool syntax, or a tool call the parser could not recover.
+   *
+   * This branch used to return "Dolphin consulted live marketplace
+   * intelligence and completed your evaluation. Ask any follow-up question
+   * below." - reporting a FAILURE as a SUCCESS, on the path taken precisely
+   * because no answer was produced. A user was told their evaluation was
+   * finished and handed nothing to read. Removed 2026-09-12; the honest
+   * version says the model garbled its output, which is what happened.
+   */
   if (
     lower.includes("tool call") ||
     lower.includes("tool use") ||
     lower.includes("wrote a tool")
   ) {
-    return "Dolphin consulted live marketplace intelligence and completed your evaluation. Ask any follow-up question below.";
+    return {
+      message:
+        "The model garbled its reply to Dolphin and no usable answer came back. Nothing was consulted on your behalf. Try asking again.",
+      kind: "fault",
+    };
   }
 
   // Rate limit — the most common free-tier failure
@@ -1469,7 +1504,11 @@ function humanizeError(cause: unknown): string {
     lower.includes("too many requests") ||
     lower.includes("quota")
   ) {
-    return "Dolphin is running on a free model tier and has temporarily hit its rate limit. This usually resets within a minute or two — try your question again shortly.";
+    return {
+      message:
+        "Dolphin runs on a free model tier, and it is out of calls for the moment. The catalog, the live protocol reads and every agent page are unaffected — only this conversation is. Free-tier limits reset on their own; try again shortly.",
+      kind: "capacity",
+    };
   }
 
   // Model overloaded or unavailable
@@ -1480,12 +1519,20 @@ function humanizeError(cause: unknown): string {
     lower.includes("service unavailable") ||
     lower.includes("bad gateway")
   ) {
-    return "The AI model Dolphin uses is temporarily overloaded. This is a provider-side issue, not a bug in the marketplace. Try again in a moment.";
+    return {
+      message:
+        "The model provider Dolphin uses is temporarily overloaded. That is upstream of the marketplace, not a fault in it. Try again in a moment.",
+      kind: "provider",
+    };
   }
 
   // Context too long — shouldn't happen with our limits, but defensive
   if (lower.includes("context length") || lower.includes("token limit")) {
-    return "That question generated too much context for the model to process. Try asking something more specific, or start a new conversation.";
+    return {
+      message:
+        "That question built more context than the model can take. Try something more specific, or start a new conversation.",
+      kind: "input",
+    };
   }
 
   // Network / timeout
@@ -1495,16 +1542,22 @@ function humanizeError(cause: unknown): string {
     lower.includes("fetch failed") ||
     lower.includes("network")
   ) {
-    return "A network issue prevented Dolphin from reaching the AI model. Check your connection and try again.";
+    return {
+      message:
+        "A network issue stopped Dolphin reaching the model. Check your connection and try again.",
+      kind: "provider",
+    };
   }
 
   // Conversation not found
   if (lower.includes("no longer exists") || lower.includes("conversation")) {
-    return raw; // Already human-readable from our own code
+    return { message: raw, kind: "input" }; // Already human-readable from our own code
   }
 
-  // Fallback — include the raw message but frame it helpfully
-  return `Something unexpected happened: ${raw.slice(0, 200)}. Try your question again — if this persists, it may be a temporary issue with the AI model provider.`;
+  return {
+    message: `Something unexpected happened: ${raw.slice(0, 200)}. Try again — if it persists it may be upstream of Dolphin.`,
+    kind: "fault",
+  };
 }
 
 /**

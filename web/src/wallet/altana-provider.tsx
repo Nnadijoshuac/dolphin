@@ -3,6 +3,7 @@
 import {
   BNB,
   createClient,
+  buildClaimRefundCall,
   erc8183Addresses,
   hireErc8183Agent,
   signerFromPasskey,
@@ -240,6 +241,8 @@ export type AltanaWalletValue = Readonly<{
    * by the wallet - so the caller must have shown the price and got consent.
    */
   registerWallet: () => Promise<void>;
+  /** Reclaim a funded escrow whose deadline passed without delivery. */
+  claimEscrowRefund: (jobId: string) => Promise<void>;
 
   /** Native balance in wei. Null while unread - never shown as zero. */
   balanceWei: bigint | null;
@@ -685,6 +688,69 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     }
   }, [adminSigner, refreshBalance, refreshRecoverability]);
 
+  /**
+   * TAKE THE MONEY BACK FROM A JOB NOBODY DELIVERED.
+   *
+   * ---------------------------------------------------------------------------
+   * WHY THIS DID NOT EXIST UNTIL 2026-09-12
+   * ---------------------------------------------------------------------------
+   * The same shape as cancelHire's own note: the SDK has shipped
+   * `buildClaimRefundCall` the whole time and NOTHING in Dolphin called it. The
+   * manage screen told users a job was "Refundable after <date>" and then
+   * offered no way to claim it, which is a promise the app could not keep.
+   *
+   * It became urgent rather than theoretical when a seller rejected a funded
+   * job outright (see buildJobDescription): the escrow was real, the work was
+   * never going to happen, and the buyer's only exit was a function no screen
+   * exposed.
+   *
+   * The kernel enforces the timing, not this code - `claimRefund` reverts
+   * before `expiredAt`. The guard below is so a user reads a sentence instead
+   * of a revert.
+   */
+  const claimEscrowRefund = useCallback(
+    async (jobId: string): Promise<void> => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("No Dolphin Wallet on this device.");
+
+      const nativeBalance = await altanaClient().balances({
+        wallet: { address: wallet.address },
+        chainId: ALTANA_NETWORK.chainId,
+      });
+      // A refund moves no BNB of its own - it only costs gas to ask.
+      await assertIntentAffordable({
+        publicClient: keystoreReader,
+        nativeBalanceWei: nativeBalance.native,
+        items: [],
+      });
+
+      setIsBusy(true);
+      setError(null);
+      try {
+        const result = await altanaClient().execute({
+          wallet: { address: wallet.address },
+          signer: adminSigner(),
+          calls: buildClaimRefundCall(ALTANA_NETWORK.chainId, BigInt(jobId)),
+          chainId: ALTANA_NETWORK.chainId,
+        });
+        if (result.status === "FAILED") {
+          throw new Error(
+            `The refund for job ${jobId} was not accepted by the chain. An escrow cannot be ` +
+              "reclaimed before its deadline passes - check the refundable-after date and try again then.",
+          );
+        }
+        refreshBalance();
+        refreshRecoverability();
+      } catch (cause) {
+        setError(toUserMessage(cause, "That refund could not be claimed. Try again."));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner, refreshBalance, refreshRecoverability],
+  );
+
   const readTokenBalance = useCallback(async (token: string): Promise<TokenHolding> => {
     const wallet = getAltanaSnapshot();
     if (!wallet) throw new Error("No Dolphin Wallet on this device.");
@@ -1064,6 +1130,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       refreshRecoverability,
       registrationFeeWei: registrationFeeQuery.data ?? null,
       registerWallet,
+      claimEscrowRefund,
       balanceWei: balanceQuery.data ?? null,
       balanceError:
         balanceQuery.error instanceof Error
@@ -1111,6 +1178,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     refreshBalance,
     refreshRecoverability,
     registerWallet,
+    claimEscrowRefund,
     registrationFeeQuery.data,
     revokeSession,
     sessions,

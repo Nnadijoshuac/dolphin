@@ -1,9 +1,11 @@
 "use client";
 
 import { useQuery as useConvexQuery } from "convex/react";
+import { useState } from "react";
 
 import { agentPaymentsApi, type AgentJobRow } from "@/convex/api";
 import { useJobDelivery } from "@/hooks/use-job-delivery";
+import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import {
@@ -13,6 +15,7 @@ import {
   type DeliveryState,
 } from "@/wallet/erc8183-job";
 import { useAltanaWallet } from "@/wallet/altana-provider";
+import { toUserMessage } from "@/wallet/wallet-errors";
 
 /**
  * What happened to a paid hire after the money moved.
@@ -68,6 +71,25 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
   // getJobsForAgent returns newest first, so the head is the current purchase.
   const job = jobs?.[0] ?? null;
   const delivery = useJobDelivery(job);
+
+  const [refund, setRefund] = useState<
+    { kind: "idle" } | { kind: "claiming" } | { kind: "done" } | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  /*
+   * Read from the chain's own clock, not from how long the panel has been
+   * waiting: DELIVERY_TIMEOUT_MS is a presentation threshold and `expiredAt` is
+   * the contractual one. Only the second decides whether a refund exists.
+   */
+  // Ticks from the shared store rather than Date.now() in render - reading
+  // the clock during render is impure and the deadline crosses on its own.
+  const now = useNow();
+  const onChain = delivery.onChain ?? null;
+  const canClaimRefund =
+    onChain !== null &&
+    !hasDeliverable(onChain) &&
+    onChain.expiredAt > 0 &&
+    now >= onChain.expiredAt * 1000;
 
   if (!job) return null;
 
@@ -186,6 +208,68 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
           slowest completion time the agents in this catalog quote for
           themselves. It is still checking once a minute.
         </p>
+      )}
+
+      {/*
+       * THE EXIT, WHICH USED TO BE A DATE AND NOTHING ELSE.
+       *
+       * This panel has always said "Refundable after <date>" and, until
+       * 2026-09-12, offered no way to claim it — the SDK's buildClaimRefundCall
+       * was never called from anywhere in Dolphin. A screen that names the day
+       * your money comes back and then cannot return it is making a promise the
+       * app does not keep.
+       *
+       * Offered only once the deadline has actually passed and nothing was
+       * delivered. The kernel enforces the timing itself (claimRefund reverts
+       * early), so this condition is about not showing a button that cannot
+       * work, not about being the check.
+       */}
+      {canClaimRefund && (
+        <div className="mt-4 border-t border-line pt-3">
+          {refund.kind === "done" ? (
+            <p className="text-[0.68rem] leading-5 text-success">
+              Refund claimed. Your balance updates once the chain confirms it.
+            </p>
+          ) : (
+            <>
+              <button
+                className="wallet-action-btn interactive"
+                disabled={refund.kind === "claiming" || wallet.isBusy}
+                onClick={() => {
+                  setRefund({ kind: "claiming" });
+                  void wallet.claimEscrowRefund(job.jobId).then(
+                    () => setRefund({ kind: "done" }),
+                    (cause: unknown) =>
+                      setRefund({
+                        kind: "error",
+                        message: toUserMessage(
+                          cause,
+                          "That refund could not be claimed. Try again.",
+                        ),
+                      }),
+                  );
+                }}
+                type="button"
+              >
+                {refund.kind === "claiming"
+                  ? "Confirm with passkey…"
+                  : `Claim your ${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol} back`}
+              </button>
+              <p className="mt-2 text-[0.68rem] leading-5 text-faint">
+                This agent never delivered and the escrow deadline has passed, so
+                the money is yours to reclaim. It returns to your Dolphin Wallet.
+              </p>
+              {refund.kind === "error" && (
+                <p
+                  className="mt-2 whitespace-pre-line text-[0.68rem] leading-5 text-danger"
+                  role="alert"
+                >
+                  {refund.message}
+                </p>
+              )}
+            </>
+          )}
+        </div>
       )}
     </div>
   );

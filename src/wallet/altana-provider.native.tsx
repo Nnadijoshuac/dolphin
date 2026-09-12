@@ -35,7 +35,6 @@ import {
   KEYSTORE_REGISTRATION_FEE_ABI,
   buildSessionPermissions,
   expiryFromNow,
-  formatBnb,
   sessionPolicyFor,
   type RecoverabilityState,
 } from "./altana-policy";
@@ -43,6 +42,7 @@ import { ALTANA_RP_ID } from "./altana-rp-id";
 import { ERC8183_CHAIN_ID, JOB_DEADLINE_SECONDS } from "./erc8183-policy";
 import {
   buildBnbConversionCall,
+  preflightBnbConversion,
   quoteBnbForExactTokenOutput,
 } from "./pancakeswap-bnb-swap";
 import { toUserMessage } from "./wallet-errors";
@@ -723,23 +723,29 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           wallet: { address: current.address as Address },
           chainId: ALTANA_NETWORK.chainId,
         });
-        if (nativeBalance.native < maxBnbWei) {
-          const shortfall = maxBnbWei - nativeBalance.native;
-          throw new Error(
-            `You need ${formatBnb(maxBnbWei)} BNB in your Dolphin Wallet to fund this agent. ` +
-              `It has ${formatBnb(nativeBalance.native)} BNB right now. Add at least ` +
-              `${formatBnb(shortfall)} BNB plus a little extra for network gas.`,
-          );
-        }
+        const swapCall = buildBnbConversionCall({
+          quote: input.quote,
+          conversion,
+          recipient: current.address as Address,
+        });
+
+        /*
+         * Built before the preflight and reused by it, so what is checked is
+         * byte-identical to what is signed. Checking a call assembled
+         * separately from the one submitted would be measuring a different
+         * transaction - the same mistake convex/lib/probe.ts is on the record
+         * for making against the hire path.
+         */
+        await preflightBnbConversion({
+          publicClient: keystoreReader,
+          account: current.address as Address,
+          call: swapCall,
+          nativeBalanceWei: nativeBalance.native,
+        });
 
         setIsBusy(true);
         setError(null);
         try {
-          const swapCall = buildBnbConversionCall({
-            quote: input.quote,
-            conversion,
-            recipient: current.address as Address,
-          });
           const swapped = await altanaClient().execute({
             wallet: { address: current.address as Address },
             signer: adminSigner(),

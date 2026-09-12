@@ -1,5 +1,6 @@
 import {
   encodeFunctionData,
+  formatEther,
   getAddress,
   type Address,
   type Hex,
@@ -214,6 +215,117 @@ export async function quoteBnbForExactTokenOutput({
     quoter: PANCAKE_V3_QUOTER_V2,
     router: PANCAKE_V3_SWAP_ROUTER,
     gasEstimate: best.gasEstimate.toString(),
+  };
+}
+
+/**
+ * Smart-account overhead on top of the raw swap, as a MULTIPLE of the measured
+ * cost of the swap itself.
+ *
+ * Measured 2026-09-12: this exact `multicall([exactOutputSingle, refundETH])`
+ * costs ~215k gas called directly on BSC. Running it through the Dolphin Wallet
+ * wraps it in an EIP-7702 account intent, which adds signature validation and
+ * the account's own dispatch around that.
+ *
+ * 2x is a CEILING for the wrapper, not a measurement of it, and it is used only
+ * to decide whether to refuse before asking for a signature. It is never shown
+ * as a fee, never charged, and never presented as what the transaction will
+ * cost - so erring high costs the user nothing except a refusal that arrives
+ * earlier. At BSC's current 0.05 gwei the whole envelope is worth a fraction of
+ * a cent; being generous with it is free and being tight with it is how a batch
+ * fails after the user has already approved it.
+ */
+const SMART_ACCOUNT_GAS_HEADROOM = BigInt(2);
+
+export type ConversionPreflight = Readonly<{
+  /** Gas units the swap itself needs, measured against live chain state. */
+  gasUnits: string;
+  gasPriceWei: string;
+  /** Gas ceiling including the smart-account wrapper. Never charged. */
+  maxFeeWei: string;
+  /** What the wallet must hold: the swap's own BNB plus that ceiling. */
+  requiredTotalWei: string;
+}>;
+
+/**
+ * Check the conversion can actually execute, BEFORE asking anyone to sign it.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * A paid hire failed at `client.execute()` with the relay's least useful
+ * answer: "An error occurred while executing calls. Reason: 0x". Empty revert
+ * data names nothing - not the contract, not the check, not the amount - and it
+ * arrives AFTER the user has approved a passkey prompt, so the cost of finding
+ * out is a signature and a wait.
+ *
+ * The swap itself was not the problem: the identical calldata succeeds when
+ * called directly on BSC. What the old code did not verify is the two
+ * preconditions the relay silently requires.
+ *
+ *  1. THE WALLET MUST COVER THE SWAP *AND* ITS GAS. The check this replaces
+ *     read `native < maxBnbWei` - the swap's BNB alone, with nothing left for
+ *     the fee. Its own error text already said "plus a little extra for network
+ *     gas" while the condition beside it did not ask for any, so a wallet funded
+ *     to exactly the quoted amount passed the check and then could not pay to
+ *     execute.
+ *
+ *  2. THE CALL MUST NOT REVERT. `estimateGas` runs the real call against live
+ *     state from the real account, so a pool that moved, a deadline that
+ *     passed, or a token that refuses this account fails HERE, with the reason
+ *     the chain gave, instead of as `0x` after a signature.
+ *
+ * Both numbers are read live - the gas price from the chain and the gas units
+ * from the call itself. Nothing here is a constant standing in for a
+ * measurement (AGENTS.md §5); the one judgement call is the headroom multiple
+ * above, which only ever makes this stricter.
+ */
+export async function preflightBnbConversion({
+  publicClient,
+  account,
+  call,
+  nativeBalanceWei,
+}: {
+  publicClient: PublicClient;
+  account: Address;
+  call: { to: Address; data: Hex; value: bigint };
+  nativeBalanceWei: bigint;
+}): Promise<ConversionPreflight> {
+  /*
+   * Checked before `estimateGas` because estimateGas on a call whose value the
+   * account cannot cover fails as "insufficient funds" - technically true, and
+   * useless next to a sentence naming the actual shortfall.
+   */
+  if (nativeBalanceWei < call.value) {
+    throw new Error(
+      `Converting BNB for this hire needs ${formatEther(call.value)} BNB and your Dolphin Wallet ` +
+        `holds ${formatEther(nativeBalanceWei)} BNB. Add at least ` +
+        `${formatEther(call.value - nativeBalanceWei)} BNB, plus a little for network gas.`,
+    );
+  }
+
+  const [gasUnits, gasPriceWei] = await Promise.all([
+    publicClient.estimateGas({ account, to: call.to, data: call.data, value: call.value }),
+    publicClient.getGasPrice(),
+  ]);
+
+  const maxFeeWei = gasUnits * SMART_ACCOUNT_GAS_HEADROOM * gasPriceWei;
+  const requiredTotalWei = call.value + maxFeeWei;
+
+  if (nativeBalanceWei < requiredTotalWei) {
+    throw new Error(
+      `Converting BNB for this hire needs ${formatEther(call.value)} BNB for the swap plus about ` +
+        `${formatEther(maxFeeWei)} BNB for network gas, and your Dolphin Wallet holds ` +
+        `${formatEther(nativeBalanceWei)} BNB. Add at least ` +
+        `${formatEther(requiredTotalWei - nativeBalanceWei)} BNB and try again.`,
+    );
+  }
+
+  return {
+    gasUnits: gasUnits.toString(),
+    gasPriceWei: gasPriceWei.toString(),
+    maxFeeWei: maxFeeWei.toString(),
+    requiredTotalWei: requiredTotalWei.toString(),
   };
 }
 

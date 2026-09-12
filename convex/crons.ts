@@ -84,4 +84,23 @@ crons.interval(
   {},
 );
 
+/**
+ * Liquidation alerts.
+ *
+ * Fifteen minutes is a compromise between two real costs. Faster means more
+ * BSC round trips per subscriber per day for a value that moves with the
+ * market rather than with the block; slower means the gap between a position
+ * going under and the person hearing about it grows, and the whole point of
+ * the alert is that the gap is short enough to act in.
+ *
+ * The action is a no-op when RESEND_API_KEY is unset, so a deployment without
+ * alerts configured does not spend RPC reads on positions it cannot report.
+ */
+crons.interval(
+  "liquidation alerts (read each watched Venus position, mail on a crossing)",
+  { minutes: 15 },
+  internal.healthAlerts.runChecks,
+  {},
+);
+
 export default crons;

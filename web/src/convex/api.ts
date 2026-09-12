@@ -901,3 +901,42 @@ export const agentToolsApi = anyApi as unknown as {
     >;
   };
 };
+
+/**
+ * convex/healthAlerts.ts. Liquidation alerts - the one path by which Dolphin
+ * can reach a person.
+ *
+ * `alertsAvailable` is checked BEFORE the form is offered. A deployment with
+ * no RESEND_API_KEY accepting a subscription would be promising a delivery it
+ * cannot perform, which is the same fault as a metric that reads "syncing"
+ * forever. See the note on the healthAlerts table in convex/schema.ts.
+ */
+export const healthAlertsApi = anyApi as unknown as {
+  healthAlerts: {
+    /** Whether this deployment can send at all. Gate the form on it. */
+    alertsAvailable: Query<Record<string, never>, boolean>;
+    getAlertForWallet: Query<
+      { sessionToken: string },
+      {
+        email: string;
+        threshold: number;
+        active: boolean;
+        lastHealthFactor: number | null;
+        lastCheckedAt: number | null;
+        lastNotifiedAt: number | null;
+      } | null
+    >;
+    /**
+     * The address is taken from the session, never from an argument. An alert
+     * creatable against someone else's address would be a way to mail a
+     * stranger about their own loan.
+     */
+    subscribe: Mutation<
+      { sessionToken: string; email: string; threshold: number },
+      { ok: boolean; reason: string | null }
+    >;
+    unsubscribe: Mutation<{ sessionToken: string }, { ok: boolean }>;
+    /** Stops the mail from the mail itself, with no sign-in. */
+    unsubscribeByToken: Mutation<{ token: string }, { ok: boolean }>;
+  };
+};

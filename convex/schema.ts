@@ -779,4 +779,83 @@ export default defineSchema({
   })
     .index("by_message", ["messageId", "calledAt"])
     .index("by_conversation", ["conversationId", "calledAt"]),
+
+  /**
+   * ===========================================================================
+   * LIQUIDATION ALERTS - THE FIRST WAY THIS PRODUCT CAN REACH A PERSON
+   * ===========================================================================
+   * Until 2026-09-12 there was NO notification channel anywhere in this
+   * codebase. No email, no push, no webhook - a grep for any of them returned
+   * only the MCP `notifications/initialized` handshake. Meanwhile the site's
+   * own hero rail said "Never Get Liquidated" and the flagship listing said
+   * "24/7 liquidation protection".
+   *
+   * A health-factor monitor that cannot wake you up is not a monitor. It is a
+   * page you have to remember to visit, about a risk that materialises while
+   * you are asleep. This table is the smallest thing that makes the
+   * most-promised feature in the product true.
+   *
+   * ---------------------------------------------------------------------------
+   * WHAT IS DELIBERATELY NOT HERE
+   * ---------------------------------------------------------------------------
+   * No agentKey. An alert is about the USER'S OWN Venus position, read from
+   * the Venus Comptroller against their own address. It is not a claim that
+   * any listed agent is watching anything, and tying it to an agent record
+   * would imply exactly that - the agent would appear to be acting when
+   * nothing but this cron had run. If an agent ever genuinely acts on a
+   * position, that belongs in agentSessions with a real authorization behind
+   * it, not here.
+   *
+   * ---------------------------------------------------------------------------
+   * THE EMAIL IS THE ONLY PII THIS PRODUCT STORES
+   * ---------------------------------------------------------------------------
+   * lib/analytics.ts refuses to put a wallet address in an event, and that
+   * rule is not weakened here: this is product data the user typed in order to
+   * receive something, not behavioural telemetry, and the two must not be
+   * joined. `unsubscribeToken` exists so an alert can be stopped from the
+   * email itself without signing in - a person who has changed wallets must
+   * still be able to make the mail stop.
+   */
+  healthAlerts: defineTable({
+    /** Checksummed. The address whose Venus position is watched. */
+    walletAddress: v.string(),
+    /** Lowercased on write, so one address cannot hold two casings of one inbox. */
+    email: v.string(),
+    /**
+     * Notify when the health factor falls BELOW this.
+     *
+     * Venus liquidates at 1.0. The UI offers values above it because an alert
+     * that fires at 1.0 has already arrived too late to act on.
+     */
+    threshold: v.number(),
+    /** False after unsubscribing. Rows are kept so a resubscribe is not a new row. */
+    active: v.boolean(),
+    /**
+     * Whether the last completed read was already below the threshold.
+     *
+     * This is what makes the alert fire on a CROSSING rather than on every
+     * tick. A position that sits at 1.3 under a 1.5 threshold is not five
+     * emails an hour; it is one email, when it first went under.
+     *
+     * Null before the first successful read - "not yet known" is distinct from
+     * "known to be above", and treating the first read as a crossing would
+     * email everyone the moment they subscribed.
+     */
+    wasBelow: v.union(v.boolean(), v.null()),
+    /** Last health factor actually read. Null when the read found no borrow. */
+    lastHealthFactor: v.union(v.number(), v.null()),
+    /** When the cron last completed a read for this row, successful or not. */
+    lastCheckedAt: v.union(v.number(), v.null()),
+    /** When an email was last actually sent. Backstop against a flapping value. */
+    lastNotifiedAt: v.union(v.number(), v.null()),
+    /** Opaque, unguessable. Lets the email carry a one-click stop. */
+    unsubscribeToken: v.string(),
+    createdAt: v.number(),
+  })
+    /* One row per (address, inbox). The mutation upserts on this. */
+    .index("by_wallet_email", ["walletAddress", "email"])
+    .index("by_wallet", ["walletAddress"])
+    /* What the cron walks: active rows, oldest check first. */
+    .index("by_active_checked", ["active", "lastCheckedAt"])
+    .index("by_token", ["unsubscribeToken"]),
 });

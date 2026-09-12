@@ -133,10 +133,25 @@ export function isFresh(price: BnbPrice, nowSeconds: number): boolean {
  */
 const WEI_PER_BNB = BigInt("1000000000000000000");
 
+/*
+ * ROUNDS TO THE NEAREST CENT, and does not truncate (changed 2026-09-12).
+ *
+ * Truncation was the first implementation and it looked harmless until a real
+ * price went through it: an agent charging 0.10 $U is worth 9.99 cents, and
+ * truncating rendered that as "$0.09" — a 10% understatement of a small price.
+ * Systematically rounding a COST down is the wrong direction to be wrong in;
+ * the user pays the higher number.
+ *
+ * Nearest-cent has no bias in either direction and is what every other
+ * currency display does. The half is added before the divide so it all stays
+ * in integer arithmetic — no float touches a money value anywhere in here.
+ */
 export function weiToUsdCents(wei: bigint, price: BnbPrice): bigint {
   const scale = BigInt(10) ** BigInt(price.decimals);
   // × 100 for cents, before either division, so precision is kept.
-  return (wei * price.answer * BigInt(100)) / (WEI_PER_BNB * scale);
+  const numerator = wei * price.answer * BigInt(100);
+  const denominator = WEI_PER_BNB * scale;
+  return (numerator + denominator / BigInt(2)) / denominator;
 }
 
 /** Cents → "$1,234.56". Grouping via Intl on an integer, so no float anywhere. */
@@ -148,27 +163,6 @@ export function formatUsdCents(cents: bigint): string {
   const grouped = new Intl.NumberFormat("en-US").format(dollars);
   const padded = remainder.toString().padStart(2, "0");
   return `${negative ? "-" : ""}$${grouped}.${padded}`;
-}
-
-/**
- * "$736.53" — the rate itself, for showing WHERE a dollar figure came from.
- *
- * ---------------------------------------------------------------------------
- * Provenance is not a nicety here. A USD balance is the only number on this
- * screen that Dolphin computes rather than reads, so it is the only one a bug
- * can make plausibly wrong without anything looking broken. Printing the rate
- * and naming the oracle beside it means a wrong dollar figure is checkable in
- * two seconds against any exchange, instead of being taken on trust.
- *
- * Cross-checked 2026-09-12: the feed read $736.53017, Binance spot was $736.75
- * and CoinGecko $736.83 — 0.03% drift, inside the feed's 0.5% deviation band,
- * on a round 58 seconds old against a 60-second heartbeat.
- * ---------------------------------------------------------------------------
- */
-export function formatPricePerBnb(price: BnbPrice): string {
-  const scale = BigInt(10) ** BigInt(price.decimals);
-  const cents = (price.answer * BigInt(100)) / scale;
-  return formatUsdCents(cents);
 }
 
 /**

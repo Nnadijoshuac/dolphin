@@ -27,8 +27,8 @@ const ONE_BNB = BigInt("1000000000000000000");
 
 describe("weiToUsdCents", () => {
   it("prices one BNB at the round that was actually read", () => {
-    // $735.15852 truncates to 73515 cents.
-    expect(weiToUsdCents(ONE_BNB, PRICE)).toBe(BigInt(73515));
+    // $735.15852 → 73515.852 cents → 73516 at the nearest cent.
+    expect(weiToUsdCents(ONE_BNB, PRICE)).toBe(BigInt(73516));
   });
 
   it("prices zero as zero", () => {
@@ -37,7 +37,7 @@ describe("weiToUsdCents", () => {
 
   it("scales linearly", () => {
     const ten = weiToUsdCents(ONE_BNB * BigInt(10), PRICE);
-    expect(ten).toBe(BigInt(735158));
+    expect(ten).toBe(BigInt(735159));
   });
 
   /*
@@ -49,8 +49,11 @@ describe("weiToUsdCents", () => {
     expect(weiToUsdCents(huge, PRICE)).toBe(BigInt(73515852000));
   });
 
-  it("truncates rather than rounding up", () => {
-    // 1 wei is worth a vanishing fraction of a cent and must not become one.
+  /*
+   * Rounding is to the NEAREST cent, so a vanishing fraction still rounds to
+   * zero — which is what keeps formatUsdFromWei's "<$0.01" branch reachable.
+   */
+  it("rounds a vanishing fraction of a cent down to zero", () => {
     expect(weiToUsdCents(BigInt(1), PRICE)).toBe(BigInt(0));
   });
 });
@@ -83,7 +86,7 @@ describe("formatUsdFromWei", () => {
   });
 
   it("formats a real balance", () => {
-    expect(formatUsdFromWei(ONE_BNB, PRICE)).toBe("$735.15");
+    expect(formatUsdFromWei(ONE_BNB, PRICE)).toBe("$735.16");
   });
 });
 

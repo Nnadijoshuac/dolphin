@@ -88,9 +88,22 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  colorScheme: "light",
+  /*
+   * Both schemes, as of 2026-09-12. This said "light" and pinned one
+   * themeColor, which told the browser to render form controls, scrollbars and
+   * the address bar light regardless of the palette globals.css had chosen -
+   * so a dark page would have kept a near-white browser chrome and light
+   * default controls sitting on top of it.
+   *
+   * The two themeColor entries are media-matched so the address bar follows
+   * the same canvas the page paints: --canvas is #f4f3ed light, #131410 dark.
+   */
+  colorScheme: "light dark",
   initialScale: 1,
-  themeColor: "#f4f3ed",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f3ed" },
+    { media: "(prefers-color-scheme: dark)", color: "#131410" },
+  ],
   width: "device-width",
   viewportFit: "cover",
 };

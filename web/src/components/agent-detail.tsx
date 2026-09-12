@@ -284,7 +284,7 @@ function TechnicalDetailsAccordion({
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold text-ink">Details & Registry Record</h2>
             {isRegistryVerified ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 border border-emerald-200">
+              <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-semibold text-success border border-success/30">
                 Verified
               </span>
             ) : null}

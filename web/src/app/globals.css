@@ -56,6 +56,129 @@
   --focus: #8a6500;
   --shadow-soft: 0 1px 2px rgb(23 24 19 / 4%), 0 12px 32px rgb(23 24 19 / 5%);
   --shadow-float: 0 18px 48px rgb(23 24 19 / 10%);
+
+  /*
+   * Surfaces that must stay OPAQUE-ish over artwork, expressed as tokens so the
+   * dark block can reassign them. The hero and the sticky rails wash the canvas
+   * colour over a photograph or a video; hardcoding the light paper value here
+   * is what made those gradients paint white over a dark page.
+   */
+  --scrim: 255 254 248;
+  --scrim-canvas: 244 243 237;
+}
+
+/*
+ * ===========================================================================
+ * DARK. (2026-09-12)
+ * ===========================================================================
+ * There was no dark mode at all before this: 1140 lines of CSS, one palette,
+ * not a single `prefers-color-scheme` query. Defensible as a brand choice for
+ * a document site, and the wrong default for this audience - the people who
+ * hold a BSC position and read a health factor at 2am are overwhelmingly on
+ * dark, and a light-only financial surface reads as unfinished regardless of
+ * how careful the light palette is.
+ *
+ * ---------------------------------------------------------------------------
+ * SAME DISCIPLINE AS THE LIGHT RAMP
+ * ---------------------------------------------------------------------------
+ * Every text token is measured against all three grounds this app paints text
+ * on, and the value chosen clears 4.5:1 on the WORST of the three:
+ *
+ *              value      canvas  paper  paper-muted
+ *   --ink      #f2f1e8    16.32   14.97   13.30
+ *   --ink-soft #d4d3c7    12.28   11.27   10.01
+ *   --muted    #a3a396     7.26    6.66    5.92
+ *   --faint    #94948a     6.04    5.55    4.93
+ *   --accent   #f0b90b    10.26    9.41    8.37
+ *   --success  #4ba87c     6.33    5.81    5.16
+ *   --danger   #e0705f     5.86    5.38    4.78
+ *   --info     #7fa8d6     7.46    6.85    6.09
+ *
+ * Worth noting against the light ramp's own caveat above: on a dark ground the
+ * ramp is NOT compressed. There is room between --muted (5.92) and --faint
+ * (4.93) on the worst surface, so de-emphasis can come from colour here in a
+ * way it could not on near-white.
+ *
+ * The greys are warm, not neutral - they carry the same hue as --ink #171813 -
+ * so the two modes read as one product rather than as a light site and a
+ * separate dark one.
+ *
+ * --accent stays Binance yellow in both modes. It is the brand and it clears
+ * 8.37:1 on the worst dark ground. What flips is --accent-ink, which is a dark
+ * brown FOR light grounds and has to become a light gold for dark ones, and
+ * the four `-soft` washes, which are tints on light and shades on dark.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY BOTH A MEDIA QUERY AND A [data-theme] HOOK
+ * ---------------------------------------------------------------------------
+ * The media query is what ships today: there is no toggle in the UI, so the
+ * viewer's OS setting decides. The [data-theme] selectors are here so adding a
+ * toggle later is a change to one component and not a rewrite of this file,
+ * and the media query is guarded with :not([data-theme="light"]) so that an
+ * explicit light choice wins over a dark OS.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --canvas: #131410;
+    --paper: #1c1d17;
+    --paper-strong: #232419;
+    --paper-muted: #26271f;
+    --ink: #f2f1e8;
+    --ink-soft: #d4d3c7;
+    --muted: #a3a396;
+    --faint: #94948a;
+    /* Non-text marks only, same rule as the light ramp. */
+    --faint-mark: #6a6b62;
+    --line: #32332a;
+    --line-strong: #45463b;
+    --accent: #f0b90b;
+    --accent-hover: #ffca2c;
+    --accent-soft: #3a2f06;
+    --accent-ink: #f7d354;
+    --success: #4ba87c;
+    --success-soft: #14281d;
+    --danger: #e0705f;
+    --danger-soft: #331915;
+    --info: #7fa8d6;
+    --info-soft: #17222e;
+    --focus: #ffd84d;
+    /* Shadow does almost nothing on a dark ground; the border carries the edge. */
+    --shadow-soft: 0 1px 2px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 34%);
+    --shadow-float: 0 18px 48px rgb(0 0 0 / 52%);
+    --scrim: 19 20 16;
+    --scrim-canvas: 19 20 16;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #131410;
+  --paper: #1c1d17;
+  --paper-strong: #232419;
+  --paper-muted: #26271f;
+  --ink: #f2f1e8;
+  --ink-soft: #d4d3c7;
+  --muted: #a3a396;
+  --faint: #94948a;
+  --faint-mark: #6a6b62;
+  --line: #32332a;
+  --line-strong: #45463b;
+  --accent: #f0b90b;
+  --accent-hover: #ffca2c;
+  --accent-soft: #3a2f06;
+  --accent-ink: #f7d354;
+  --success: #4ba87c;
+  --success-soft: #14281d;
+  --danger: #e0705f;
+  --danger-soft: #331915;
+  --info: #7fa8d6;
+  --info-soft: #17222e;
+  --focus: #ffd84d;
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 34%);
+  --shadow-float: 0 18px 48px rgb(0 0 0 / 52%);
+  --scrim: 19 20 16;
+  --scrim-canvas: 19 20 16;
 }
 
 @theme inline {

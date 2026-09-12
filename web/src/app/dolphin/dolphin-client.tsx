@@ -240,20 +240,20 @@ function ChatHistory({
   return (
     <aside
       aria-label="Chat history"
-      className="flex h-full min-h-0 flex-col border-l border-slate-200/80 bg-white/78 px-3 pb-4 pt-3 backdrop-blur-xl"
+      className="flex h-full min-h-0 flex-col border-l border-line/80 bg-paper/78 px-3 pb-4 pt-3 backdrop-blur-xl"
     >
       <div className="flex items-center gap-2 px-2 py-2">
-        <div className="grid size-9 place-items-center rounded-xl bg-slate-950 text-white">
+        <div className="grid size-9 place-items-center rounded-xl bg-ink text-canvas">
           <CategoryGlyph color="#FFFFFF" name="panel-left" size={17} strokeWidth={1.9} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-slate-950">Chat history</h2>
-          <p className="text-[0.68rem] text-slate-500">Saved on this device</p>
+          <h2 className="text-sm font-semibold text-ink">Chat history</h2>
+          <p className="text-[0.68rem] text-muted">Saved on this device</p>
         </div>
         {onClose ? (
           <button
             aria-label="Close chat history"
-            className="grid size-9 place-items-center rounded-full text-slate-600 transition-colors hover:bg-slate-100"
+            className="grid size-9 place-items-center rounded-full text-muted transition-colors hover:bg-paper-muted"
             onClick={onClose}
             type="button"
           >
@@ -263,19 +263,19 @@ function ChatHistory({
       </div>
 
       <button
-        className="mt-3 flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 active:translate-y-0"
+        className="mt-3 flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-ink px-4 text-sm font-semibold text-canvas transition-transform hover:-translate-y-0.5 active:translate-y-0"
         onClick={onNew}
         type="button"
       >
         <CategoryGlyph color="#FFFFFF" name="add" size={18} strokeWidth={2} />
-        <span className="text-white">New conversation</span>
+        <span className="text-canvas">New conversation</span>
       </button>
 
       <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
         {entries.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white/55 px-4 py-5">
-            <p className="text-sm font-medium text-slate-800">No saved chats yet</p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+          <div className="rounded-2xl border border-dashed border-line bg-paper/55 px-4 py-5">
+            <p className="text-sm font-medium text-ink-soft">No saved chats yet</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted">
               Your first question will appear here automatically.
             </p>
           </div>
@@ -286,7 +286,7 @@ function ChatHistory({
               return (
                 <div
                   className={`group flex items-center gap-1 rounded-2xl p-1 transition-colors ${
-                    active ? "bg-emerald-50 ring-1 ring-emerald-200" : "hover:bg-slate-100/80"
+                    active ? "bg-success-soft ring-1 ring-success/30" : "hover:bg-paper-muted/80"
                   }`}
                   key={entry.conversationKey}
                 >
@@ -295,16 +295,16 @@ function ChatHistory({
                     onClick={() => onOpen(entry.conversationKey)}
                     type="button"
                   >
-                    <span className="block truncate text-[0.82rem] font-medium text-slate-900">
+                    <span className="block truncate text-[0.82rem] font-medium text-ink">
                       {entry.title}
                     </span>
-                    <span className="mt-0.5 block text-[0.66rem] text-slate-500">
+                    <span className="mt-0.5 block text-[0.66rem] text-muted">
                       {historyTime(entry.updatedAt)}
                     </span>
                   </button>
                   <button
                     aria-label={`Remove ${entry.title} from history`}
-                    className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-400 opacity-70 transition-colors hover:bg-white hover:text-slate-900 group-hover:opacity-100"
+                    className="grid size-8 shrink-0 place-items-center rounded-lg text-faint opacity-70 transition-colors hover:bg-paper hover:text-ink group-hover:opacity-100"
                     onClick={() => onRemove(entry.conversationKey)}
                     type="button"
                   >
@@ -319,7 +319,7 @@ function ChatHistory({
 
       {entries.length > 0 ? (
         <button
-          className="mt-3 self-start px-2 py-2 text-xs font-medium text-slate-500 hover:text-slate-950"
+          className="mt-3 self-start px-2 py-2 text-xs font-medium text-muted hover:text-ink"
           onClick={onClear}
           type="button"
         >
@@ -431,10 +431,10 @@ export function DolphinClient({
       <div aria-hidden className={styles.grid} />
 
       <section className="relative z-10 flex min-h-0 min-w-0 flex-col">
-        <header className="relative flex min-h-16 items-center justify-between gap-2.5 border-b border-slate-200/65 bg-white/45 px-4 backdrop-blur-sm">
+        <header className="relative flex min-h-16 items-center justify-between gap-2.5 border-b border-line/65 bg-paper/45 px-4 backdrop-blur-sm">
           <Link
             aria-label="Back to Discover"
-            className="grid size-10 place-items-center rounded-full text-slate-950 no-underline transition-colors hover:bg-white/80"
+            className="grid size-10 place-items-center rounded-full text-ink no-underline transition-colors hover:bg-paper/80"
             href="/"
           >
             <svg aria-hidden fill="none" height="20" viewBox="0 0 24 24" width="20">
@@ -450,7 +450,7 @@ export function DolphinClient({
 
           <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
             <BrandMark size={20} />
-            <span className="text-sm font-semibold text-slate-950">Dolphin</span>
+            <span className="text-sm font-semibold text-ink">Dolphin</span>
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -476,11 +476,11 @@ export function DolphinClient({
               */}
             {wallet.isConnected && wallet.address ? (
               <Link
-                className="hidden items-center gap-1.5 rounded-full border border-slate-300/80 bg-white/75 px-3 py-1.5 text-[12px] font-semibold text-slate-700 no-underline transition-colors hover:bg-white sm:inline-flex"
+                className="hidden items-center gap-1.5 rounded-full border border-line/80 bg-paper/75 px-3 py-1.5 text-[12px] font-semibold text-ink-soft no-underline transition-colors hover:bg-paper sm:inline-flex"
                 href="/wallet"
                 title={wallet.address}
               >
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-600" />
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-success" />
                 <span className="font-mono">{shortWalletAddress(wallet.address)}</span>
               </Link>
             ) : (
@@ -496,7 +496,7 @@ export function DolphinClient({
             )}
             <button
               aria-label="Open chat history"
-              className="grid size-10 place-items-center rounded-full text-slate-700 transition-colors hover:bg-white/80 lg:hidden"
+              className="grid size-10 place-items-center rounded-full text-ink-soft transition-colors hover:bg-paper/80 lg:hidden"
               onClick={() => setHistoryOpen(true)}
               type="button"
             >
@@ -504,7 +504,7 @@ export function DolphinClient({
             </button>
             {!isEmpty ? (
               <button
-                className="rounded-full px-3 py-2 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-white/80 hover:text-slate-950"
+                className="rounded-full px-3 py-2 text-[13px] font-semibold text-ink-soft transition-colors hover:bg-paper/80 hover:text-ink"
                 onClick={startNew}
                 type="button"
               >
@@ -522,20 +522,20 @@ export function DolphinClient({
               </div>
             ) : conversationKey && !exists ? (
               <div className="flex flex-col items-center gap-2 pt-[18vh] text-center">
-                <h1 className="text-base font-semibold text-slate-950">
+                <h1 className="text-base font-semibold text-ink">
                   Conversation unavailable
                 </h1>
-                <p className="max-w-sm text-sm text-slate-500">
+                <p className="max-w-sm text-sm text-muted">
                   This locally saved chat can no longer be opened.
                 </p>
               </div>
             ) : isEmpty ? (
               <div className="dolphin-empty-hero flex flex-col items-center pt-[14vh]">
                 <BrandMark size={48} />
-                <h1 className="mt-4 text-center text-[1.6rem] font-semibold tracking-tight text-slate-950">
+                <h1 className="mt-4 text-center text-[1.6rem] font-semibold tracking-tight text-ink">
                   Ask the marketplace
                 </h1>
-                <p className="mt-2 max-w-md text-center text-sm text-slate-500">
+                <p className="mt-2 max-w-md text-center text-sm text-muted">
                   Autonomous agent intelligence on BNB Chain. Ask questions, compare strategies, or inspect live contract telemetry.
                 </p>
                 {/*
@@ -553,7 +553,7 @@ export function DolphinClient({
                     : STARTER_PROMPTS
                   ).map((samplePrompt) => (
                     <button
-                      className="rounded-full border border-slate-300/80 bg-white/75 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-white hover:text-slate-950"
+                      className="rounded-full border border-line/80 bg-paper/75 px-3.5 py-1.5 text-xs font-medium text-ink-soft shadow-sm transition hover:border-line-strong hover:bg-paper hover:text-ink"
                       key={samplePrompt}
                       onClick={() => submit(samplePrompt)}
                       type="button"
@@ -577,7 +577,7 @@ export function DolphinClient({
             )}
 
             {sendError ? (
-              <p className="mt-4 text-[0.85rem] text-slate-900">{sendError}</p>
+              <p className="mt-4 text-[0.85rem] text-ink">{sendError}</p>
             ) : null}
             <div ref={bottomRef} />
           </div>
@@ -591,10 +591,10 @@ export function DolphinClient({
               submit(draft);
             }}
           >
-            <div className="flex w-full flex-col items-end rounded-[1.65rem] border border-slate-300/90 bg-white/88 p-2 shadow-[0_12px_38px_rgba(15,23,42,0.11)] backdrop-blur-xl">
+            <div className="flex w-full flex-col items-end rounded-[1.65rem] border border-line/90 bg-paper/88 p-2 shadow-[0_12px_38px_rgba(15,23,42,0.11)] backdrop-blur-xl">
               <textarea
                 aria-label="Message Dolphin"
-                className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-slate-950 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-slate-400"
+                className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-faint"
                 onChange={(event) => {
                   setDraft(event.target.value);
                   event.target.style.height = "auto";
@@ -614,13 +614,13 @@ export function DolphinClient({
               />
               <button
                 aria-label="Send"
-                className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-950 text-white transition-[opacity,transform] hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-30"
+                className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-canvas transition-[opacity,transform] hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-30"
                 disabled={draft.trim().length === 0 || isSending}
                 type="submit"
               >
                 <svg
                   aria-hidden
-                  className="text-white"
+                  className="text-canvas"
                   fill="none"
                   height="15"
                   viewBox="0 0 24 24"
@@ -655,7 +655,7 @@ export function DolphinClient({
         <div className="fixed inset-0 z-30 flex justify-end lg:hidden">
           <button
             aria-label="Close chat history"
-            className="absolute inset-0 bg-slate-950/25 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]"
             onClick={() => setHistoryOpen(false)}
             type="button"
           />

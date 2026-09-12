@@ -6,19 +6,54 @@
 .mobile-agent-row,
 .mobile-discover-hero { display: none; }
 
-@media (max-width: 767px) {
-  :root {
+/*
+ * THE MOBILE PALETTE IS LIGHT-ONLY, AND SAYS SO. (2026-09-12)
+ *
+ * This block re-declares the colour tokens at the phone breakpoint to get a
+ * slightly cooler, nearer-white ground than the desktop canvas. Two things
+ * were wrong with it as written:
+ *
+ * 1. It was not guarded, so it fought the dark palette in globals.css. It only
+ *    lost by an accident of specificity - `:root:not([data-theme="light"])` is
+ *    (0,2,0) against this rule's (0,1,0). Depending on that is how a later
+ *    edit silently reintroduces a white page in dark mode, so the guard is now
+ *    explicit and the ordering no longer matters.
+ *
+ * 2. It quietly reverted the contrast fix documented in globals.css. Measured
+ *    against this block's own grounds (canvas #fbf9f4, paper #fff,
+ *    paper-muted #f5f3eb):
+ *
+ *      --muted      #6e706b   4.76 / 5.01 / 4.51   passes, by 0.01
+ *      --accent-ink #946b00   4.58 / 4.81 / 4.33   FAILS on paper-muted
+ *
+ *    --accent-ink carries every eyebrow on the site. Both are now measured
+ *    against the same three grounds:
+ *
+ *      --accent-ink #7d5a00   5.99 / 6.30 / 5.67
+ *      --muted      #5f6058   6.05 / 6.36 / 5.73   (matches desktop)
+ *
+ *    Each clears 4.5:1 with room rather than by a rounding error. There is no
+ *    design reason the phone needs a lighter grey than the desktop; the values
+ *    had simply drifted apart.
+ */
+@media (max-width: 767px) and (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
     --canvas: #fbf9f4;
     --paper: #fff;
     --paper-muted: #f5f3eb;
     --ink: #111214;
     --ink-soft: #303236;
-    --muted: #6e706b;
+    --muted: #5f6058;
     --line: #ece8de;
     --accent: #f5b300;
     --accent-hover: #e2a500;
     --accent-soft: #fef5d6;
-    --accent-ink: #946b00;
+    --accent-ink: #7d5a00;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
     --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
 
@@ -40,7 +75,7 @@
     display: inline-flex; width: 38px; height: 38px; flex: 0 0 38px;
     align-items: center; justify-content: center; border: 1px solid var(--line);
     border-radius: 999px; background: var(--paper); text-decoration: none;
-    box-shadow: 0 2px 8px #1112140a;
+    box-shadow: var(--shadow-soft);
   }
 
   .mobile-brand-header { display: block; padding: 12px 24px; }
@@ -214,7 +249,7 @@
   .mobile-promo-rail { display: flex; gap: 16px; padding: 8px 16px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .mobile-promo-card {
     display: flex; flex: 0 0 calc(90vw - 16px); height: 180px; align-items: end;
-    padding: 16px; border: 1px solid #0000000a; border-radius: 16px;
+    padding: 16px; border: 1px solid var(--line); border-radius: 16px;
     background-size: cover; background-position: center; color: #fff;
     text-decoration: none; scroll-snap-align: start; scroll-margin-left: 16px;
   }
@@ -231,7 +266,7 @@
   .mobile-search-field > button:last-child { width: 42px; height: 42px; }
   .mobile-category-rail { margin-top: 10px; gap: 8px; border: 0; padding-block: 2px; }
   .mobile-category-rail > button { min-height: 34px; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); font-size: 12px; line-height: 18px; }
-  .mobile-category-rail > button[aria-pressed="true"] { background: var(--accent); border-color: #f3e3a6; color: var(--ink); font-weight: 700; }
+  .mobile-category-rail > button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent-hover); color: var(--ink); font-weight: 700; }
   .mobile-category-rail > button > span { display: none; }
   .mobile-search-results { padding-top: 4px; }
   .mobile-results-header { padding-bottom: 10px; border: 0; }
@@ -246,7 +281,7 @@
   .mobile-history-row { display: flex; align-items: center; justify-content: space-between; min-height: 44px; gap: 12px; }
   .mobile-history-row > button:first-child { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; text-align: left; font-size: 13.5px; }
   .mobile-history-row > button:last-child { padding: 10px; }
-  .mobile-active-filter { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; padding: 4px 9px; border: 1px solid #f3e3a6; border-radius: 999px; background: var(--accent-soft); font-size: 11.5px; font-weight: 600; }
+  .mobile-active-filter { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; padding: 4px 9px; border: 1px solid var(--accent-hover); border-radius: 999px; background: var(--accent-soft); font-size: 11.5px; font-weight: 600; }
 
   .mobile-page-heading { padding: 8px 24px 12px; }
   .mobile-page-heading h1 { font-size: 32px; font-weight: 700; letter-spacing: -.6px; line-height: 40px; }
@@ -284,7 +319,7 @@
   .mobile-wallet-actions > * { display: flex; width: 84px; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; text-decoration: none; }
   .mobile-wallet-actions span { display: grid; place-items: center; width: 64px; height: 64px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); }
   .mobile-wallet-accounts { display: grid; gap: 12px; margin-top: 24px; }
-  .mobile-account-card { display: block; min-height: 140px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); text-decoration: none; box-shadow: 0 2px 8px #1112140a; }
+  .mobile-account-card { display: block; min-height: 140px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); text-decoration: none; box-shadow: var(--shadow-soft); }
   .mobile-account-card header { display: flex; align-items: center; gap: 10px; }
   .mobile-account-card__icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 18px; background: var(--paper-muted); }
   .mobile-account-card header > div { flex: 1; min-width: 0; }
@@ -325,7 +360,7 @@
   .mobile-detail-identity p { margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--ink-soft); }
   .mobile-detail-identity p > span { font-size: 12px; font-weight: 500; }
   .mobile-detail-tagline { margin-top: 14px; font-size: 14.5px; font-weight: 500; line-height: 21px; }
-  .mobile-detail-action { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 24px; background: var(--paper); box-shadow: 0 2px 8px #11121405; }
+  .mobile-detail-action { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 24px; background: var(--paper); box-shadow: var(--shadow-soft); }
   .mobile-detail-action > div > p { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--ink-soft); }
   .mobile-detail-action h2 { margin-top: 2px; font-size: 18px; font-weight: 900; }
   .mobile-detail-action > button { width: 100%; margin-top: 14px; }
@@ -363,10 +398,10 @@
   .mobile-onboarding-rail small { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent-ink); }
   .mobile-onboarding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
   .mobile-onboarding-grid article { padding: 16px; border: 1px solid var(--line); border-radius: 24px; background: var(--paper); }
-  .mobile-onboarding-grid article > span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 16px; background: #eaf1fb; }
-  .mobile-onboarding-grid article:nth-child(2) > span { background: #faf5e6; }
-  .mobile-onboarding-grid article:nth-child(3) > span { background: #f9f3f0; }
-  .mobile-onboarding-grid article:nth-child(4) > span { background: #f0f7f2; }
+  .mobile-onboarding-grid article > span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 16px; background: var(--info-soft); }
+  .mobile-onboarding-grid article:nth-child(2) > span { background: var(--accent-soft); }
+  .mobile-onboarding-grid article:nth-child(3) > span { background: var(--danger-soft); }
+  .mobile-onboarding-grid article:nth-child(4) > span { background: var(--success-soft); }
   .mobile-onboarding-grid h3 { margin-top: 12px; font-size: 15px; font-weight: 700; }
   .mobile-onboarding-grid p { margin-top: 4px; font-size: 12px; line-height: 16px; }
   .mobile-onboarding-grid--compact article { text-align: center; border-radius: 16px; }
@@ -381,7 +416,7 @@
   .mobile-onboarding > footer { padding: 8px 24px max(32px, env(safe-area-inset-bottom)); text-align: center; }
   .mobile-onboarding-dots { display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; }
   .mobile-onboarding-dots button { display: grid; place-items: center; min-width: 18px; height: 24px; }
-  .mobile-onboarding-dots span { width: 8px; height: 8px; border-radius: 999px; background: #dcd8cd; }
+  .mobile-onboarding-dots span { width: 8px; height: 8px; border-radius: 999px; background: var(--line-strong); }
   .mobile-onboarding-dots button[aria-current] span { width: 24px; height: 10px; background: var(--accent); }
   .mobile-onboarding-continue { display: flex; width: 100%; min-height: 52px; align-items: center; justify-content: center; gap: 10px; border-radius: 16px; background: var(--accent); font-size: 16px; font-weight: 700; }
   .mobile-onboarding-back { margin-top: 10px; padding: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }

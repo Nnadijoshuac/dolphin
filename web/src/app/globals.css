@@ -434,94 +434,150 @@ textarea:focus-visible {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   WALLET PAGE DESIGN SYSTEM
+   WALLET — a physical surface
    ═══════════════════════════════════════════════════════════════
 
-   Rewritten 2026-09-12 alongside components/altana-wallet-panel.tsx.
+   Rewritten 2026-09-12 against "too stiff — think skeuomorphism", with
+   "little is more" as the constraint that stops it becoming costume.
 
-   Roughly 150 lines of orphaned rules were removed in the same pass —
-   .wallet-setup__*, .wallet-balance-card__*, .wallet-divider,
-   .wallet-status-badge, .wallet-live-dot, .wallet-meta-row, .wcard__footer,
-   .wcard__addr-pill, .wcard__title, .wcard__sub, .wcard__ext-link,
-   .wcard__hero-balance and friends. None of them had a single call site left
-   in src/**. They are not kept "just in case": dead CSS in a file this size is
-   how the next person ends up styling against a class nothing renders.
+   ── The four materials, and nothing else ────────────────────────
+   Everything on this screen is one of four things, and each has exactly one
+   recipe. A fifth material is how a page starts looking busy.
 
-   Three rules govern everything below:
+   1. RAISED  — the hero, cards, the switch key. Sits above the page. Light
+                falls from above, so: a 1px inner highlight along the TOP edge,
+                a tight contact shadow, and a wider ambient one.
+   2. SUNK    — the balance readout, the address block, the QR plate's well.
+                Cut into the surface. The same two cues INVERTED: inner shadow
+                at the top, inner highlight at the bottom.
+   3. PRESSED — the transient state of anything raised while the pointer is
+                down. It genuinely travels: 1px of translate plus the raised
+                cue swapped for the sunk one. That swap is the entire trick,
+                and it is why these read as buttons rather than as rectangles
+                that change colour.
+   4. FLAT    — text, icons, dividers. No depth at all. Most of the screen.
 
-   1. ONE elevation cue per element. A hairline border OR a shadow, never a
-      hairline sitting under a wide soft shadow — that reads as a rendering
-      artefact rather than as depth. The hero is the single raised surface on
-      the page; cards are bordered and flat.
-   2. Radii are 12px for cards and 10px for controls. Pills are reserved for
-      things that are genuinely pill-shaped: the network chip, the badge.
-   3. Every number that a person compares against another number is
-      tabular-nums. Balances that jump a pixel left and right as they refresh
-      are the cheapest possible tell that a wallet is not serious.
+   ── Why any of this ─────────────────────────────────────────────
+   Depth here is not decoration, it is a claim about behaviour: raised means
+   you can press it, sunk means you cannot. Applying either to something that
+   does not do what it claims is the failure mode of skeuomorphism, so nothing
+   inert is raised and nothing pressable is flat.
 
-   Amber (--accent) is this palette's WARNING colour as well as its brand
-   colour, which is why the agent card no longer carries an amber wash: a card
-   that is permanently tinted the same shade as the "not recoverable" banner
-   reads as permanently alarmed. The card is distinguished by a 2px top rail
-   and its avatar instead — present, not shouting.
+   ── Light and dark ──────────────────────────────────────────────
+   The highlight is white at low alpha and the shadow is black at low alpha, in
+   BOTH themes. What changes is only how much of each: on the dark ground a
+   white edge reads as a lit bevel and needs to be brighter, while shadows have
+   nothing left to darken and are pulled back. Hence --lift-* below, redefined
+   once per theme, and used everywhere instead of literal rgba.
+
+   ── Reduced motion ──────────────────────────────────────────────
+   Nothing here animates on its own. The only motion is the press, which is
+   direct response to input, and the global prefers-reduced-motion rule already
+   collapses its duration.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── Shared primitives ── */
+:root {
+  /* Light catching a top edge. */
+  --lift-edge: rgb(255 255 255 / 78%);
+  /* Contact shadow — tight, directly under the object. */
+  --lift-contact: rgb(23 24 19 / 10%);
+  /* Ambient shadow — wide, soft, the room's own light. */
+  --lift-ambient: rgb(23 24 19 / 8%);
+  /* The inside of a cut surface. */
+  --sink-top: rgb(23 24 19 / 9%);
+  --sink-bottom: rgb(255 255 255 / 70%);
+  /* A surface with a hint of vertical fall-off, so it is not a flat fill. */
+  --sheen: linear-gradient(180deg, rgb(255 255 255 / 55%) 0%, rgb(255 255 255 / 0%) 46%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --lift-edge: rgb(255 255 255 / 9%);
+    --lift-contact: rgb(0 0 0 / 40%);
+    --lift-ambient: rgb(0 0 0 / 34%);
+    --sink-top: rgb(0 0 0 / 42%);
+    --sink-bottom: rgb(255 255 255 / 5%);
+    --sheen: linear-gradient(180deg, rgb(255 255 255 / 5%) 0%, rgb(255 255 255 / 0%) 52%);
+  }
+}
+
+:root[data-theme="dark"] {
+  --lift-edge: rgb(255 255 255 / 9%);
+  --lift-contact: rgb(0 0 0 / 40%);
+  --lift-ambient: rgb(0 0 0 / 34%);
+  --sink-top: rgb(0 0 0 / 42%);
+  --sink-bottom: rgb(255 255 255 / 5%);
+  --sheen: linear-gradient(180deg, rgb(255 255 255 / 5%) 0%, rgb(255 255 255 / 0%) 52%);
+}
+
+/* ═══════════════ shared primitives ═══════════════ */
 
 .wallet-loading { max-width: 640px; }
+.wallet-dashboard { display: flex; flex-direction: column; gap: 1.5rem; }
 
-.wallet-dashboard { display: flex; flex-direction: column; gap: 1.75rem; }
-
-.wallet-action-btn {
+/* ── Button ──
+   Raised at rest, travels on press. :active swaps the lift recipe for the sink
+   one, which is what makes it feel like a key rather than a rectangle. */
+.wallet-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  min-height: 2.75rem;
   width: 100%;
-  padding-inline: 1.25rem;
+  min-height: 2.625rem;
+  padding-inline: 1.125rem;
+  border: 1px solid var(--line);
   border-radius: 0.625rem;
-  font-size: 0.85rem;
+  background-image: var(--sheen);
+  font-size: 0.84rem;
   font-weight: 650;
   letter-spacing: -0.01em;
+  box-shadow:
+    inset 0 1px 0 var(--lift-edge),
+    0 1px 2px var(--lift-contact);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 90ms ease;
 }
-.wallet-action-btn:disabled { cursor: wait; opacity: 0.55; }
-.wallet-action-btn--accent { background: var(--accent); color: var(--ink); }
-.wallet-action-btn--accent:hover:not(:disabled) { background: var(--accent-hover); }
-.wallet-action-btn--ghost {
-  border: 1px solid var(--line);
-  background: var(--paper);
-  color: var(--ink);
+.wallet-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px var(--sink-top);
 }
-.wallet-action-btn--ghost:hover:not(:disabled) { border-color: var(--line-strong); background: var(--canvas); }
-.wallet-action-btn--danger { background: var(--danger-soft); color: var(--danger); }
-.wallet-action-btn--danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.wallet-btn:disabled { cursor: not-allowed; opacity: 0.5; box-shadow: none; }
 
-.wallet-copy-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.7rem;
-  font-weight: 650;
-  color: var(--muted);
+.wallet-btn--accent {
+  border-color: color-mix(in srgb, var(--accent) 70%, #000);
+  background-color: var(--accent);
+  color: #2a1f00;
 }
-.wallet-copy-btn:hover { background: var(--canvas); color: var(--ink); }
+.wallet-btn--accent:hover:not(:disabled) { background-color: var(--accent-hover); }
 
-.wallet-error-banner {
-  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
-  border-radius: 0.75rem;
-  background: var(--danger-soft);
-  padding: 0.75rem 1rem;
-  font-size: 0.8rem;
-  line-height: 1.55;
+.wallet-btn--ghost { background-color: var(--paper); color: var(--ink); }
+.wallet-btn--ghost:hover:not(:disabled) {
+  background-color: var(--paper-strong);
+  border-color: var(--line-strong);
+}
+
+.wallet-btn--danger {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+  background-color: var(--danger-soft);
   color: var(--danger);
 }
+.wallet-btn--danger:hover:not(:disabled) { background-color: var(--danger); color: #fff; }
 
-.wallet-inline-error { font-size: 0.75rem; line-height: 1.55; color: var(--danger); }
+.wallet-error-banner {
+  margin-top: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: 0.625rem;
+  background: var(--danger-soft);
+  padding: 0.625rem 0.875rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--danger);
+}
+.wallet-inline-error { margin-top: 0.4rem; font-size: 0.74rem; line-height: 1.5; color: var(--danger); }
 
 .wallet-count-badge {
   border-radius: 99px;
@@ -531,118 +587,207 @@ textarea:focus-visible {
   font-weight: 700;
   color: var(--muted);
   flex-shrink: 0;
+  box-shadow: inset 0 1px 2px var(--sink-top);
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   HERO — the total, the network, the actions
-   ═══════════════════════════════════════════════════════════════
-
-   The page's entry point and the only raised surface on it. Everything here
-   exists to answer "how much do I have, on what chain, and what can I do with
-   it" before the eye reaches anything else.
-
-   The figure is one size at every breakpoint band rather than free-scaling
-   text, and it is tabular so that "0.004821" and "0.004822" occupy exactly the
-   same pixels. A balance that shifts horizontally as it settles looks like a
-   glitch even when the number is right.
-   ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════ HERO ═══════════════
+   The only raised surface on the page, and the page's entry point. */
 
 .wallet-hero {
   position: relative;
-  overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 1rem;
-  background:
-    radial-gradient(
-      120% 140% at 100% 0%,
-      color-mix(in srgb, var(--accent-soft) 55%, transparent) 0%,
-      transparent 58%
-    ),
-    var(--paper-strong);
-  box-shadow: var(--shadow-soft);
-  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border-radius: 1.125rem;
+  background-color: var(--paper-strong);
+  background-image: var(--sheen);
+  padding: clamp(1.375rem, 3vw, 1.875rem);
+  box-shadow:
+    inset 0 1px 0 var(--lift-edge),
+    0 1px 2px var(--lift-contact),
+    0 14px 34px -10px var(--lift-ambient);
 }
 
 .wallet-hero__head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
 }
 
-.wallet-hero__heading {
-  margin-top: 0.3rem;
-  font-size: 1.05rem;
+/* ── Network chip ── */
+.wnet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background-color: var(--paper);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.72rem;
   font-weight: 650;
-  letter-spacing: -0.025em;
   color: var(--ink);
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact);
+}
+.wnet__dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success) 22%, transparent);
 }
 
-.wallet-hero__figure {
+/* ── The readout ──
+   Sunk into the hero, like a display window set into a case. This is the one
+   place a "screen" metaphor is honest: it shows a number and you cannot press
+   it. The controls sit INSIDE the well, on its right, which is also why the
+   well is a flex row. */
+.wallet-readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.875rem;
+  background: var(--canvas);
+  padding: 1.125rem 1.25rem;
+  box-shadow:
+    inset 0 2px 5px var(--sink-top),
+    inset 0 -1px 0 var(--sink-bottom);
+}
+
+/* LETTER-SPACING: the figures were at -0.055em and the digits genuinely
+   collided — a "0.0243" read as one smeared token. Money is now at +0.005em,
+   marginally OPEN rather than tight. Tight tracking is a display-type trick
+   and it is exactly wrong on numerals, which have no shapes to interlock and
+   are read digit by digit. tabular-nums on top, so the figure does not shuffle
+   sideways as it refreshes. */
+.wallet-readout__figure {
   display: flex;
   align-items: baseline;
+  gap: 0.45rem;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.875rem;
-  font-size: clamp(2.5rem, 6vw, 3.75rem);
-  font-weight: 680;
-  letter-spacing: -0.055em;
-  line-height: 1;
+  min-width: 0;
+  font-size: clamp(2.1rem, 5vw, 3rem);
+  font-weight: 660;
+  letter-spacing: 0.005em;
+  line-height: 1.05;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
-/* The non-answer. Set well below the figure's size and in muted ink so it can
-   never be read as a balance, and as a word rather than a mark so it can never
-   be read as a loading skeleton — an em-dash at the figure's size is a 60px
-   bar, which is exactly what it looked like. Same top margin as the figure, so
-   the hero does not jump when a real number replaces it. */
-.wallet-hero__placeholder {
-  margin-top: 0.875rem;
-  font-size: 1.5rem;
+.wallet-readout__unit {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+/* The non-answer: a word, well below the figure's size, in muted ink. Never a
+   mark — an em-dash at figure size is a 60px bar that reads as a skeleton. */
+.wallet-readout__placeholder {
+  font-size: 1.375rem;
   font-weight: 620;
-  letter-spacing: -0.03em;
-  line-height: 1;
+  letter-spacing: -0.015em;
   color: var(--faint);
 }
 
-.wallet-hero__unit {
-  font-size: 1.05rem;
-  font-weight: 550;
-  letter-spacing: -0.01em;
-  color: var(--muted);
+.wallet-readout__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
-.wallet-hero__eye {
-  align-self: center;
+/* ── Currency switch ──
+   A physical two-position selector: a sunk track with one raised key that
+   slides between the slots. The key is a real element rather than a background
+   on the active button, so it can travel — which is what tells you the two
+   options are one control and not two buttons. */
+.wallet-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   border: 1px solid var(--line);
-  border-radius: 99px;
-  padding: 0.2rem 0.7rem;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--muted);
+  border-radius: 0.5rem;
+  background: var(--paper-muted);
+  padding: 0.1875rem;
+  box-shadow: inset 0 1px 3px var(--sink-top);
 }
-.wallet-hero__eye:hover { background: var(--canvas); color: var(--ink); }
+.wallet-switch__key {
+  position: absolute;
+  z-index: 0;
+  top: 0.1875rem;
+  bottom: 0.1875rem;
+  left: 0.1875rem;
+  width: calc(50% - 0.1875rem);
+  border-radius: 0.375rem;
+  background-color: var(--paper-strong);
+  background-image: var(--sheen);
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact);
+  transition: transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.wallet-switch[data-active="usd"] .wallet-switch__key { transform: translateX(100%); }
+
+.wallet-switch__opt {
+  position: relative;
+  z-index: 1;
+  min-width: 2.75rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  transition: color 140ms ease;
+}
+.wallet-switch__opt[aria-pressed="true"] { color: var(--ink); }
+.wallet-switch__opt:disabled { cursor: not-allowed; opacity: 0.45; }
+
+/* ── Hide/show ──
+   Icon only. A label reading "Hide" beside an eye is explaining a light
+   switch. Square, so it reads as a key rather than as a word-shaped button. */
+.wallet-eye {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background-color: var(--paper-strong);
+  background-image: var(--sheen);
+  color: var(--muted);
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact);
+  transition: color 140ms ease, box-shadow 140ms ease, transform 90ms ease;
+}
+.wallet-eye:hover { color: var(--ink); }
+.wallet-eye:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px var(--sink-top);
+}
+.wallet-eye[aria-pressed="true"] {
+  color: var(--accent-ink);
+  box-shadow: inset 0 2px 4px var(--sink-top);
+}
 
 .wallet-hero__caption {
-  margin-top: 0.625rem;
-  max-width: 62ch;
-  font-size: 0.8rem;
-  line-height: 1.6;
+  margin-top: 0.75rem;
+  max-width: 60ch;
+  font-size: 0.78rem;
+  line-height: 1.55;
   color: var(--muted);
 }
 
-/* The action row never changes height or count between states — a disabled
-   action still occupies its slot, so the hero does not reflow as accounts
-   connect. */
+/* ── Quick actions ──
+   Icon then one word, on one line. The row keeps its three slots in every
+   state so the hero does not reflow as accounts connect. */
 .wallet-hero__actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.625rem;
-  margin-top: 1.5rem;
-  max-width: 30rem;
+  gap: 0.5rem;
+  margin-top: 1.125rem;
+  max-width: 28rem;
 }
 
 .wallet-quick {
@@ -650,94 +795,74 @@ textarea:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  min-height: 2.875rem;
+  min-height: 2.75rem;
   padding-inline: 0.5rem;
   border: 1px solid var(--line);
   border-radius: 0.625rem;
-  background: var(--paper);
-  color: var(--ink);
-  text-decoration: none;
-}
-.wallet-quick:hover:not(:disabled) {
-  background: var(--canvas);
-  border-color: var(--line-strong);
-}
-.wallet-quick:disabled { opacity: 0.45; cursor: not-allowed; }
-.wallet-quick__icon { display: flex; color: var(--muted); }
-.wallet-quick:hover:not(:disabled) .wallet-quick__icon { color: var(--accent-ink); }
-.wallet-quick__label {
+  background-color: var(--paper);
+  background-image: var(--sheen);
   font-size: 0.8rem;
   font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-/* ── Network chip ──
-   A pill, not 0.7rem grey text in a gap between sections. Which chain an
-   address belongs to is the fact that decides whether sending to it loses the
-   money; it is not a footnote. */
-.wnet-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-shrink: 0;
-  border: 1px solid var(--line);
-  border-radius: 99px;
-  background: var(--paper);
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 650;
   color: var(--ink);
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 90ms ease;
 }
-.wnet-chip__dot {
-  width: 0.4375rem;
-  height: 0.4375rem;
-  border-radius: 50%;
-  background: var(--success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
+.wallet-quick:hover:not(:disabled) {
+  background-color: var(--paper-strong);
+  border-color: var(--line-strong);
 }
-.wnet-chip__id {
-  padding-left: 0.4rem;
-  border-left: 1px solid var(--line);
-  font-size: 0.68rem;
-  font-weight: 500;
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
+.wallet-quick:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px var(--sink-top);
 }
+.wallet-quick:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
+.wallet-quick__icon { display: flex; color: var(--muted); }
+.wallet-quick:hover:not(:disabled) .wallet-quick__icon { color: var(--accent-ink); }
 
-/* ═══════════════════════════════════════════════════════════════
-   ACCOUNT CARDS
-   ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════ ACCOUNT CARDS ═══════════════ */
 
-.wallet-dual-section {
+.wallet-accounts {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  align-items: stretch;
+  gap: 0.875rem;
 }
 @media (max-width: 800px) {
-  .wallet-dual-section { grid-template-columns: 1fr; }
+  .wallet-accounts { grid-template-columns: 1fr; }
 }
-/* No single-column modifier, deliberately. Both slots are always rendered -
-   each card owns its own empty/prompt state - so the grid keeps two equal
-   columns regardless of what is connected. The shape of this screen is a
-   constant, not a function of wallet state. */
 
+/* FIXED HEIGHT, and that is the point.
+   The cards used to size to their contents, so the row changed shape as
+   balances arrived, as an error appeared, as a wallet was created — two panels
+   of different heights sitting beside each other, resizing on their own. A
+   card is an object; objects do not breathe. 16rem fits every state including
+   the two-control empty card, and `justify-content: space-between` pins the
+   footer to the bottom edge so the content above can vary without moving it. */
 .wcard {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  padding: 1.25rem;
+  min-height: 16rem;
+  padding: 1.125rem 1.25rem;
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  background: var(--paper-strong);
+  border-radius: 0.875rem;
+  background-color: var(--paper-strong);
+  background-image: var(--sheen);
   overflow: hidden;
-  transition: border-color 160ms ease;
+  box-shadow:
+    inset 0 1px 0 var(--lift-edge),
+    0 1px 2px var(--lift-contact),
+    0 8px 20px -8px var(--lift-ambient);
 }
 
-/* The 2px top rail is the whole distinction between the two cards, plus the
-   avatar. It replaces a full amber wash — see the note at the top of this
-   block on why a permanently tinted card was the wrong signal. */
+/* The 2px top rail is the entire distinction between the two cards, plus the
+   avatar. It replaced a full amber wash: amber is this palette's WARNING
+   colour as well as its brand colour, and a permanently tinted card reads as
+   permanently alarmed. */
 .wcard::before {
   content: "";
   position: absolute;
@@ -745,33 +870,22 @@ textarea:focus-visible {
   height: 2px;
   background: var(--line-strong);
 }
-.wcard--agent::before { background: var(--accent); }
-.wcard--empty::before { opacity: 0.4; }
-
-.wcard__top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+.wcard--agent::before {
+  background: linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 40%, transparent) 100%);
 }
+.wcard--empty { background-image: none; background-color: var(--paper); }
+.wcard--empty::before { opacity: 0.45; }
 
-.wcard__ident {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  min-width: 0;
-}
-.wcard__ident-text { min-width: 0; }
+.wcard__head { display: flex; align-items: center; gap: 0.625rem; }
+.wcard__head-text { min-width: 0; flex: 1; }
 .wcard__avatar {
   border-radius: 0.5rem;
   background: var(--canvas);
   border: 1px solid var(--line);
+  box-shadow: inset 0 1px 2px var(--sink-top);
 }
 
 .wcard__eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
   font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.11em;
@@ -780,13 +894,12 @@ textarea:focus-visible {
 }
 .wcard--agent .wcard__eyebrow { color: var(--accent-ink); }
 
-/* The truncated address is a BUTTON, because a truncated address is not an
-   address — it is a label for one. Clicking it opens the receive sheet, which
-   is where the full string, the copy control and the network warning live. */
-.wcard__addr-btn {
+/* The address chip. A truncated address is not an address, it is a label for
+   one — so it is not a thing to copy, it is a thing to open. */
+.wcard__addr {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
   margin-top: 0.15rem;
   margin-left: -0.35rem;
   padding: 0.1rem 0.35rem;
@@ -794,149 +907,92 @@ textarea:focus-visible {
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.7rem;
   font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--faint);
+  transition: background-color 140ms ease, color 140ms ease;
 }
-.wcard__addr-btn:hover { background: var(--canvas); color: var(--ink); }
+.wcard__addr:hover { background: var(--canvas); color: var(--ink); }
 
 .wcard__badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
   flex-shrink: 0;
-  border-radius: 99px;
+  border-radius: 50%;
   background: var(--paper-muted);
-  padding: 0.25rem 0.6rem;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--muted);
+  box-shadow: inset 0 1px 2px var(--sink-top);
 }
 
-/* ── Card balance — deliberately SMALLER than the hero ──
-   Both cards used to carry a clamp(1.9rem, 4vw, 2.6rem) figure, side by side
-   and identical in weight, so the screen had two equal entry points and
-   therefore none. The total upstairs is the answer; these are the breakdown. */
-.wcard__balance-line {
+/* Card balances: smaller than the hero's, same open tracking, same tabular
+   figures. The hero answers "how much"; these are the breakdown. */
+/* margin-top is FIXED, not auto, and that is a bug fix rather than a taste
+   call. Both this and .wcard__foot used to be `margin-top: auto`, and two auto
+   margins in one flex column SPLIT the free space between them — so the card
+   with a footer pushed its balance up and the card without one pushed its
+   balance to the bottom. Two balances side by side, at different heights, in
+   cards that were otherwise identical. Only the footer floats now, so every
+   balance on this row sits on the same line. */
+.wcard__amount {
   display: flex;
   align-items: baseline;
   gap: 0.35rem;
-  margin-top: 0.5rem;
-  font-variant-numeric: tabular-nums;
-}
-.wcard__balance-figure {
-  font-size: 1.6rem;
-  font-weight: 680;
-  letter-spacing: -0.045em;
+  margin-top: 1.125rem;
+  font-size: 1.5rem;
+  font-weight: 660;
+  letter-spacing: 0.005em;
   line-height: 1.1;
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
-.wcard__balance-line--muted .wcard__balance-figure {
-  font-size: 1.15rem;
-  font-weight: 620;
-  color: var(--faint);
-}
-.wcard__balance-unit {
-  font-size: 0.78rem;
-  font-weight: 550;
+.wcard__amount--muted { font-size: 1.05rem; font-weight: 620; color: var(--faint); }
+.wcard__amount-unit {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--muted);
 }
 
-.wcard__hero-sub {
-  margin: 0.15rem 0 0;
-  font-size: 0.72rem;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-/* ── Empty / prompt state — same slot, same size, different content ── */
-.wcard--empty {
-  justify-content: flex-start;
-  background: var(--paper);
-}
-.wcard__empty-title {
-  margin: 0.5rem 0 0;
+.wcard__title {
+  margin-top: 0.5rem;
   font-size: 1rem;
   font-weight: 650;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
-.wcard__empty-body {
-  margin: 0.3rem 0 0;
-  font-size: 0.78rem;
-  line-height: 1.6;
+.wcard__sub {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.55;
   color: var(--muted);
 }
-.wcard__empty-action {
+
+/* The footer is pinned to the bottom by margin-top:auto on whichever element
+   precedes it, so a card with one control and a card with two still agree
+   about where their base is. */
+.wcard__foot {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
   margin-top: auto;
   padding-top: 1rem;
 }
-/* Tertiary: a text action under the bordered one, so the card offers a clear
-   first choice and a quieter second rather than two buttons of equal weight. */
-.wcard__empty-link {
+.wcard__link {
   align-self: center;
-  font-size: 0.75rem;
+  font-size: 0.73rem;
   font-weight: 600;
   color: var(--muted);
-  transition: color 160ms ease;
+  transition: color 140ms ease;
 }
-.wcard__empty-link:hover:not(:disabled) {
-  color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.wcard__empty-link:disabled { opacity: 0.5; cursor: wait; }
+.wcard__link:hover:not(:disabled) { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.wcard__link:disabled { opacity: 0.5; cursor: wait; }
 
-/* ── Asset list ── */
-.wcard__asset-list {
-  margin-top: auto;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--line);
-}
+/* ═══════════════ RECEIVE SHEET ═══════════════
 
-.wcard__asset-row {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 0 0.625rem;
-  padding: 0.5rem 0;
-}
-.wcard__asset-row + .wcard__asset-row { border-top: 1px solid var(--line); }
-.wcard__asset-icon { display: flex; align-items: center; justify-content: center; grid-row: 1 / 3; }
-.wcard__asset-name { font-size: 0.82rem; font-weight: 650; color: var(--ink); }
-.wcard__asset-sub { grid-column: 2; font-size: 0.68rem; color: var(--faint); margin-top: -0.15rem; }
-.wcard__asset-amount {
-  grid-column: 3;
-  grid-row: 1 / 3;
-  align-self: center;
-  text-align: right;
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.78rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Footer slot: whichever single control belongs to this account. */
-.wcard__connect {
-  margin-top: 0.875rem;
-  padding-top: 0.875rem;
-  border-top: 1px solid var(--line);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   RECEIVE SHEET
-   ═══════════════════════════════════════════════════════════════
-
-   Native <dialog>, so ::backdrop, Escape, focus containment and the top layer
-   are the platform's problem rather than ours. The element itself is reset to
-   nothing and .receive-sheet__panel is the visible card — otherwise the UA's
-   default border and max-width fight the layout.
-   ═══════════════════════════════════════════════════════════════ */
+   Native <dialog>, reset to nothing so the UA's border and max-width do not
+   fight the layout; .receive-sheet__panel is the visible object. */
 
 .receive-sheet {
   margin: auto;
@@ -949,257 +1005,217 @@ textarea:focus-visible {
   overflow: visible;
 }
 .receive-sheet::backdrop {
-  background: rgb(var(--scrim-canvas) / 72%);
-  backdrop-filter: blur(3px);
+  background: rgb(var(--scrim-canvas) / 70%);
+  backdrop-filter: blur(4px);
 }
 
 .receive-sheet__panel {
-  width: min(92vw, 26rem);
+  width: min(92vw, 23rem);
   border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: var(--paper-strong);
-  box-shadow: var(--shadow-float);
-  padding: 1.5rem;
+  border-radius: 1.125rem;
+  background-color: var(--paper-strong);
+  background-image: var(--sheen);
+  padding: 1.25rem;
+  box-shadow:
+    inset 0 1px 0 var(--lift-edge),
+    0 24px 60px -12px rgb(0 0 0 / 45%);
 }
 
 .receive-sheet__head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
 }
-.receive-sheet__avatar {
-  border-radius: 0.625rem;
-  background: var(--canvas);
-  border: 1px solid var(--line);
-}
-.receive-sheet__head-text { flex: 1; min-width: 0; }
 .receive-sheet__title {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   color: var(--ink);
-}
-.receive-sheet__note {
-  margin-top: 0.15rem;
-  font-size: 0.72rem;
-  line-height: 1.5;
-  color: var(--muted);
 }
 .receive-sheet__close {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 1.875rem;
-  height: 1.875rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
+  background-color: var(--paper);
   color: var(--muted);
+  box-shadow: inset 0 1px 0 var(--lift-edge);
+  transition: color 140ms ease, background-color 140ms ease, transform 90ms ease;
 }
-.receive-sheet__close:hover { background: var(--canvas); color: var(--ink); }
+.receive-sheet__close:hover { background-color: var(--canvas); color: var(--ink); }
+.receive-sheet__close:active { transform: translateY(1px); }
 
-.receive-sheet__qr-gap {
-  margin-top: 1.25rem;
-  border: 1px dashed var(--line-strong);
-  border-radius: 0.75rem;
-  background: var(--canvas);
-  padding: 0.875rem 1rem;
-  font-size: 0.72rem;
-  line-height: 1.6;
-  color: var(--muted);
+/* The QR sits on its own plate — a white card inside the sheet, which is also
+   the highest-contrast ground a camera can read it from. It stays light in
+   BOTH themes on purpose: dark-on-light is what scanners are tuned for, and a
+   code inverted for aesthetics is a code that takes three tries to scan. */
+.receive-sheet__plate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+  border-radius: 0.875rem;
+  background: #ffffff;
+  color: #12130f;
+  padding: 0.875rem;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 90%),
+    0 1px 2px var(--lift-contact),
+    0 8px 18px -8px var(--lift-ambient);
 }
 
-/* The address gets its own block at a readable size, breaking on characters
-   rather than being truncated. First-six and last-four are the segments people
-   are told to check, so they carry the ink and the middle recedes — the
-   comparison the user is actually asked to make is the one the type supports. */
+/* The address, sunk into the sheet. First six and last four carry the ink —
+   the groups people are told to check — and only the middle may break: a
+   break-all split the last four as "…Cd5" / "80d", across the exact group the
+   user is being asked to compare. */
 .receive-sheet__address {
   display: block;
-  margin-top: 1rem;
+  margin-top: 0.875rem;
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: 0.625rem;
   background: var(--canvas);
-  padding: 0.875rem 1rem;
+  padding: 0.75rem 0.875rem;
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.85rem;
-  line-height: 1.65;
-  letter-spacing: 0.02em;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  letter-spacing: 0.03em;
   word-break: break-all;
   user-select: all;
+  box-shadow: inset 0 1px 3px var(--sink-top);
 }
-/* nowrap on the edges is the point of the whole treatment. break-all applies
-   to the block, and it split the last four characters across two lines as
-   "…Cd5" / "80d" — which is precisely the group the user is being asked to
-   compare against what they paste. Only the middle may break. */
 .receive-sheet__address-edge { color: var(--ink); font-weight: 700; white-space: nowrap; }
 .receive-sheet__address-mid { color: var(--faint); font-weight: 400; }
 
-.receive-sheet__copy { margin-top: 0.875rem; }
+.receive-sheet__copy { margin-top: 0.75rem; }
 
+/* Reserved height, so the panel does not jump when the status line appears. */
 .receive-sheet__status {
-  min-height: 2.25rem;
-  margin-top: 0.5rem;
+  min-height: 1.5rem;
+  margin-top: 0.4rem;
   font-size: 0.72rem;
-  line-height: 1.5;
-  color: var(--muted);
+  line-height: 1.45;
+  color: var(--danger);
 }
 
 .receive-sheet__network {
   display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  border-radius: 0.625rem;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 0.5rem;
   background: var(--accent-soft);
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0.7rem;
   font-size: 0.72rem;
-  line-height: 1.55;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--accent-ink);
 }
-.receive-sheet__network > :first-child { flex-shrink: 0; margin-top: 0.15rem; }
 
-.receive-sheet__explorer {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin-top: 0.875rem;
-  font-size: 0.75rem;
-  font-weight: 650;
-  color: var(--muted);
-  text-decoration: none;
-}
-.receive-sheet__explorer:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+/* ═══════════════ NOTE STRIP ═══════════════
+   Recoverability. One row: icon, text, action. Flat — it states a fact, it is
+   not a thing you press. */
 
-/* ═══════════════════════════════════════════════════════════════
-   FUNDING / RECOVERABILITY
-   ═══════════════════════════════════════════════════════════════ */
-
-.wallet-fund-banner {
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
-  border-radius: 0.75rem;
-  background: var(--accent-soft);
-  padding: 1rem 1.125rem;
-}
-.wallet-recoverability .wallet-fund-banner {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 60%, var(--paper));
-}
-.wallet-fund-banner__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.wallet-fund-banner__title { font-size: 0.82rem; font-weight: 700; color: var(--accent-ink); }
-.wallet-fund-banner__address { display: block; margin-top: 0.5rem; font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.72rem; word-break: break-all; color: var(--ink); }
-.wallet-fund-banner__hint { margin-top: 0.375rem; font-size: 0.75rem; line-height: 1.55; color: var(--accent-ink); opacity: 0.8; }
-
-.wallet-recoverability {
+.wallet-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
   border: 1px solid var(--line);
   border-left: 3px solid var(--line-strong);
   border-radius: 0.75rem;
   background: var(--paper);
-  padding: 1rem 1.125rem;
+  padding: 0.875rem 1rem;
 }
-.wallet-recoverability--ok {
-  border-color: color-mix(in srgb, var(--success) 25%, var(--line));
+.wallet-note--ok {
+  border-color: color-mix(in srgb, var(--success) 22%, var(--line));
   border-left-color: var(--success);
-  background: color-mix(in srgb, var(--success-soft) 45%, var(--paper));
+  background: color-mix(in srgb, var(--success-soft) 40%, var(--paper));
 }
-.wallet-recoverability--warn {
-  border-color: color-mix(in srgb, var(--danger) 25%, var(--line));
+.wallet-note--warn {
+  border-color: color-mix(in srgb, var(--danger) 22%, var(--line));
   border-left-color: var(--danger);
-  background: color-mix(in srgb, var(--danger-soft) 45%, var(--paper));
+  background: color-mix(in srgb, var(--danger-soft) 40%, var(--paper));
 }
-.wallet-recoverability__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.wallet-recoverability__title { display: flex; align-items: center; gap: 0.45rem; font-size: 0.8rem; font-weight: 700; color: var(--ink); }
-.wallet-recoverability__icon { display: flex; }
-.wallet-recoverability--ok .wallet-recoverability__title { color: var(--success); }
-.wallet-recoverability--warn .wallet-recoverability__title { color: var(--danger); }
-.wallet-recoverability__recheck { font-size: 0.68rem; font-weight: 600; color: var(--muted); flex-shrink: 0; }
-.wallet-recoverability__recheck:hover:not(:disabled) { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-.wallet-recoverability__recheck:disabled { opacity: 0.5; }
-.wallet-recoverability__body { margin-top: 0.375rem; max-width: 78ch; font-size: 0.75rem; line-height: 1.6; color: var(--muted); }
-
-/* ═══════════════════════════════════════════════════════════════
-   SECTIONS — activity, permissions, device access
-   ═══════════════════════════════════════════════════════════════ */
-
-.wallet-section__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--line);
+.wallet-note__icon { display: flex; margin-top: 0.1rem; color: var(--muted); }
+.wallet-note--ok .wallet-note__icon { color: var(--success); }
+.wallet-note--warn .wallet-note__icon { color: var(--danger); }
+.wallet-note__body { flex: 1; min-width: 0; }
+.wallet-note__title { font-size: 0.8rem; font-weight: 700; color: var(--ink); }
+.wallet-note--ok .wallet-note__title { color: var(--success); }
+.wallet-note--warn .wallet-note__title { color: var(--danger); }
+.wallet-note__text { margin-top: 0.2rem; max-width: 72ch; font-size: 0.75rem; line-height: 1.55; color: var(--muted); }
+.wallet-note__action { margin-top: 0.75rem; max-width: 16rem; }
+.wallet-note__recheck {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  transition: color 140ms ease;
 }
-.wallet-section__title { margin-top: 0.375rem; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.04em; color: var(--ink); }
+.wallet-note__recheck:hover:not(:disabled) { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.wallet-note__recheck:disabled { opacity: 0.5; }
 
+/* ═══════════════ SECTIONS ═══════════════ */
+
+.wallet-section__header,
 .wallet-activity > header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding-bottom: 1rem;
+  padding-bottom: 0.875rem;
   border-bottom: 1px solid var(--line);
 }
+.wallet-section__title,
 .wallet-activity h2 {
-  margin-top: 0.375rem;
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   color: var(--ink);
 }
 .wallet-activity > header a {
   flex-shrink: 0;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 650;
   color: var(--muted);
   text-decoration: none;
 }
-.wallet-activity > header a:hover {
-  color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
+.wallet-activity > header a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 
 .wallet-activity-list { border-bottom: 1px solid var(--line); }
 .wallet-activity-row {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  padding-block: 0.875rem;
+  padding: 0.75rem 0.5rem;
+  margin-inline: -0.5rem;
   border-bottom: 1px solid var(--line);
+  border-radius: 0.5rem;
   text-decoration: none;
+  transition: background-color 140ms ease;
 }
 .wallet-activity-row:last-child { border-bottom: 0; }
 .wallet-activity-row:hover { background: var(--paper); }
-.wallet-activity-icon {
-  flex-shrink: 0;
-  border-radius: 0.625rem;
-  overflow: hidden;
-}
-.wallet-activity-icon > [aria-hidden="true"] {
-  display: block;
-}
-.wallet-activity-row > div {
-  flex: 1;
-  min-width: 0;
-}
+.wallet-activity-icon { flex-shrink: 0; border-radius: 0.625rem; overflow: hidden; }
+.wallet-activity-icon > [aria-hidden="true"] { display: block; }
+.wallet-activity-row > div { flex: 1; min-width: 0; }
 .wallet-activity-row h3 {
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   font-weight: 650;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.wallet-activity-row p {
-  margin-top: 0.15rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
+.wallet-activity-row p { margin-top: 0.1rem; font-size: 0.73rem; color: var(--muted); }
 .wallet-activity-row > strong {
   flex-shrink: 0;
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 650;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.005em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
@@ -1209,95 +1225,83 @@ textarea:focus-visible {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding-block: 3rem;
+  padding-block: 2.5rem;
 }
 .wallet-activity-empty > span {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 0.75rem;
   background: var(--paper-muted);
   color: var(--faint);
-  margin-bottom: 0.875rem;
+  margin-bottom: 0.75rem;
+  box-shadow: inset 0 1px 2px var(--sink-top);
 }
-.wallet-activity-empty h3 {
-  font-size: 0.9rem;
-  font-weight: 650;
-  color: var(--ink);
-}
-.wallet-activity-empty p {
-  margin-top: 0.25rem;
-  max-width: 42ch;
-  font-size: 0.8rem;
-  line-height: 1.6;
-  color: var(--muted);
-}
+.wallet-activity-empty h3 { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
+.wallet-activity-empty p { margin-top: 0.2rem; max-width: 40ch; font-size: 0.78rem; line-height: 1.55; color: var(--muted); }
 
-.wallet-empty-permissions { display: flex; align-items: flex-start; gap: 1rem; padding-block: 2rem; }
-.wallet-empty-permissions__icon {
-  display: flex;
-  flex-shrink: 0;
-  color: var(--faint);
-}
-.wallet-empty-permissions__title { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
-.wallet-empty-permissions__sub { margin-top: 0.25rem; font-size: 0.8rem; line-height: 1.55; color: var(--muted); }
+.wallet-empty-permissions { display: flex; align-items: flex-start; gap: 0.875rem; padding-block: 1.75rem; }
+.wallet-empty-permissions__icon { display: flex; flex-shrink: 0; color: var(--faint); }
+.wallet-empty-permissions__title { font-size: 0.85rem; font-weight: 650; color: var(--ink); }
+.wallet-empty-permissions__sub { margin-top: 0.2rem; font-size: 0.78rem; line-height: 1.5; color: var(--muted); }
 
 .wallet-sessions-list { list-style: none; margin: 0; padding: 0; }
-.wallet-session-row { padding-block: 1.25rem; border-bottom: 1px solid var(--line); }
+.wallet-session-row { padding-block: 1.125rem; border-bottom: 1px solid var(--line); }
 .wallet-session-row__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.wallet-session-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.5rem; }
+.wallet-session-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; }
 .wallet-session-dot { display: inline-block; width: 0.4375rem; height: 0.4375rem; border-radius: 50%; flex-shrink: 0; }
 .wallet-session-dot--ok { background: var(--success); }
 .wallet-session-dot--warn { background: var(--accent); }
-.wallet-session-row__name { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
-.wallet-session-row__id { font-size: 0.72rem; color: var(--faint); }
-.wallet-revoke-btn { flex-shrink: 0; font-size: 0.75rem; font-weight: 650; color: var(--muted); }
+.wallet-session-row__name { font-size: 0.85rem; font-weight: 650; color: var(--ink); }
+.wallet-session-row__id { font-size: 0.7rem; color: var(--faint); }
+.wallet-revoke-btn { flex-shrink: 0; font-size: 0.74rem; font-weight: 650; color: var(--muted); }
 .wallet-revoke-btn:hover:not(:disabled) { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
 .wallet-revoke-btn:disabled { opacity: 0.5; }
 
-.wallet-session-row__chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 0.875rem; }
+.wallet-session-row__chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 0.75rem; }
 @media (max-width: 500px) { .wallet-session-row__chips { grid-template-columns: 1fr 1fr; } }
-.wallet-chip { background: var(--canvas); border-radius: 0.625rem; padding: 0.5rem 0.75rem; }
-.wallet-chip__label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
-.wallet-chip__value { margin-top: 0.2rem; font-size: 0.78rem; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.wallet-chip {
+  background: var(--canvas);
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  box-shadow: inset 0 1px 2px var(--sink-top);
+}
+.wallet-chip__label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.wallet-chip__value { margin-top: 0.15rem; font-size: 0.76rem; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
 .wallet-chip__value--warn { color: var(--accent-ink); }
 .wallet-chip__sub { font-weight: 400; color: var(--muted); }
-.wallet-session-row__tx { display: inline-block; margin-top: 0.625rem; font-size: 0.7rem; font-weight: 600; color: var(--muted); }
+.wallet-session-row__tx { display: inline-block; margin-top: 0.5rem; font-size: 0.7rem; font-weight: 600; color: var(--muted); }
 .wallet-session-row__tx:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 
-.wallet-past-sessions { padding-top: 1.25rem; border-top: 1px solid var(--line); }
-.wallet-past-sessions > summary { cursor: pointer; font-size: 0.82rem; font-weight: 650; color: var(--ink); }
+.wallet-past-sessions { padding-top: 1rem; border-top: 1px solid var(--line); }
+.wallet-past-sessions > summary { cursor: pointer; font-size: 0.8rem; font-weight: 650; color: var(--ink); }
 .wallet-past-sessions > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
-.wallet-past-sessions__list { list-style: none; margin: 0.875rem 0 0; padding: 0; border-top: 1px solid var(--line); }
-.wallet-past-sessions__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 0.75rem; border-bottom: 1px solid var(--line); }
-.wallet-past-sessions__name { font-size: 0.82rem; font-weight: 650; color: var(--ink); }
-.wallet-past-sessions__meta { margin-top: 0.125rem; font-size: 0.72rem; color: var(--muted); }
-.wallet-past-sessions__status { font-size: 0.72rem; text-transform: capitalize; color: var(--faint); flex-shrink: 0; }
+.wallet-past-sessions__list { list-style: none; margin: 0.75rem 0 0; padding: 0; border-top: 1px solid var(--line); }
+.wallet-past-sessions__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 0.7rem; border-bottom: 1px solid var(--line); }
+.wallet-past-sessions__name { font-size: 0.8rem; font-weight: 650; color: var(--ink); }
+.wallet-past-sessions__meta { margin-top: 0.1rem; font-size: 0.7rem; color: var(--muted); }
+.wallet-past-sessions__status { font-size: 0.7rem; text-transform: capitalize; color: var(--faint); flex-shrink: 0; }
 
-/* The destructive control is a bordered panel, not a bare row with a rule
-   above it. Something that removes an account from a device should look like
-   a section of its own rather than like the page running out. */
-.wallet-danger-zone {
+/* ── Device access ── */
+.wallet-danger {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 1.25rem;
+  gap: 1rem;
   border: 1px solid var(--line);
   border-radius: 0.75rem;
   background: var(--paper);
-  padding: 1.25rem;
+  padding: 1rem 1.125rem;
 }
-.wallet-danger-zone__title { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
-.wallet-danger-zone__sub { margin-top: 0.25rem; max-width: 48ch; font-size: 0.8rem; line-height: 1.55; color: var(--muted); }
-.wallet-danger-zone__trigger { font-size: 0.8rem; font-weight: 650; color: var(--muted); flex-shrink: 0; }
-.wallet-danger-zone__trigger:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
-.wallet-danger-zone__confirm { flex-shrink: 0; }
-.wallet-danger-zone__confirm-label { font-size: 0.78rem; font-weight: 700; color: var(--ink); margin-bottom: 0.75rem; }
-.wallet-danger-zone__confirm-actions { display: flex; gap: 0.5rem; }
-.wallet-danger-zone__confirm-actions .wallet-action-btn { min-height: 2.375rem; font-size: 0.78rem; padding-inline: 1rem; }
+.wallet-danger__title { font-size: 0.85rem; font-weight: 650; color: var(--ink); }
+.wallet-danger__sub { margin-top: 0.2rem; max-width: 46ch; font-size: 0.76rem; line-height: 1.5; color: var(--muted); }
+.wallet-danger__trigger { flex-shrink: 0; font-size: 0.78rem; font-weight: 650; color: var(--muted); }
+.wallet-danger__trigger:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
+.wallet-danger__confirm { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.wallet-danger__confirm .wallet-btn { width: auto; min-height: 2.25rem; font-size: 0.76rem; padding-inline: 0.875rem; }
 
 /* Identity wallet section — /account only. The wallet screen used to render
    this too, restating a card it already showed; see wallet-client.tsx. */

@@ -555,16 +555,18 @@ export function WalletConnectButton({
           Your hire records are kept and reappear when you reconnect this
           address. Nothing on-chain changes.
         </p>
+        {/* Same two materials as the wallet screen's other confirm, and the
+            same verbs — "Keep" / "Disconnect" mirrors "Keep" / "Remove". */}
         <div className="mt-3 flex gap-2">
           <button
-            className="interactive min-h-11 flex-1 rounded-lg border border-line bg-paper px-4 text-sm font-semibold text-ink hover:bg-canvas"
+            className="wallet-btn wallet-btn--ghost"
             onClick={() => setConfirmDisconnect(false)}
             type="button"
           >
-            Stay connected
+            Keep
           </button>
           <button
-            className="interactive min-h-11 flex-1 rounded-lg border border-danger bg-danger-soft px-4 text-sm font-semibold text-danger"
+            className="wallet-btn wallet-btn--danger"
             onClick={() => {
               setConfirmDisconnect(false);
               void wallet.disconnect();
@@ -587,12 +589,25 @@ export function WalletConnectButton({
 
   return (
     <div className="w-full">
+      {/*
+       * `wallet-btn` rather than the hand-rolled Tailwind this carried
+       * (2026-09-12). It was `bg-accent` with no border, no top highlight and
+       * no press state, so on the redesigned wallet screen it was the one
+       * control that did not move under the finger — a flat slab beside
+       * buttons that travel. Sharing the class means it cannot drift from them
+       * again, and the two consumers that are not the wallet screen (/account
+       * and the phone) get the same material for free.
+       *
+       * The connected variant keeps its danger-on-hover treatment, which the
+       * shared modifiers do not cover: this is the only button on the site
+       * whose action changes meaning with state.
+       */}
       <button
         aria-busy={wallet.isConnecting}
-        className={`interactive min-h-12 w-full rounded-lg px-5 text-sm font-semibold disabled:cursor-wait disabled:opacity-60 ${
+        className={`wallet-btn ${
           wallet.isConnected
-            ? "border border-line bg-paper text-ink hover:border-danger hover:bg-danger-soft hover:text-danger"
-            : "bg-accent text-ink hover:bg-accent-hover"
+            ? "wallet-btn--ghost hover:!border-danger hover:!bg-danger-soft hover:!text-danger"
+            : "wallet-btn--accent"
         }`}
         disabled={wallet.isConnecting}
         onClick={() => {

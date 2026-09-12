@@ -25,6 +25,8 @@ import ShieldOffIcon from "@hugeicons/core-free-icons/ShieldOffIcon";
 import SparklesIcon from "@hugeicons/core-free-icons/SparklesIcon";
 import StarIcon from "@hugeicons/core-free-icons/StarIcon";
 import Tick01Icon from "@hugeicons/core-free-icons/Tick01Icon";
+import ViewIcon from "@hugeicons/core-free-icons/ViewIcon";
+import ViewOffSlashIcon from "@hugeicons/core-free-icons/ViewOffSlashIcon";
 import Wallet01Icon from "@hugeicons/core-free-icons/Wallet01Icon";
 import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
@@ -126,7 +128,9 @@ export type GlyphName =
   | "more"
   | "star"
   | "spanner"
-  | "dollar";
+  | "dollar"
+  | "eye"
+  | "eye-off";
 
 /**
  * Every glyph name that is a Hugeicons mark. A name absent from this map falls
@@ -167,6 +171,10 @@ const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
   star: StarIcon,
   spanner: Wrench01Icon,
   dollar: Dollar01Icon,
+  // Show/hide for balances. The universally read pair - a label saying
+  // "Hide" next to them would be explaining a light switch.
+  eye: ViewIcon,
+  "eye-off": ViewOffSlashIcon,
 };
 
 type CategoryGlyphProps = {

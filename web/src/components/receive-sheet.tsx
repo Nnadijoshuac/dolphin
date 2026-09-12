@@ -3,72 +3,59 @@
 import { useEffect, useRef, useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
-import { WalletAvatar } from "@/components/wallet-avatar";
+import { QrCode } from "@/components/qr-code";
 import { ALTANA_CHAIN_ID, ALTANA_NETWORK_LABEL } from "@/wallet/altana-policy";
 
 /**
  * The "Receive" surface — the thing every wallet has and this one did not.
  *
  * ---------------------------------------------------------------------------
- * WHY THIS EXISTS (2026-09-12)
+ * WHY IT EXISTS (2026-09-12)
  * ---------------------------------------------------------------------------
  * "Receive" and "Deposit" on the wallet cards were wired to
  * `navigator.clipboard.writeText(address)` and nothing else. No confirmation,
  * no address shown, no error path — clicking either produced a completely
- * silent interface. If the clipboard write rejected (it does: an unfocused
- * document, a denied permission, Safari outside a user-gesture microtask)
- * the user got exactly the same nothing as on success.
+ * silent interface, and a rejected clipboard write (unfocused document, denied
+ * permission, Safari outside a user-gesture microtask) looked exactly like
+ * success. The user's next move is pasting an address they do not have.
  *
- * That is the single worst interaction on the page, because the failure is
- * invisible and the user's next move is to paste an address they do not have.
+ * ---------------------------------------------------------------------------
+ * THIS IS ALSO THE ONLY PLACE A FULL ADDRESS APPEARS.
+ * ---------------------------------------------------------------------------
+ * It used to be three: a truncated one on each card, the full string in the
+ * fund banner, and another full string in the recoverability panel's deposit
+ * branch — each with its own copy button. An address repeated across a screen
+ * is not reassurance, it is three things to check instead of one, and it is
+ * how a person ends up comparing the wrong two.
  *
- * The standard receive surface is: the address rendered in full, a copy
- * control that confirms, and the network stated. Pairing a visible address
- * with a copy button is the documented pattern rather than a preference —
- * some people scan or read, some paste, and offering only one path drops the
- * other. See Agent/SESSION-LOG-2026-09-12-wallet-ui.md for the sources.
- *
- * NO QR CODE YET, deliberately. A QR is the other half of this pattern and it
- * needs an encoder; this repo has none and AGENTS.md §1/§3 say to flag a gap
- * rather than add a dependency unilaterally. Hand-rolling Reed-Solomon here
- * was the alternative and it is the wrong trade: a silently mis-encoded QR
- * sends funds to an address that does not exist. An honest missing feature
- * beats a plausible-looking wrong one (§5, same reasoning as a fabricated
- * APY). The slot is marked in the markup below.
+ * Everywhere else now shows a truncated address as a BUTTON that opens this
+ * sheet. One surface owns the full string, the QR, the copy control and the
+ * network warning.
  * ---------------------------------------------------------------------------
  *
- * Native <dialog> rather than a hand-built overlay: Escape-to-close, focus
- * containment, inert background and the top layer all come for free and are
- * the parts hand-built modals get wrong.
+ * Native <dialog>: Escape, focus containment, inert background and the top
+ * layer come for free and are the parts hand-built modals get wrong.
  */
 
-/** First 6 and last 4, emphasised — the segments a person is told to verify. */
+/** First six and last four carry the ink — the groups people are told to check. */
 function AddressSegments({ address }: { address: string }) {
-  const head = address.slice(0, 6);
-  const middle = address.slice(6, -4);
-  const tail = address.slice(-4);
   return (
     <code className="receive-sheet__address">
-      <span className="receive-sheet__address-edge">{head}</span>
-      <span className="receive-sheet__address-mid">{middle}</span>
-      <span className="receive-sheet__address-edge">{tail}</span>
+      <span className="receive-sheet__address-edge">{address.slice(0, 6)}</span>
+      <span className="receive-sheet__address-mid">{address.slice(6, -4)}</span>
+      <span className="receive-sheet__address-edge">{address.slice(-4)}</span>
     </code>
   );
 }
 
 export function ReceiveSheet({
   address,
-  kind,
   label,
-  note,
   onClose,
 }: {
   address: string;
-  kind: "human" | "bot";
   /** Which of the two accounts this is, in the user's words. */
   label: string;
-  /** One line on what this account is for. */
-  note: string;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -77,23 +64,22 @@ export function ReceiveSheet({
 
   /*
    * Mount = open. There is no `open` prop, deliberately: the caller renders
-   * this component only while a sheet is wanted, so the copy affordance resets
-   * to "idle" through unmounting rather than through an effect that writes
-   * state during render. A stale "Copied" carried over from a previous visit
-   * would be a claim about THIS address that nothing had verified.
+   * this only while a sheet is wanted, so the copy affordance resets by
+   * unmounting rather than through an effect that writes state during render
+   * (which this repo's eslint config rejects outright). A stale "Copied"
+   * carried over from a previous visit would be a claim about THIS address
+   * that nothing had verified.
    */
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
     /*
-     * Focus AFTER showModal, not via the autoFocus prop.
-     *
-     * React applies autoFocus by calling .focus() during commit, which is
-     * before this effect runs — and showModal() then executes the dialog
-     * focusing steps itself, which land on the first focusable descendant.
-     * That is the close button, so the sheet opened with a bright ring on
-     * "dismiss this" and Enter threw away the sheet the user had just asked
-     * for. Verified by screenshot: the prop alone did not survive showModal.
+     * Focus AFTER showModal, not via the autoFocus prop. React applies
+     * autoFocus during commit; showModal then runs the dialog focusing steps
+     * itself and lands on the first focusable descendant — the close button.
+     * The sheet opened with a bright ring on "dismiss this" and Enter threw
+     * away the sheet the user had just asked for. Caught by screenshot; the
+     * prop alone does not survive showModal.
      */
     copyRef.current?.focus();
   }, []);
@@ -104,9 +90,8 @@ export function ReceiveSheet({
       className="receive-sheet"
       onCancel={onClose}
       onClick={(event) => {
-        // Backdrop click: the <dialog> element itself is the backdrop's hit
-        // target, so a click whose target IS the dialog came from outside the
-        // panel inside it.
+        // The <dialog> element itself is the backdrop's hit target, so a click
+        // whose target IS the dialog came from outside the panel inside it.
         if (event.target === ref.current) onClose();
       }}
       onClose={onClose}
@@ -114,35 +99,33 @@ export function ReceiveSheet({
     >
       <div className="receive-sheet__panel">
         <header className="receive-sheet__head">
-          <WalletAvatar address={address} className="receive-sheet__avatar" kind={kind} size={40} />
-          <div className="receive-sheet__head-text">
-            <p className="receive-sheet__title">{label}</p>
-            <p className="receive-sheet__note">{note}</p>
-          </div>
+          <p className="receive-sheet__title">{label}</p>
           <button
             aria-label="Close"
             className="receive-sheet__close interactive"
             onClick={onClose}
             type="button"
           >
-            <CategoryGlyph color="currentColor" name="close" size={16} strokeWidth={2} />
+            <CategoryGlyph color="currentColor" name="close" size={15} strokeWidth={2} />
           </button>
         </header>
 
         {/*
-         * The QR slot. Not a placeholder graphic — a stated absence, because a
-         * decorative square where a scannable code belongs is worse than the
-         * sentence explaining why there isn't one.
+         * The QR sits in a raised plate rather than flat on the sheet — it is
+         * the thing a camera is pointed at, so it gets the physical emphasis.
+         * QrCode renders in currentColor and returns null if the payload will
+         * not encode, in which case the address and copy button below are still
+         * a complete receive path. A code that does not encode THIS address is
+         * never drawn.
          */}
-        <p className="receive-sheet__qr-gap">
-          No QR code yet. Dolphin will not draw a code it cannot guarantee
-          scans back to this exact address.
-        </p>
+        <div className="receive-sheet__plate">
+          <QrCode size={156} value={address} />
+        </div>
 
         <AddressSegments address={address} />
 
         <button
-          className="wallet-action-btn wallet-action-btn--accent receive-sheet__copy interactive"
+          className="wallet-btn wallet-btn--accent receive-sheet__copy"
           onClick={() => {
             const clipboard = navigator.clipboard;
             if (!clipboard) {
@@ -160,48 +143,30 @@ export function ReceiveSheet({
           <CategoryGlyph
             color="currentColor"
             name={copied === "ok" ? "check" : "copy"}
-            size={14}
+            size={15}
             strokeWidth={2}
           />
-          {copied === "ok" ? "Copied to clipboard" : "Copy address"}
+          {copied === "ok" ? "Copied" : "Copy address"}
         </button>
 
         {/*
-         * role="status" so the outcome is announced, not just drawn. The
-         * failure branch says what to do instead rather than only that it
-         * failed — the address is on screen above it and can be selected.
+         * role="status" so the outcome is announced, not only drawn. The
+         * failure branch says what to do instead — the address is on screen
+         * above it and is selectable.
          */}
         <p className="receive-sheet__status" role="status">
-          {copied === "failed"
-            ? "Could not reach the clipboard. Select the address above and copy it manually."
-            : copied === "ok"
-              ? "Check the first six and last four characters against what you paste."
-              : " "}
+          {copied === "failed" ? "Clipboard blocked — select the address above." : " "}
         </p>
 
         {/*
-         * The network line is a warning, not a label. Sending a token from
-         * another chain to this address is the most common way people lose
-         * funds at this exact step, and the address alone does not say which
-         * chain it is good for.
+         * The network line is a warning, not a label. Sending another chain's
+         * assets to this address is how people lose funds at exactly this step,
+         * and the address itself does not say which chain it is good for.
          */}
         <p className="receive-sheet__network">
           <CategoryGlyph color="currentColor" name="info" size={13} strokeWidth={2} />
-          <span>
-            {ALTANA_NETWORK_LABEL} (chain {ALTANA_CHAIN_ID}) only. Assets sent
-            here on any other network cannot be recovered.
-          </span>
+          <span>{ALTANA_NETWORK_LABEL} only · chain {ALTANA_CHAIN_ID}</span>
         </p>
-
-        <a
-          className="receive-sheet__explorer interactive"
-          href={`https://bscscan.com/address/${address}`}
-          rel="noreferrer"
-          target="_blank"
-        >
-          View on BscScan
-          <CategoryGlyph color="currentColor" name="external" size={12} strokeWidth={2} />
-        </a>
       </div>
     </dialog>
   );

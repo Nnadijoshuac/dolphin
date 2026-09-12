@@ -146,25 +146,31 @@ export function LiquidationAlertPanel() {
 
   return (
     <section className="surface-raised mt-6 p-6" aria-labelledby="alerts-heading">
+      {/*
+       * CUT 2026-09-12, from four paragraphs to two lines.
+       *
+       * The old version explained the mechanism (Comptroller, fifteen minutes),
+       * then the stakes, then disclaimed agency in three clauses. All true, and
+       * together they made an opt-in email field read like terms of service.
+       *
+       * The test applied to each sentence was whether a person ACTS differently
+       * for having read it. "Venus liquidates at 1.0" changes which number they
+       * pick, so it stays. "from the Comptroller every fifteen minutes" does
+       * not, so it went. The no-agency line is compressed rather than dropped:
+       * this panel sits on a marketplace and without it the feature reads as
+       * one of the listed agents taking the position over — but that needs six
+       * words, not three sentences.
+       */}
       <p className="eyebrow">Liquidation alerts</p>
       <h2 className="section-title mt-3" id="alerts-heading">
         Get told before it matters
       </h2>
       <p className="body-copy mt-3 max-w-2xl">
-        Dolphin reads your Venus health factor from the Comptroller on BNB Smart
-        Chain every fifteen minutes and emails you the first time it falls below
-        the figure you pick. Venus liquidates at 1.0, so pick a number with room
-        in it.
+        Dolphin emails you when your Venus health factor drops below your number.
+        Venus liquidates at 1.0, so leave room.
       </p>
-
-      {/*
-        * Stated outright. This panel sits on a marketplace, so without this
-        * line it reads as one of the listed agents taking the position over.
-        */}
-      <p className="mt-2 max-w-2xl text-xs text-faint">
-        This is Dolphin watching, not an agent. Nothing is hired, no permission
-        is granted, and nothing here can move your funds. Your email is used for
-        these alerts and nothing else.
+      <p className="mt-2 text-xs text-faint">
+        Watching only — nothing is hired and nothing can move your funds.
       </p>
 
       {active && existing ? (

@@ -10,16 +10,18 @@ import { ReceiveSheet } from "@/components/receive-sheet";
 import { StatePanel } from "@/components/state-panel";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import type { AgentSessionRow } from "@/convex/api";
+import { useBnbPrice, type BnbPriceState } from "@/hooks/use-bnb-price";
 import { useNow } from "@/hooks/use-now";
+import { useAppStore, type DisplayCurrency } from "@/store/use-app-store";
 import {
   ALTANA_CHAIN_ID,
-  ALTANA_FUNDING_HINT,
   ALTANA_NETWORK_LABEL,
   FEATURE_SESSION_EXECUTION,
   formatBnb,
   recoverabilityCopy,
 } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
+import { formatPricePerBnb, formatUsdFromWei } from "@/wallet/bnb-price";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { summariseTotal } from "@/wallet/wallet-total";
@@ -28,66 +30,154 @@ import { summariseTotal } from "@/wallet/wallet-total";
    THE WALLET SCREEN
    ═══════════════════════════════════════════════════════════════════════════
 
-   REDESIGNED 2026-09-12. What was wrong and what the shape is now.
+   Rebuilt 2026-09-12, then rebuilt again the same day against the note
+   "too stiff — think skeuomorphism, and little is more".
 
-   The old screen opened on a warning banner, then put two equally-weighted
-   2.6rem balances side by side, then a third band restating one of them.
-   There was no page title, no total, no entry point for the eye, and the
-   network — the one piece of information that decides whether an address is
-   safe to send to — was 0.7rem grey text floating between sections.
+   Those two pull against each other, and the resolution is the whole design:
+   FEWER ELEMENTS, EACH ONE PHYSICAL. Not textures and stitching — depth that
+   means something. A raised hero that catches light on its top edge. Buttons
+   that travel down under the finger. A balance sunk into the surface like a
+   display window. A QR on its own plate, because it is the thing a camera is
+   pointed at.
 
-   Every wallet people actually use (Rainbow, Zerion, Phantom, Rabby, Coinbase
-   Wallet) has settled on the same anatomy, and it is not arbitrary:
+   Skeuomorphism earns its keep when the material tells you what a thing does.
+   It becomes costume when it decorates something that was already clear. Every
+   effect here is attached to an affordance; none is attached to a label.
 
-     1. ONE total, large, at the top. The question "how much do I have" gets
-        answered before any other pixel.
-     2. The network, stated as a chip, not buried.
-     3. Primary actions directly under the total — receive / explorer /
-        refresh — as a fixed row that does not move between states.
-     4. Accounts below the total, secondary to it.
-     5. Activity below accounts.
-     6. Security and destructive controls last, visually separated.
+   "Little is more" showed up as deletions, and they are the larger half of
+   this diff:
+     - ONE address on the screen, not four (see receive-sheet.tsx)
+     - the eye icon instead of the word "Hide"
+     - two-word card subtitles instead of two-sentence ones
+     - no "Deposit" button beside a "Receive" button opening the same sheet
+     - no fund banner reprinting an address the sheet already owns
 
-   This file now follows that order. Notably, THE PHONE ALREADY DID: see
-   components/mobile-wallet.tsx, which has had a total, a glyph action row and
-   account cards since it was written. Desktop was the screen that had drifted,
-   so this is bringing the big screen up to the small one rather than inventing
-   a vocabulary. Labels, the account names and the total's honesty rule are
-   deliberately identical to the mobile ones.
-
-   WHAT DID NOT CHANGE: every number on this screen is still read live or
-   rendered as an explicit unavailable state (AGENTS.md §5). The redesign adds
-   no figure that is not sourced, and the total below refuses to print at all
-   rather than present a partial sum as complete.
+   THE ORDER is the one every wallet has settled on and it did not change: one
+   total, the network, the actions, the accounts, activity, security last.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─────────────── tiny helpers ─────────────── */
+/* ─────────────── money ─────────────── */
 
-function CopyButton({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      aria-label={label}
-      className="wallet-copy-btn interactive"
-      onClick={() => {
-        void navigator.clipboard?.writeText(value).then(
-          () => { setCopied(true); window.setTimeout(() => setCopied(false), 1800); },
-          () => setCopied(false),
-        );
-      }}
-      type="button"
-    >
-      <CategoryGlyph color="currentColor" name={copied ? "check" : "copy"} size={11} strokeWidth={2} />
-      {copied ? "Copied" : "Copy"}
-    </button>
-  );
+const HIDDEN = "••••";
+
+/**
+ * One wei amount, in whichever denomination the user picked.
+ *
+ * ---------------------------------------------------------------------------
+ * USD IS REFUSED RATHER THAN APPROXIMATED. The preference is remembered, but a
+ * remembered preference cannot conjure a price: when the Chainlink round is
+ * missing or stale this returns the BNB figure regardless of the setting
+ * (AGENTS.md §5). The switch disables its own USD side in that case, so the
+ * user is told why rather than silently ignored.
+ * ---------------------------------------------------------------------------
+ */
+function renderAmount(
+  wei: bigint,
+  currency: DisplayCurrency,
+  price: BnbPriceState,
+  hidden: boolean,
+): { figure: string; unit: string | null } {
+  if (hidden) return { figure: HIDDEN, unit: null };
+  if (currency === "USD" && price.status === "ready") {
+    return { figure: formatUsdFromWei(wei, price.price), unit: null };
+  }
+  return { figure: formatBnb(wei), unit: "BNB" };
 }
+
+/* ─────────────── small parts ─────────────── */
 
 function truncateAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-const HIDDEN_FIGURE = "••••";
+/**
+ * A quick action: icon over a ONE-WORD label. "Receive", "BscScan", "Refresh"
+ * each name a verb or a destination that needs no sentence around it.
+ */
+function QuickAction({ glyph, label, href, onClick, disabled }: {
+  glyph: "receive" | "external" | "refresh";
+  label: string;
+  href?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  const inner = (
+    <>
+      <span aria-hidden="true" className="wallet-quick__icon">
+        <CategoryGlyph color="currentColor" name={glyph} size={17} strokeWidth={1.8} />
+      </span>
+      {label}
+    </>
+  );
+  if (href) {
+    return (
+      <a className="wallet-quick" href={href} rel="noreferrer" target="_blank">
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <button className="wallet-quick" disabled={disabled} onClick={onClick} type="button">
+      {inner}
+    </button>
+  );
+}
+
+/**
+ * BNB / USD — a physical two-position selector whose raised key slides between
+ * the slots.
+ *
+ * The USD side is DISABLED, not hidden, while no price is readable. Hiding it
+ * leaves the user wondering whether the feature exists; disabling it with a
+ * reason says the feature exists and the price does not. `title` carries the
+ * reason the hook actually gave rather than a generic one.
+ */
+function CurrencySwitch({
+  currency,
+  onChange,
+  price,
+}: {
+  currency: DisplayCurrency;
+  onChange: (currency: DisplayCurrency) => void;
+  price: BnbPriceState;
+}) {
+  const usdReady = price.status === "ready";
+  const usdReason =
+    price.status === "loading"
+      ? "Reading the BNB price…"
+      : price.status === "unavailable"
+        ? price.reason
+        : undefined;
+
+  return (
+    <div
+      aria-label="Display currency"
+      className="wallet-switch"
+      data-active={currency === "USD" && usdReady ? "usd" : "bnb"}
+      role="group"
+    >
+      <span aria-hidden="true" className="wallet-switch__key" />
+      <button
+        aria-pressed={currency === "BNB" || !usdReady}
+        className="wallet-switch__opt"
+        onClick={() => onChange("BNB")}
+        type="button"
+      >
+        BNB
+      </button>
+      <button
+        aria-pressed={currency === "USD" && usdReady}
+        className="wallet-switch__opt"
+        disabled={!usdReady}
+        onClick={() => onChange("USD")}
+        title={usdReason}
+        type="button"
+      >
+        USD
+      </button>
+    </div>
+  );
+}
 
 /* ─────────────── session row ─────────────── */
 
@@ -119,7 +209,7 @@ function SessionRow({
           <span className="wallet-session-row__id">#{session.agentKey}</span>
         </div>
         <button
-          className="wallet-revoke-btn interactive"
+          className="wallet-revoke-btn"
           disabled={isBusy}
           onClick={onRevoke}
           type="button"
@@ -150,12 +240,12 @@ function SessionRow({
 
       {session.grantTransactionHash && (
         <a
-          className="interactive wallet-session-row__tx"
+          className="wallet-session-row__tx"
           href={`https://bscscan.com/tx/${session.grantTransactionHash}`}
           rel="noreferrer"
           target="_blank"
         >
-          View on BscScan ↗
+          BscScan
         </a>
       )}
     </li>
@@ -166,19 +256,16 @@ function SessionRow({
 
 /**
  * MOVED 2026-09-12: this used to be the FIRST thing on the wallet page, above
- * the title it did not have, rendered unconditionally by wallet-client.tsx.
+ * the title it did not have, rendered unconditionally — including when no
+ * Dolphin Wallet existed, warning about the recoverability of an account that
+ * was not there. It now sits under the card it describes, and only when there
+ * is one.
  *
- * Two problems with that. It opened the screen on an alarm — a red-bordered
- * "Not recoverable yet — read this before you clear this browser" is a
- * terrible first impression of a page whose actual job is showing a balance.
- * And it rendered even with no Dolphin Wallet at all, warning about the
- * recoverability of an account that did not exist.
- *
- * It now sits directly under the account cards and only when there is a wallet
- * for it to describe. Same copy, same live KeyStore read, same three branches —
- * the finding is unchanged, it is just no longer shouted before the greeting.
+ * Its deposit branch used to print the full wallet address with its own copy
+ * button, which was the third full address on one screen. It opens the receive
+ * sheet now, like every other address affordance here.
  */
-export function RecoverabilityPanel() {
+export function RecoverabilityPanel({ onDeposit }: { onDeposit: () => void }) {
   const wallet = useAltanaWallet();
   const [state, setState] = useState<
     { kind: "idle" } | { kind: "registering" } | { kind: "error"; message: string }
@@ -193,189 +280,129 @@ export function RecoverabilityPanel() {
   const isUnregistered = wallet.recoverability === "unregistered";
 
   return (
-    <div className={`wallet-recoverability ${isRegistered ? "wallet-recoverability--ok" : isUnregistered ? "wallet-recoverability--warn" : ""}`}>
-      <div className="wallet-recoverability__row">
-        <p className="wallet-recoverability__title">
-          <span aria-hidden="true" className="wallet-recoverability__icon">
-            <CategoryGlyph color="currentColor" name="shield" size={13} strokeWidth={2} />
-          </span>
-          {copy.title}
-        </p>
-        <button
-          className="interactive wallet-recoverability__recheck"
-          disabled={wallet.isCheckingRecoverability}
-          onClick={() => wallet.refreshRecoverability()}
-          type="button"
-        >
-          {wallet.isCheckingRecoverability ? "Checking…" : "Re-check"}
-        </button>
-      </div>
-      <p className="wallet-recoverability__body">{copy.body}</p>
+    <div
+      className={`wallet-note ${isRegistered ? "wallet-note--ok" : isUnregistered ? "wallet-note--warn" : ""}`}
+    >
+      <span aria-hidden="true" className="wallet-note__icon">
+        <CategoryGlyph color="currentColor" name="shield" size={15} strokeWidth={2} />
+      </span>
 
-      {wallet.recoverabilityError && (
-        <p className="wallet-inline-error">{wallet.recoverabilityError}</p>
-      )}
+      <div className="wallet-note__body">
+        <p className="wallet-note__title">{copy.title}</p>
+        <p className="wallet-note__text">{copy.body}</p>
 
-      {/*
-       * Three mutually exclusive branches, never a disabled button.
-       *
-       * This used to render "Make recoverable — 0.000723 BNB + gas" greyed out
-       * above a line explaining the balance was too low. That is a dead end: the
-       * only control offered is one the user cannot use, and the thing that
-       * WOULD unblock them (depositing) is not offered at all. Every Dolphin
-       * Wallet in existence is empty, so that dead end was the state every user
-       * actually saw.
-       *
-       * Now the panel offers the action that is genuinely available at each
-       * point: deposit when short, register when funded, and neither when the
-       * fee could not be read — because an action Dolphin cannot price is one it
-       * must not put a button behind (AGENTS.md §5).
-       */}
-      {isUnregistered && (
-        <div className="mt-4">
-          {fee === null ? (
-            <p className="wallet-inline-error">
-              The registration fee could not be read just now, so Dolphin will not
-              offer an action it cannot price for you. Re-check to try again.
-            </p>
-          ) : !canAffordFee ? (
-            <div className="wallet-fund-banner">
-              <div className="wallet-fund-banner__row">
-                <p className="wallet-fund-banner__title">
-                  Deposit BNB to make this wallet recoverable
-                </p>
-                {wallet.address && (
-                  <CopyButton label="Copy wallet address" value={wallet.address} />
-                )}
-              </div>
-              <code className="wallet-fund-banner__address">{wallet.address}</code>
-              <p className="wallet-fund-banner__hint">
-                {/*
-                 * The fee is stated exactly because it was read from the chain.
-                 * Gas is named but NOT quantified — Dolphin has not measured it
-                 * and will not print a plausible-looking guess beside a real
-                 * figure. "plus relay gas" is the honest amount of precision.
-                 */}
-                Registration costs {formatBnb(fee)} BNB plus relay gas, paid by
-                this wallet. It currently holds{" "}
-                {wallet.balanceWei === null
-                  ? "an amount Dolphin could not read"
-                  : `${formatBnb(wallet.balanceWei)} BNB`}
-                . Send BNB to the address above, then re-check.
+        {wallet.recoverabilityError && (
+          <p className="wallet-inline-error">{wallet.recoverabilityError}</p>
+        )}
+
+        {/*
+         * Three mutually exclusive branches, never a disabled button.
+         *
+         * This used to render "Make recoverable — 0.000723 BNB + gas" greyed
+         * out above a line explaining the balance was too low: the only control
+         * offered was one the user could not use, while the thing that WOULD
+         * unblock them was not offered at all. Every Dolphin Wallet starts
+         * empty, so that dead end was the state every user actually saw.
+         *
+         * Each branch offers what is genuinely available — deposit when short,
+         * register when funded, and neither when the fee could not be read,
+         * because an action Dolphin cannot price is one it must not put a
+         * button behind (AGENTS.md §5).
+         */}
+        {isUnregistered && (
+          <div className="wallet-note__action">
+            {fee === null ? (
+              <p className="wallet-inline-error">
+                The fee could not be read, so Dolphin will not offer an action it
+                cannot price. Re-check to try again.
               </p>
-            </div>
-          ) : (
-            <button
-              className="wallet-action-btn wallet-action-btn--accent interactive"
-              disabled={state.kind === "registering" || wallet.isBusy}
-              onClick={() => {
-                setState({ kind: "registering" });
-                void wallet.registerWallet().then(
-                  () => setState({ kind: "idle" }),
-                  (cause: unknown) =>
-                    setState({
-                      kind: "error",
-                      message: toUserMessage(cause, "That action could not be completed. Try again."),
-                    }),
-                );
-              }}
-              type="button"
-            >
-              {state.kind === "registering"
-                ? "Confirm with passkey…"
-                : `Make recoverable — ${formatBnb(fee)} BNB + gas`}
-            </button>
-          )}
+            ) : !canAffordFee ? (
+              <button className="wallet-btn wallet-btn--ghost" onClick={onDeposit} type="button">
+                Deposit to enable
+              </button>
+            ) : (
+              <button
+                className="wallet-btn wallet-btn--accent"
+                disabled={state.kind === "registering" || wallet.isBusy}
+                onClick={() => {
+                  setState({ kind: "registering" });
+                  void wallet.registerWallet().then(
+                    () => setState({ kind: "idle" }),
+                    (cause: unknown) =>
+                      setState({
+                        kind: "error",
+                        message: toUserMessage(cause, "That could not be completed. Try again."),
+                      }),
+                  );
+                }}
+                type="button"
+              >
+                {/*
+                 * The fee is exact because it was read from the chain. Gas is
+                 * named but NOT quantified — Dolphin has not measured it and
+                 * will not print a plausible guess beside a real figure.
+                 */}
+                {state.kind === "registering"
+                  ? "Confirm with passkey…"
+                  : `Enable — ${formatBnb(fee)} BNB + gas`}
+              </button>
+            )}
 
-          {state.kind === "error" && (
-            <p className="wallet-error-banner mt-3">{state.message}</p>
-          )}
-        </div>
-      )}
+            {state.kind === "error" && <p className="wallet-error-banner">{state.message}</p>}
+          </div>
+        )}
+      </div>
+
+      <button
+        className="wallet-note__recheck"
+        disabled={wallet.isCheckingRecoverability}
+        onClick={() => wallet.refreshRecoverability()}
+        type="button"
+      >
+        {wallet.isCheckingRecoverability ? "Checking…" : "Re-check"}
+      </button>
     </div>
   );
 }
 
-/* ─────────────── quick action button ─────────────── */
-
-/*
- * ConnectFirstPanel and WalletSetup used to live here. Both are gone: their
- * jobs moved INTO the two cards, so the connect prompt and the create/recover
- * prompt now occupy the same grid slots as the wallets they stand in for,
- * instead of being full-width panels that changed the shape of the screen.
- */
+/* ═══════════════ hero ═══════════════ */
 
 /**
- * One quick action.
+ * Total, network, currency, actions — the screen's entry point and the only
+ * raised surface on the page.
  *
- * `glyph` is a CategoryGlyph name, not a character. The three actions here used
- * to be the literal strings "↓", "↗" and "↻" while the rest of this codebase —
- * including the phone's version of this exact row — drew Hugeicons through
- * CategoryGlyph. Arrow glyphs render at a different weight and baseline in
- * every font on every platform, which is why they looked misaligned; the fix
- * is to use the icon set that is already here.
- */
-function WalletAction({ glyph, label, href, onClick, disabled }: {
-  glyph: "receive" | "external" | "refresh";
-  label: string;
-  href?: string;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  const cls = "wallet-quick interactive";
-  const inner = (
-    <>
-      <span aria-hidden="true" className="wallet-quick__icon">
-        <CategoryGlyph color="currentColor" name={glyph} size={18} strokeWidth={1.8} />
-      </span>
-      <span className="wallet-quick__label">{label}</span>
-    </>
-  );
-  if (href) {
-    return <a className={cls} href={href} rel="noreferrer" target="_blank">{inner}</a>;
-  }
-  return (
-    <button className={cls} disabled={disabled} onClick={onClick} type="button">
-      {inner}
-    </button>
-  );
-}
-
-/* ═══════════════ the total ═══════════════ */
-
-/**
- * The hero: total, network, actions. The screen's entry point.
- *
- * The action row is rendered in every state at the same size, so the page does
- * not reflow as balances land — one of the small things that separates a wallet
- * that feels solid from one that feels like it is still loading.
+ * The action row renders in every state at the same size, so the hero does not
+ * reflow as accounts connect. That steadiness is most of what separates a
+ * wallet that feels solid from one that feels like it is still loading.
  */
 function WalletHero({
-  hidden,
-  onToggleHidden,
   onReceive,
+  price,
   receiveTarget,
 }: {
-  hidden: boolean;
-  onToggleHidden: () => void;
   onReceive: () => void;
+  price: BnbPriceState;
   receiveTarget: string | null;
 }) {
   const identity = useWallet();
   const dolphin = useAltanaWallet();
+  const currency = useAppStore((s) => s.displayCurrency);
+  const setCurrency = useAppStore((s) => s.setDisplayCurrency);
+  const hidden = useAppStore((s) => s.hideBalances);
+  const toggleHidden = useAppStore((s) => s.toggleHideBalances);
 
   const identityAddress = identity.isConnected ? identity.address : null;
 
   /*
-   * chainId is PINNED to BNB Smart Chain, and this is a correctness fix, not
-   * tidying. This read used to inherit whatever chain the connector happened
-   * to be on, while the row beneath it was hard-coded to say "BNB Smart
-   * Chain" — so a visitor whose MetaMask sat on Ethereum saw their ETH
-   * balance, rendered in full, labelled as BNB. A real number attached to the
-   * wrong asset is the same class of defect as a fabricated one.
+   * chainId is PINNED to BNB Smart Chain, and that is a correctness fix rather
+   * than tidying. This read used to inherit whatever chain the connector
+   * happened to be on while the row beneath it was hard-coded to say "BNB
+   * Smart Chain" — so a visitor whose MetaMask sat on Ethereum saw their ETH
+   * balance rendered in full and labelled BNB. A real number attached to the
+   * wrong asset is the same defect as a fabricated one.
    *
-   * Pinning also makes this share a react-query key with the identity card's
-   * own read, so the two resolve from one request rather than two.
+   * Pinning also shares a react-query key with the identity card's read, so
+   * the two resolve from one request rather than two.
    */
   const identityBalance = useBalance({
     address: identityAddress as `0x${string}` | undefined,
@@ -396,19 +423,13 @@ function WalletHero({
   /*
    * A non-"ready" hero renders WORDS, not a figure — and this took two goes.
    *
-   * First attempt printed "0", which is a fabricated balance: with nothing
-   * connected the hero said "0 BNB" directly above "No account connected yet",
-   * and the louder of those two contradicting lines was the wrong one. Nobody
-   * holds zero here; there is simply nothing to report (AGENTS.md §5).
+   * First attempt printed "0", a fabricated balance: with nothing connected
+   * the hero said "0 BNB" directly above "No account connected yet", and the
+   * louder of two contradicting lines was the wrong one.
    *
-   * Second attempt printed "—", which typechecks as honest and looks like a
-   * redaction: an em-dash set at 3.75rem is a 60-pixel horizontal bar, and on
-   * screen it reads as a loading skeleton rather than as an absent value. That
-   * is the kind of thing only a screenshot tells you.
-   *
-   * So the placeholder is a short phrase at a smaller size. It cannot be
-   * mistaken for a number, it cannot be mistaken for a skeleton, and it says
-   * which of the three non-answers this is.
+   * Second attempt printed "—", which typechecks as honest and renders as a
+   * redaction: an em-dash at hero size is a 60px horizontal bar that reads as
+   * a loading skeleton. Only a screenshot tells you that.
    */
   const placeholder =
     total.kind === "reading"
@@ -417,117 +438,168 @@ function WalletHero({
         ? "Unavailable"
         : "No balance yet";
 
+  /*
+   * When the total is shown in dollars, the caption says the RATE and the
+   * ORACLE instead of the network.
+   *
+   * A USD balance is the only number on this screen Dolphin computes rather
+   * than reads, so it is the only one a bug can make plausibly wrong while
+   * everything still looks fine. Naming the rate and its source makes that
+   * checkable against any exchange in two seconds. It costs no extra element —
+   * it is the same line, saying the more useful of two things.
+   */
+  const showingUsd = currency === "USD" && price.status === "ready";
+
   const caption =
     total.kind === "ready"
-      ? `Across ${total.accounts} ${total.accounts === 1 ? "account" : "accounts"} on ${ALTANA_NETWORK_LABEL}`
+      ? showingUsd && price.status === "ready"
+        ? `${total.accounts} ${total.accounts === 1 ? "account" : "accounts"} · at ${formatPricePerBnb(price.price)}/BNB, Chainlink`
+        : `${total.accounts} ${total.accounts === 1 ? "account" : "accounts"} · ${ALTANA_NETWORK_LABEL}`
       : total.kind === "reading"
-        ? `Checking every connected account on ${ALTANA_NETWORK_LABEL}.`
+        ? "Checking accounts…"
         : total.kind === "partial"
-          ? "One balance could not be read, so this is not a total. The per-account figures below are what Dolphin does know."
-          : "Connect an account below and its balance appears here.";
+          ? "One balance could not be read — see the accounts below."
+          : "Connect an account to see a balance.";
 
-  function refreshAll() {
-    void identityBalance.refetch();
-    void dolphin.refreshBalance();
-  }
+  const amount =
+    total.kind === "ready" ? renderAmount(total.wei, currency, price, hidden) : null;
 
   return (
     <section aria-labelledby="wallet-total-heading" className="wallet-hero">
       <div className="wallet-hero__head">
-        <div>
-          <p className="eyebrow">Wallet</p>
-          <h1 className="wallet-hero__heading" id="wallet-total-heading">
-            Total balance
-          </h1>
-        </div>
-
+        <p className="eyebrow" id="wallet-total-heading">Total balance</p>
         {/*
-         * The network, as a chip. It was 0.7rem grey text in a row between
-         * sections. Which chain an address is good for is the single fact that
-         * decides whether sending to it loses the funds, and it should not be
-         * the smallest text on a wallet screen.
+         * The network as a chip. It was 0.7rem grey text floating between
+         * sections. Which chain an address is good for decides whether sending
+         * to it loses the money; it should not be the smallest thing here.
          */}
-        <span className="wnet-chip">
-          <span aria-hidden="true" className="wnet-chip__dot" />
-          <BnbLogo size={14} />
+        <span className="wnet">
+          <span aria-hidden="true" className="wnet__dot" />
+          <BnbLogo size={13} />
           {ALTANA_NETWORK_LABEL}
-          <span className="wnet-chip__id">chain {ALTANA_CHAIN_ID}</span>
         </span>
       </div>
 
-      {total.kind === "ready" ? (
-        <p className="wallet-hero__figure">
-          {hidden ? HIDDEN_FIGURE : formatBnb(total.wei)}
-          <span className="wallet-hero__unit">BNB</span>
-          <button
-            className="wallet-hero__eye interactive"
-            onClick={onToggleHidden}
-            type="button"
-          >
-            {hidden ? "Show" : "Hide"}
-          </button>
-        </p>
-      ) : (
-        /* No unit either — "Unavailable BNB" would be a denomination for a
-           quantity that does not exist. */
-        <p className="wallet-hero__placeholder">{placeholder}</p>
-      )}
+      {/* The readout: sunk into the surface, like a display window. */}
+      <div className="wallet-readout">
+        {amount ? (
+          <p className="wallet-readout__figure">
+            {amount.figure}
+            {amount.unit && <span className="wallet-readout__unit">{amount.unit}</span>}
+          </p>
+        ) : (
+          /* No unit either — "Unavailable BNB" denominates a quantity that
+             does not exist. */
+          <p className="wallet-readout__placeholder">{placeholder}</p>
+        )}
 
-      {/*
-       * aria-live so a total that arrives after the page does is announced.
-       * "polite" because it is never urgent and a screen reader should not be
-       * interrupted mid-sentence by a balance settling.
-       */}
-      <p aria-live="polite" className="wallet-hero__caption">
-        {caption}
-      </p>
+        <div className="wallet-readout__controls">
+          <CurrencySwitch currency={currency} onChange={setCurrency} price={price} />
+          {total.kind === "ready" && (
+            <button
+              aria-label={hidden ? "Show balances" : "Hide balances"}
+              aria-pressed={hidden}
+              className="wallet-eye"
+              onClick={toggleHidden}
+              type="button"
+            >
+              {/* Icon only. A label reading "Hide" beside an eye is explaining
+                  a light switch. */}
+              <CategoryGlyph
+                color="currentColor"
+                name={hidden ? "eye-off" : "eye"}
+                size={17}
+                strokeWidth={1.8}
+              />
+            </button>
+          )}
+        </div>
+      </div>
 
-      {/*
-       * There is no USD figure here and there is not going to be one until a
-       * price source is wired. Dolphin reads no oracle and calls no price API,
-       * so any fiat number on this screen would be invented — and a made-up
-       * dollar value next to a real BNB balance is precisely what AGENTS.md §5
-       * rules out. The caption says "BNB" and means it.
-       */}
+      {/* aria-live so a total arriving after the page does is announced.
+          "polite" — a balance settling must not interrupt a screen reader. */}
+      <p aria-live="polite" className="wallet-hero__caption">{caption}</p>
 
       <div className="wallet-hero__actions">
-        <WalletAction
+        <QuickAction
           disabled={receiveTarget === null}
           glyph="receive"
           label="Receive"
           onClick={onReceive}
         />
         {receiveTarget ? (
-          <WalletAction
+          <QuickAction
             glyph="external"
             href={`https://bscscan.com/address/${receiveTarget}`}
             label="BscScan"
           />
         ) : (
-          <WalletAction disabled glyph="external" label="BscScan" />
+          <QuickAction disabled glyph="external" label="BscScan" />
         )}
-        <WalletAction
+        <QuickAction
           disabled={total.kind === "reading"}
           glyph="refresh"
           label="Refresh"
-          onClick={refreshAll}
+          onClick={() => {
+            void identityBalance.refetch();
+            void dolphin.refreshBalance();
+          }}
         />
       </div>
     </section>
   );
 }
 
-/* ─────────────── identity wallet card (wagmi) ─────────────── */
+/* ─────────────── account cards ─────────────── */
+
+/**
+ * The truncated address, as a button that opens the receive sheet.
+ *
+ * A truncated address is not an address, it is a label for one — so it is not
+ * a thing to copy, it is a thing to open. This is the only address affordance
+ * on a card, and the sheet behind it is the only place a full string exists.
+ */
+function AddressChip({ address, onOpen }: { address: string; onOpen: () => void }) {
+  return (
+    <button className="wcard__addr" onClick={onOpen} title="Show address and QR" type="button">
+      <code>{truncateAddress(address)}</code>
+      <CategoryGlyph color="currentColor" name="receive" size={11} strokeWidth={2} />
+    </button>
+  );
+}
+
+/** One balance line on a card, in the chosen currency or as a stated absence. */
+function CardAmount({
+  amount,
+  loading,
+}: {
+  amount: { figure: string; unit: string | null } | null;
+  loading: boolean;
+}) {
+  if (!amount) {
+    return (
+      <p className="wcard__amount wcard__amount--muted">{loading ? "…" : "Unavailable"}</p>
+    );
+  }
+  return (
+    <p className="wcard__amount">
+      {amount.figure}
+      {amount.unit && <span className="wcard__amount-unit">{amount.unit}</span>}
+    </p>
+  );
+}
 
 function IdentityWalletCard({
-  hidden,
   onReceive,
+  price,
 }: {
-  hidden: boolean;
   onReceive: (address: string) => void;
+  price: BnbPriceState;
 }) {
   const identity = useWallet();
-  const { data: balData, isLoading: balLoading } = useBalance({
+  const currency = useAppStore((s) => s.displayCurrency);
+  const hidden = useAppStore((s) => s.hideBalances);
+  const { data, isLoading } = useBalance({
     address: identity.address as `0x${string}` | undefined,
     // Same pin, same reason, and the same query key as the hero's read.
     chainId: ALTANA_CHAIN_ID,
@@ -535,152 +607,93 @@ function IdentityWalletCard({
   });
 
   /*
-   * The empty state is a CARD, not an absence.
-   *
-   * It occupies the same grid slot at the same size as the connected card, so
-   * the two-column shape of this screen never changes with connection state -
-   * cards do not grow into the row or drop below one another as wallets come
-   * and go. What changes is only what is inside the slot.
+   * The empty state is a CARD, not an absence. It occupies the same slot at
+   * the same FIXED height as the connected card, so the shape of this screen
+   * never changes with connection state — cards do not grow into the row or
+   * drop below one another as wallets come and go.
    */
   if (!identity.isConnected || !identity.address) {
     return (
-      <div className="wcard wcard--identity wcard--empty" aria-label="Identity wallet">
-        <div className="wcard__top-row">
-          <div className="wcard__eyebrow">Your wallet</div>
-        </div>
-        <p className="wcard__empty-title">Not connected</p>
-        <p className="wcard__empty-body">
-          Connect an address so Dolphin can remember which agents you have
-          hired. It reads the public address only.
-        </p>
-        <div className="wcard__empty-action">
-          <WalletConnectButton connectLabel="Connect wallet" />
+      <div aria-label="Identity wallet" className="wcard wcard--empty">
+        <p className="wcard__eyebrow">Your wallet</p>
+        <p className="wcard__title">Not connected</p>
+        <p className="wcard__sub">Remembers your hires. Reads the public address only.</p>
+        <div className="wcard__foot">
+          <WalletConnectButton connectLabel="Connect" />
         </div>
       </div>
     );
   }
 
-  /*
-   * Formatted with the SAME helper the agent card uses, deliberately.
-   *
-   * This previously did its own `Number(value / 10n**14n) / 10000` then
-   * `.toFixed(4)`, which truncated to 4 decimals while the agent card's
-   * formatBnb keeps 6. Two cards on one screen, both denominated in BNB on the
-   * same chain, disagreed about the same quantity: a balance that rendered as
-   * "0.00001" on one showed as "0.0000" on the other, which reads as "empty"
-   * when it is not. Sharing formatBnb makes that class of mismatch impossible
-   * rather than merely fixed once.
-   *
-   * It also drops a float conversion from a wei value — formatBnb stays in
-   * bigint arithmetic, so a large balance cannot lose precision.
-   */
-  const bnbStr = balLoading ? "…" : balData ? formatBnb(balData.value) : "—";
-  const shown = hidden && balData ? HIDDEN_FIGURE : bnbStr;
   const address = identity.address;
 
   return (
-    <div className="wcard wcard--identity" aria-label="Identity wallet">
-      <div className="wcard__top-row">
-        <div className="wcard__ident">
-          <WalletAvatar address={address} className="wcard__avatar" kind="human" size={36} />
-          <div className="wcard__ident-text">
-            <p className="wcard__eyebrow">Your wallet</p>
-            <button
-              className="wcard__addr-btn interactive"
-              onClick={() => onReceive(address)}
-              title="Show full address"
-              type="button"
-            >
-              <code>{truncateAddress(address)}</code>
-              <CategoryGlyph color="currentColor" name="receive" size={11} strokeWidth={2} />
-            </button>
-          </div>
+    <div aria-label="Identity wallet" className="wcard">
+      <div className="wcard__head">
+        <WalletAvatar address={address} className="wcard__avatar" kind="human" size={34} />
+        <div className="wcard__head-text">
+          <p className="wcard__eyebrow">Your wallet</p>
+          <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
       </div>
 
-      <p className="wcard__balance-line">
-        <span className="wcard__balance-figure">{shown}</span>
-        <span className="wcard__balance-unit">BNB</span>
-      </p>
-      <p className="wcard__hero-sub">Identity · signs in, holds your hire records</p>
-
-      <div className="wcard__asset-list">
-        <div className="wcard__asset-row">
-          <span className="wcard__asset-icon"><BnbLogo size={18} /></span>
-          <span className="wcard__asset-name">BNB</span>
-          <span className="wcard__asset-sub">{ALTANA_NETWORK_LABEL}</span>
-          <span className="wcard__asset-amount">{shown}</span>
-        </div>
-      </div>
+      <CardAmount
+        amount={data ? renderAmount(data.value, currency, price, hidden) : null}
+        loading={isLoading}
+      />
+      <p className="wcard__sub">Signs in · hire records</p>
 
       {/*
-       * Disconnect lives HERE now, on the card for the account it disconnects.
-       *
-       * It used to be a separate full-width band under the cards
-       * (IdentityWalletSection) whose entire content was a heading repeating
-       * "Identity wallet", a sentence repeating what the card already said, and
-       * this control. A third strip restating a card that is six inches above
-       * it is the kind of thing that makes a page feel unconsidered.
-       *
-       * Still WalletConnectButton rather than a local button, for the reason
-       * that component's own comment gives: it owns the two-step confirm, and a
-       * second disconnect path here would be one click where the other is two.
+       * Disconnect lives HERE, on the card for the account it disconnects. It
+       * used to be a separate full-width band under the cards, restating the
+       * card six inches above it. Still WalletConnectButton rather than a local
+       * button, for the reason that component's own note gives: it owns the
+       * two-step confirm, and a second path here would be one click where the
+       * other is two.
        */}
-      <div className="wcard__connect">
-        <WalletConnectButton connectLabel="Connect wallet" />
+      <div className="wcard__foot">
+        <WalletConnectButton connectLabel="Connect" />
       </div>
     </div>
   );
 }
 
-/* ─────────────── agent wallet card (Altana passkey) ─────────────── */
-
-/**
- * The agent slot, in whichever of its three states applies.
- *
- * Like IdentityWalletCard it always renders a card of the same shape, so the
- * grid keeps its two columns whether a Dolphin Wallet exists, cannot exist in
- * this browser, or has simply not been created yet.
- */
 function AgentWalletCard({
-  hidden,
   onReceive,
+  price,
 }: {
-  hidden: boolean;
   onReceive: (address: string) => void;
+  price: BnbPriceState;
 }) {
   const wallet = useAltanaWallet();
+  const currency = useAppStore((s) => s.displayCurrency);
+  const hidden = useAppStore((s) => s.hideBalances);
 
   // No wallet on this device: an invitation, not an empty box. Creation stays
-  // an explicit user action - nothing here creates one as a side effect.
+  // an explicit user action — nothing here creates one as a side effect.
   if (wallet.status !== "connected" || !wallet.address) {
     const blocked = wallet.status === "unsupported";
     return (
-      <div className="wcard wcard--agent wcard--empty" aria-label="Agent payments wallet">
-        <div className="wcard__top-row">
-          <div className="wcard__eyebrow">Agent payments</div>
-        </div>
-        <p className="wcard__empty-title">
-          {blocked ? "Not available here" : "No wallet yet"}
-        </p>
-        <p className="wcard__empty-body">
+      <div aria-label="Agent payments wallet" className="wcard wcard--agent wcard--empty">
+        <p className="wcard__eyebrow">Agent payments</p>
+        <p className="wcard__title">{blocked ? "Unavailable here" : "Not set up"}</p>
+        <p className="wcard__sub">
           {blocked
             ? wallet.unsupportedReason ?? "This browser cannot hold a passkey wallet."
-            : "A passkey-secured account that pays agents on your behalf. Optional — you only need it to pay an agent."}
+            : "Pays the agents you hire. Optional."}
         </p>
-        {/*
-         * Ghost, not accent — and that is the hierarchy, not a downgrade.
-         *
-         * Both empty cards sit side by side, and only one of them is the path a
-         * new visitor needs: connecting an address is what makes hiring work.
-         * This wallet is genuinely optional and says so. Two solid accent
-         * buttons competing across the row would flatten that distinction into
-         * "pick one", which is the opposite of true.
-         */}
+        {wallet.error && <p className="wallet-inline-error">{wallet.error}</p>}
         {!blocked && (
-          <div className="wcard__empty-action">
+          <div className="wcard__foot">
+            {/*
+             * Ghost, not accent, and that is hierarchy rather than a downgrade.
+             * Both empty cards sit side by side and only one is the path a new
+             * visitor needs — connecting an address is what makes hiring work.
+             * This wallet is genuinely optional and says so. Two solid buttons
+             * competing across the row would flatten that into "pick one".
+             */}
             <button
-              className="wallet-action-btn wallet-action-btn--ghost interactive"
+              className="wallet-btn wallet-btn--ghost"
               disabled={wallet.isBusy}
               onClick={() => void wallet.createWallet()}
               type="button"
@@ -688,131 +701,91 @@ function AgentWalletCard({
               {wallet.isBusy ? "Waiting for passkey…" : "Create with passkey"}
             </button>
             <button
-              className="wcard__empty-link interactive"
+              className="wcard__link"
               disabled={wallet.isBusy}
               onClick={() => void wallet.recoverWallet()}
               type="button"
             >
-              I already have one — recover it
+              Recover an existing one
             </button>
           </div>
         )}
-        {wallet.error && <p className="wallet-inline-error">{wallet.error}</p>}
       </div>
     );
   }
 
   const address = wallet.address;
   const readable = !wallet.balanceError && wallet.balanceWei !== null;
-  const figure = wallet.balanceError
-    ? "Unavailable"
-    : wallet.balanceWei === null
-      ? (wallet.isReadingBalance ? "…" : "—")
-      : hidden
-        ? HIDDEN_FIGURE
-        : formatBnb(wallet.balanceWei);
 
   return (
-    <div className="wcard wcard--agent" aria-label="Agent payments wallet">
-      <div className="wcard__top-row">
-        {/*
-         * "Agent Payments", not "For agents" / "Agent spending".
-         *
-         * The old wording was ambiguous in a money-shaped way: it read as
-         * though this account holds what an agent EARNS. It does not, and
-         * there is no code path that would put earnings here — a paid hire
-         * sends $U to the agent's own registered ERC-8004 wallet
-         * (convex/agentPayments.ts verifies the payee against it). This
-         * balance is outbound only: funds the USER deposits in order to pay
-         * agents. The subcopy below says so in as many words.
-         */}
-        <div className="wcard__ident">
-          <WalletAvatar address={address} className="wcard__avatar" kind="bot" size={36} />
-          <div className="wcard__ident-text">
-            <p className="wcard__eyebrow">Agent payments</p>
-            <button
-              className="wcard__addr-btn interactive"
-              onClick={() => onReceive(address)}
-              title="Show full address"
-              type="button"
-            >
-              <code>{truncateAddress(address)}</code>
-              <CategoryGlyph color="currentColor" name="receive" size={11} strokeWidth={2} />
-            </button>
-          </div>
+    <div aria-label="Agent payments wallet" className="wcard wcard--agent">
+      <div className="wcard__head">
+        <WalletAvatar address={address} className="wcard__avatar" kind="bot" size={34} />
+        <div className="wcard__head-text">
+          {/*
+           * "Agent payments", not "agent spending" or "for agents". The old
+           * wording read as though this account holds what an agent EARNS. It
+           * does not, and no code path would put earnings here — a paid hire
+           * sends to the agent's own registered ERC-8004 wallet, which
+           * convex/agentPayments.ts verifies the payee against. This balance is
+           * outbound only.
+           */}
+          <p className="wcard__eyebrow">Agent payments</p>
+          <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
-        <span className="wcard__badge">
+        <span className="wcard__badge" title="Secured by a passkey on this device">
           <CategoryGlyph color="currentColor" name="shield" size={11} strokeWidth={2} />
-          Passkey
         </span>
       </div>
 
-      <p className={`wcard__balance-line${readable ? "" : " wcard__balance-line--muted"}`}>
-        <span className="wcard__balance-figure">{figure}</span>
-        {readable && <span className="wcard__balance-unit">BNB</span>}
-      </p>
-      <p className="wcard__hero-sub">Funds you deposit to pay agents you hire</p>
+      <CardAmount
+        amount={readable ? renderAmount(wallet.balanceWei!, currency, price, hidden) : null}
+        loading={wallet.isReadingBalance}
+      />
+      <p className="wcard__sub">Pays your hires</p>
 
-      <div className="wcard__asset-list">
-        <div className="wcard__asset-row">
-          <span className="wcard__asset-icon"><BnbLogo size={18} /></span>
-          <span className="wcard__asset-name">BNB</span>
-          <span className="wcard__asset-sub">Dolphin Wallet · passkey-secured</span>
-          <span className="wcard__asset-amount">{readable ? figure : "—"}</span>
-        </div>
-      </div>
-
-      <div className="wcard__connect">
-        <button
-          className="wallet-action-btn wallet-action-btn--ghost interactive"
-          onClick={() => onReceive(address)}
-          type="button"
-        >
-          Deposit BNB
-        </button>
-      </div>
+      {/*
+       * No "Deposit" button here. It opened the same sheet as the hero's
+       * Receive and as the address chip above it — three controls, one
+       * destination. The chip is the one that belongs to this account.
+       */}
     </div>
   );
 }
 
-/* ─────────────── danger zone ─────────────── */
+/* ─────────────── device access ─────────────── */
 
 function DeviceAccessSection() {
   const wallet = useAltanaWallet();
-  const [confirmForget, setConfirmForget] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   return (
-    <section className="wallet-danger-zone" aria-label="Device access">
-      <div className="wallet-danger-zone__body">
-        <p className="wallet-danger-zone__title">Remove from this device</p>
-        <p className="wallet-danger-zone__sub">
-          Clears the local record only. Active permissions on-chain are unchanged.
-        </p>
+    <section aria-label="Device access" className="wallet-danger">
+      <div>
+        <p className="wallet-danger__title">Remove from this device</p>
+        <p className="wallet-danger__sub">Local record only. On-chain access is unchanged.</p>
       </div>
-      {confirmForget ? (
-        <div className="wallet-danger-zone__confirm">
-          <p className="wallet-danger-zone__confirm-label">Remove wallet from this browser?</p>
-          <div className="wallet-danger-zone__confirm-actions">
-            <button
-              className="wallet-action-btn wallet-action-btn--ghost interactive"
-              onClick={() => setConfirmForget(false)}
-              type="button"
-            >
-              Keep it
-            </button>
-            <button
-              className="wallet-action-btn wallet-action-btn--danger interactive"
-              onClick={() => { wallet.forgetWallet(); setConfirmForget(false); }}
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
+      {confirming ? (
+        <div className="wallet-danger__confirm">
+          <button
+            className="wallet-btn wallet-btn--ghost"
+            onClick={() => setConfirming(false)}
+            type="button"
+          >
+            Keep
+          </button>
+          <button
+            className="wallet-btn wallet-btn--danger"
+            onClick={() => { wallet.forgetWallet(); setConfirming(false); }}
+            type="button"
+          >
+            Remove
+          </button>
         </div>
       ) : (
         <button
-          className="interactive wallet-danger-zone__trigger"
-          onClick={() => setConfirmForget(true)}
+          className="wallet-danger__trigger"
+          onClick={() => setConfirming(true)}
           type="button"
         >
           Remove
@@ -826,59 +799,53 @@ function DeviceAccessSection() {
 
 /*
  * Gated off by FEATURE_SESSION_EXECUTION (see altana-policy.ts for the full
- * reasoning). The flag removes this from the rendered tree entirely rather than
- * disabling controls inside it, while keeping the markup type-checked and one
- * flag away from returning.
+ * reasoning). The flag removes this from the rendered tree entirely rather
+ * than disabling controls inside it, while keeping the markup type-checked and
+ * one flag away from returning.
  *
  * Why it is off: a granted session's signing key never reaches an agent and
- * nothing in this app can execute with one, so this panel listed permissions
- * that no party could exercise - and the Grant button that fed it charged real
- * BNB in gas to create them.
+ * nothing in this app can execute with one, so this listed permissions no
+ * party could exercise — and the Grant button that fed it charged real BNB in
+ * gas to create them.
  */
 function PermissionsSection() {
   const wallet = useAltanaWallet();
-  const activeSessions = (wallet.sessions ?? []).filter((s) => s.status === "active");
-  const pastSessions = (wallet.sessions ?? []).filter((s) => s.status !== "active");
+  const active = (wallet.sessions ?? []).filter((s) => s.status === "active");
+  const past = (wallet.sessions ?? []).filter((s) => s.status !== "active");
 
   return (
     <section aria-labelledby="permissions-heading" className="wallet-section">
       <div className="wallet-section__header">
-        <div>
-          <p className="eyebrow">Agent access</p>
-          <h2 className="wallet-section__title" id="permissions-heading">Permissions</h2>
-        </div>
+        <h2 className="wallet-section__title" id="permissions-heading">Permissions</h2>
         {!wallet.sessionsUnavailable && wallet.sessions !== undefined && (
-          <span className="wallet-count-badge">{activeSessions.length} active</span>
+          <span className="wallet-count-badge">{active.length} active</span>
         )}
       </div>
 
       {wallet.sessionsUnavailable ? (
         <StatePanel
-          body="Backend not configured — active sessions cannot be shown. New grants are refused."
+          body="Backend not configured. New grants are refused."
           compact
           state="unavailable"
-          title="Permission records unavailable"
+          title="Permissions unavailable"
         />
       ) : wallet.sessions === undefined ? (
-        <StatePanel
-          body="Reading permission records…"
-          compact
-          state="syncing"
-          title="Checking permissions"
-        />
-      ) : activeSessions.length === 0 ? (
+        <StatePanel body="Reading records…" compact state="syncing" title="Checking" />
+      ) : active.length === 0 ? (
         <div className="wallet-empty-permissions">
           <span className="wallet-empty-permissions__icon">
             <CategoryGlyph color="currentColor" name="shield" size={16} strokeWidth={2} />
           </span>
           <div>
             <p className="wallet-empty-permissions__title">No active permissions</p>
-            <p className="wallet-empty-permissions__sub">Read-only hires receive no spending authority.</p>
+            <p className="wallet-empty-permissions__sub">
+              Read-only hires get no spending authority.
+            </p>
           </div>
         </div>
       ) : (
         <ul className="wallet-sessions-list">
-          {activeSessions.map((session) => (
+          {active.map((session) => (
             <SessionRow
               isBusy={wallet.isBusy}
               isLiveThisTab={wallet.liveSessionKeys.includes(session.sessionPublicKey)}
@@ -890,19 +857,16 @@ function PermissionsSection() {
         </ul>
       )}
 
-      {pastSessions.length > 0 && (
+      {past.length > 0 && (
         <details className="wallet-past-sessions">
-          <summary>
-            {pastSessions.length} inactive permission{pastSessions.length === 1 ? "" : "s"}
-          </summary>
+          <summary>{past.length} inactive</summary>
           <ul className="wallet-past-sessions__list">
-            {pastSessions.map((session) => (
+            {past.map((session) => (
               <li className="wallet-past-sessions__row" key={session.sessionPublicKey}>
                 <div>
                   <p className="wallet-past-sessions__name">{session.agentName}</p>
                   <p className="wallet-past-sessions__meta">
                     {formatBnb(BigInt(session.spendCapWei))} BNB / {session.spendPeriod}
-                    {" · "}#{session.agentKey}
                   </p>
                 </div>
                 <span className="wallet-past-sessions__status">{session.status}</span>
@@ -918,49 +882,38 @@ function PermissionsSection() {
 /* ─────────────── public export ─────────────── */
 
 /**
- * Decides which wallet layout the screen shows.
- *
  * ---------------------------------------------------------------------------
- * FIXED (2026-09-01): the identity card no longer depends on the agent wallet.
+ * ONE dashboard, not two render paths.
  * ---------------------------------------------------------------------------
- * This used to branch on `wallet.status` ALONE, and that status describes only
- * the Altana/Dolphin wallet - altana-provider.tsx derives it as
- * `stored ? "connected" : "no-wallet"`, where `stored` is the passkey
- * credential in localStorage. IdentityWalletCard is rendered inside
- * ConnectedWallet, so it was reachable only once a Dolphin Wallet existed.
+ * This used to branch on `wallet.status` alone, and that status describes only
+ * the Dolphin wallet — so someone could connect MetaMask and see no trace of
+ * it, because the screen was still showing "create a Dolphin Wallet". Two
+ * independent accounts, one gating the other's visibility for no reason.
  *
- * The effect: someone could connect MetaMask and see no trace of it, because
- * the screen was still showing "create a Dolphin Wallet". Two independent
- * accounts, one of them gating the other's visibility for no reason.
+ * There were then two whole render paths, which is how the fund banner, the
+ * refresh row and the device control each drifted to a slightly different
+ * condition from the card they belonged to. Now every section decides for
+ * itself whether it has anything to say, and nothing moves when a wallet is
+ * created — the sections were always going to be in that order.
  *
- * ---------------------------------------------------------------------------
- * SIMPLIFIED (2026-09-12): one layout, not two.
- * ---------------------------------------------------------------------------
- * There used to be two whole render paths here — a "ConnectedWallet" dashboard
- * and a shorter no-wallet variant — which is how the screen ended up with a
- * fund banner, a refresh row and a "remove from this device" control that were
- * each conditional in a slightly different way from the card they belonged to.
- *
- * Now there is ONE dashboard and each section decides for itself whether it has
- * anything to say. Sections that describe the Dolphin Wallet render only when
- * there is one; the cards and the total render always, each in its own state.
- * That is why nothing below moves when a wallet is created — the sections were
- * always going to be in that order.
- *
- * This changes VISIBILITY only. createPasskeyWallet is untouched and remains a
- * separate, explicit, user-initiated action - nothing here auto-creates a
- * wallet or makes one a precondition for anything else.
+ * VISIBILITY only. createPasskeyWallet is untouched and remains a separate,
+ * explicit, user-initiated action.
  */
 export function AltanaWalletPanel() {
   const wallet = useAltanaWallet();
   const identity = useWallet();
-  const [hidden, setHidden] = useState(false);
+  const price = useBnbPrice();
+  const hidden = useAppStore((s) => s.hideBalances);
   const [receiving, setReceiving] = useState<string | null>(null);
 
   if (wallet.status === "loading") {
     return (
       <div className="wallet-loading">
-        <StatePanel body="Checking this browser for a Dolphin Wallet credential." state="syncing" title="Checking device" />
+        <StatePanel
+          body="Checking this browser for a Dolphin Wallet credential."
+          state="syncing"
+          title="Checking device"
+        />
       </div>
     );
   }
@@ -974,42 +927,23 @@ export function AltanaWalletPanel() {
    * identity wallet is the user's own MetaMask and they already have a full
    * interface for it.
    */
-  const heroReceiveTarget = dolphinAddress ?? identityAddress;
-  const isReceivingDolphin =
-    receiving !== null && receiving.toLowerCase() === dolphinAddress?.toLowerCase();
+  const heroTarget = dolphinAddress ?? identityAddress;
 
   return (
     <div className="wallet-dashboard">
       <WalletHero
-        hidden={hidden}
-        onReceive={() => setReceiving(heroReceiveTarget)}
-        onToggleHidden={() => setHidden((value) => !value)}
-        receiveTarget={heroReceiveTarget}
+        onReceive={() => setReceiving(heroTarget)}
+        price={price}
+        receiveTarget={heroTarget}
       />
 
-      <section aria-label="Accounts" className="wallet-dual-section">
-        <AgentWalletCard hidden={hidden} onReceive={setReceiving} />
-        <IdentityWalletCard hidden={hidden} onReceive={setReceiving} />
+      <section aria-label="Accounts" className="wallet-accounts">
+        <AgentWalletCard onReceive={setReceiving} price={price} />
+        <IdentityWalletCard onReceive={setReceiving} price={price} />
       </section>
 
-      {/*
-       * Recoverability, directly under the card it describes, and only when
-       * there is a wallet to describe. See RecoverabilityPanel's own note for
-       * why it is no longer the first thing on the page.
-       */}
-      {dolphinAddress && <RecoverabilityPanel />}
-
-      {/* Zero balance funding prompt — the one case where the deposit address
-          is worth putting on the page rather than behind the Receive sheet. */}
-      {dolphinAddress && wallet.balanceWei === BigInt(0) && (
-        <div className="wallet-fund-banner">
-          <div className="wallet-fund-banner__row">
-            <p className="wallet-fund-banner__title">Fund the agent wallet to get started</p>
-            <CopyButton label="Copy funding address" value={dolphinAddress} />
-          </div>
-          <code className="wallet-fund-banner__address">{dolphinAddress}</code>
-          <p className="wallet-fund-banner__hint">{ALTANA_FUNDING_HINT}</p>
-        </div>
+      {dolphinAddress && (
+        <RecoverabilityPanel onDeposit={() => setReceiving(dolphinAddress)} />
       )}
 
       {wallet.error && <p className="wallet-error-banner">{wallet.error}</p>}
@@ -1023,12 +957,10 @@ export function AltanaWalletPanel() {
       {receiving && (
         <ReceiveSheet
           address={receiving}
-          kind={isReceivingDolphin ? "bot" : "human"}
-          label={isReceivingDolphin ? "Agent payments wallet" : "Your wallet"}
-          note={
-            isReceivingDolphin
-              ? "Passkey-secured. Funds here pay the agents you hire."
-              : "Your connected address. Dolphin only ever reads it."
+          label={
+            receiving.toLowerCase() === dolphinAddress?.toLowerCase()
+              ? "Agent payments"
+              : "Your wallet"
           }
           onClose={() => setReceiving(null)}
         />

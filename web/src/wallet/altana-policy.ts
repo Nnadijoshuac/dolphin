@@ -413,29 +413,38 @@ export function recoverabilityCopy(state: RecoverabilityState): {
   body: string;
 } {
   switch (state) {
+    /*
+     * SHORTENED 2026-09-12. These were three to four sentences each and they
+     * sat in the loudest panel on the wallet screen, which made the screen
+     * read as a document rather than as a wallet.
+     *
+     * The cut was made by asking, of each sentence, whether a person acts
+     * differently for having read it. What survives is the state, the
+     * consequence, and the fix. What went is the mechanism — "registered in
+     * Altana's on-chain KeyStore", "there is nothing for a passkey to recover
+     * from" — which explains how the machinery works to someone who only needs
+     * to know whether their money is reachable tomorrow.
+     *
+     * The WARNING itself is not shortened away, deliberately: losing access is
+     * a real and permanent outcome, and §5's spirit cuts both ways — you may
+     * not overstate a risk and you may not soften one either.
+     */
     case "registered":
       return {
-        title: "Recoverable on another device",
-        body:
-          "This wallet's key is registered in Altana's on-chain KeyStore, so your " +
-          "passkey can rebuild it on a new device or after clearing this browser. " +
-          "Read live from the chain just now, not assumed.",
+        title: "Recoverable",
+        body: "Your passkey can rebuild this wallet on another device. Read live from the chain.",
       };
     case "unregistered":
       return {
-        title: "Not recoverable yet — read this before you clear this browser",
+        title: "Not recoverable yet",
         body:
-          "This wallet has never transacted, so its key is not yet in Altana's " +
-          "on-chain KeyStore and there is nothing for a passkey to recover from. " +
-          "If you clear this browser or move to another device now, you will lose " +
-          "access to it. Its first on-chain action fixes this automatically.",
+          "Clearing this browser now would lose this wallet. Its first on-chain " +
+          "action fixes that automatically.",
       };
     default:
       return {
-        title: "Recoverability not checked",
-        body:
-          "Dolphin has not been able to read this wallet's KeyStore entry, so it " +
-          "will not tell you either way. Refresh to try again.",
+        title: "Recoverability unknown",
+        body: "Dolphin could not read this wallet's recovery entry, so it will not say either way.",
       };
   }
 }

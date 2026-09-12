@@ -15,7 +15,7 @@
  * IT DELIBERATELY PRESERVES THE OLD CONTRACT
  * ---------------------------------------------------------------------------
  * Every field the mobile app and the website already read is still here, in the
- * shape they already read it in. That is not inertia - `AGENTS.md` §11 keeps the
+ * shape they already read it in. That is not inertia - `AGENTS.md` §12 (§11 when this was written) keeps the
  * UI layer off-limits, and the rebuild's authorisation covers three screens
  * (Discover, Search, category listing) so pagination and server-side search can
  * be wired. Changing the agent shape underneath twenty components was never in

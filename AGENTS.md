@@ -118,7 +118,25 @@ The backend (`convex/`) follows patterns already established in the codebase —
 - Never leave uncommitted changes at the end of a task or session.
 - Before committing anything that touches config, env files, or permission/settings files, check it doesn't contain a secret (private key, API token) — these have leaked into `.claude/settings.json` before via approved command strings. If you spot one, flag it and remove it in its own commit rather than letting it ride along with unrelated work.
 
-## 11. UI/Frontend Boundary — Expo app only
+## 11. Session Logs — Every Agent, Every Session
+
+**Before you finish a session, write what you learned to `Agent/SESSION-LOG-<YYYY-MM-DD>-<topic>.md`.** This is not optional and it is not a summary of your commits — the commits already exist and `git log` reads them better than prose does.
+
+**What belongs in a session log is what the diff cannot carry:**
+
+- **What you measured, and the number you got.** "The KeyStore registration fee is 0.00068 BNB, read live from `getRegistrationFeeInWei`" is worth more than any amount of description. Include the address, the block, the call.
+- **What you believed that turned out to be false.** These are the expensive ones. The next agent will believe the same thing.
+- **What you could not verify, and why.** An honest "I could not reproduce this without the user's passkey" stops the next session from asserting it was fine.
+- **Dead ends.** A path you ruled out is a path nobody has to walk again — say what you tried and what ruled it out.
+- **Anything a third party told you.** A seller's rejection message, an SDK's undocumented behaviour, an endpoint's real response shape. These are not in the repo and cannot be rediscovered by reading it.
+
+**Why this is a rule and not a nicety.** `Agent/` is git-ignored, so it exists only on a machine that has worked on this project — it is the only memory that survives between sessions, and a session that does not write to it leaves nothing behind but code. This codebase is full of comments beginning "measured 2026-08-31" and "found by running it, not by reading it" precisely because someone wrote the finding down. Several bugs in this repo's history were rediscovered more than once because the first discovery was never recorded.
+
+**Conventions:** one file per session, named by date and topic. Link the commits by hash where it helps. Cite a log from a source comment the way existing code already does (`SESSION-LOG-2026-08-31-payments.md §0.8`). Add a line to `Agent/AGENT_INDEX.md` so the file is findable. If you are resuming a topic, write a new dated file rather than editing an old one — the old one was true when it was written and is evidence of what was believed then.
+
+**Never put a secret in a session log.** It is git-ignored, not encrypted, and §10's rule about keys applies here identically.
+
+## 12. UI/Frontend Boundary — Expo app only
 
 **Corrected 2026-09-12.** This section used to put "the UI/frontend layer" off-limits without saying which frontend, and it was written when `web/` did not exist. It became a barrier: it was read as covering the website, where the actual request was usually to change the UI, so work stalled on a rule that was never about that codebase.
 

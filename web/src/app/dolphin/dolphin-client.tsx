@@ -15,6 +15,12 @@ import {
     type DolphinTurn,
 } from "@/hooks/use-dolphin-conversation";
 import { useAppStore, type ChatHistoryEntry } from "@/store/use-app-store";
+import { useWallet } from "@/wallet/wallet-provider";
+
+/** Matches the abbreviation SiteHeader uses, so one address reads the same everywhere. */
+function shortWalletAddress(value: string) {
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
 
 function relativeTime(timestamp: number): string {
   const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
@@ -305,6 +311,7 @@ export function DolphinClient({
       : "",
   );
   const [historyOpen, setHistoryOpen] = useState(false);
+  const wallet = useWallet();
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoAskedRef = useRef(false);
@@ -413,6 +420,46 @@ export function DolphinClient({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/*
+              * CONNECT, ON THE ONE ROUTE THAT HID IT. (2026-09-12)
+              *
+              * app-frame.tsx suppresses SiteHeader here, and SiteHeader is
+              * where the connect button lives - so the chat was the only
+              * surface in the product with no way to connect a wallet. That
+              * mattered in two concrete ways:
+              *
+              *  - SYSTEM_PROMPT rule 13 instructs the model, verbatim, to
+              *    "invite them to click 'Connect' in the top bar". The control
+              *    it names did not exist on this route, so following the
+              *    instruction sent the user looking for a button that was not
+              *    there.
+              *  - One of the starter prompts is "What is my Venus health
+              *    factor?", which cannot be answered without an address.
+              *
+              * Rendered as a compact pill rather than the full header control:
+              * this header is a chat toolbar, not site chrome, and the address
+              * links to /wallet the same way SiteHeader's does.
+              */}
+            {wallet.isConnected && wallet.address ? (
+              <Link
+                className="hidden items-center gap-1.5 rounded-full border border-slate-300/80 bg-white/75 px-3 py-1.5 text-[12px] font-semibold text-slate-700 no-underline transition-colors hover:bg-white sm:inline-flex"
+                href="/wallet"
+                title={wallet.address}
+              >
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-600" />
+                <span className="font-mono">{shortWalletAddress(wallet.address)}</span>
+              </Link>
+            ) : (
+              <button
+                aria-busy={wallet.isConnecting}
+                className="rounded-full bg-accent px-3 py-1.5 text-[12px] font-semibold text-ink transition-colors hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60"
+                disabled={wallet.isConnecting}
+                onClick={() => void wallet.connect()}
+                type="button"
+              >
+                {wallet.isConnecting ? "Connecting…" : "Connect"}
+              </button>
+            )}
             <button
               aria-label="Open chat history"
               className="grid size-10 place-items-center rounded-full text-slate-700 transition-colors hover:bg-white/80 lg:hidden"

@@ -11,6 +11,7 @@ import {
   useReportBackendStatus,
 } from "@/components/backend-status";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { MobileMenuButton } from "@/components/mobile-nav";
 import { FilterModal } from "@/components/filter-modal";
 import { StatePanel } from "@/components/state-panel";
 import {
@@ -195,6 +196,18 @@ function SearchContent() {
 
   return (
     <div className="mobile-search-page site-frame page-shell" style={{ paddingBlockStart: 0 }}>
+      {/*
+        * The phone's only route off this page.
+        *
+        * Search had no header of its own and relied entirely on the bottom tab
+        * bar for navigation; with that gone it was a dead end — you could
+        * search, and then only go forward. Sits above the field rather than
+        * inside it, because the field is a text input and a menu button inside
+        * one reads as a control that acts on the query.
+        */}
+      <div className="mobile-only mobile-search-topbar">
+        <MobileMenuButton />
+      </div>
       <section aria-label="Agent search" className="mobile-search-controls pt-6 sm:pt-8">
         <form
           onSubmit={(event) => {

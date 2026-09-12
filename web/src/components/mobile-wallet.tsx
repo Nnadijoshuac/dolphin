@@ -7,6 +7,7 @@ import { useBalance } from "wagmi";
 import { AgentActivity } from "@/components/agent-activity";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
+import { MobileMenuButton } from "@/components/mobile-nav";
 import { OptionalFeature } from "@/components/optional-feature";
 import { ReceiveSheet } from "@/components/receive-sheet";
 import { WalletAvatar } from "@/components/wallet-avatar";
@@ -132,9 +133,13 @@ export function MobileWallet() {
             <CategoryGlyph name="wallet" size={20} />
           )}
         </Link>
-        <Link aria-label="Wallet and security details" className="mobile-circle" href="/account#security">
-          <CategoryGlyph name="info" size={20} />
-        </Link>
+        {/*
+          * The menu replaces the "security details" shortcut here. The bottom
+          * tab bar is gone, so the one control this row can spare has to be
+          * the one that reaches every other screen; /account#security is still
+          * one tap away through the avatar on the left.
+          */}
+        <MobileMenuButton />
       </header>
 
       <section aria-label="Wallet overview" className="mobile-wallet-total">

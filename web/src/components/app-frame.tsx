@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { CensusMarquee } from "@/components/census-marquee";
+import { MobileNavDrawer } from "@/components/mobile-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -58,13 +59,19 @@ export function AppFrame({ children }: { children: ReactNode }) {
       {isStandaloneRoute(pathname) ? null : (
         <>
           <SiteHeader />
-          <CensusMarquee />
+          {/*
+           * DISCOVER ONLY. The census is the argument for the catalog, and the
+           * catalog is what Discover is. On /search or /wallet it is a fact
+           * about a different page scrolling above the one you asked for.
+           */}
+          {pathname === "/" ? <CensusMarquee /> : null}
         </>
       )}
       <main className="min-w-0 flex-1" id="main-content">
         {children}
       </main>
       {isFullHeight ? null : <SiteFooter />}
+      <MobileNavDrawer />
     </div>
   );
 }

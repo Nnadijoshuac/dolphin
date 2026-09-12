@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+
 
 import { BnbBadge, BnbLogo, BrandMark } from "@/components/brand-mark";
-import { CategoryGlyph } from "@/components/category-glyph";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 import { useWallet } from "@/wallet/wallet-provider";
 
@@ -36,33 +35,17 @@ function shortAddress(address: string) {
 export function SiteHeader() {
   const pathname = usePathname();
   const wallet = useWallet();
-  const mobileNav = useRef<HTMLElement>(null);
   const isDolphinPath = pathname === "/dolphin" || pathname.startsWith("/dolphin/");
 
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    const update = () => {
-      const editing = document.activeElement?.matches("input, textarea, [contenteditable='true']");
-      const keyboardOpen = editing && window.innerHeight - viewport.height > 120;
-      mobileNav.current?.toggleAttribute("data-keyboard-open", Boolean(keyboardOpen));
-    };
-    viewport.addEventListener("resize", update);
-    document.addEventListener("focusin", update);
-    document.addEventListener("focusout", update);
-    return () => {
-      viewport.removeEventListener("resize", update);
-      document.removeEventListener("focusin", update);
-      document.removeEventListener("focusout", update);
-    };
-  }, []);
+  /*
+   * The visualViewport listener that lived here is gone with the tab bar. Its
+   * only job was toggling `data-keyboard-open` so a floating bottom bar got
+   * out of the way of the on-screen keyboard. Nothing floats now.
+   */
 
   if (isDolphinPath) {
     return null;
   }
-
-  const isTabPage = navigation.some((item) => item.path === pathname) && pathname !== "/dolphin";
-  const activeIndex = navigation.findIndex((item) => isActiveRoute(pathname, item.path));
 
   return (
     <>
@@ -138,107 +121,18 @@ export function SiteHeader() {
         </header>
       ) : null}
 
-      {isTabPage ? (
-        <nav
-          aria-label="Mobile navigation"
-          className="mobile-tab-bar"
-          ref={mobileNav}
-        >
-          <div className="mobile-sculpted-nav">
-            <svg
-              aria-hidden="true"
-              className="mobile-sculpted-nav__bg"
-              fill="none"
-              preserveAspectRatio="none"
-              shapeRendering="geometricPrecision"
-              viewBox="0 0 350 64"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <defs>
-                <linearGradient id="pearl-base" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0a0a0c" />
-                  <stop offset="25%" stopColor="#040405" />
-                  <stop offset="75%" stopColor="#000000" />
-                  <stop offset="100%" stopColor="#060608" />
-                </linearGradient>
-                <linearGradient id="pearl-rim" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.16)" />
-                  <stop offset="20%" stopColor="rgba(255, 231, 255, 0.08)" />
-                  <stop offset="80%" stopColor="rgba(0, 0, 0, 0.8)" />
-                  <stop offset="100%" stopColor="rgba(255, 231, 255, 0.1)" />
-                </linearGradient>
-                <linearGradient id="pearl-gloss" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(255, 255, 255, 0.1)" />
-                  <stop offset="35%" stopColor="rgba(255, 231, 255, 0.03)" />
-                  <stop offset="100%" stopColor="rgba(0, 0, 0, 0)" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
-                fill="url(#pearl-base)"
-                stroke="url(#pearl-rim)"
-                strokeWidth="1.2"
-              />
-              <path
-                d="M 27,5 L 120,5 C 133.00,5.00 144.44,21.59 149.61,14.23 A 31.0 31.0 0 0 1 200.39 14.23 C 205.56,21.59 217.00,5.00 230.00,5.00 L 323,5 C 338,5 348,16 348,32 C 348,48 338,59 323,59 L 230.00,59 C 217.00,59.00 205.56,42.41 200.39,49.77 A 31.0 31.0 0 0 1 149.61 49.77 C 144.44,42.41 133.00,59.00 120.00,59.00 L 27,59 C 12,59 2,48 2,32 C 2,16 12,5 27,5 Z"
-                fill="url(#pearl-gloss)"
-                opacity="0.4"
-              />
-            </svg>
-
-            {/* Percentage positioning keeps the highlight aligned as the cage scales. */}
-            {activeIndex !== -1 && (
-              <div
-                className="mobile-sculpted-nav__jelly-pill"
-                style={{
-                  left: `calc(${activeIndex * 20 + 10}% - 24px)`,
-                }}
-              >
-                <div
-                  className="mobile-sculpted-nav__jelly-inner"
-                  key={activeIndex}
-                />
-              </div>
-            )}
-
-            {/* Relative 5-Slot Navigation Track */}
-            <div className="mobile-sculpted-nav__track">
-              {navigation.map((item) => {
-                const isActive = isActiveRoute(pathname, item.path);
-                return (
-                  <Link
-                    aria-current={isActive ? "page" : undefined}
-                    aria-label={item.label}
-                    className="mobile-sculpted-nav__slot"
-                    href={item.path}
-                    key={item.path}
-                  >
-                    <span
-                      className={`mobile-sculpted-nav__bubble ${
-                        isActive ? "mobile-sculpted-nav__bubble--active" : ""
-                      }`}
-                    >
-                      {item.path === "/dolphin" ? (
-                        <BrandMark
-                          color={isActive ? "#080808" : "#FFE7FF"}
-                          size={26}
-                        />
-                      ) : (
-                        <CategoryGlyph
-                          color={isActive ? "#080808" : "#FFE7FF"}
-                          name={item.icon}
-                          size={21}
-                          strokeWidth={isActive ? 2.3 : 1.9}
-                        />
-                      )}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </nav>
-      ) : null}
+      {/*
+       * THE BOTTOM TAB BAR IS GONE (2026-09-12), replaced by the menu drawer
+       * in components/mobile-nav.tsx.
+       *
+       * It was a hand-drawn SVG cage with four gradients, a sliding jelly
+       * pill, a raised centre orb and a visualViewport listener to hide itself
+       * when the keyboard opened — and it reserved ~120px of permanent bottom
+       * padding on every page while pinning the product to exactly five
+       * destinations. The drawer costs one tap, holds as many destinations as
+       * the product grows to, and gives each a label and a line of
+       * explanation, which five one-word icons never did.
+       */}
       {pathname.startsWith("/manage/") && <MobileStackHeader title="Manage agent" fallback="/my-agents" />}
     </>
   );

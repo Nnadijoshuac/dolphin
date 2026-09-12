@@ -2,7 +2,6 @@
    existing modules; 768px is the shared boundary in use-mobile-layout.ts. */
 .mobile-only,
 .mobile-brand-header,
-.mobile-tab-bar,
 .mobile-agent-row,
 .mobile-discover-hero { display: none; }
 
@@ -60,7 +59,8 @@
   html { scroll-padding-top: 64px; }
   body { padding: env(safe-area-inset-top) 0 0; font-family: var(--font-sans); }
   .app-frame { min-height: calc(100dvh - env(safe-area-inset-top)); }
-  .app-frame:has(.mobile-tab-bar) > main { padding-bottom: calc(120px + env(safe-area-inset-bottom)); }
+  /* No reserved bottom strip any more: nothing floats over the page. */
+  .app-frame > main { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
   .desktop-only, .desktop-site-header, .app-frame > footer { display: none !important; }
   .mobile-only { display: block; }
   .site-frame { width: 100%; padding-inline: max(20px, env(safe-area-inset-left)) max(20px, env(safe-area-inset-right)); }
@@ -83,127 +83,10 @@
   .mobile-brand-header strong { font-size: 17px; font-weight: 800; letter-spacing: -.4px; }
   .mobile-brand-header p { font-size: 11px; font-weight: 500; color: var(--muted); line-height: 15px; }
   .mobile-brand-header p + div { margin-top: 2px; }
-  .mobile-tab-bar {
-    display: flex; position: fixed; z-index: 50; inset-inline: 0;
-    bottom: max(20px, calc(env(safe-area-inset-bottom) + 8px));
-    justify-content: center; pointer-events: none;
-  }
-  .mobile-tab-bar[data-keyboard-open] { display: none; }
-
-  .mobile-sculpted-nav {
-    position: relative;
-    display: flex;
-    align-items: center;
-    width: min(350px, calc(100vw - 24px));
-    height: 64px;
-    border-radius: 32px;
-    background: transparent;
-    pointer-events: auto;
-    filter: drop-shadow(0 14px 24px rgba(17, 18, 20, 0.32)) drop-shadow(0 3px 8px rgba(17, 18, 20, 0.28));
-    user-select: none;
-    -webkit-user-select: none;
-    overflow: hidden;
-  }
-  .mobile-sculpted-nav__bg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-  .mobile-sculpted-nav__track {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    width: 100%;
-    height: 100%;
-  }
-  .mobile-sculpted-nav__slot {
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-decoration: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .mobile-sculpted-nav__slot:focus-visible {
-    outline: none;
-  }
-  .mobile-sculpted-nav__slot:focus-visible .mobile-sculpted-nav__bubble {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-  .mobile-sculpted-nav__jelly-pill {
-    position: absolute;
-    top: 8px;
-    width: 48px;
-    height: 48px;
-    pointer-events: none;
-    z-index: 1;
-    transition: left 0.34s cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: left;
-  }
-  .mobile-sculpted-nav__jelly-inner {
-    width: 100%;
-    height: 100%;
-    border-radius: 9999px;
-    background: #FFFFFF;
-    box-shadow:
-      0 4px 14px rgba(0, 0, 0, 0.3),
-      inset 0 1px 2px rgba(255, 255, 255, 0.9),
-      inset 0 -2px 4px rgba(0, 0, 0, 0.12);
-    animation: nano-jelly-squish 0.34s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  @keyframes nano-jelly-squish {
-    0% {
-      transform: scale(0.96, 1.04);
-    }
-    35% {
-      transform: scale(1.08, 0.94);
-    }
-    65% {
-      transform: scale(0.98, 1.02);
-    }
-    85% {
-      transform: scale(1.01, 0.99);
-    }
-    100% {
-      transform: scale(1, 1);
-    }
-  }
-
-  .mobile-sculpted-nav__bubble {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    border-radius: 9999px;
-    color: #FFE7FF;
-    background: transparent;
-    transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), color 0.2s ease;
-  }
-  .mobile-sculpted-nav__bubble--active {
-    color: #080808;
-  }
-  .mobile-sculpted-nav__slot:active .mobile-sculpted-nav__bubble {
-    transform: scale(0.92);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .mobile-sculpted-nav__jelly-pill,
-    .mobile-sculpted-nav__bubble {
-      transition: none;
-    }
-    .mobile-sculpted-nav__jelly-inner {
-      animation: none;
-    }
-  }
+  /* The bottom tab bar and its sculpted SVG cage were removed 2026-09-12 and
+     replaced by the drawer in components/mobile-nav.tsx. Roughly 120 lines of
+     gradients, a jelly pill and a keyboard-aware hide rule went with it; the
+     drawer's styles live in globals.css beside the other dialogs. */
 
   .mobile-dolphin-orb {
     position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
@@ -256,6 +139,9 @@
   .mobile-promo-label { margin-bottom: 4px; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #ffffffcc; }
   .mobile-promo-card h2 { margin-bottom: 4px; font-size: 20px; font-weight: 900; letter-spacing: -.5px; line-height: 24px; }
   .mobile-promo-subtitle { max-width: 85%; font-size: 12px; line-height: 16px; color: #ffffffe6; }
+
+  /* The menu button's own row, above the search field. */
+  .mobile-search-topbar { display: flex; justify-content: flex-end; padding: 10px 0 2px; }
 
   .mobile-search-page.site-frame { padding-inline: 16px; }
   .mobile-search-controls { position: sticky; top: 0; z-index: 30; margin-inline: -16px; padding: 6px 16px 10px; background: var(--canvas); }

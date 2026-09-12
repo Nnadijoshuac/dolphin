@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CategoryGlyph } from "@/components/category-glyph";
+import { MobileMenuButton } from "@/components/mobile-nav";
 import type { Agent } from "@/types/agent";
 
 /**
@@ -44,9 +44,17 @@ export function MobileDiscoverHero({ agents }: { agents: Agent[] }) {
     <div className="mobile-discover-hero">
       <div className="mobile-discover-heading">
         <h1>Discover</h1>
-        <Link aria-label="Search agents" className="mobile-circle" href="/search">
-          <CategoryGlyph name="layers" color="var(--accent-ink)" size={18} />
-        </Link>
+        {/*
+          * This was a "layers" glyph linking to /search. It is the MENU now.
+          *
+          * Discover's title row is the header this screen already has, and the
+          * bottom tab bar that used to carry navigation is gone — so the one
+          * control in this row has to be the one that reaches everywhere.
+          * Search did not disappear: it is one of the five destinations inside
+          * the drawer, with a label, which is more than a "layers" icon ever
+          * told anyone about where it went.
+          */}
+        <MobileMenuButton />
       </div>
       <div aria-label="Featured agents and collections" className="mobile-promo-rail">
         {promos.map((promo) => {

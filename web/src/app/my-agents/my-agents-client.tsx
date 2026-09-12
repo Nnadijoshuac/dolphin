@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
+import { MobileMenuButton } from "@/components/mobile-nav";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { StatePanel } from "@/components/state-panel";
@@ -210,7 +211,7 @@ export function MyAgentsClient() {
 
   return (
     <div className="mobile-my-agents site-frame page-shell" style={{ paddingBlockStart: "clamp(1.5rem, 4vw, 3rem)" }}>
-      <header className="mobile-only mobile-page-heading"><h1>My Agents</h1><p>Hired agents and saved setup previews</p></header>
+      <header className="mobile-only mobile-page-heading"><div><h1>My Agents</h1><p>Hired agents and saved setup previews</p></div><MobileMenuButton /></header>
       <div>
         {!wallet.isConnected || !wallet.address ? (
           isMobile ? <MobileEmptyAgents /> :

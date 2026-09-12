@@ -722,6 +722,20 @@ export default defineSchema({
       v.literal("complete"),
       v.literal("error"),
     ),
+    /**
+     * When this answer was FIRST produced, if it is a replay of an earlier one.
+     *
+     * Null on an answer a model just wrote. A number means the text was reused
+     * for an identical question rather than costing one of a strictly limited
+     * number of free-tier model calls — see the `promptHash` note above, which
+     * described this and which nothing implemented until 2026-09-12.
+     *
+     * The value is the ORIGINAL `completedAt`, and the UI must render that
+     * rather than the moment of reuse. An answer restated as current when it
+     * was written an hour ago is the fabricated-liveness failure of AGENTS.md
+     * §5 wearing a cache as a disguise.
+     */
+    reusedFrom: v.optional(v.union(v.number(), v.null())),
     /** Populated when status is "error". Never a stack trace. */
     errorReason: v.union(v.string(), v.null()),
     /**

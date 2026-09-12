@@ -337,6 +337,7 @@ export const getConversation = query({
         role: message.role,
         content: message.content,
         status: message.status,
+        reusedFrom: message.reusedFrom ?? null,
         errorReason: message.errorReason,
         errorKind: message.errorKind ?? null,
         model: message.model,
@@ -499,6 +500,111 @@ export const appendTurn = internalMutation({
   },
 });
 
+/**
+ * AN ANSWER TO THE SAME QUESTION, ALREADY PAID FOR.
+ *
+ * ===========================================================================
+ * WHY THIS EXISTS (2026-09-12)
+ * ===========================================================================
+ * `dolphinMessages.promptHash` has been computed, stored and INDEXED since the
+ * table was written, with a schema note explaining that it exists "so a
+ * repeated question can reuse a previous answer rather than spend one of a
+ * strictly limited number of free-tier model calls". `lib/openrouter.ts`'s
+ * header lists the same thing as an obligation on the caller.
+ *
+ * Nothing ever read the index. `grep by_prompt_hash` returned the schema line
+ * and nothing else.
+ *
+ * That is fine at ten visitors a day and fatal at a launch: a hundred people
+ * arriving at once ask a handful of the same questions, and the free tier -
+ * capped per-minute AND per-day, globally per account, more keys do not help -
+ * is spent on answering the same question a hundred times.
+ *
+ * ===========================================================================
+ * ONLY TOOL-FREE ANSWERS ARE REUSABLE, AND THAT IS THE WHOLE SAFETY ARGUMENT
+ * ===========================================================================
+ * An answer that CONSULTED A TOOL is about a moving number - a health factor,
+ * a pool state, an APY. Replaying it would restate a stale reading as the
+ * current one, which is the fabricated-liveness failure §5 forbids, wearing a
+ * cache as a disguise.
+ *
+ * An answer that called no tools is explanation: what ERC-8004 is, how a grid
+ * accumulates fees, what Dolphin does. Those are stable, and they are exactly
+ * the questions a launch generates in volume.
+ *
+ * The TTL is a second belt. Even an explanation can go stale when the catalog
+ * changes underneath it - the answer to "what can you do" depends on how many
+ * agents are listed.
+ */
+const ANSWER_REUSE_TTL_MS = 6 * 60 * 60 * 1000;
+
+export const reusableAnswer = internalQuery({
+  args: { promptHash: v.string() },
+  handler: async (
+    ctx,
+    { promptHash },
+  ): Promise<{ content: string; completedAt: number } | null> => {
+    /*
+     * Newest first: the most recent answer to this question is the one most
+     * likely to still describe the catalog as it is now.
+     */
+    const asked = await ctx.db
+      .query("dolphinMessages")
+      .withIndex("by_prompt_hash", (q) => q.eq("promptHash", promptHash))
+      .order("desc")
+      .take(12);
+
+    const cutoff = Date.now() - ANSWER_REUSE_TTL_MS;
+
+    for (const userTurn of asked) {
+      if (userTurn.role !== "user") continue;
+
+      /* The assistant turn written immediately after this question. */
+      const answer = await ctx.db
+        .query("dolphinMessages")
+        .withIndex("by_conversation", (q) =>
+          q.eq("conversationId", userTurn.conversationId),
+        )
+        .order("asc")
+        .collect()
+        .then((rows) => {
+          const index = rows.findIndex((row) => row._id === userTurn._id);
+          const next = index >= 0 ? rows[index + 1] : undefined;
+          return next && next.role === "assistant" ? next : null;
+        });
+
+      if (!answer) continue;
+      if (answer.status !== "complete") continue;
+      if (answer.content.trim().length === 0) continue;
+      if (answer.completedAt === null || answer.completedAt < cutoff) continue;
+
+      /*
+       * `model === null` is the failsafe template, which must never be
+       * replayed - it is what Dolphin says when it could NOT answer, and
+       * serving it to someone else would spread one outage across every
+       * repeat of that question.
+       */
+      if (answer.model === null) continue;
+
+      /* Never replay an answer that was already a replay: keep one hop to the
+       * original, so `reusedFrom` always points at when a model actually
+       * wrote the text rather than at a chain of reuses. */
+      if (answer.reusedFrom != null) continue;
+
+      /* THE TOOL RULE. See the header. */
+      const usedTools = await ctx.db
+        .query("dolphinToolCalls")
+        .withIndex("by_message", (q) => q.eq("messageId", answer._id))
+        .first();
+      if (usedTools) continue;
+
+      return { content: answer.content, completedAt: answer.completedAt };
+    }
+
+    return null;
+  },
+});
+
 export const setMessageStatus = internalMutation({
   args: {
     messageId: v.id("dolphinMessages"),
@@ -509,6 +615,8 @@ export const setMessageStatus = internalMutation({
       v.literal("error"),
     ),
     content: v.optional(v.string()),
+    /** The ORIGINAL completedAt when this answer is a replay. See reusableAnswer. */
+    reusedFrom: v.optional(v.union(v.number(), v.null())),
     errorReason: v.optional(v.union(v.string(), v.null())),
     errorKind: v.optional(
       v.union(
@@ -521,9 +629,10 @@ export const setMessageStatus = internalMutation({
     ),
     model: v.optional(v.union(v.string(), v.null())),
   },
-  handler: async (ctx, { messageId, status, content, errorReason, errorKind, model }) => {
+  handler: async (ctx, { messageId, status, content, reusedFrom, errorReason, errorKind, model }) => {
     const patch: Partial<Doc<"dolphinMessages">> = { status };
     if (content !== undefined) patch.content = content;
+    if (reusedFrom !== undefined) patch.reusedFrom = reusedFrom;
     if (errorReason !== undefined) patch.errorReason = errorReason;
     if (errorKind !== undefined) patch.errorKind = errorKind;
     if (model !== undefined) patch.model = model;
@@ -986,7 +1095,17 @@ export const ask = action({
 
     try {
       /*
-       * PHASE 0: CONVERSATION MEMORY & CONTEXT
+       * PHASE -1: HAVE WE ALREADY PAID FOR THIS ANSWER?
+       *
+       * Before any model call, and only when this is the FIRST turn in the
+       * conversation. A follow-up depends on what was said before it, so an
+       * answer to the same words in a different conversation is a different
+       * answer - "what about that one?" hashes identically and means something
+       * else entirely.
+       *
+       * Only tool-free explanations are eligible; see reusableAnswer. The
+       * reused text carries the timestamp of the model call that produced it,
+       * never the moment of reuse.
        */
       const priorTurns: { role: "user" | "assistant"; content: string }[] =
         await ctx.runQuery(internal.dolphin.recentHistory, {
@@ -994,6 +1113,31 @@ export const ask = action({
           excludeMessageId: assistantId,
         });
 
+      if (priorTurns.filter((turn) => turn.role === "user").length <= 1) {
+        const reusable = await ctx.runQuery(internal.dolphin.reusableAnswer, {
+          promptHash,
+        });
+        if (reusable) {
+          await ctx.runMutation(internal.dolphin.setMessageStatus, {
+            messageId: assistantId,
+            status: "complete",
+            content: reusable.content,
+            reusedFrom: reusable.completedAt,
+            /*
+             * No model answered THIS turn. Null is the same statement it makes
+             * everywhere else in this file, and it keeps a replay out of the
+             * pool of answers that can themselves be replayed.
+             */
+            model: null,
+          });
+          return { messageId: assistantId };
+        }
+      }
+
+      /*
+       * PHASE 0: CONVERSATION MEMORY & CONTEXT
+       * `priorTurns` was read above, for the reuse check.
+       */
       const activeUserAddress =
         (userAddress ? userAddress.toLowerCase() : null) ?? ownerAddress ?? null;
 

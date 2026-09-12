@@ -636,6 +636,18 @@ export type DolphinMessage = {
   role: "user" | "assistant";
   content: string;
   status: "thinking" | "consulting" | "complete" | "error";
+  /**
+   * When this answer was FIRST produced, if it is a replay of an earlier one.
+   *
+   * Null when a model wrote it this turn. A number means an identical question
+   * was answered before and the text was reused rather than spending one of a
+   * strictly limited number of free-tier model calls.
+   *
+   * RENDER THIS TIMESTAMP, not the moment of reuse — see the note on
+   * `reusedFrom` in convex/schema.ts. Only tool-free explanations are ever
+   * reused, so a reused answer never restates a live reading as current.
+   */
+  reusedFrom: number | null;
   errorReason: string | null;
   /**
    * Which kind of failure, when status is "error". See the note on `errorKind`

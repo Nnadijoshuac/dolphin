@@ -210,7 +210,22 @@ function Turn({
 
         <DolphinToolCalls calls={turn.toolCalls} />
 
-        {turn.status === "complete" && turn.completedAt !== null ? (
+        {/*
+          * A REUSED ANSWER SHOWS WHEN IT WAS WRITTEN, not when it was served.
+          *
+          * Dolphin reuses a previous answer to an identical question rather
+          * than spending a free-tier model call on it (convex/dolphin.ts,
+          * reusableAnswer). Only tool-free explanations are eligible, so this
+          * never restates a live reading as current - but the timestamp still
+          * has to be the original one, which is what the schema note on
+          * `reusedFrom` requires.
+          */}
+        {turn.status === "complete" && turn.reusedFrom !== null ? (
+          <p className="pl-1 text-[0.68rem] text-faint">
+            Answered {relativeTime(turn.reusedFrom)} · reused for an identical
+            question
+          </p>
+        ) : turn.status === "complete" && turn.completedAt !== null ? (
           <p className="pl-1 text-[0.68rem] text-faint">
             {relativeTime(turn.completedAt)}
           </p>

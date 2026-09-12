@@ -155,15 +155,24 @@ export const SLOW_POLL_INTERVAL_MS = 60_000;
 /**
  * When "in progress" becomes "taking longer than expected".
  *
- * 10 minutes = 2x the slowest seller estimate observed (600s). Long enough not
+ * 20 minutes = 2x the slowest seller estimate observed (600s). Long enough not
  * to cry wolf on an agent having an ordinary slow run, short enough that
  * nobody is left staring at a spinner with no acknowledgement.
+ *
+ * CORRECTED 2026-09-12. This was 10 minutes while claiming to be "2x the
+ * slowest seller estimate (600s)" — but 600s IS 10 minutes, so it was 1x, and
+ * the arithmetic was wrong in the comment rather than the intent. yieldrouter
+ * quotes exactly 600s, so Dolphin was calling a job overdue at the very instant
+ * the seller's own estimate elapsed, while the UI told the user it had allowed
+ * double. Doubling the constant is the fix that matches what was written down;
+ * shortening the copy to "the slowest estimate" would have kept a threshold
+ * nobody chose.
  *
  * This is a PRESENTATION threshold only. The real deadline is the job's own
  * on-chain `expiredAt`, after which the escrow becomes reclaimable, and that
  * is what the UI shows the user - never this number dressed up as a deadline.
  */
-export const DELIVERY_TIMEOUT_MS = 10 * 60 * 1000;
+export const DELIVERY_TIMEOUT_MS = 20 * 60 * 1000;
 
 export type DeliveryState =
   /** Escrow funded, seller has not submitted, inside the expected window. */
@@ -227,7 +236,19 @@ export function deliveryCopy(state: DeliveryState): {
     case "overdue":
       return {
         label: "Taking longer than expected",
-        body: "Nothing has been submitted yet. This is not an error - the escrow is still funded and the agent can still deliver. Dolphin is still checking, less often.",
+        /*
+         * "This is not an error" used to be the first thing this said, and it
+         * was not always true. A seller can REFUSE a funded job outright - one
+         * did, rejecting every notify_funded with "no signed quote anchored in
+         * job description" - and because a job description is immutable once
+         * created, that refusal is permanent. From the chain a refused job and
+         * a slow one are byte-identical: both are FUNDED with no deliverable.
+         *
+         * So this no longer reassures. It states both possibilities, because
+         * Dolphin genuinely cannot tell them apart from here, and points at the
+         * exit that exists either way.
+         */
+        body: "Nothing has been submitted yet. The escrow is still funded and the agent can still deliver - but a seller can also refuse a job outright, and from the chain those look the same. Dolphin is still checking, less often. If nothing arrives, the escrow is yours to reclaim after the date below.",
       };
     case "delivered":
       return {

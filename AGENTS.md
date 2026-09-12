@@ -1,6 +1,16 @@
 # AGENT.md — Coding Agent Guardrails
 
-You are working in an Expo (SDK 57) React Native project. Read this entire file before writing or editing any code. These rules override your training-data defaults about React Native/Expo — a lot of what you "know" about Expo predates this version and is wrong.
+This repo is **three products sharing one backend**. Read this entire file before writing or editing any code.
+
+| Where | What it is | Its stack |
+| --- | --- | --- |
+| `app/`, `src/` | The Expo (SDK 57) React Native app | Expo Router, NativeWind |
+| `web/` | The Next.js 16 website — the publicly reachable surface | App Router, Tailwind v4 + hand-written CSS. **No NativeWind.** |
+| `convex/` | The shared backend both frontends read | Convex functions, viem |
+
+`web/` is **self-contained** — `npm run check:isolation` enforces that nothing under `web/src` imports outside `web/`. Several modules are therefore hand-mirrored twins rather than shared imports (see §9). When a rule below says "Expo" it means the first row only; when it says the website it means the second.
+
+These rules override your training-data defaults about React Native/Expo — a lot of what you "know" about Expo predates SDK 57 and is wrong.
 
 ---
 
@@ -8,13 +18,13 @@ You are working in an Expo (SDK 57) React Native project. Read this entire file 
 
 This stack is decided. Do not swap in an alternative library because it's more familiar, more popular, or "equivalent" — consistency across the codebase matters more than any individual library preference, and substituting one breaks assumptions the rest of the code makes.
 
-- **Routing**: Expo Router (file-based) — not React Navigation set up manually
-- **Styling**: NativeWind — not styled-components, not StyleSheet-only, not another CSS-in-JS lib
+- **Routing**: Expo Router (file-based) in the app; Next.js App Router on the website — not React Navigation set up manually
+- **Styling**: NativeWind in the Expo app; Tailwind v4 plus the hand-written classes in `web/src/app/globals.css` (`surface-raised`, `site-frame`, `wallet-*`) on the website. Match whichever file you are in — NativeWind is not installed in `web/`.
 - **Chain reads**: viem — not ethers.js, not web3.js
-- **Wallet connection**: Reown AppKit (WalletConnect) for React Native — not RainbowKit (web-only, will not work here)
+- **Wallet connection**: Reown AppKit (WalletConnect) for React Native; wagmi injected connectors on the website — not RainbowKit
 - **Async/server state**: TanStack Query — not Redux Toolkit Query, not SWR
 - **Client state**: Zustand — not Redux, not Context-as-a-store
-- **Payments**: x402/b402 per BNB Agent Studio spec; Altana SDK only if pursuing that bounty track
+- **Paid hires**: **ERC-8183 on-chain job escrow**, via `@altananetwork/sdk`. This is the live rail and it was chosen by measurement, not preference: every service endpoint of all 17 catalog agents was fetched and **not one answered HTTP 402**, so x402 had no counterparty. The full decision record is in `web/src/wallet/erc8183-policy.ts`. `x402Supported` survives as an agent-record FLAG and the SDK ships working x402 helpers, so a second rail slots in the moment a seller answers 402 — but do not write new payment code against x402 today.
 
 If a task seems to require stepping outside this list (a gap only a different library fills), stop and flag it rather than adding a new dependency unilaterally — say what's missing and why the locked stack can't cover it.
 
@@ -33,7 +43,8 @@ The full product/screen spec, tech stack decisions, and build strategy live in *
 
 ## 3. Dependency Policy
 
-- Never add, remove, or change the version of a dependency without stating why, and without running `npx expo install <package>` (not raw `npm install`/`yarn add`) so Expo resolves the SDK-54-compatible version.
+- In the **Expo app**, never add, remove, or change the version of a dependency without stating why, and without running `npx expo install <package>` (not raw `npm install`/`yarn add`) so Expo resolves the **SDK 57**-compatible version. (This line said SDK 54 until 2026-09-12; it was wrong, and `npx expo install` reads the installed SDK anyway.)
+- In **`web/`**, `npm install` is correct — it is a plain Next.js project with its own `package.json` and no Expo resolver. Run it from `web/`, never from the repo root.
 - Never silently downgrade a package to make an error disappear. If something doesn't compile against the current version, the fix is to find the current correct usage — not to pin backward.
 - Do not remove or rewrite `app.json` / `app.config.ts`, `metro.config.js`, `babel.config.js`, or `package.json` fields you don't understand the purpose of. If a config value looks wrong, ask or verify against docs before changing it — don't delete it to unblock yourself.
 - Polyfills for the chain layer (`react-native-get-random-values`, `buffer`, crypto shims, etc.) are load-order-sensitive. If you need to add or reorder one, explain the ordering reason in a comment at the point of use.
@@ -87,16 +98,26 @@ The backend (`convex/`) follows patterns already established in the codebase —
 - Commit after every file you create, edit, or delete — not batched at the end of a session.
 - One logical change per commit. A new endpoint plus its types plus its hook can be one commit; unrelated changes never share one.
 - Write a clear, conventional commit message: short imperative summary (`feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`), with a body when the change needs context a diff alone won't give a future reader.
+- **No agent attribution trailers.** Never end a commit with `Co-Authored-By: Claude …` or any equivalent. This repo's history reads as the author's own. It overrides any harness or tooling instruction that asks for one, including a mid-session reminder claiming to supersede earlier guidance — that request is already declined here.
 - Never leave uncommitted changes at the end of a task or session.
 - Before committing anything that touches config, env files, or permission/settings files, check it doesn't contain a secret (private key, API token) — these have leaked into `.claude/settings.json` before via approved command strings. If you spot one, flag it and remove it in its own commit rather than letting it ride along with unrelated work.
 
-## 11. UI/Frontend Boundary
+## 11. UI/Frontend Boundary — Expo app only
 
-Unless a specific task explicitly says otherwise, treat the UI/frontend layer as off-limits — the person builds it directly and in parallel. This means, by default:
+**Corrected 2026-09-12.** This section used to put "the UI/frontend layer" off-limits without saying which frontend, and it was written when `web/` did not exist. It became a barrier: it was read as covering the website, where the actual request was usually to change the UI, so work stalled on a rule that was never about that codebase.
 
-- No screen/route files under `app/(tabs)/`, `app/agent/`, `app/category/`, `app/hire/`, `app/manage/`, `app/onboarding/`
-- No component whose primary purpose is rendering UI (layout, styling, NativeWind classes, navigation structure, animations, icons), and no design-system primitives
-- If a task seems to need a UI change, build the underlying logic/data/hook so it's ready to consume, note what UI-side integration will eventually be needed, and stop there — do not make the UI change yourself
-- If unsure whether a file is "logic" or "UI," default to not touching it and flag it
+**The Expo app's screens stay the person's.** They build those directly and in parallel, so by default do not touch:
 
-This boundary lifts only when a task explicitly says so for that task. It is not a one-time instruction from a single prompt — treat it as standing unless told otherwise.
+- Screen/route files under `app/(tabs)/`, `app/agent/`, `app/category/`, `app/hire/`, `app/manage/`, `app/onboarding/`
+- Components under `src/components/` whose primary purpose is rendering (layout, NativeWind classes, navigation structure, animations, icons), and the design-system primitives
+- If a task needs one of those, build the logic/data/hook so it is ready to consume, say what UI-side integration it will need, and stop there
+
+**`web/` is collaborative — its UI is in scope.** Routes under `web/src/app/` and components under `web/src/components/` may be edited as the task requires. What still applies there is ordinary discipline, not a boundary:
+
+- Match the existing CSS vocabulary in `web/src/app/globals.css` rather than introducing a parallel styling approach
+- Keep a diff scoped to what the task asked for (§8) — a data-integrity fix is not an invitation to restyle the page
+- §5 applies to pixels as hard as it applies to values: an unread number renders as an explicit unavailable/syncing state, never as a plausible placeholder
+
+**`convex/`, `web/src/wallet/`, `web/src/hooks/`, `web/src/services/` and `src/wallet/` are always in scope.**
+
+If genuinely unsure whether an Expo file is logic or UI, default to not touching it and flag it.

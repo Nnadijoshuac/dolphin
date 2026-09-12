@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { AgentTransactionPanel } from "@/components/agent-transaction-panel";
 import { HireAction } from "@/components/hire-action";
 import { McpUseAction } from "@/components/mcp-use-action";
 import { MetricCell } from "@/components/metric-cell";
@@ -450,6 +451,15 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           ) : (
             <HireAction agent={agent} />
           )}
+
+          {/*
+            Only renders for an agent whose own tool list says it BUILDS
+            transactions (execution.kind === "calldata"). The component
+            returns null otherwise, so a read-only agent's page is unchanged
+            and a direct-write agent is deliberately not offered a button -
+            see convex/agentTools.ts for why that boundary is held.
+          */}
+          <AgentTransactionPanel agent={agent} />
 
           {/*
             Opens Dolphin with this agent already in context, so a conversation

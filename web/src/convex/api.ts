@@ -855,3 +855,43 @@ export const adminApi = anyApi as unknown as {
 };
 
 
+
+/** One call in an agent-built batch, after convex/lib/agentTransaction.ts validated it. */
+export type AgentCall = {
+  to: string;
+  data: string;
+  value: string;
+  /** The agent's own words for this step. Rendered verbatim and attributed. */
+  label: string | null;
+};
+
+/**
+ * A transaction an agent BUILT for the user to sign.
+ *
+ * The only way an agent acts in Dolphin today: it computes the route and the
+ * calls, the user's own wallet signs them, and no key or allowance is ever
+ * granted to the agent. See convex/agentTools.ts.
+ */
+export type AgentTransactionPlan = {
+  chainId: number;
+  calls: AgentCall[];
+  /** True when every call must land together - the Dolphin Wallet batches natively. */
+  atomicRequired: boolean;
+  payer: string | null;
+  /** The agent's own claims about the outcome. Its words, not Dolphin's. */
+  summary: Record<string, string>;
+  raw: string;
+};
+
+export const agentToolsApi = anyApi as unknown as {
+  agentTools: {
+    buildAgentTransaction: Action<
+      {
+        agentKey: string;
+        toolName: string;
+        toolArguments: Record<string, string | number | boolean | string[]>;
+      },
+      { agentName: string; toolName: string; plan: AgentTransactionPlan }
+    >;
+  };
+};

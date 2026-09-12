@@ -193,6 +193,19 @@ export type PayForAgentWithBnbInput = QuoteBnbPaymentInput & {
   maxBnbInWei?: string;
 };
 
+/** One call in an agent-built batch, validated server-side. */
+export type AgentCall = Readonly<{ to: string; data: string; value: string; label: string | null }>;
+
+/** A transaction an agent BUILT and the user signs. See convex/lib/agentTransaction.ts. */
+export type AgentTransactionPlan = Readonly<{
+  chainId: number;
+  calls: readonly AgentCall[];
+  atomicRequired: boolean;
+  payer: string | null;
+  summary: Readonly<Record<string, string>>;
+  raw: string;
+}>;
+
 export type PaidJob = {
   jobId: string;
   transactionHash: string | null;
@@ -243,6 +256,8 @@ export type AltanaWalletValue = Readonly<{
   registerWallet: () => Promise<void>;
   /** Reclaim a funded escrow whose deadline passed without delivery. */
   claimEscrowRefund: (jobId: string) => Promise<void>;
+  /** Sign a batch an agent built. Returns the tx hash or relay calls id. */
+  executeAgentPlan: (plan: AgentTransactionPlan) => Promise<string>;
 
   /** Native balance in wei. Null while unread - never shown as zero. */
   balanceWei: bigint | null;
@@ -751,6 +766,118 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     [adminSigner, refreshBalance, refreshRecoverability],
   );
 
+  /**
+   * SIGN A TRANSACTION AN AGENT BUILT.
+   *
+   * ---------------------------------------------------------------------------
+   * THE THIRD OPTION (2026-09-12)
+   * ---------------------------------------------------------------------------
+   * Dolphin has refused to let agents execute, correctly: an agent acting for
+   * you needs something to sign, and the choices were a session key handed to a
+   * stranger's server or the user approving every step. altana-policy.ts
+   * records that stalemate; FEATURE_SESSION_EXECUTION has been off since.
+   *
+   * Topaz was already publishing the way out. Its `*_build_*_calldata` tools
+   * compute a route and return UNSIGNED calls; nothing is granted to the agent
+   * and no key is shared. The agent did the work, the user's own wallet signs.
+   *
+   * WHY THIS WALLET AND NOT A BROWSER EXTENSION. A Topaz swap comes back as
+   * five ordered calls with `atomicRequired: true` - clear a legacy allowance,
+   * reset to Permit2, approve, Permit2-approve, swap. An EOA signs those one at
+   * a time and can stop after three, leaving a live approval and no swap. This
+   * wallet is an EIP-7702 account whose relay executes `calls[]` as ONE intent,
+   * so the atomicity the agent asks for is native rather than hoped for. The
+   * batching Dolphin already built for escrow funding is exactly what this
+   * needed.
+   *
+   * Dolphin renders every call and its label before this runs. It does not
+   * vouch for what they do - `to` is an address a stranger chose.
+   */
+  const executeAgentPlan = useCallback(
+    async (plan: AgentTransactionPlan): Promise<string> => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("Create a Dolphin Wallet before signing an agent transaction.");
+
+      if (plan.chainId !== ALTANA_NETWORK.chainId) {
+        throw new Error(
+          `This transaction was built for chain ${plan.chainId}; your Dolphin Wallet is on chain ` +
+            `${ALTANA_NETWORK.chainId}.`,
+        );
+      }
+      if (plan.calls.length === 0) {
+        throw new Error("This agent returned no calls to sign.");
+      }
+      /*
+       * The agent built this FOR an account. If it built it for a different
+       * one, the approvals and recipients inside the calldata point somewhere
+       * that is not this wallet - signing it would spend from here for someone
+       * else's benefit.
+       */
+      if (plan.payer && plan.payer.toLowerCase() !== wallet.address.toLowerCase()) {
+        throw new Error(
+          `This transaction was built for ${plan.payer}, not for your Dolphin Wallet ` +
+            `(${wallet.address}). Refusing to sign a batch addressed to another account.`,
+        );
+      }
+
+      const calls = plan.calls.map((call) => ({
+        to: call.to as Address,
+        data: call.data as Hex,
+        value: BigInt(call.value),
+      }));
+      const totalValueWei = calls.reduce((sum, call) => sum + call.value, BigInt(0));
+
+      const nativeBalance = await altanaClient().balances({
+        wallet: { address: wallet.address },
+        chainId: ALTANA_NETWORK.chainId,
+      });
+      const surchargeWei = await readFirstActionSurcharge({
+        publicClient: keystoreReader,
+        keyStore: ALTANA_NETWORK.keyStore as Address,
+        keyStoreController: ALTANA_NETWORK.keyStoreController as Address,
+        walletAddress: wallet.address as Address,
+      });
+      await assertIntentAffordable({
+        publicClient: keystoreReader,
+        nativeBalanceWei: nativeBalance.native,
+        items: [
+          { label: "BNB this transaction sends", wei: totalValueWei },
+          {
+            label:
+              "one-time wallet setup, charged once so this wallet is recoverable from your passkey",
+            wei: surchargeWei,
+          },
+        ],
+      });
+
+      setIsBusy(true);
+      setError(null);
+      try {
+        const result = await altanaClient().execute({
+          wallet: { address: wallet.address },
+          signer: adminSigner(),
+          calls,
+          chainId: ALTANA_NETWORK.chainId,
+        });
+        if (result.status === "FAILED") {
+          throw new Error(
+            "The chain rejected this agent's transaction. Nothing was spent beyond gas. The agent " +
+              "may have built it against stale prices or allowances - ask it to build a fresh one.",
+          );
+        }
+        refreshBalance();
+        refreshRecoverability();
+        return result.transactionHash ?? result.callsId;
+      } catch (cause) {
+        setError(toUserMessage(cause, "That transaction could not be signed. Try again."));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner, refreshBalance, refreshRecoverability],
+  );
+
   const readTokenBalance = useCallback(async (token: string): Promise<TokenHolding> => {
     const wallet = getAltanaSnapshot();
     if (!wallet) throw new Error("No Dolphin Wallet on this device.");
@@ -1131,6 +1258,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       registrationFeeWei: registrationFeeQuery.data ?? null,
       registerWallet,
       claimEscrowRefund,
+      executeAgentPlan,
       balanceWei: balanceQuery.data ?? null,
       balanceError:
         balanceQuery.error instanceof Error
@@ -1179,6 +1307,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     refreshRecoverability,
     registerWallet,
     claimEscrowRefund,
+    executeAgentPlan,
     registrationFeeQuery.data,
     revokeSession,
     sessions,

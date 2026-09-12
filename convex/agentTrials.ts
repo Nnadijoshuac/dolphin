@@ -56,16 +56,29 @@ import { readExecutionCapability } from "./lib/toolCapability";
 /**
  * How long a result stands in for a fresh call.
  *
- * Five minutes is chosen against what these tools return - pool state, rates,
- * rankings - which move on market time rather than block time. Long enough
- * that a page being shared does not become a load test, short enough that the
- * number on screen is still worth reading. The age is always shown, so a
- * cached answer is never passed off as a live one.
+ * Raised from 5 to 15 minutes on 2026-09-12, ahead of a public test round.
+ * The numbers these tools return - pool state, rates, rankings - move on
+ * market time rather than block time, so 15 minutes is still a reading worth
+ * having, and the age is ALWAYS shown so a cached answer is never passed off
+ * as a live one.
+ *
+ * What the longer window buys, and it is the whole reason: a tool is now
+ * fetched from its publisher at most four times an hour no matter how many
+ * people press it. During a burst of new visitors the catalog warms once and
+ * then serves from here, which protects Dolphin's budget and is a courtesy to
+ * sellers who did not ask to be a demo.
  */
-const TRIAL_TTL_MS = 5 * 60 * 1000;
+const TRIAL_TTL_MS = 15 * 60 * 1000;
 
-/** Global ceiling, across every agent and tool. */
-const GLOBAL_TRIALS_PER_WINDOW = 30;
+/**
+ * Global ceiling on trials that actually reach a publisher, per minute.
+ *
+ * 30 was sized for a trickle. With 65 previewable tools across the live
+ * catalog (measured 2026-09-12) a cold cache warms in about a minute at 60,
+ * after which a burst is served entirely from the table - so this binds only
+ * during a genuine flood, which is exactly when it should.
+ */
+const GLOBAL_TRIALS_PER_WINDOW = 60;
 const GLOBAL_WINDOW_MS = 60 * 1000;
 
 /** Stored output is a citation, not an archive. Matches dolphin.ts's ceiling. */

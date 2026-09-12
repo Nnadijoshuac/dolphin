@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { AgentTrialPanel } from "@/components/agent-trial-panel";
 import { HireAction } from "@/components/hire-action";
 import { McpUseAction } from "@/components/mcp-use-action";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
@@ -91,6 +92,20 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
       <section className="mobile-detail-section"><h2>Overview</h2><p className="mobile-detail-description">{expanded ? agent.description : agent.description.slice(0, 220)}{agent.description.length > 220 && <> {expanded ? "" : "… "}<button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : "Show more"}</button></>}</p>
         {agent.skills.length > 0 && <div className="mobile-detail-skills">{agent.skills.map(skill => <span key={`${skill.name}-${skill.evidence}`}>{skill.name}</span>)}</div>}
       </section>
+      {/*
+        * RUN IT, ON A PHONE. (2026-09-12)
+        *
+        * agent-detail.tsx returns MobileAgentDetail early for narrow screens,
+        * so everything in the desktop action sidebar - including the free tool
+        * preview - was invisible on mobile. For a link shared publicly that is
+        * most of the traffic, and the preview is the one thing on the page
+        * that returns something without a wallet.
+        *
+        * Placed ABOVE reviews, and outside the action sheet on purpose: the
+        * sheet is the commitment surface, and this is the thing you do before
+        * committing to anything.
+        */}
+      <AgentTrialPanel agent={agent} />
       {convexClient && <Reviews agent={agent} />}
       <div className="mobile-detail-registry">{registry}</div>
     </div>

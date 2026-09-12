@@ -6,7 +6,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { StatePanel } from "@/components/state-panel";
-import { categoryLabel } from "@/constants/agents";
+import { agentRouteId, categoryLabel } from "@/constants/agents";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
@@ -59,7 +59,7 @@ function AgentRecordRow({
        * management anywhere between them. /manage/[id] is the screen that
        * actually manages a hire, including ending it.
        */
-      href={`/manage/${encodeURIComponent(agent?.agentKey ?? fallbackId)}`}
+      href={`/manage/${agentRouteId(agent?.agentKey ?? fallbackId)}`}
     >
       <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-5">
         <div className="flex items-start gap-4 sm:contents">

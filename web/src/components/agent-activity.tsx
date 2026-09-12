@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { agentRouteId } from "@/constants/agents";
 import { agentPaymentsApi } from "@/convex/api";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
@@ -191,7 +192,7 @@ function AgentActivityContent({
       amount,
       href: job.transactionHash
         ? `https://bscscan.com/tx/${job.transactionHash}`
-        : `/manage/${encodeURIComponent(job.agentKey)}`,
+        : `/manage/${agentRouteId(job.agentKey)}`,
       external: Boolean(job.transactionHash),
       sortAt: Date.parse(job.verifiedAt) || 0,
     });
@@ -213,7 +214,7 @@ function AgentActivityContent({
         .filter(Boolean)
         .join(" - "),
       amount: null,
-      href: `/manage/${encodeURIComponent(hire.agentKey)}`,
+      href: `/manage/${agentRouteId(hire.agentKey)}`,
       external: false,
       sortAt: Date.parse(hire.hiredAt) || 0,
     });

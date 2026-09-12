@@ -51,9 +51,59 @@ import {
   resolveA2AEndpoint,
 } from "./erc8183";
 // The one MCP client. See the note where this file's private copies used to be.
+import { bscPublicClient } from "./bscClient";
 import { mcpCall, parseJsonRpc } from "./mcpClient";
 import type { AgentProtocol, AgentPricing, FailureClass, VerificationState } from "../model/agent";
 
+
+/** ERC-20 metadata, the two fields a price is meaningless without. */
+const ERC20_METADATA_ABI = [
+  { name: "symbol", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
+  { name: "decimals", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
+] as const;
+
+/**
+ * Reads the quoted token's symbol and decimals FROM THE TOKEN.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS NOT THE THING §5 FORBIDS (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * This used to store `tokenSymbol: ""` and `tokenDecimals: 0`, with a comment
+ * saying a guess here would be a fabricated number on a price. That reasoning
+ * was right about guessing and wrong about the alternative: reading the token
+ * contract is not a guess, it is the same `eth_call` agentPayments.ts already
+ * makes at payment time.
+ *
+ * The cost of not reading it was paid on every screen. A price of
+ * `100000000000000000` with no decimals cannot be rendered at all, so the
+ * catalog fell back to a live per-card RPC read that never happened - every
+ * agent card showed "Not available" where its price should be.
+ *
+ * Failure stays honest: unreadable metadata leaves the fields empty exactly as
+ * before, and a caller that cannot format a price says so rather than assuming
+ * 18 decimals. One read per probe, not per view.
+ */
+async function readTokenMetadata(
+  token: string,
+): Promise<{ symbol: string; decimals: number }> {
+  try {
+    const [symbol, decimals] = await Promise.all([
+      bscPublicClient.readContract({
+        address: token as `0x${string}`,
+        abi: ERC20_METADATA_ABI,
+        functionName: "symbol",
+      }),
+      bscPublicClient.readContract({
+        address: token as `0x${string}`,
+        abi: ERC20_METADATA_ABI,
+        functionName: "decimals",
+      }),
+    ]);
+    return { symbol: String(symbol), decimals: Number(decimals) };
+  } catch {
+    return { symbol: "", decimals: 0 };
+  }
+}
 /** Fetching a card is cheap; asking for a quote is not. */
 const CARD_TIMEOUT_MS = 8_000;
 const RPC_TIMEOUT_MS = 20_000;
@@ -457,6 +507,7 @@ async function probeA2A(
       agentWallet,
       taskDescription: PROBE_TASK,
     });
+    const tokenMeta = await readTokenMetadata(quote.paymentToken);
     return {
       state: "live",
       failureClass: null,
@@ -471,12 +522,9 @@ async function probeA2A(
         // it, because a price must never travel as a JS number.
         amountRaw: quote.priceRaw,
         token: quote.paymentToken,
-        // The seller quotes an address; symbol and decimals are read on-chain
-        // at payment time by convex/agentPayments.ts. Storing a guess here
-        // would be a fabricated number on a price, which is the one place it
-        // matters most (AGENTS.md §5).
-        tokenSymbol: "",
-        tokenDecimals: 0,
+        // Read from the token itself, not assumed - see readTokenMetadata.
+        tokenSymbol: tokenMeta.symbol,
+        tokenDecimals: tokenMeta.decimals,
         display: null,
         escrowContract: quote.verifyingContract,
       },

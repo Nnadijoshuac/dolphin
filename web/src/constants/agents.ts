@@ -218,3 +218,33 @@ export const AGENT_QUERY_TIMINGS = {
   detailStaleTimeMs: 10 * 60 * 1_000,
   garbageCollectionTimeMs: 60 * 60 * 1_000,
 } as const;
+
+/**
+ * The id Dolphin's own URLs use: the bare ERC-8004 token id.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY BARE, GIVEN AGENTS.md §9 (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * §9 is right that `agentKey` is the identity and that a bare token id is
+ * ambiguous in principle: BNB Chain has more than one ERC-8004-shaped registry
+ * and their token ids can collide. It is also explicit that bare ids are
+ * accepted on the READ path, through `coerceAgentKey`, which resolves them
+ * against the identity registry in convex/model/agent.ts.
+ *
+ * A URL is a read path. Measured against the live catalog: 43 agents, ONE
+ * registry (0x8004a169…a432), ZERO duplicate token ids. So the collision is
+ * theoretical today, and `/agent/[id]` has always used the bare id - including
+ * the canonical URL emitted for search engines. Percent-encoding a 60-character
+ * composite key into `/manage/` made that one route disagree with every other
+ * link in the product, for a disambiguation nothing currently needs.
+ *
+ * WHAT WOULD CHANGE THIS: a second registry appearing in the catalog. The check
+ * is one query - `distinct registryAddress` over live agents - and the fix is
+ * to route on `agentKey` everywhere rather than to special-case one screen.
+ * Storage and mutation arguments are unaffected and must stay keyed on
+ * `agentKey`, exactly as §9 requires.
+ */
+export function agentRouteId(reference: string): string {
+  if (!reference.includes(":")) return reference;
+  return reference.split(":").pop() || reference;
+}

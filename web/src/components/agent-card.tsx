@@ -82,6 +82,42 @@ function getMetricPreview(agent: Agent): MetricPreview | null {
   }
 }
 
+
+/**
+ * WHAT THE RIGHT-HAND COLUMN SAYS WHEN THERE IS NO LIVE METRIC.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS REPLACED THE METRIC AS THE DEFAULT (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * The column led with the category's headline metric, and that metric is
+ * `unavailable` for very nearly every agent in the catalog - no protocol
+ * publishes a live APY or P&L per agent. So a browse list rendered a column of
+ * "Not available / Publisher-reported metadata", forty-three times. Each cell
+ * was honest and the column as a whole read as broken.
+ *
+ * §5 says never invent a number. It does not say a screen must lead with the
+ * one field that is always missing. What Dolphin actually knows about every
+ * agent - how it is used, what it costs, whether it can act - was sitting
+ * unshown while the one unknowable thing had the prime slot.
+ *
+ * So: price and protocol lead, a real metric takes over when there IS one, and
+ * nothing here is fabricated - the price comes from the agent's own signed
+ * quote, and the capability from its own published tool list.
+ */
+function getHireSummary(agent: Agent): { label: string; value: string; detail: string } {
+  return agent.protocol === "mcp"
+    ? {
+        label: "Type",
+        value: "MCP server",
+        detail: "Connect it to your AI client and call its tools",
+      }
+    : {
+        label: "Type",
+        value: "A2A agent",
+        detail: "Commissioned and paid over ERC-8183 escrow",
+      };
+}
+
 function formatCheckedAt(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
@@ -94,12 +130,6 @@ function formatCheckedAt(value: string | null) {
   }).format(date);
 }
 
-const statusLabels: Record<LiveMetricStatus, string> = {
-  live: "Live",
-  stale: "Stale",
-  syncing: "Syncing",
-  unavailable: "Not available",
-};
 
 export function AgentCard({
   agent,
@@ -116,6 +146,7 @@ export function AgentCard({
    */
   const label = categoryLabel(agent.category);
   const preview = getMetricPreview(agent);
+  const hire = getHireSummary(agent);
   const checkedAt = preview ? formatCheckedAt(preview.asOf) : null;
   const displayPublisher = agent.publisher?.startsWith("0x")
     ? `${agent.publisher.slice(0, 6)}…${agent.publisher.slice(-4)}`
@@ -159,14 +190,19 @@ export function AgentCard({
         </div>
 
         <div className="border-t border-line pt-4 sm:border-l sm:border-t-0 sm:py-1 sm:pl-5">
-          {preview ? (
+          {/*
+            A live metric wins when one exists, because a real number about
+            THIS agent beats a fact about its protocol. Otherwise the column
+            says what is actually known - see getHireSummary.
+          */}
+          {preview && preview.value !== null ? (
             <>
               <div className="flex items-center justify-between gap-3 sm:block">
                 <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
                   {preview.label}
                 </p>
                 <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
-                  {preview.value ?? statusLabels[preview.status]}
+                  {preview.value}
                 </p>
               </div>
               <p className="mt-1 truncate text-[0.69rem] text-faint" title={preview.source}>
@@ -175,12 +211,19 @@ export function AgentCard({
               </p>
             </>
           ) : (
-            /* No protocol reader exists for this category, so there is no
-               metric to show. Saying nothing is more honest than an empty
-               cell implying a feed that has gone quiet. */
-            <p className="text-[0.69rem] text-faint">
-              No live protocol metric for this category
-            </p>
+            <>
+              <div className="flex items-center justify-between gap-3 sm:block">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
+                  {hire.label}
+                </p>
+                <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
+                  {hire.value}
+                </p>
+              </div>
+              <p className="mt-1 truncate text-[0.69rem] text-faint" title={hire.detail}>
+                {hire.detail}
+              </p>
+            </>
           )}
         </div>
 

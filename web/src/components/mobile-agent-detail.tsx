@@ -34,9 +34,15 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
     if (raw == null) return "Price not reported yet";
     if (Number(raw) === 0) return "Free to hire";
     if (token) {
-      const decimals = agent.pricing?.tokenDecimals ?? metadata?.decimals;
-      const symbol = agent.pricing?.tokenSymbol ?? metadata?.symbol;
-      return decimals == null || !symbol ? "Syncing price…" : `${formatTokenAmount(raw, decimals)} ${symbol}`;
+      const live = metadata.status === "ready" ? metadata.metadata : null;
+      const decimals = agent.pricing?.tokenDecimals ?? live?.decimals;
+      const symbol = agent.pricing?.tokenSymbol ?? live?.symbol;
+      // "Still reading" and "cannot read" are different claims; only one of
+      // them gets better by waiting. See use-token-metadata.ts.
+      if (decimals == null || !symbol) {
+        return metadata.status === "unavailable" ? "Price unavailable" : "Syncing price…";
+      }
+      return `${formatTokenAmount(raw, decimals)} ${symbol}`;
     }
     return `${raw} ${price?.token ?? ""}`;
   })();

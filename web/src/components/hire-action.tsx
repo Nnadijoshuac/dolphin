@@ -125,28 +125,40 @@ export function HireAction({ agent }: { agent: Agent }) {
     (priceModel?.token?.startsWith("0x") ? priceModel.token : null);
   const tokenMeta = useTokenMetadata(tokenAddress);
 
+  /*
+   * "Still reading" and "cannot read" are different claims, and only one of
+   * them gets better by waiting. The old code said "Syncing price…" for both,
+   * so a failed read left the panel spinning forever on a price it was never
+   * going to show.
+   */
+  const priceUnreadableText =
+    tokenMeta.status === "unavailable" ? "Price unavailable" : "Syncing price…";
+
   const priceText = (() => {
     if (agent.protocol === "mcp") return "Free to Connect";
     if (agent.pricing?.display) return agent.pricing.display;
     if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      if (!agent.pricing.tokenDecimals && !tokenMeta) {
-        return "Syncing price…";
-      }
-      const decimals = agent.pricing.tokenDecimals || tokenMeta?.decimals || 0;
+      /*
+       * `tokenDecimals: 0` and `tokenSymbol: ""` are how convex/lib/probe.ts
+       * records "not read yet" - it refuses to store a guess for either, since
+       * a fabricated number on a PRICE is where AGENTS.md §5 bites hardest - so
+       * falsy here means missing, not a real zero-decimals token. For every
+       * paid agent in this catalog that makes the live read below the only
+       * source of what the user is about to pay.
+       */
+      const live = tokenMeta.status === "ready" ? tokenMeta.metadata : null;
+      const decimals = agent.pricing.tokenDecimals || live?.decimals || null;
+      if (decimals === null) return priceUnreadableText;
       const symbol =
-        agent.pricing.tokenSymbol ||
-        tokenMeta?.symbol ||
-        shortAddress(agent.pricing.token);
+        agent.pricing.tokenSymbol || live?.symbol || shortAddress(agent.pricing.token);
       return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
     }
     if (priceModel === null) return "Price not reported yet";
     if (Number(priceModel.amount) === 0) return "Free to hire";
 
     if (priceModel.token.startsWith("0x")) {
-      if (!tokenMeta) {
-        return "Syncing price…";
-      }
-      return `${formatTokenAmount(priceModel.amount, tokenMeta.decimals)} ${tokenMeta.symbol}`;
+      if (tokenMeta.status !== "ready") return priceUnreadableText;
+      return `${formatTokenAmount(priceModel.amount, tokenMeta.metadata.decimals)} ${tokenMeta.metadata.symbol}`;
     }
 
     return `${priceModel.amount} ${priceModel.token}`;
@@ -158,6 +170,21 @@ export function HireAction({ agent }: { agent: Agent }) {
       ? Number(agent.pricing.amountRaw) === 0
       : priceModel === null || Number(priceModel.amount) === 0);
   const priceRequiresPayment = !priceIsFree;
+
+  /*
+   * A PAYMENT WHOSE AMOUNT CANNOT BE SHOWN IS NOT OFFERED.
+   *
+   * Pressing Hire on a paid agent funds an escrow in the same interaction -
+   * there is no separate confirmation step by design ("PAYING IS HIRING"
+   * above). So the price beside the button is the ONLY place the user is told
+   * what it costs, and when the token read fails there is no such place. The
+   * button stayed enabled through all of this: a user could authorise a
+   * payment of an amount the screen had just admitted it could not state.
+   *
+   * Free and MCP agents are unaffected - nothing is spent, so nothing needs
+   * quoting.
+   */
+  const priceUnreadable = priceRequiresPayment && tokenMeta.status === "unavailable";
   const paidJobs = useConvexQuery(
     agentPaymentsApi.agentPayments.getJobsForAgent,
     altana.address ? { agentKey: agent.agentKey, altanaWalletAddress: altana.address } : "skip",
@@ -334,7 +361,7 @@ export function HireAction({ agent }: { agent: Agent }) {
     if (state.kind === "hiring") {
       return state.label;
     }
-    if (priceModel === null) return "Price unavailable";
+    if (priceModel === null || priceUnreadable) return "Price unavailable";
     return "Hire";
   })();
 
@@ -345,6 +372,11 @@ export function HireAction({ agent }: { agent: Agent }) {
    */
   const note = (() => {
     if (state.kind === "error") return state.message;
+    if (priceUnreadable) {
+      return tokenMeta.status === "unavailable"
+        ? `${tokenMeta.reason} Reload in a moment; Dolphin will not start a payment it cannot price.`
+        : null;
+    }
     if (priceModel === null) {
       return "Dolphin will not assume a price while this agent's catalog value is unresolved, so it cannot record a hire yet.";
     }
@@ -406,7 +438,7 @@ export function HireAction({ agent }: { agent: Agent }) {
         ) : (
           <PearlButton
             aria-busy={busy}
-            disabled={busy || priceModel === null}
+            disabled={busy || priceModel === null || priceUnreadable}
             onClick={() => void runHire(settledPaymentJobId)}
             type="button"
           >

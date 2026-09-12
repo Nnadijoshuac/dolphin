@@ -13,6 +13,10 @@ import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent } from "@/types/agent";
 import { track } from "@/lib/analytics";
+// Shared with the wallet screen's own recoverability panel on purpose: two
+// cards denominated in BNB that round differently is the mismatch
+// altana-policy.ts already warns about.
+import { formatBnb } from "@/wallet/altana-policy";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { defaultTaskDescription, formatTokenAmount } from "@/wallet/erc8183-policy";
 import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
@@ -105,7 +109,10 @@ export function HireAction({ agent }: { agent: Agent }) {
     | { kind: "idle" }
     | { kind: "hiring"; label: string }
     | { kind: "done"; id: string }
-    | { kind: "error"; message: string }
+    // The stage is carried so the error can offer the action that fixes it -
+    // a payment refusal is almost always "fund the wallet", and the deposit
+    // flow with a copyable address already exists on the wallet screen.
+    | { kind: "error"; message: string; stage: HireStage }
   >({ kind: "idle" });
 
   /**
@@ -185,6 +192,41 @@ export function HireAction({ agent }: { agent: Agent }) {
    * quoting.
    */
   const priceUnreadable = priceRequiresPayment && tokenMeta.status === "unavailable";
+
+  /*
+   * WHAT A FIRST PURCHASE REALLY COSTS, SAID BEFORE IT IS MADE.
+   *
+   * ---------------------------------------------------------------------------
+   * WHY THIS ROW EXISTS (2026-09-12)
+   * ---------------------------------------------------------------------------
+   * The Altana relay prepends a KeyStore registration to a wallet's FIRST admin
+   * intent, carrying its own BNB value (see readFirstActionSurcharge in
+   * altana-policy.ts). Measured live it is ~0.00068 BNB against the ~0.00014 BNB
+   * a 0.1 U hire converts - roughly FIVE TIMES the thing being bought.
+   *
+   * Until now nothing on this page said so. A user funded the wallet for the
+   * price they could see, pressed Hire, and got a refusal. The cost was never
+   * wrong - it buys something real, and the wallet screen has explained it for
+   * a while - it was simply disclosed in the wrong place, after the decision
+   * rather than before it.
+   *
+   * So it is a ROW BESIDE THE PRICE, not a warning and not an error. It is a
+   * real line item on a first purchase, it is charged once per wallet ever, and
+   * what it buys - a wallet a passkey can rebuild on another device - is worth
+   * more than the hire is.
+   *
+   * Shown only for "unregistered", never for "unknown": a cost Dolphin has not
+   * confirmed is one it must not put a number against (AGENTS.md §5). Free and
+   * MCP agents never reach an admin intent from this button, so they never see
+   * it either.
+   */
+  const needsWalletSetup =
+    priceRequiresPayment && altana.recoverability === "unregistered";
+  const walletSetupText = !needsWalletSetup
+    ? null
+    : altana.registrationFeeWei === null
+      ? "Syncing…"
+      : `${formatBnb(altana.registrationFeeWei)} BNB`;
   const paidJobs = useConvexQuery(
     agentPaymentsApi.agentPayments.getJobsForAgent,
     altana.address ? { agentKey: agent.agentKey, altanaWalletAddress: altana.address } : "skip",
@@ -343,7 +385,11 @@ export function HireAction({ agent }: { agent: Agent }) {
        * output on this path at all before.
        */
       console.error(`[hire:${stage}] ${agent.agentKey}`, cause);
-      setState({ kind: "error", message: toUserMessage(cause, HIRE_STAGE_FALLBACK[stage]) });
+      setState({
+        kind: "error",
+        message: toUserMessage(cause, HIRE_STAGE_FALLBACK[stage]),
+        stage,
+      });
       track("hire_failed", { agentKey: agent.agentKey, reason: "error", stage });
     }
   }
@@ -418,13 +464,29 @@ export function HireAction({ agent }: { agent: Agent }) {
 
       <p className="mt-4 text-sm leading-6 text-muted">{access.reason}</p>
 
-      {/* The one fact that bears on the decision. */}
-      <div className="mt-5 flex items-baseline justify-between gap-4 border-y border-line py-3">
-        <span className="text-xs text-muted">Price</span>
-        <span className="text-sm font-semibold text-ink">
-          {priceText}
-        </span>
+      {/* The facts that bear on the decision, and on a first purchase there
+          are two of them. */}
+      <div className="mt-5 border-y border-line">
+        <div className="flex items-baseline justify-between gap-4 py-3">
+          <span className="text-xs text-muted">Price</span>
+          <span className="text-sm font-semibold text-ink">
+            {priceText}
+          </span>
+        </div>
+        {walletSetupText ? (
+          <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
+            <span className="text-xs text-muted">One-time wallet setup</span>
+            <span className="text-sm font-semibold text-ink">{walletSetupText}</span>
+          </div>
+        ) : null}
       </div>
+      {walletSetupText ? (
+        <p className="mt-3 text-xs leading-5 text-muted">
+          Your first purchase also registers this wallet&rsquo;s key on BNB Chain, so your
+          passkey can rebuild it on another device or after you clear this browser.
+          Charged once and never again &mdash; later hires pay only the price above.
+        </p>
+      ) : null}
 
       <div className="mt-5">
         {showMyAgents ? (
@@ -462,6 +524,24 @@ export function HireAction({ agent }: { agent: Agent }) {
           >
             {note}
           </p>
+        ) : null}
+        {/*
+         * A refusal with somewhere to go.
+         *
+         * Every way the payment stage fails is answered on the wallet screen -
+         * it holds the deposit banner with a copyable address, the live
+         * balance, and the recoverability panel that explains the setup charge.
+         * Naming an amount and leaving the user to find that themselves is half
+         * an answer.
+         */}
+        {state.kind === "error" && state.stage === "payment" ? (
+          <Link
+            className="interactive mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-ink no-underline hover:underline"
+            href="/wallet"
+          >
+            Open your Dolphin Wallet
+            <CategoryGlyph color="currentColor" name="arrow-right" size={14} strokeWidth={2} />
+          </Link>
         ) : null}
         {/*
          * Sign-in is not its own button any more, but its failures still have

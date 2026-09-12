@@ -3,7 +3,8 @@ import {
   recoverTextToolCalls,
   stripToolCallMarkup,
   LEAKED_TOOL_SYNTAX,
-} from "../../../convex/lib/openrouter";
+} from "@/lib/openrouter-recovery";
+
 
 describe("openrouter recovery and anti-leak guards", () => {
   it("recovers standard JSON tool calls in an array", () => {

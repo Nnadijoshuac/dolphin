@@ -529,6 +529,20 @@ select:focus-visible {
   --sheen: linear-gradient(180deg, rgb(255 255 255 / 5%) 0%, rgb(255 255 255 / 0%) 52%);
 }
 
+/* ── The logo follows the theme ──
+   dolphin-logo.png is pure black on transparent (max luminance 1/255), so a
+   plain <BrandMark/> was a black dolphin on a near-black canvas in dark mode.
+   Only CSS can see the theme, which is why the inversion lives here rather
+   than in the component. Callers that pass an explicit colour — the mobile tab
+   bar's always-black pill, for one — do not get this class and keep theirs. */
+.brand-mark--auto { filter: none; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-mark--auto { filter: brightness(0) invert(1); }
+}
+
+:root[data-theme="dark"] .brand-mark--auto { filter: brightness(0) invert(1); }
+
 /* ═══════════════ SITE-WIDE APPLICATION ═══════════════
 
    Three rules carry the whole site. Anything not covered here stays FLAT,

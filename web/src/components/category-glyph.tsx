@@ -31,7 +31,6 @@ import Wallet01Icon from "@hugeicons/core-free-icons/Wallet01Icon";
 import Wrench01Icon from "@hugeicons/core-free-icons/Wrench01Icon";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 
-import { colors } from "@/constants/theme";
 import type { AgentCategory } from "@/types/agent";
 
 /**
@@ -184,10 +183,31 @@ type CategoryGlyphProps = {
   strokeWidth?: number;
 };
 
+/**
+ * ---------------------------------------------------------------------------
+ * THE DEFAULT COLOUR IS `currentColor`, AND THAT IS A DARK-MODE FIX.
+ * ---------------------------------------------------------------------------
+ * It used to be `colors.ink`, which is the literal string "#171813" from
+ * constants/theme.ts — a near-black that does NOT move with the theme. Roughly
+ * twenty call sites rely on the default, and in dark mode every one of them was
+ * painting a near-black icon onto a #131410 canvas. They were not dim; they
+ * were invisible.
+ *
+ * `currentColor` inherits the text colour of wherever the icon sits, and every
+ * text colour on this site is already a theme-aware token. So the icon is now
+ * correct in both themes by construction rather than by each call site
+ * remembering to pass a colour — and a caller that wants something specific
+ * still passes `color`, which the fixed-background call sites (agent-icon,
+ * state-panel) already did.
+ *
+ * constants/theme.ts is a LIGHT-ONLY palette left over from before dark mode
+ * existed. Anything else reading from it is suspect for the same reason.
+ * ---------------------------------------------------------------------------
+ */
 export function CategoryGlyph({
   name,
   size = 24,
-  color = colors.ink,
+  color = "currentColor",
   strokeWidth = 1.8,
 }: CategoryGlyphProps) {
   const hugeicon = HUGEICONS[name];
@@ -270,9 +290,16 @@ export function CategoryGlyph({
           <path d="M11 20s6-3.2 6-8.5V5.5l-6-2.5-6 2.5v6C5 16.8 11 20 11 20Z" {...stroked(1.8)} />
           <line x1="11" x2="11" y1="6.5" y2="14.5" {...stroked(1.8)} />
           <line x1="8.5" x2="13.5" y1="9" y2="9" {...stroked(1.8)} />
-          <circle cx="17.5" cy="17.5" fill="#111215" r="3.8" />
-          <line stroke="#FFFFFF" strokeLinecap="round" strokeWidth={1.4} x1="17.5" x2="17.5" y1="15.5" y2="17.5" />
-          <circle cx="17.5" cy="19.4" fill="#FFFFFF" r="0.6" />
+          {/*
+            * The alert badge, previously a #111215 disc with #FFFFFF marks.
+            * On a dark canvas that is a black dot carrying white scratches
+            * nobody can see. The disc now takes the glyph's own colour and the
+            * marks take the page ground, so the pair inverts with the theme
+            * and keeps its contrast either way.
+            */}
+          <circle cx="17.5" cy="17.5" fill={color} r="3.8" />
+          <line stroke="var(--canvas)" strokeLinecap="round" strokeWidth={1.4} x1="17.5" x2="17.5" y1="15.5" y2="17.5" />
+          <circle cx="17.5" cy="19.4" fill="var(--canvas)" r="0.6" />
         </>
       )}
 

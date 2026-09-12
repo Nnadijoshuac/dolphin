@@ -195,13 +195,35 @@ export const subscribe = mutation({
        * unsubscribed while under water and came back later would get no email
        * on the next read, because the row still remembers being below.
        */
+      const wasInactive = !existing.active;
       await ctx.db.patch(existing._id, {
         threshold: normalizedThreshold,
         active: true,
         wasBelow: existing.active ? existing.wasBelow : null,
       });
+
+      /*
+       * Confirm on a RESUBSCRIBE or a CHANGED THRESHOLD, not on every save.
+       *
+       * Coming back after unsubscribing needs the same proof-of-delivery a new
+       * subscription does — the address may have died in between. A changed
+       * threshold needs it because the number is the whole subscription and
+       * reading it back is how a typo gets caught. Re-saving the identical
+       * settings needs nothing, and mailing on it would train people to ignore
+       * the sender, which costs exactly the alert this feature exists for.
+       */
+      if (wasInactive || existing.threshold !== normalizedThreshold) {
+        await ctx.scheduler.runAfter(0, internal.healthAlerts.sendConfirmation, {
+          email: normalizedEmail,
+          threshold: normalizedThreshold,
+          walletAddress,
+          unsubscribeToken: existing.unsubscribeToken,
+        });
+      }
       return { ok: true, reason: null };
     }
+
+    const unsubscribeToken = newUnsubscribeToken();
 
     await ctx.db.insert("healthAlerts", {
       walletAddress,
@@ -212,8 +234,21 @@ export const subscribe = mutation({
       lastHealthFactor: null,
       lastCheckedAt: null,
       lastNotifiedAt: null,
-      unsubscribeToken: newUnsubscribeToken(),
+      unsubscribeToken,
       createdAt: Date.now(),
+    });
+
+    /*
+     * Scheduled rather than awaited: a mutation cannot do network I/O at all,
+     * and even if it could, the form must not wait on Resend to tell someone
+     * their subscription saved. The row is already durable at this point, so
+     * a confirmation that fails loses nothing but the confirmation.
+     */
+    await ctx.scheduler.runAfter(0, internal.healthAlerts.sendConfirmation, {
+      email: normalizedEmail,
+      threshold: normalizedThreshold,
+      walletAddress,
+      unsubscribeToken,
     });
 
     return { ok: true, reason: null };
@@ -330,6 +365,100 @@ function alertBody(input: {
     `${siteUrl}/wallet?unsubscribe=${unsubscribeToken}`,
   ].join("\n");
 }
+
+/**
+ * The message that proves the pipe works, sent the moment someone subscribes.
+ *
+ * ===========================================================================
+ * WHY THIS EXISTS (2026-09-12)
+ * ===========================================================================
+ * Subscribing sent NOTHING. You typed an address, pressed "Email me", and the
+ * form said it worked — and then nothing arrived, possibly ever, because
+ * `runChecks` only mails on a CROSSING and `wasBelow === null` on a new row
+ * deliberately never fires. Someone healthy at 2.4 under a 1.5 threshold could
+ * wait months for the first real email.
+ *
+ * That is the silent-clipboard bug in another costume: success and total
+ * failure look identical to the user, and a wrong address, a dead Resend key,
+ * a suspended domain or a spam-foldered sender are all discovered at the exact
+ * moment the alert actually matters — which is the one moment they must not be
+ * discovered.
+ *
+ * A confirmation does four jobs at once, and that is why it is worth an email:
+ *   - proves the address is real and reachable;
+ *   - proves THIS deployment can send, on every single subscription, so a
+ *     broken key surfaces immediately rather than during a liquidation;
+ *   - hands over the unsubscribe link before anyone needs it;
+ *   - states the threshold back, which is how someone catches a typo'd 1.5.
+ *
+ * It says the CURRENT health factor is not included on purpose: this mutation
+ * runs before any read, and quoting a number here would mean inventing one.
+ */
+function confirmationBody(input: {
+  threshold: number;
+  walletAddress: string;
+  unsubscribeToken: string;
+  siteUrl: string;
+}): string {
+  const { threshold, walletAddress, unsubscribeToken, siteUrl } = input;
+  return [
+    `Dolphin is now watching this address for you.`,
+    "",
+    `Address: ${walletAddress}`,
+    `You will be emailed if its Venus health factor falls below ${threshold}.`,
+    "",
+    "Venus liquidates a position at 1.0, so this fires while there is still room to act.",
+    "Checked every 15 minutes against the Venus Comptroller on BNB Smart Chain.",
+    "",
+    "This is the only message you get until that happens. If your position is",
+    "already below the number, the next genuine crossing is what triggers the alert.",
+    "",
+    "---",
+    "This email also confirms Dolphin can reach you. To stop the alerts:",
+    `${siteUrl}/wallet?unsubscribe=${unsubscribeToken}`,
+  ].join("\n");
+}
+
+/**
+ * Sends the confirmation. An ACTION because mutations cannot do network I/O,
+ * scheduled by `subscribe` so the form still returns instantly — a person
+ * should not wait on Resend to find out their form submitted.
+ *
+ * A failure here is logged and swallowed rather than thrown: the subscription
+ * is already durable, and re-running a scheduled action that cannot succeed
+ * (a mistyped address will never accept mail) would retry forever. What it
+ * must NOT do is fail silently on the server, hence the console.error - this
+ * is the deployment's canary for a dead key.
+ */
+export const sendConfirmation = internalAction({
+  args: {
+    email: v.string(),
+    threshold: v.number(),
+    walletAddress: v.string(),
+    unsubscribeToken: v.string(),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (_ctx, args) => {
+    const siteUrl = (process.env.SITE_URL ?? "").trim() || "https://dolphinamp.vercel.app";
+    const result = await sendEmail({
+      to: args.email,
+      subject: `Watching your Venus position below ${args.threshold}`,
+      text: confirmationBody({
+        threshold: args.threshold,
+        walletAddress: args.walletAddress,
+        unsubscribeToken: args.unsubscribeToken,
+        siteUrl,
+      }),
+    });
+
+    if (!result.ok) {
+      console.error(
+        `[healthAlerts] confirmation to ${args.email} failed: ${result.reason ?? "unknown"}`,
+      );
+    }
+    return { ok: result.ok };
+  },
+});
 
 /**
  * One tick: read each due position, email the ones that have just gone under.

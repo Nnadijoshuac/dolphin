@@ -590,6 +590,138 @@ select {
   box-shadow: inset 0 1px 3px var(--sink-top);
 }
 
+/* ═══════════════ THE CENSUS TICKER ═══════════════
+
+   A strip under the navbar, on every route. Chrome, not content — so it is
+   FLAT, with a hairline under it and nothing else. Giving page furniture the
+   raised treatment would put it in front of the page it frames.
+
+   THE LOOP: .ticker__track holds the sequence twice and translates by exactly
+   -50%, so the second copy sits where the first began at the moment the
+   animation restarts. Any other distance shows a seam.
+
+   REDUCED MOTION removes the animation entirely rather than shortening it. The
+   global prefers-reduced-motion rule at the top of this file collapses
+   durations to 0.01ms, which for an infinite linear translate means it still
+   moves — just instantly, which is worse. Perpetual horizontal motion in fixed
+   chrome is a vestibular trigger and this is on every page, so it gets its own
+   explicit opt-out and becomes a plain scrollable row. */
+
+.ticker {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  /* Fixed height whether or not the numbers have landed, so a late Convex
+     response cannot push the page down under the reader. */
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  /* The strip is decorative chrome for pointer users but must stay reachable:
+     under reduced motion it becomes scrollable, and this keeps that usable. */
+  scrollbar-width: none;
+}
+.ticker::-webkit-scrollbar { display: none; }
+
+/* Soft edges so text enters and leaves rather than being chopped by the
+   viewport. Masked rather than faded with a gradient overlay, so it works on
+   any background in either theme. */
+.ticker::before,
+.ticker::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3rem;
+  z-index: 1;
+  pointer-events: none;
+}
+.ticker::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--paper), transparent);
+}
+.ticker::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--paper), transparent);
+}
+
+.ticker__track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 62s linear infinite;
+}
+
+/* Slow enough to read a segment as it passes; 62s is tuned to the real string
+   length rather than picked round. */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Hovering pauses it, so a number you want to read stops instead of escaping. */
+.ticker:hover .ticker__track { animation-play-state: paused; }
+
+.ticker__pass {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding-right: 2rem;
+  white-space: nowrap;
+}
+
+.ticker__tag {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+.ticker__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+/* Tabular and barely open. These are counts read against each other, and tight
+   tracking on numerals is a mistake this codebase already made once. */
+.ticker__value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.005em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.ticker__value--terminal { color: var(--accent-ink); }
+
+.ticker__label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.ticker__note {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--faint);
+}
+
+@media (max-width: 767px) {
+  .ticker { height: 2.25rem; }
+  .ticker::before, .ticker::after { width: 1.75rem; }
+  .ticker__pass { gap: 1.5rem; padding-right: 1.5rem; }
+  .ticker__value { font-size: 0.875rem; }
+  .ticker__label, .ticker__note { font-size: 0.72rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker { overflow-x: auto; }
+  .ticker__track { animation: none; width: auto; }
+  /* The duplicate pass is redundant once nothing scrolls, and it would just be
+     the same sentence twice in a row. */
+  .ticker__pass[aria-hidden="true"] { display: none; }
+}
+
 /* ═══════════════ shared primitives ═══════════════ */
 
 .wallet-loading { max-width: 640px; }

@@ -19,6 +19,7 @@ import type * as agentTrials from "../agentTrials.js";
 import type * as agents from "../agents.js";
 import type * as categoryStats from "../categoryStats.js";
 import type * as categoryStatsValidators from "../categoryStatsValidators.js";
+import type * as census from "../census.js";
 import type * as crons from "../crons.js";
 import type * as discovery from "../discovery.js";
 import type * as dolphin from "../dolphin.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   agents: typeof agents;
   categoryStats: typeof categoryStats;
   categoryStatsValidators: typeof categoryStatsValidators;
+  census: typeof census;
   crons: typeof crons;
   discovery: typeof discovery;
   dolphin: typeof dolphin;

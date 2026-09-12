@@ -923,6 +923,29 @@ export const agentToolsApi = anyApi as unknown as {
  * cannot perform, which is the same fault as a metric that reads "syncing"
  * forever. See the note on the healthAlerts table in convex/schema.ts.
  */
+/**
+ * convex/census.ts. The discovery funnel, as four integers.
+ *
+ * Deliberately NOT `adminApi.getOverview`, which would drag a hundred agent
+ * documents and the whole verification matrix onto a landing page to render
+ * three numbers — and which is an ungated query whose exposure should stay
+ * accidental rather than become a dependency.
+ */
+export const censusApi = anyApi as unknown as {
+  census: {
+    funnel: Query<
+      Record<string, never>,
+      {
+        assessed: number;
+        candidates: number;
+        live: number;
+        publishers: number;
+        lastRunAt: string | null;
+      }
+    >;
+  };
+};
+
 export const healthAlertsApi = anyApi as unknown as {
   healthAlerts: {
     /** Whether this deployment can send at all. Gate the form on it. */

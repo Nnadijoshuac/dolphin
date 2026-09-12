@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { CensusMarquee } from "@/components/census-marquee";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
@@ -41,7 +42,25 @@ export function AppFrame({ children }: { children: ReactNode }) {
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      {isStandaloneRoute(pathname) ? null : <SiteHeader />}
+      {/*
+       * The census ticker rides directly under the navbar on every route that
+       * has one, because it is a claim about the whole product rather than
+       * about one page.
+       *
+       * Deliberately NOT on /dolphin or /admin: both are full-height app
+       * screens that own their viewport, and a scrolling strip above a pinned
+       * chat composer is chrome competing with a workspace.
+       *
+       * It renders nothing when the numbers cannot be read, so a deployment
+       * without Convex looks exactly as it did before rather than reserving a
+       * blank band.
+       */}
+      {isStandaloneRoute(pathname) ? null : (
+        <>
+          <SiteHeader />
+          <CensusMarquee />
+        </>
+      )}
       <main className="min-w-0 flex-1" id="main-content">
         {children}
       </main>

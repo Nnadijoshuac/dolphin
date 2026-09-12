@@ -160,8 +160,6 @@ export interface HealthFactorLiveStats {
 export interface YieldLiveStats {
   category: "yield";
   currentApy: LiveMetric<number>;
-  tvlManagedUsd: LiveMetric<number>;
-  protocolsUsed: LiveMetric<string[]>;
   rebalanceFrequency: LiveMetric<string>;
 }
 

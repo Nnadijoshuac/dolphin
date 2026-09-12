@@ -109,6 +109,25 @@ export async function readYieldStats(
     const tvlUsd = baseCurrencyUnit > 0n ? Number(totalCollateralBase) / Number(baseCurrencyUnit) : 0;
     const hasAavePosition = totalCollateralBase > 0n;
 
+    /*
+     * NOT SURFACED SINCE 2026-09-12 — `tvlManagedUsd` and `protocolsUsed` are
+     * still computed and stored, and the website no longer renders either.
+     *
+     * Both measure the AGENT'S OWN WALLET. An agent that rebalances a user's
+     * position holds nothing itself, so both were structurally pinned at
+     * "$0.00M" and "None" on every agent in the catalog, under a heading that
+     * said "Live". A permanently-zero metric labelled live is worse than a
+     * missing one: it reads as a verdict on the agent.
+     *
+     * They are left in place rather than deleted because removing a field from
+     * `agentLiveStatsValidator` would make every already-stored row fail schema
+     * validation, so it needs a migration rather than an edit. Doing that is a
+     * separate, reversible change; hiding the wrong number was the urgent half.
+     *
+     * The metric that WOULD be honest here is the agent's escrow record — jobs
+     * funded, delivered, refunded — which describes work done for other people
+     * rather than a balance it happens to hold.
+     */
     return {
       category: "yield",
       currentApy: unavailableMetricValue(NOT_WIRED_REASONS.apy, source, checkedAt),

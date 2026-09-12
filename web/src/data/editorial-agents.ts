@@ -116,8 +116,6 @@ export function unavailableLiveStats(category: AgentCategory): AgentLiveStats | 
       return {
         category,
         currentApy: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
-        tvlManagedUsd: unavailableMetric<number>(METRICS_NOT_PUBLISHED),
-        protocolsUsed: unavailableMetric<string[]>(METRICS_NOT_PUBLISHED),
         rebalanceFrequency: unavailableMetric<string>(METRICS_NOT_PUBLISHED),
       };
     case "trading":

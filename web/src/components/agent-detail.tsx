@@ -186,16 +186,28 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
             label="Current APY"
             metric={stats.currentApy}
           />
-          <MetricCell
-            format={(value) => `$${(value / 1e6).toFixed(2)}M`}
-            label="Total value managed"
-            metric={stats.tvlManagedUsd}
-          />
-          <MetricCell
-            format={formatList}
-            label="Protocols used"
-            metric={stats.protocolsUsed}
-          />
+          {/*
+            * "Total value managed" and "Protocols used" were REMOVED here
+            * (2026-09-12), and they are the same bug rather than two.
+            *
+            * Both read the AGENT'S OWN WALLET —
+            * Pool.getUserAccountData(agentWallet).totalCollateralBase, and
+            * whether that same wallet holds an Aave position. An agent that
+            * rebalances YOUR position never holds anything itself, which is
+            * the design this whole product is built around. So the tiles were
+            * not merely empty pending data: they were structurally incapable
+            * of ever being non-zero, and rendered "$0.00M" and "None" on every
+            * agent, forever, under a heading that says "Live".
+            *
+            * A permanently-zero metric labelled Live is worse than a missing
+            * one. It reads as a measurement of the agent's competence and it
+            * is nothing of the kind.
+            *
+            * What would be honest here is the agent's ESCROW record — jobs
+            * funded, delivered, refunded — which is about work it did for
+            * other people rather than money it happens to be sitting on. That
+            * belongs to the track-record section, which already exists.
+            */}
           <MetricCell
             format={(value) => value}
             label="Rebalance cadence"

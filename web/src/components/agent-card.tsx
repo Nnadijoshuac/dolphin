@@ -183,9 +183,10 @@ export function AgentCard({
             <p className="mt-2 truncate text-xs text-faint">By {displayPublisher}</p>
             {/*
              * The comparison signal, on the surface where comparison happens.
-             * Renders nothing for an agent with no history - see signal-strip.
+             * `verifiedAt` is what keeps this from rendering nothing at all for
+             * an agent with no hires yet - see signal-strip.
              */}
-            <SignalStrip className="mt-2" signals={signals} />
+            <SignalStrip className="mt-2" signals={signals} verifiedAt={agent.verifiedAt} />
           </div>
         </div>
 

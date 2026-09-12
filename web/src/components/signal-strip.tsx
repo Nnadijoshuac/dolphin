@@ -1,7 +1,33 @@
 "use client";
 
 import { MIN_RATE_DENOMINATOR } from "@/constants/reviews";
+import { useNow } from "@/hooks/use-now";
 import type { AgentSignals } from "@/hooks/use-agents";
+
+/**
+ * "Answered 4m ago", from the probe timestamp.
+ *
+ * Returns null when the time is not yet known - `useNow` reports 0 on the
+ * server so that the first client render agrees with it - and when the
+ * timestamp is unparseable. Both cases render nothing rather than a guess.
+ */
+function answeredLabel(verifiedAt: string | null | undefined, now: number): string | null {
+  if (!verifiedAt || now === 0) return null;
+
+  const at = new Date(verifiedAt).getTime();
+  if (Number.isNaN(at)) return null;
+
+  const seconds = Math.round((now - at) / 1000);
+  if (seconds < 0) return null;
+
+  if (seconds < 90) return "Answered just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `Answered ${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Answered ${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `Answered ${days}d ago`;
+}
 
 /**
  * The one line on a catalog card that lets one agent be preferred to another.
@@ -29,11 +55,35 @@ import type { AgentSignals } from "@/hooks/use-agents";
  */
 export function SignalStrip({
   signals,
+  verifiedAt,
   className = "",
 }: {
   signals: AgentSignals | undefined;
+  /**
+   * WHEN DOLPHIN LAST CALLED THIS AGENT AND IT ANSWERED. (2026-09-12)
+   *
+   * The note above is right that silence is the honest rendering of "not yet
+   * known" - and wrong about what silence COMMUNICATES. On a catalog where
+   * most records have no hires and no reviews, most cards rendered nothing at
+   * all, and a blank card does not read as "new". It reads as abandoned. There
+   * is no signal-free option here: absence is itself a signal, and this
+   * component did not control which one it sent.
+   *
+   * The way out is not to invent evidence, it is to show a DIFFERENT true
+   * thing. Every listed agent has answered a probe, because answering is what
+   * listing means (README: "Nothing enters the catalog that has not
+   * answered"). So this is the one signal that is real for every row, is never
+   * zero, is produced by infrastructure already running, and belongs to
+   * Dolphin rather than to an indexer.
+   *
+   * Rendered last and muted: it is a liveness fact, not an endorsement, and it
+   * must never outrank a hire or a review that was actually earned.
+   */
+  verifiedAt?: string | null;
   className?: string;
 }) {
+  const now = useNow();
+
   if (!signals) return null;
 
   const parts: { key: string; label: string; strong?: boolean }[] = [];
@@ -85,6 +135,9 @@ export function SignalStrip({
 
     parts.push({ key: "reviews", label: rehire });
   }
+
+  const answered = answeredLabel(verifiedAt, now);
+  if (answered) parts.push({ key: "answered", label: answered });
 
   if (parts.length === 0) return null;
 

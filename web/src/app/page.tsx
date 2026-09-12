@@ -131,8 +131,9 @@ function DiscoverAgentCard({
           <p className={styles.agentTagline}>{agent.tagline}</p>
         </div>
 
-        {/* The comparison signal. Renders nothing for an agent with no history. */}
-        <SignalStrip className="mt-4" signals={signals} />
+        {/* The comparison signal. `verifiedAt` is the one part of it that is
+            true for every listed agent - see signal-strip. */}
+        <SignalStrip className="mt-4" signals={signals} verifiedAt={agent.verifiedAt} />
 
         <dl className={styles.agentEvidence}>
           <div>

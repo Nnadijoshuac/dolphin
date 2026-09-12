@@ -301,7 +301,17 @@ const catalogValidator = v.object({
   categorySlug: v.string(),
   tags: v.array(v.string()),
   skills: v.array(
-    v.object({ name: v.string(), description: v.union(v.string(), v.null()) }),
+    v.object({
+      name: v.string(),
+      description: v.union(v.string(), v.null()),
+      /**
+       * Carried through from the probe. Optional here for the same reason it
+       * is optional on the table: a row written before 2026-09-12 has none,
+       * and an A2A skill records null because prose has no signature. See
+       * ProbeSkill in lib/probe.ts.
+       */
+      requiresInput: v.optional(v.union(v.boolean(), v.null())),
+    }),
   ),
   protocol: v.union(v.literal("a2a"), v.literal("mcp")),
   endpoint: v.string(),

@@ -111,6 +111,27 @@ const RPC_TIMEOUT_MS = 20_000;
 export interface ProbeSkill {
   name: string;
   description: string | null;
+  /**
+   * Whether this tool REQUIRES any argument. MCP only; null for A2A.
+   *
+   * Added 2026-09-12 for the free tool preview on a listing
+   * (convex/agentTrials.ts), which will only run a tool that needs no input -
+   * that rule is what keeps a visitor's text from ever reaching a stranger's
+   * server, and what stops Dolphin inventing a value and presenting the reply
+   * as that agent's answer.
+   *
+   * Recorded HERE rather than discovered at click time because the alternative
+   * is a listing full of buttons that turn out to error. Measured over the
+   * live catalog, the split is real and uneven: `getSupportedChains`,
+   * `topaz_get_protocol_stats`, `bnb_agent_census` and `bobai_token_info` take
+   * nothing, while every read tool on Aave-powered-by-HeyAnon wants at least
+   * `chainName`. A UI that cannot tell them apart offers four chips and errors
+   * on all four.
+   *
+   * Null means "not known" - an A2A skill, or an MCP row probed before this
+   * field existed. A null is NOT treated as runnable; see agentTrials.ts.
+   */
+  requiresInput: boolean | null;
 }
 
 export interface ProbeResult {
@@ -238,6 +259,13 @@ function parseCard(payload: unknown): AgentCard | null {
           typeof skill.description === "string" && skill.description.trim().length > 0
             ? skill.description.trim().slice(0, 300)
             : null,
+        /*
+         * Null, not false. An A2A skill is a prose capability on an agent
+         * card, not a callable tool with a schema - "does it require input"
+         * is not a question its card answers. Recording false would claim it
+         * takes none, and the preview would then offer it.
+         */
+        requiresInput: null,
       });
     }
   }
@@ -637,12 +665,21 @@ async function probeMCP(endpoint: string): Promise<ProbeResult> {
     const tool = raw as Record<string, unknown>;
     const name = typeof tool.name === "string" ? tool.name.trim() : "";
     if (name.length === 0) continue;
+    /*
+     * The tool's own JSON Schema decides this, not a guess from its name. An
+     * absent or malformed `required` means nothing is required, which is what
+     * the MCP spec says and what every server in this catalog does.
+     */
+    const schema = tool.inputSchema as { required?: unknown } | null | undefined;
+    const required = Array.isArray(schema?.required) ? schema.required : [];
+
     skills.push({
       name: name.slice(0, 80),
       description:
         typeof tool.description === "string" && tool.description.trim().length > 0
           ? tool.description.trim().slice(0, 300)
           : null,
+      requiresInput: required.length > 0,
     });
   }
 

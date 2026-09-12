@@ -243,6 +243,15 @@ export interface Agent {
   agentWallet: Address | null;
   skills: AgentSkill[];
   verifiedSkills: string[];
+  /**
+   * MCP tools this agent's own schema says take no argument, so a listing can
+   * offer to RUN one for free.
+   *
+   * Empty for an A2A agent, and empty for any record probed before
+   * 2026-09-12 — the flag it derives from did not exist, and "not known" is
+   * never offered. See previewableTools in convex/lib/publicAgent.ts.
+   */
+  previewableTools: string[];
   services: AgentService[];
   x402Supported: LiveMetric<boolean>;
   isActive: LiveMetric<boolean>;

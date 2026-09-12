@@ -6,6 +6,7 @@ import { useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AgentTransactionPanel } from "@/components/agent-transaction-panel";
+import { AgentTrialPanel } from "@/components/agent-trial-panel";
 import { HireAction } from "@/components/hire-action";
 import { McpUseAction } from "@/components/mcp-use-action";
 import { MetricCell } from "@/components/metric-cell";
@@ -460,6 +461,15 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             see convex/agentTools.ts for why that boundary is held.
           */}
           <AgentTransactionPanel agent={agent} />
+
+          {/*
+            Running the agent, free, before anything is connected or signed.
+            Placed in the action column ABOVE nothing and below the primary
+            CTA on purpose: it is the cheapest thing on the page to say yes to,
+            and the only one that returns something. Renders null for an A2A
+            agent and for an MCP agent with no read-only tool.
+          */}
+          <AgentTrialPanel agent={agent} />
 
           {/*
             Opens Dolphin with this agent already in context, so a conversation

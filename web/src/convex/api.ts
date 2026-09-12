@@ -940,3 +940,49 @@ export const healthAlertsApi = anyApi as unknown as {
     unsubscribeByToken: Mutation<{ token: string }, { ok: boolean }>;
   };
 };
+
+/**
+ * convex/agentTrials.ts. Running an agent before committing to anything.
+ *
+ * One click, no wallet, no signature, no payment — the agent's own output on
+ * its listing. Fenced four ways (zero-argument tools only, no write tools,
+ * cached per tool, globally capped); the reasoning is in the module header and
+ * in the `agentToolTrials` note in convex/schema.ts.
+ *
+ * `resultText` is A STRANGER'S PROSE. Render it attributed to the agent, never
+ * as Dolphin's own statement — mcpClient.ts's header has the precedent where a
+ * `collectFees` tool reported success having collected nothing.
+ */
+export type AgentTrialOutcome = {
+  agentName: string;
+  toolName: string;
+  resultText: string;
+  /** The agent answered and said the call failed. Still an answer. */
+  isError: boolean;
+  /** The call could not be made at all, which is a different fact. */
+  transportError: string | null;
+  latencyMs: number;
+  calledAt: number;
+  /** Served from Dolphin's cache. Say so; never imply it is live. */
+  cached: boolean;
+};
+
+export const agentTrialsApi = anyApi as unknown as {
+  agentTrials: {
+    /** The last thing this tool said, or null if nothing has run it. */
+    lastTrial: Query<
+      { agentKey: string; toolName: string },
+      {
+        resultText: string;
+        isError: boolean;
+        transportError: string | null;
+        latencyMs: number;
+        calledAt: number;
+      } | null
+    >;
+    tryAgentTool: Action<
+      { agentKey: string; toolName: string },
+      AgentTrialOutcome
+    >;
+  };
+};

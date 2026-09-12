@@ -100,6 +100,19 @@ export type AnalyticsEvents = {
     /** Whether this record has a chart, which is the thing being evaluated. */
     hasPerformanceSeries: boolean;
   };
+  /**
+   * Someone ran one of an agent's read-only tools from its listing.
+   *
+   * The one event that measures whether the catalog DEMONSTRATES anything.
+   * Until 2026-09-12 nothing on a listing produced output without a wallet, a
+   * signature and a hire, so "did this agent show anyone what it does" had no
+   * numerator at all.
+   *
+   * Deliberately carries no tool name: which tools get pressed is a question
+   * about a third party's product surface, not about Dolphin's funnel, and the
+   * vocabulary above stays as narrow as the question it answers.
+   */
+  agent_tool_previewed: { agentKey: string; category: string };
   /** A wallet connected. WHICH wallet is never recorded. */
   wallet_connected: { connector: string; surface: AnalyticsSurface };
   /** Sign-In With Ethereum completed. The step between connecting and acting. */

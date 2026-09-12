@@ -117,7 +117,21 @@ export default defineSchema({
      * what an agent can do, and it is fetched by the probe anyway.
      */
     skills: v.array(
-      v.object({ name: v.string(), description: v.union(v.string(), v.null()) }),
+      v.object({
+        name: v.string(),
+        description: v.union(v.string(), v.null()),
+        /**
+         * Whether the tool requires any argument, read from its own JSON
+         * Schema at probe time. See ProbeSkill in convex/lib/probe.ts.
+         *
+         * OPTIONAL because every row written before 2026-09-12 predates it,
+         * and NULLABLE because an A2A skill is prose rather than a callable
+         * signature. Both absent and null mean "not known to take none", and
+         * the preview in agentTrials.ts treats them that way - it will not
+         * offer a tool it cannot prove is argument-free.
+         */
+        requiresInput: v.optional(v.union(v.boolean(), v.null())),
+      }),
     ),
 
     // --- Service --------------------------------------------------------
@@ -858,4 +872,59 @@ export default defineSchema({
     /* What the cron walks: active rows, oldest check first. */
     .index("by_active_checked", ["active", "lastCheckedAt"])
     .index("by_token", ["unsubscribeToken"]),
+
+  /**
+   * ===========================================================================
+   * WHAT AN AGENT ACTUALLY SAID, WHEN ANYONE PRESSED RUN
+   * ===========================================================================
+   * The catalog could describe an agent and never show one working. A visitor
+   * had to connect a wallet, sign, and record a hire before getting anything
+   * back - and what a hire returns is a database row, so in practice the answer
+   * was never. Every cost was front-loaded and the payoff was absent.
+   *
+   * This table backs a free, anonymous, one-click run of a ZERO-ARGUMENT
+   * read-only tool on an agent's own MCP server, so a listing can show its
+   * output instead of describing it.
+   *
+   * ---------------------------------------------------------------------------
+   * IT IS A CACHE AND A RATE LIMIT IN ONE, AND THAT IS THE POINT
+   * ---------------------------------------------------------------------------
+   * This is an unauthenticated endpoint that makes an outbound call to a third
+   * party. The 2026-09-06 audit flagged `refreshAgentCategoryStats` as exactly
+   * that and called it an amplification endpoint against both the RPC quota and
+   * a stranger's server. Repeating the mistake with a Run button on every
+   * listing would be worse, because it is designed to be pressed.
+   *
+   * So a row IS the throttle: a trial inside the TTL is served from here and
+   * never reaches the publisher. One agent's tool can be invoked at most once
+   * per TTL no matter how many people press the button, which bounds Dolphin's
+   * cost and is a courtesy to the seller, who did not ask to be a demo.
+   *
+   * There is no argsHash because there are no arguments - see the zero-argument
+   * rule in agentTrials.ts. That is also why one row per (agent, tool) is a
+   * complete cache rather than a sampling of one.
+   *
+   * ---------------------------------------------------------------------------
+   * THE TEXT IS A STRANGER'S, AND IS LABELLED AS SUCH WHEREVER IT RENDERS
+   * ---------------------------------------------------------------------------
+   * Same rule as mcpClient.ts's header: an agent's prose is a claim by that
+   * agent, never an outcome, and never Dolphin's own statement of fact. Stored
+   * so it can be quoted and attributed, never restated.
+   */
+  agentToolTrials: defineTable({
+    agentKey: v.string(),
+    toolName: v.string(),
+    /** The tool's text output, truncated. A citation, not an archive. */
+    resultText: v.string(),
+    /** The server's own isError flag. A tool that fails is still answering. */
+    isError: v.boolean(),
+    /** Null when the call completed; set when it could not be made at all. */
+    transportError: v.union(v.string(), v.null()),
+    latencyMs: v.number(),
+    calledAt: v.number(),
+  })
+    /* The cache lookup, and the per-agent-per-tool throttle. */
+    .index("by_agent_tool", ["agentKey", "toolName"])
+    /* The global throttle: how many trials have run recently, across everything. */
+    .index("by_called_at", ["calledAt"]),
 });

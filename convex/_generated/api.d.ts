@@ -15,6 +15,7 @@ import type * as agentRetention from "../agentRetention.js";
 import type * as agentReviews from "../agentReviews.js";
 import type * as agentSessions from "../agentSessions.js";
 import type * as agentTools from "../agentTools.js";
+import type * as agentTrials from "../agentTrials.js";
 import type * as agents from "../agents.js";
 import type * as categoryStats from "../categoryStats.js";
 import type * as categoryStatsValidators from "../categoryStatsValidators.js";
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   agentReviews: typeof agentReviews;
   agentSessions: typeof agentSessions;
   agentTools: typeof agentTools;
+  agentTrials: typeof agentTrials;
   agents: typeof agents;
   categoryStats: typeof categoryStats;
   categoryStatsValidators: typeof categoryStatsValidators;

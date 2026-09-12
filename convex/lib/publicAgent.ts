@@ -217,6 +217,22 @@ export function toPublicAgent(row: Doc<"agents">) {
      */
     skills: row.skills.map((skill) => ({ name: skill.name, evidence: "verified" as const })),
     verifiedSkills: row.skills.map((skill) => skill.name),
+    /**
+     * The tools a listing may offer to RUN for free - MCP tools this agent's
+     * own schema says need no argument.
+     *
+     * Derived here rather than in the client so the rule lives in one place:
+     * `requiresInput === false` and nothing else. Absent (a row probed before
+     * 2026-09-12) and null (an A2A prose skill) both mean not-known, and
+     * not-known is not offered. convex/agentTrials.ts re-checks the live
+     * schema before calling regardless, so this only decides what is shown.
+     */
+    previewableTools:
+      row.protocol === "mcp"
+        ? row.skills
+            .filter((skill) => skill.requiresInput === false)
+            .map((skill) => skill.name)
+        : [],
     tags: row.tags,
     services: [{ name: row.protocol, endpoint: row.endpoint, version: null }],
     /**

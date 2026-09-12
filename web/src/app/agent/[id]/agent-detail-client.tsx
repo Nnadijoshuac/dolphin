@@ -12,6 +12,7 @@ import {
 import { StatePanel } from "@/components/state-panel";
 import { useAgentDetail } from "@/hooks/use-agents";
 import { track } from "@/lib/analytics";
+import type { Agent } from "@/types/agent";
 
 /**
  * The live half of an agent page.
@@ -37,10 +38,49 @@ import { track } from "@/lib/analytics";
  * `useAgentDetail` already distinguished these: it exposes `notFound` for the
  * null case specifically, and the old code ignored it.
  */
-export function AgentDetailClient({ reference }: { reference: string }) {
-  const { data: agent, isLoading, notFound } = useAgentDetail(reference);
+export function AgentDetailClient({
+  reference,
+  initialAgent = null,
+}: {
+  reference: string;
+  /**
+   * THE RECORD THE SERVER ALREADY READ. (2026-09-12)
+   *
+   * page.tsx calls `fetchAgent(id)` to build the title, the description, the
+   * OpenGraph card and the JSON-LD - so it holds the name, category, publisher
+   * and tagline before a byte of this component runs. It then threw all of it
+   * away and handed this component a bare `reference`, so the first thing a
+   * visitor saw on the most linkable page in the product was a panel reading
+   * "Syncing - Loading agent record".
+   *
+   * Passing it through is safe against the rule the header comment on page.tsx
+   * sets out - identity on the server, live values on the client - because the
+   * live values do not come from this object. `LiveStats` reads
+   * `useAgentCategoryStats` and falls back to `syncingLiveStats(...)` until
+   * that resolves, so every metric renders as explicitly syncing during the
+   * server-snapshot paint rather than as a server-timestamped number. The hire
+   * state, the registry check and the reviews each subscribe for themselves.
+   *
+   * What the visitor gets immediately is what the server actually knew: who
+   * this agent is. What still waits is everything that can change.
+   */
+  initialAgent?: Agent | null;
+}) {
+  const { data: live, isLoading, notFound } = useAgentDetail(reference);
   const backend = useBackendStatus();
   useReportBackendStatus(backend, "agent");
+
+  /*
+   * The subscription wins the moment it arrives. `initialAgent` is a snapshot
+   * taken at request time and is only ever the opening frame.
+   *
+   * `notFound` discards it outright: the backend answering "no such agent" is a
+   * later and better-informed answer than a snapshot taken seconds earlier, and
+   * holding a de-listed record on screen because the server had once seen it
+   * would be the same conflation of "gone" and "not loaded" that the note above
+   * exists to prevent, running in the other direction.
+   */
+  const agent = live ?? (notFound ? undefined : (initialAgent ?? undefined));
 
   const isUnavailable =
     backend.kind === "unreachable" || backend.kind === "unconfigured";

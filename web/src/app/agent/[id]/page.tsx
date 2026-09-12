@@ -176,7 +176,14 @@ export default async function AgentPage({ params }: AgentPageProps) {
           type="application/ld+json"
         />
       ) : null}
-      <AgentDetailClient reference={id} />
+      {/*
+       * The record read above is handed straight to the client component. It
+       * was already fetched for the metadata and the JSON-LD; not passing it on
+       * meant a visitor's first paint was "Syncing - Loading agent record" on a
+       * page whose identity the server had in hand. See the note on
+       * `initialAgent` for why this does not put a live value on screen.
+       */}
+      <AgentDetailClient initialAgent={agent} reference={id} />
     </>
   );
 }

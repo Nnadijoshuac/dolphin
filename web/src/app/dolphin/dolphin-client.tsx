@@ -35,6 +35,50 @@ function historyTime(timestamp: number): string {
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+/**
+ * What to ask when you have no idea what this thing can do.
+ *
+ * ===========================================================================
+ * WHY A COLD /dolphin HAD NONE (2026-09-12)
+ * ===========================================================================
+ * Sample prompts already existed, and were rendered ONLY when `seedAgentName`
+ * was set - that is, only for someone who arrived from an agent page and
+ * therefore already knew what they were asking about. Anyone landing on
+ * /dolphin directly, which is the case for every shared link and every visitor
+ * who clicks Dolphin in the nav, got a brand mark, one line of copy and an
+ * empty box.
+ *
+ * A blank input is the worst possible opening for this product specifically.
+ * The user does not know 43 agents exist, does not know a Venus health factor
+ * is readable, and cannot guess that asking about execution capability is a
+ * question with an answer. The cost of a blank box here is not typing effort,
+ * it is that the product's entire capability surface is invisible.
+ *
+ * ===========================================================================
+ * THE RULE FOR WHAT GOES IN THIS LIST
+ * ===========================================================================
+ * Every entry must be answerable by something that is actually wired, so that
+ * a first impression is a real answer rather than an apology:
+ *
+ *  - Execution capability is derived from published tool lists
+ *    (convex/lib/toolCapability.ts).
+ *  - The Venus health factor is a live protocol read (convex/protocols/venus.ts).
+ *  - Comparing yield agents is catalog work, which needs no model tools at all.
+ *  - The probe story is the one question Dolphin can always answer about
+ *    itself, and it is the thing most worth knowing about this marketplace.
+ *
+ * Do NOT add a prompt about grid-trading or trading performance. Those
+ * categories return unavailableStats by construction, so the honest answer is
+ * "nothing measures that" - a true sentence, and a terrible first impression
+ * to have invited.
+ */
+const STARTER_PROMPTS = [
+  "Which agents here can actually execute a transaction?",
+  "What is my Venus health factor?",
+  "Compare the yield agents on BNB Chain",
+  "How does Dolphin decide an agent is live?",
+];
+
 function UserAvatar() {
   return (
     <div className="grid size-8 shrink-0 place-items-center rounded-full bg-paper-muted ring-1 ring-line">
@@ -255,7 +299,11 @@ export function DolphinClient({
   seedAgentName?: string | null;
   autoAsk?: boolean;
 }) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() =>
+    !autoAsk && seedAgentName
+      ? `Tell me about ${seedAgentName.trim()} — what strategy does it run?`
+      : "",
+  );
   const [historyOpen, setHistoryOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -305,10 +353,9 @@ export function DolphinClient({
         void submit(prompt);
       }, 120);
       return () => clearTimeout(timer);
-    } else if (seedAgentName) {
-      setDraft(`Tell me about ${seedAgentName.trim()} — what strategy does it run?`);
     }
   }, [seedAgentKey, seedAgentName, autoAsk, submit]);
+
 
   const startNew = useCallback(() => {
     reset();
@@ -410,24 +457,30 @@ export function DolphinClient({
                 <p className="mt-2 max-w-md text-center text-sm text-slate-500">
                   Autonomous agent intelligence on BNB Chain. Ask questions, compare strategies, or inspect live contract telemetry.
                 </p>
-                {seedAgentName ? (
-                  <div className="mt-6 flex flex-wrap justify-center gap-2">
-                    {[
-                      `What strategy does ${seedAgentName} run?`,
-                      `Check live health for ${seedAgentName}`,
-                      `Is ${seedAgentName} verified and safe?`,
-                    ].map((samplePrompt) => (
-                      <button
-                        className="rounded-full border border-slate-300/80 bg-white/75 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-white hover:text-slate-950"
-                        key={samplePrompt}
-                        onClick={() => submit(samplePrompt)}
-                        type="button"
-                      >
-                        {samplePrompt}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+                {/*
+                  * Agent-specific prompts when the visitor came from a record,
+                  * STARTER_PROMPTS otherwise. The second branch is the one that
+                  * was missing - see the note on STARTER_PROMPTS.
+                  */}
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  {(seedAgentName
+                    ? [
+                        `What strategy does ${seedAgentName} run?`,
+                        `Check live health for ${seedAgentName}`,
+                        `Is ${seedAgentName} verified and safe?`,
+                      ]
+                    : STARTER_PROMPTS
+                  ).map((samplePrompt) => (
+                    <button
+                      className="rounded-full border border-slate-300/80 bg-white/75 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-white hover:text-slate-950"
+                      key={samplePrompt}
+                      onClick={() => submit(samplePrompt)}
+                      type="button"
+                    >
+                      {samplePrompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               <div>

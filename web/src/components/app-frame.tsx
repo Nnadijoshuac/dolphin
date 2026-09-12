@@ -16,10 +16,18 @@ import { SiteHeader } from "@/components/site-header";
  * below a text input nobody has finished typing in. An app screen and a
  * document page want different chrome.
  */
-const FULL_HEIGHT_ROUTES = ["/dolphin"];
+const FULL_HEIGHT_ROUTES = ["/dolphin", "/admin"];
 
 export function isDolphinRoute(pathname: string) {
   return pathname === "/dolphin" || pathname.startsWith("/dolphin/");
+}
+
+export function isStandaloneRoute(pathname: string) {
+  return (
+    isDolphinRoute(pathname) ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/")
+  );
 }
 
 export function AppFrame({ children }: { children: ReactNode }) {
@@ -33,7 +41,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      {isDolphinRoute(pathname) ? null : <SiteHeader />}
+      {isStandaloneRoute(pathname) ? null : <SiteHeader />}
       <main className="min-w-0 flex-1" id="main-content">
         {children}
       </main>
@@ -41,3 +49,4 @@ export function AppFrame({ children }: { children: ReactNode }) {
     </div>
   );
 }
+

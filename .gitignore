@@ -39,6 +39,10 @@ yarn-error.*
 
 example
 
+# Local operator admin dashboard (not tracked or pushed to git)
+/web/src/app/admin/
+/convex/admin.ts
+
 # Agent working context: handovers, session logs, audits and browser/diagnostic
 # scratch. Kept on disk for coding agents to read, out of the repo because it is
 # session history rather than source. AGENTS.md and CLAUDE.md deliberately stay

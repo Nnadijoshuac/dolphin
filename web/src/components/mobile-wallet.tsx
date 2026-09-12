@@ -6,6 +6,8 @@ import { useBalance } from "wagmi";
 
 import { AgentActivity } from "@/components/agent-activity";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
+import { OptionalFeature } from "@/components/optional-feature";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { formatBnb } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
@@ -224,6 +226,23 @@ export function MobileWallet() {
       </div>
 
       <AgentActivity hidden={hidden} maxRows={4} mobile />
+
+      {/*
+        * Liquidation alerts, on the phone too.
+        *
+        * This is the surface where the feature matters MOST, not least - the
+        * whole premise is being told about a position while you are away from
+        * a desk, and a phone is where that message arrives. Shipping it
+        * desktop-only would have made the one screen that cannot watch
+        * anything the only one that can ask to be told.
+        *
+        * Same boundary as the desktop wallet: an opt-in panel querying
+        * functions a deployment may not have yet must not be able to take the
+        * route down. See components/optional-feature.tsx.
+        */}
+      <OptionalFeature label="Liquidation alerts (mobile)">
+        <LiquidationAlertPanel />
+      </OptionalFeature>
     </div>
   );
 }

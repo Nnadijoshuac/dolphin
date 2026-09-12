@@ -152,6 +152,56 @@ export function canNegotiate(
 }
 
 /**
+ * The kernel's own cap on a job description, quoted from the SDK's
+ * `buildHireCalls`: "description exceeds 4096 bytes (kernel limit — do not
+ * truncate signed quotes)". That parenthetical is the SDK saying what a
+ * description is for.
+ */
+export const JOB_DESCRIPTION_MAX_BYTES = 4096;
+
+/**
+ * What goes into the on-chain job description.
+ *
+ * ---------------------------------------------------------------------------
+ * THE BUG THIS EXISTS TO FIX (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * The hire path passed `quote.taskDescription` - the prose - and every
+ * signed-envelope seller rejected the funded job. Measured against a live one
+ * (#56783, 0.1 U escrowed to yieldrouter):
+ *
+ *   notify_funded -> {"status":"rejected","job_id":56783,
+ *                     "reason":"no signed quote anchored in job description"}
+ *
+ * The seller was right. Its agent card states the contract in both skills:
+ * "Anchor the returned envelope on-chain via createJob + fund", and "the seller
+ * verifies the funded job carries its signed quote". Without the envelope a
+ * seller cannot tell the job it is asked to do is the one it priced and signed,
+ * which is the whole purpose of signing a quote.
+ *
+ * The failure was silent and expensive: escrow funds, seller refuses, buyer
+ * waits out the kernel's 7-day dispute window for a refund - and every symptom
+ * points at the agent rather than at us.
+ *
+ * Throws rather than truncating. A half-envelope fails the seller's signature
+ * check exactly like no envelope, except the money has already moved.
+ */
+export function buildJobDescription(quote: {
+  signedEnvelope: string | null;
+  taskDescription: string;
+}): string {
+  const description = quote.signedEnvelope ?? quote.taskDescription;
+  const bytes = new TextEncoder().encode(description).length;
+  if (bytes > JOB_DESCRIPTION_MAX_BYTES) {
+    throw new Error(
+      `This agent's signed quote is ${bytes} bytes and an ERC-8183 job description holds ` +
+        `${JOB_DESCRIPTION_MAX_BYTES}. Dolphin will not truncate a signed quote — the seller would ` +
+        "reject a job it could no longer verify, after the escrow was already funded.",
+    );
+  }
+  return description;
+}
+
+/**
  * Atomic units -> a display string, using the decimals the TOKEN ITSELF
  * reported. Display only: every comparison, balance check and on-chain amount
  * uses the raw bigint, never this.

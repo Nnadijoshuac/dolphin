@@ -45,7 +45,11 @@ import {
   sessionPolicyFor,
   type RecoverabilityState,
 } from "./altana-policy";
-import { ERC8183_CHAIN_ID, JOB_DEADLINE_SECONDS } from "./erc8183-policy";
+import {
+  ERC8183_CHAIN_ID,
+  JOB_DEADLINE_SECONDS,
+  buildJobDescription,
+} from "./erc8183-policy";
 import {
   forgetLocalWallet,
   getAltanaServerSnapshot,
@@ -762,7 +766,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           adminSigner(),
           {
             provider: quote.provider as Address,
-            task: quote.taskDescription,
+            /*
+             * The seller's SIGNED ENVELOPE, not the prose task. A
+             * signed-envelope seller verifies the funded job carries the
+             * quote it signed and rejects it otherwise - see
+             * buildJobDescription for the live rejection that proved it.
+             */
+            task: buildJobDescription(quote),
             budget: price,
             deadlineSeconds: JOB_DEADLINE_SECONDS,
           },

@@ -557,6 +557,8 @@ export type AgentQuote = {
   negotiationHash: string | null;
   providerSignature: string | null;
   taskDescription: string;
+  /** The seller's signed envelope. Anchored into the on-chain job description. */
+  signedEnvelope: string | null;
   /** The seller's own words about what it will deliver. */
   deliverables: string | null;
   endpoint: string;
@@ -691,3 +693,165 @@ export const dolphinApi = anyApi as unknown as {
     >;
   };
 };
+
+export type AdminOverview = {
+  serverTimestamp: string;
+  discovery: {
+    seenTotal: number;
+    screenedOut: number;
+    candidatesFound: number;
+    filterFailures: number;
+    lastRunAt: string | null;
+    lastRunSummary: string | null;
+    backfillPhase: "a2a" | "mcp" | "done";
+    backfillOffset: number;
+    registryTotal: number | null;
+    lastCreatedAt: string | null;
+  };
+  catalog: {
+    totalLive: number;
+    categories: Array<{ slug: string; label: string; count: number }>;
+    liveAgents: Array<{
+      agentKey: string;
+      name: string;
+      categorySlug: string;
+      protocol: "a2a" | "mcp";
+      rank: number;
+      status: "live" | "degraded" | "unavailable";
+      pricing: string;
+      reputationScore: number | null;
+      feedbackCount: number;
+      endpoint: string;
+      curated: boolean;
+      lastVerifiedAt: string;
+    }>;
+    degradedAgents: Array<{
+      agentKey: string;
+      name: string;
+      categorySlug: string;
+      protocol: "a2a" | "mcp";
+      rank: number;
+      status: "live" | "degraded" | "unavailable";
+      pricing: string;
+      reputationScore: number | null;
+      feedbackCount: number;
+      endpoint: string;
+      lastVerifiedAt: string;
+    }>;
+
+  };
+  verification: {
+    counts: Record<string, number>;
+    recentIssues: Array<{
+      agentKey: string;
+      state: string;
+      failureClass: string | null;
+      detail: string;
+      consecutiveFailures: number;
+      attempts: number;
+      probedEndpoint: string | null;
+      lastProbeAt: string | null;
+      nextProbeAt: string;
+    }>;
+    unprobed: Array<{
+      agentKey: string;
+      detail: string;
+      firstSeenAt: string;
+      nextProbeAt: string;
+    }>;
+  };
+  dolphin: {
+    totalConversations: number;
+    recentConversations: Array<{
+      id: string;
+      key: string;
+      title: string;
+      ownerAddress: string | null;
+      seedAgentKey: string | null;
+      updatedAt: number;
+    }>;
+    recentMessages: Array<{
+      id: string;
+      role: "user" | "assistant";
+      status: "thinking" | "consulting" | "complete" | "error";
+      content: string;
+      model: string | null;
+      errorReason: string | null;
+      createdAt: number;
+      completedAt: number | null;
+    }>;
+    recentToolCalls: Array<{
+      id: string;
+      agentName: string;
+      agentKey: string;
+      toolName: string;
+      latencyMs: number | null;
+      isError: boolean;
+      transportError: string | null;
+      argumentsJson: string;
+      resultPreview: string | null;
+      calledAt: number;
+    }>;
+  };
+  commerce: {
+    activeHiresCount: number;
+    recentJobs: Array<{
+      id: string;
+      agentName: string;
+      agentKey: string;
+      jobId: string;
+      jobStatus: string;
+      budgetRaw: string;
+      paymentTokenSymbol: string;
+      verifiedAt: string;
+      transactionHash: string | null;
+      providerAddress: string;
+    }>;
+    recentSessions: Array<{
+      id: string;
+      agentName: string;
+      altanaWalletAddress: string;
+      status: "active" | "revoked" | "expired";
+      spendCapWei: string;
+      grantedAt: string;
+    }>;
+  };
+  crons: {
+    discovery: {
+      name: string;
+      intervalMinutes: number;
+      cadenceLabel: string;
+      lastRunAt: string | null;
+      lastRunSummary: string | null;
+      target: string;
+    };
+    verification: {
+      name: string;
+      intervalMinutes: number;
+      cadenceLabel: string;
+      lastRunAt: string | null;
+      lastRunSummary: string | null;
+      target: string;
+    };
+    facets: {
+      name: string;
+      intervalMinutes: number;
+      cadenceLabel: string;
+      lastRunAt: string | null;
+      lastRunSummary: string | null;
+      target: string;
+    };
+  };
+};
+
+export const adminApi = anyApi as unknown as {
+  admin: {
+    getOverview: Query<Record<string, never>, AdminOverview>;
+    triggerDiscoverySweep: Action<{ backfill?: boolean }, unknown>;
+    triggerProbeBatch: Action<{ limit?: number }, unknown>;
+    triggerAgentProbe: Action<{ agentKey: string }, { probed: boolean; agentKey: string }>;
+    triggerFacetRecompute: Action<Record<string, never>, unknown>;
+  };
+};
+
+

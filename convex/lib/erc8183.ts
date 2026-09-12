@@ -76,8 +76,37 @@ export type NormalizedQuote = {
   /** Present only in the signed-envelope dialect. Anchored into the job. */
   negotiationHash: string | null;
   providerSignature: string | null;
-  /** What the job description should say, so the seller can match it to this quote. */
+  /** What the job is FOR, in prose. Shown to the user; not what the chain carries. */
   taskDescription: string;
+  /**
+   * WHAT THE JOB DESCRIPTION MUST ACTUALLY CARRY: the seller's own signed
+   * envelope, verbatim JSON.
+   *
+   * -------------------------------------------------------------------------
+   * THE BUG THIS EXISTS TO FIX (2026-09-12)
+   * -------------------------------------------------------------------------
+   * The hire path funded jobs whose description was the prose task text, and
+   * signed-envelope sellers rejected every one of them. Measured against a
+   * live funded job (#56783, 0.1 U escrowed to yieldrouter):
+   *
+   *   notify_funded -> {"status":"rejected","job_id":56783,
+   *                     "reason":"no signed quote anchored in job description"}
+   *
+   * The seller was right and Dolphin was wrong. yieldrouter's own agent card
+   * states the contract in both skills: "Anchor the returned envelope on-chain
+   * via createJob + fund", and "the seller verifies the funded job carries its
+   * signed quote". Without it a seller cannot tell that the job it is being
+   * asked to do is the one it priced and signed - which is the entire point of
+   * signing the quote.
+   *
+   * The result was silent and expensive: the money escrows, the seller refuses,
+   * and the buyer waits out the kernel's 7-day dispute window for a refund.
+   * `rawResponse` was already being kept for forensics while the thing it holds
+   * was exactly what the chain needed.
+   *
+   * Null for the `instructions` dialect, which has no envelope to anchor.
+   */
+  signedEnvelope: string | null;
   /** The seller's own words about what it will deliver. Shown before paying. */
   deliverables: string | null;
   /** The untouched response, kept so a disagreement is inspectable after the fact. */
@@ -278,10 +307,24 @@ export function normalizeQuote(
     negotiationHash,
     providerSignature,
     taskDescription: expected.taskDescription,
+    /*
+     * The envelope PART, not the whole JSON-RPC result. The seller signed the
+     * negotiation, not the transport that carried it, and the kernel caps a
+     * description at 4096 bytes - so anchoring the wrapper as well would spend
+     * that budget on `jsonrpc`, `id` and `taskId` fields no seller checks.
+     */
+    signedEnvelope: envelope ? JSON.stringify(envelope) : null,
     deliverables,
     rawResponse,
   };
 }
+
+/*
+ * The job DESCRIPTION is built client-side, in web/src/wallet/erc8183-policy.ts
+ * and its Expo twin - Convex relays and witnesses but never creates a job, so
+ * putting the builder here would be dead code on the one side and an
+ * isolation-breaking import on the other (web/ may not import outside web/).
+ */
 
 /**
  * The A2A JSON-RPC envelope both dialects speak. `message/send` with one data

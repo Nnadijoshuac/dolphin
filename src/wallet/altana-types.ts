@@ -60,6 +60,12 @@ export type AgentQuote = Readonly<{
   negotiationHash: string | null;
   providerSignature: string | null;
   taskDescription: string;
+  /**
+   * The seller's signed envelope. Anchored into the on-chain job description by
+   * buildJobDescription - a signed-envelope seller rejects a funded job that
+   * does not carry the quote it signed.
+   */
+  signedEnvelope: string | null;
   deliverables: string | null;
   endpoint: string;
   rawResponse: string;

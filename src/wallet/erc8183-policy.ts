@@ -4,7 +4,7 @@ import type { AgentCategory } from "@/types/agent";
  * Dolphin's paid-hire policy: which rail a paid agent is paid over, and what
  * a user is shown before any money moves.
  *
- * MIRRORED BY HAND in web/src/wallet/erc8183-policy.ts (the website), the same
+ * MIRRORED BY HAND from web/src/wallet/erc8183-policy.ts, the same
  * manual-sync rule altana-policy.ts already carries. Edit both in one change.
  *
  * Deliberately free of `@altananetwork/sdk` imports, for the reason measured in
@@ -73,7 +73,7 @@ export const JOB_DEADLINE_SECONDS = 1800;
  * `{address}` is substituted with the user's own Dolphin Wallet, because every
  * one of these questions is only answerable about a specific account.
  */
-const TASK_TEMPLATES: Readonly<Record<string, string>> = {
+const TASK_TEMPLATES: Readonly<Record<AgentCategory, string>> = {
   "health-factor":
     "Report the current health factor for {address} on BNB Chain, the collateral drawdown that would liquidate it, and the minimum repayment that would restore a safe position.",
   rebalancing:
@@ -88,27 +88,11 @@ const TASK_TEMPLATES: Readonly<Record<string, string>> = {
     "State the trades you would place for {address} on BNB Chain right now, with the entry, the exit, the invalidation level and the size, and cost each one against the venue that would actually fill it.",
 };
 
-/**
- * The generic ask, for any category with no hand-written template.
- *
- * REQUIRED as of the 2026-09-07 rebuild, not defensive padding. `AgentCategory`
- * is an open string now, so `TASK_TEMPLATES[category]` is a partial lookup that
- * still typechecks - and returning undefined here would have thrown on
- * `.replace` and broken the hire flow outright for every agent in a category
- * nobody wrote copy for.
- *
- * It is phrased to be answerable by any seller: it asks what the agent would do
- * and what it would cost, which is exactly what a negotiate call is for.
- */
-const GENERIC_TASK_TEMPLATE =
-  "Describe the service you would perform for {address} on BNB Chain, what you " +
-  "would deliver, and quote a price for it.";
-
 export function defaultTaskDescription(
   category: AgentCategory,
   walletAddress: string | null,
 ): string {
-  return (TASK_TEMPLATES[category] ?? GENERIC_TASK_TEMPLATE).replace(
+  return TASK_TEMPLATES[category].replace(
     "{address}",
     walletAddress ?? "the address I will provide",
   );
@@ -168,12 +152,62 @@ export function canNegotiate(
 }
 
 /**
+ * The kernel's own cap on a job description, quoted from the SDK's
+ * `buildHireCalls`: "description exceeds 4096 bytes (kernel limit — do not
+ * truncate signed quotes)". That parenthetical is the SDK saying what a
+ * description is for.
+ */
+export const JOB_DESCRIPTION_MAX_BYTES = 4096;
+
+/**
+ * What goes into the on-chain job description.
+ *
+ * ---------------------------------------------------------------------------
+ * THE BUG THIS EXISTS TO FIX (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * The hire path passed `quote.taskDescription` - the prose - and every
+ * signed-envelope seller rejected the funded job. Measured against a live one
+ * (#56783, 0.1 U escrowed to yieldrouter):
+ *
+ *   notify_funded -> {"status":"rejected","job_id":56783,
+ *                     "reason":"no signed quote anchored in job description"}
+ *
+ * The seller was right. Its agent card states the contract in both skills:
+ * "Anchor the returned envelope on-chain via createJob + fund", and "the seller
+ * verifies the funded job carries its signed quote". Without the envelope a
+ * seller cannot tell the job it is asked to do is the one it priced and signed,
+ * which is the whole purpose of signing a quote.
+ *
+ * The failure was silent and expensive: escrow funds, seller refuses, buyer
+ * waits out the kernel's 7-day dispute window for a refund - and every symptom
+ * points at the agent rather than at us.
+ *
+ * Throws rather than truncating. A half-envelope fails the seller's signature
+ * check exactly like no envelope, except the money has already moved.
+ */
+export function buildJobDescription(quote: {
+  signedEnvelope: string | null;
+  taskDescription: string;
+}): string {
+  const description = quote.signedEnvelope ?? quote.taskDescription;
+  const bytes = new TextEncoder().encode(description).length;
+  if (bytes > JOB_DESCRIPTION_MAX_BYTES) {
+    throw new Error(
+      `This agent's signed quote is ${bytes} bytes and an ERC-8183 job description holds ` +
+        `${JOB_DESCRIPTION_MAX_BYTES}. Dolphin will not truncate a signed quote — the seller would ` +
+        "reject a job it could no longer verify, after the escrow was already funded.",
+    );
+  }
+  return description;
+}
+
+/**
  * Atomic units -> a display string, using the decimals the TOKEN ITSELF
  * reported. Display only: every comparison, balance check and on-chain amount
  * uses the raw bigint, never this.
  *
  * BigInt(...) rather than an `n` literal for the same reason formatBnb in
- * altana-policy.ts avoids one: the website twin targets ES2017 and the two must stay identical.
+ * altana-policy.ts avoids one: web/tsconfig.json targets ES2017.
  */
 export function formatTokenAmount(
   raw: string | bigint,

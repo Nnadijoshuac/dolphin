@@ -75,6 +75,8 @@ const quoteValidator = v.object({
   negotiationHash: v.union(v.string(), v.null()),
   providerSignature: v.union(v.string(), v.null()),
   taskDescription: v.string(),
+  /** The seller's signed envelope, anchored into the job description. */
+  signedEnvelope: v.union(v.string(), v.null()),
   deliverables: v.union(v.string(), v.null()),
   endpoint: v.string(),
   /**

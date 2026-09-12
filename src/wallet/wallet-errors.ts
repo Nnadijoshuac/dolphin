@@ -170,9 +170,20 @@ const CONVEX_ENVELOPE = /^\s*Uncaught \w*Error:\s*([\s\S]*?)(?:\n\s+at\s|$)/m;
  */
 function readableLine(message: string): string | null {
   const unwrapped = CONVEX_ENVELOPE.exec(message)?.[1] ?? message;
+  /*
+   * Line breaks are KEPT, horizontal whitespace is collapsed.
+   *
+   * This used to flatten `\s+` to a single space, which also flattened the
+   * deliberate ones: preflightBnbConversion itemises what a hire needs - price,
+   * gas, held, shortfall - one figure per line, and that is the whole reason
+   * the message is readable. Blank lines and indentation still go, so a
+   * library's wrapped prose cannot open up a paragraph on screen.
+   */
   const line = (unwrapped.split(/\n\s*(?:Details|Version):/)[0] ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .split("\n")
+    .map((part) => part.replace(/[^\S\n]+/g, " ").trim())
+    .filter((part) => part.length > 0)
+    .join("\n");
   if (!line) return null;
   // A version string surviving the split means this was library output.
   if (/\b(viem|wagmi|@?wagmi\/core)@\d/.test(line)) return null;

@@ -1,6 +1,7 @@
 import {
   encodeFunctionData,
   formatEther,
+  formatUnits,
   getAddress,
   type Address,
   type Hex,
@@ -237,6 +238,29 @@ export async function quoteBnbForExactTokenOutput({
  */
 const SMART_ACCOUNT_GAS_HEADROOM = BigInt(2);
 
+/**
+ * Display-only BNB. Every comparison above stays in wei; this is never parsed
+ * back and never decides anything.
+ *
+ * Eight decimal places, because `formatEther` prints all eighteen and the tail
+ * is noise on amounts this small - "0.000138283110098305 BNB" is a number
+ * nobody can read against their wallet balance, and the digits past the eighth
+ * are worth less than a millionth of a cent.
+ *
+ * `roundUp` exists for the figures a user is told to ACT on - the shortfall and
+ * the gas ceiling. Rounding those down produces an instruction that still
+ * leaves them short, which is the one way this message could waste the trip it
+ * exists to save.
+ */
+function displayBnb(wei: bigint, roundUp = false): string {
+  const scale = BigInt(10) ** BigInt(10); // 18 decimals down to 8
+  const rounded = roundUp
+    ? ((wei + scale - BigInt(1)) / scale) * scale
+    : (wei / scale) * scale;
+  const text = formatEther(rounded);
+  return text.includes(".") ? text.replace(/0+$/, "").replace(/\.$/, "") : text;
+}
+
 export type ConversionPreflight = Readonly<{
   /** Gas units the swap itself needs, measured against live chain state. */
   gasUnits: string;
@@ -284,13 +308,20 @@ export async function preflightBnbConversion({
   publicClient,
   account,
   call,
+  conversion,
   nativeBalanceWei,
 }: {
   publicClient: PublicClient;
   account: Address;
   call: { to: Address; data: Hex; value: bigint };
+  conversion: BnbConversionQuote;
   nativeBalanceWei: bigint;
 }): Promise<ConversionPreflight> {
+  const priceLabel = `${formatUnits(
+    BigInt(conversion.tokenShortfallRaw),
+    conversion.paymentTokenDecimals,
+  )} ${conversion.paymentTokenSymbol}`;
+
   /*
    * Checked before `estimateGas` because estimateGas on a call whose value the
    * account cannot cover fails as "insufficient funds" - technically true, and
@@ -298,9 +329,12 @@ export async function preflightBnbConversion({
    */
   if (nativeBalanceWei < call.value) {
     throw new Error(
-      `Converting BNB for this hire needs ${formatEther(call.value)} BNB and your Dolphin Wallet ` +
-        `holds ${formatEther(nativeBalanceWei)} BNB. Add at least ` +
-        `${formatEther(call.value - nativeBalanceWei)} BNB, plus a little for network gas.`,
+      [
+        "Not enough BNB in your Dolphin Wallet.",
+        `${displayBnb(call.value)} BNB — hire price (${priceLabel}, bought with BNB), plus network gas on top.`,
+        `${displayBnb(nativeBalanceWei)} BNB — what it holds now.`,
+        `Add at least ${displayBnb(call.value - nativeBalanceWei, true)} BNB and try again.`,
+      ].join("\n"),
     );
   }
 
@@ -313,11 +347,24 @@ export async function preflightBnbConversion({
   const requiredTotalWei = call.value + maxFeeWei;
 
   if (nativeBalanceWei < requiredTotalWei) {
+    /*
+     * ITEMISED, because a single total is not actionable.
+     *
+     * The first version of this message ran the three figures together in a
+     * sentence at full `formatEther` precision - "needs 0.000138283110098305
+     * BNB for the swap plus about 0.0000215007 BNB" - and a reader could not
+     * tell at a glance what the money was for or how much to send. Same facts,
+     * one per line, rounded to where the digits stop meaning anything.
+     */
     throw new Error(
-      `Converting BNB for this hire needs ${formatEther(call.value)} BNB for the swap plus about ` +
-        `${formatEther(maxFeeWei)} BNB for network gas, and your Dolphin Wallet holds ` +
-        `${formatEther(nativeBalanceWei)} BNB. Add at least ` +
-        `${formatEther(requiredTotalWei - nativeBalanceWei)} BNB and try again.`,
+      [
+        "Not enough BNB in your Dolphin Wallet.",
+        `${displayBnb(requiredTotalWei, true)} BNB — needed in total:`,
+        `• ${displayBnb(call.value)} BNB — hire price (${priceLabel}, bought with BNB)`,
+        `• ${displayBnb(maxFeeWei, true)} BNB — network gas`,
+        `${displayBnb(nativeBalanceWei)} BNB — what it holds now.`,
+        `Add at least ${displayBnb(requiredTotalWei - nativeBalanceWei, true)} BNB and try again.`,
+      ].join("\n"),
     );
   }
 

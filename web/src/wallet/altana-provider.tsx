@@ -896,6 +896,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           publicClient: keystoreReader,
           account: wallet.address as Address,
           call: swapCall,
+          conversion,
           nativeBalanceWei: nativeBalance.native,
         });
 

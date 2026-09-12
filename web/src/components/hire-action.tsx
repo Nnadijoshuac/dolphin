@@ -452,7 +452,10 @@ export function HireAction({ agent }: { agent: Agent }) {
         ) : null}
         {note ? (
           <p
-            className={`mt-3 text-xs leading-5 ${
+            // `whitespace-pre-line` so an itemised refusal keeps its lines.
+            // preflightBnbConversion breaks a shortfall into price, gas, held
+            // and what to add - one per line is the whole point of it.
+            className={`mt-3 whitespace-pre-line text-xs leading-5 ${
               state.kind === "error" ? "text-danger" : "text-muted"
             }`}
             role={state.kind === "error" ? "alert" : "status"}

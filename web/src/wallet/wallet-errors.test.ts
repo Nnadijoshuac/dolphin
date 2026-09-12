@@ -79,6 +79,28 @@ describe("toUserMessage", () => {
     expect(result).not.toContain("Connection cancelled");
   });
 
+  it("keeps deliberate line breaks but flattens indentation and blank lines", () => {
+    // preflightBnbConversion itemises a shortfall one figure per line. The
+    // earlier version of this function collapsed all whitespace, which flattened
+    // that into an unreadable run-on - the reason it is structured at all.
+    const itemised = new Error(
+      [
+        "Not enough BNB in your Dolphin Wallet.",
+        "",
+        "0.00015979 BNB — needed in total:",
+        "    • 0.00013828 BNB — hire price (0.1 U, bought with BNB)",
+        "    • 0.00002151 BNB — network gas",
+      ].join("\n"),
+    );
+
+    expect(toUserMessage(itemised, FALLBACK)).toBe(
+      "Not enough BNB in your Dolphin Wallet.\n" +
+        "0.00015979 BNB — needed in total:\n" +
+        "• 0.00013828 BNB — hire price (0.1 U, bought with BNB)\n" +
+        "• 0.00002151 BNB — network gas",
+    );
+  });
+
   it("caps a message Dolphin did not write", () => {
     // A seller's A2A endpoint can put arbitrary prose in a JSON-RPC error and
     // agentPayments relays it verbatim.

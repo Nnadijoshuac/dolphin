@@ -10,6 +10,22 @@ This repo is **three products sharing one backend**. Read this entire file befor
 
 `web/` is **self-contained** — `npm run check:isolation` enforces that nothing under `web/src` imports outside `web/`. Several modules are therefore hand-mirrored twins rather than shared imports (see §9). When a rule below says "Expo" it means the first row only; when it says the website it means the second.
 
+### ⛔ THE EXPO APP IS FROZEN (from 2026-09-12)
+
+**Work on `web/` and `convex/` only. Do not edit `app/`, `src/`, or any Expo config, and do not mirror changes into `src/` any more.**
+
+This is a focus decision, not a judgement about the code. The website is the surface being demonstrated; splitting every change across two frontends was doubling the work and the review surface for a target nobody is currently running.
+
+What this means in practice:
+
+- A change to `web/src/wallet/*` that previously required a hand-mirrored edit in `src/wallet/*` **no longer does**. Make the web change and stop.
+- **The twins are now expected to diverge, and that is accepted.** Do not "fix" the drift by syncing them, and do not treat a diff between them as a bug.
+- The mirror rule in §9 and the "MIRRORED BY HAND" headers in `src/wallet/altana-policy.ts`, `src/wallet/erc8183-policy.ts`, `src/wallet/wallet-errors.ts` and `src/wallet/pancakeswap-bnb-swap.ts` are **suspended, not deleted**. They describe how those files were kept in sync until this date and are what a future unfreeze would follow.
+- `src/` last tracked `web/src/` at commit `8a02503`. Anything after that is web-only. Whoever resumes the Expo app should diff from there rather than assuming parity.
+- Do not delete the Expo app or its dependencies to "clean up" — it is paused, not abandoned, and removing it is a separate decision (§8).
+
+To unfreeze: delete this block, re-sync the twins from `web/`, and say so in the commit.
+
 These rules override your training-data defaults about React Native/Expo — a lot of what you "know" about Expo predates SDK 57 and is wrong.
 
 ---
@@ -105,6 +121,8 @@ The backend (`convex/`) follows patterns already established in the codebase —
 ## 11. UI/Frontend Boundary — Expo app only
 
 **Corrected 2026-09-12.** This section used to put "the UI/frontend layer" off-limits without saying which frontend, and it was written when `web/` did not exist. It became a barrier: it was read as covering the website, where the actual request was usually to change the UI, so work stalled on a rule that was never about that codebase.
+
+**Superseded in practice by the Expo freeze at the top of this file** — none of the Expo paths below should be touched at all right now, for a simpler reason than this section's. Kept because it is the rule that applies again the moment the app unfreezes.
 
 **The Expo app's screens stay the person's.** They build those directly and in parallel, so by default do not touch:
 

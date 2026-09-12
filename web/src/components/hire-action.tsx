@@ -492,7 +492,16 @@ export function HireAction({ agent }: { agent: Agent }) {
         {showMyAgents ? (
           <Link
             className="interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-paper px-5 text-sm font-semibold text-ink no-underline hover:bg-canvas"
-            href={`/manage/${agent.tokenId}`}
+            /*
+             * The full agentKey, like every other link into this route
+             * (my-agents-client.tsx, agent-activity.tsx). This one passed a
+             * bare tokenId, which `coerceAgentKey` resolves by ASSUMING one
+             * registry - and AGENTS.md §9 exists because BNB Chain has more
+             * than one ERC-8004-shaped registry whose token ids collide. A
+             * bare id is tolerated on the read path so old deep links keep
+             * working; it is not something to newly generate.
+             */
+            href={`/manage/${encodeURIComponent(agent.agentKey)}`}
           >
             Manage this hire
             <CategoryGlyph color="currentColor" name="arrow-right" size={16} strokeWidth={2} />

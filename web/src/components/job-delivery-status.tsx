@@ -7,6 +7,7 @@ import { agentPaymentsApi, type AgentJobRow } from "@/convex/api";
 import { useJobDelivery } from "@/hooks/use-job-delivery";
 import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
+import { priceTextOr, usePriceText } from "@/hooks/use-price-text";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import {
   DELIVERY_TIMEOUT_MS,
@@ -91,6 +92,19 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
     onChain.expiredAt > 0 &&
     now >= onChain.expiredAt * 1000;
 
+  /*
+   * Called BEFORE the `!job` return, with nullable inputs, because it is a
+   * hook and hooks cannot sit behind a conditional return. usePriceText
+   * reports "unknown" for a missing amount, which the callers below fall back
+   * out of anyway.
+   */
+  const paidPrice = usePriceText({
+    amountRaw: job?.budgetRaw,
+    token: job?.paymentToken,
+    decimals: job?.paymentTokenDecimals,
+    symbol: job?.paymentTokenSymbol,
+  });
+
   if (!job) return null;
 
   const copy = delivery.state ? deliveryCopy(delivery.state) : null;
@@ -149,9 +163,16 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
       <dl className="mt-4 border-t border-line text-xs">
         <div className="flex items-start justify-between gap-4 border-b border-line py-2.5">
           <dt className="text-muted">Paid</dt>
+          {/*
+           * Dollars (2026-09-12). "1.2 U" is a quantity of a thing; "$1.20" is
+           * what it cost. usePriceText falls back to the token amount whenever
+           * no rate is readable - never to an estimate.
+           */}
           <dd className="text-right font-medium text-ink">
-            {formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)}{" "}
-            {job.paymentTokenSymbol}
+            {priceTextOr(
+              paidPrice,
+              `${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol}`,
+            )}
           </dd>
         </div>
         <div className="flex items-start justify-between gap-4 border-b border-line py-2.5">
@@ -253,7 +274,10 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
               >
                 {refund.kind === "claiming"
                   ? "Confirm with passkey…"
-                  : `Claim your ${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol} back`}
+                  : `Claim ${priceTextOr(
+                      paidPrice,
+                      `${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol}`,
+                    )} back`}
               </button>
               <p className="mt-2 text-[0.68rem] leading-5 text-faint">
                 This agent never delivered and the escrow deadline has passed, so

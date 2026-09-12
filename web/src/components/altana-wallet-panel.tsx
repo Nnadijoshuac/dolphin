@@ -21,7 +21,7 @@ import {
   recoverabilityCopy,
 } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
-import { formatPricePerBnb, formatUsdFromWei } from "@/wallet/bnb-price";
+import { formatUsdFromWei } from "@/wallet/bnb-price";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { summariseTotal } from "@/wallet/wallet-total";
@@ -439,22 +439,24 @@ function WalletHero({
         : "No balance yet";
 
   /*
-   * When the total is shown in dollars, the caption says the RATE and the
-   * ORACLE instead of the network.
+   * NO RATE, NO ORACLE NAME, NO "Chainlink" (removed 2026-09-12).
    *
-   * A USD balance is the only number on this screen Dolphin computes rather
-   * than reads, so it is the only one a bug can make plausibly wrong while
-   * everything still looks fine. Naming the rate and its source makes that
-   * checkable against any exchange in two seconds. It costs no extra element —
-   * it is the same line, saying the more useful of two things.
+   * A previous version of this line read "2 accounts · at $736.53/BNB,
+   * Chainlink". The reasoning was that provenance makes a wrong figure
+   * checkable — which is true, and beside the point. The user opened a wallet
+   * to see what they have. Someone who wants the BNB rate will look it up
+   * somewhere built for that; showing it here taxes everyone else to reassure
+   * nobody who asked.
+   *
+   * THE GENERAL RULE, which applies past this line: sourcing is a property of
+   * the CODE, not of the copy. Dolphin's guarantee is that it refuses to print
+   * a number it could not read — see renderAmount above and use-token-usd.ts —
+   * and that guarantee holds whether or not the screen brags about it.
+   * Explaining where a figure came from is engineering talking to itself.
    */
-  const showingUsd = currency === "USD" && price.status === "ready";
-
   const caption =
     total.kind === "ready"
-      ? showingUsd && price.status === "ready"
-        ? `${total.accounts} ${total.accounts === 1 ? "account" : "accounts"} · at ${formatPricePerBnb(price.price)}/BNB, Chainlink`
-        : `${total.accounts} ${total.accounts === 1 ? "account" : "accounts"} · ${ALTANA_NETWORK_LABEL}`
+      ? `${total.accounts} ${total.accounts === 1 ? "account" : "accounts"} · ${ALTANA_NETWORK_LABEL}`
       : total.kind === "reading"
         ? "Checking accounts…"
         : total.kind === "partial"

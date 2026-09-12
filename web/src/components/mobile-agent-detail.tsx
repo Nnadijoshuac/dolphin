@@ -12,7 +12,7 @@ import { TrackRecord } from "@/components/track-record";
 import { useAgentReviews } from "@/hooks/use-agent-reviews";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { convexClient } from "@/providers/convex-provider";
-import { formatTokenAmount } from "@/wallet/erc8183-policy";
+import { usePriceText } from "@/hooks/use-price-text";
 import type { Agent } from "@/types/agent";
 
 function Reviews({ agent }: { agent: Agent }) {
@@ -28,24 +28,36 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
   const price = agent.priceModel.status === "live" || agent.priceModel.status === "stale" ? agent.priceModel.value : null;
   const token = agent.pricing?.token || (price?.token.startsWith("0x") ? price.token : null);
   const metadata = useTokenMetadata(token);
+  const live = metadata.status === "ready" ? metadata.metadata : null;
+  const rawAmount = agent.pricing?.amountRaw ?? price?.amount ?? null;
+
+  /*
+   * Priced in dollars, same rule as the desktop hire panel: "1.2 U" is a
+   * quantity of a thing, "$1.20" is what it costs. Falls back to the token
+   * amount when no rate is readable, and never to an estimate.
+   */
+  const usdPrice = usePriceText({
+    amountRaw: token && rawAmount != null && Number(rawAmount) > 0 ? rawAmount : null,
+    token,
+    decimals: agent.pricing?.tokenDecimals || live?.decimals || null,
+    symbol: agent.pricing?.tokenSymbol || live?.symbol || null,
+  });
+
   const priceText = (() => {
     if (agent.protocol === "mcp") return "Free to Connect";
-    if (agent.pricing?.display) return agent.pricing.display;
-    const raw = agent.pricing?.amountRaw ?? price?.amount;
-    if (raw == null) return "Price not reported yet";
-    if (Number(raw) === 0) return "Free to hire";
+    if (rawAmount == null) return "Price not reported yet";
+    if (Number(rawAmount) === 0) return "Free to hire";
     if (token) {
-      const live = metadata.status === "ready" ? metadata.metadata : null;
-      const decimals = agent.pricing?.tokenDecimals ?? live?.decimals;
-      const symbol = agent.pricing?.tokenSymbol ?? live?.symbol;
+      if (usdPrice.status === "usd" || usdPrice.status === "token") return usdPrice.text;
       // "Still reading" and "cannot read" are different claims; only one of
       // them gets better by waiting. See use-token-metadata.ts.
-      if (decimals == null || !symbol) {
-        return metadata.status === "unavailable" ? "Price unavailable" : "Syncing price…";
-      }
-      return `${formatTokenAmount(raw, decimals)} ${symbol}`;
+      if (usdPrice.status === "loading") return "Syncing price…";
+      // The seller's own display string last, not first: it is free text they
+      // chose, and a rate Dolphin read beats a label somebody typed.
+      return agent.pricing?.display
+        ?? (metadata.status === "unavailable" ? "Price unavailable" : "Syncing price…");
     }
-    return `${raw} ${price?.token ?? ""}`;
+    return `${rawAmount} ${price?.token ?? ""}`;
   })();
   useEffect(() => {
     if (!open) return;

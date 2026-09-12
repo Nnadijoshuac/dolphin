@@ -11,6 +11,7 @@ import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { PearlButton } from "@/components/pearl-button";
 import { agentHiresApi, agentPaymentsApi, type AgentQuote } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
+import { usePriceText } from "@/hooks/use-price-text";
 import { assessAuthorizationCapability } from "@/services/authorization";
 import type { Agent } from "@/types/agent";
 import { track } from "@/lib/analytics";
@@ -19,7 +20,7 @@ import { track } from "@/lib/analytics";
 // altana-policy.ts already warns about.
 import { formatBnb } from "@/wallet/altana-policy";
 import { toUserMessage } from "@/wallet/wallet-errors";
-import { defaultTaskDescription, formatTokenAmount } from "@/wallet/erc8183-policy";
+import { defaultTaskDescription } from "@/wallet/erc8183-policy";
 import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
@@ -142,33 +143,66 @@ export function HireAction({ agent }: { agent: Agent }) {
   const priceUnreadableText =
     tokenMeta.status === "unavailable" ? "Price unavailable" : "Syncing price…";
 
+  /*
+   * `tokenDecimals: 0` and `tokenSymbol: ""` are how convex/lib/probe.ts
+   * records "not read yet" - it refuses to store a guess for either, since a
+   * fabricated number on a PRICE is where AGENTS.md §5 bites hardest - so
+   * falsy here means MISSING, not a real zero-decimals token. For every paid
+   * agent in this catalog that makes the live read below the only source of
+   * what the user is about to pay.
+   */
+  const liveToken = tokenMeta.status === "ready" ? tokenMeta.metadata : null;
+  const chargedRaw =
+    agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0
+      ? agent.pricing.amountRaw
+      : priceModel?.token?.startsWith("0x") && Number(priceModel.amount) > 0
+        ? priceModel.amount
+        : null;
+
+  /*
+   * PRICED IN DOLLARS (2026-09-12).
+   *
+   * This used to render "1.2 U" and that is not a price to anybody who has not
+   * looked up what $U is worth - it is a quantity of a thing. The dollar
+   * figure is the only form of this number a person can weigh against anything
+   * else they might buy, and deciding whether to spend is the entire job of
+   * this line.
+   *
+   * usePriceText falls back to the token amount, unchanged, whenever no rate
+   * can be read. There is no estimate and no last-known price in between.
+   */
+  const usdPrice = usePriceText({
+    amountRaw: chargedRaw,
+    token: tokenAddress,
+    decimals: agent.pricing?.tokenDecimals || liveToken?.decimals || null,
+    symbol:
+      agent.pricing?.tokenSymbol ||
+      liveToken?.symbol ||
+      (tokenAddress ? shortAddress(tokenAddress) : null),
+  });
+
   const priceText = (() => {
     if (agent.protocol === "mcp") return "Free to Connect";
-    if (agent.pricing?.display) return agent.pricing.display;
-    if (agent.pricing?.amountRaw && Number(agent.pricing.amountRaw) > 0) {
-      /*
-       * `tokenDecimals: 0` and `tokenSymbol: ""` are how convex/lib/probe.ts
-       * records "not read yet" - it refuses to store a guess for either, since
-       * a fabricated number on a PRICE is where AGENTS.md §5 bites hardest - so
-       * falsy here means missing, not a real zero-decimals token. For every
-       * paid agent in this catalog that makes the live read below the only
-       * source of what the user is about to pay.
-       */
-      const live = tokenMeta.status === "ready" ? tokenMeta.metadata : null;
-      const decimals = agent.pricing.tokenDecimals || live?.decimals || null;
-      if (decimals === null) return priceUnreadableText;
-      const symbol =
-        agent.pricing.tokenSymbol || live?.symbol || shortAddress(agent.pricing.token);
-      return `${formatTokenAmount(agent.pricing.amountRaw, decimals)} ${symbol}`;
+
+    const isFreeQuote =
+      chargedRaw === null &&
+      (priceModel === null || Number(priceModel.amount) === 0);
+
+    if (chargedRaw !== null) {
+      if (usdPrice.status === "usd" || usdPrice.status === "token") return usdPrice.text;
+      if (usdPrice.status === "loading") return "Syncing price…";
+      // The seller's own display string is the last resort rather than the
+      // first: it is free text they chose, so it can say anything, and a rate
+      // Dolphin read itself beats a label somebody typed.
+      return agent.pricing?.display ?? priceUnreadableText;
     }
+
     if (priceModel === null) return "Price not reported yet";
-    if (Number(priceModel.amount) === 0) return "Free to hire";
+    if (isFreeQuote) return "Free to hire";
 
-    if (priceModel.token.startsWith("0x")) {
-      if (tokenMeta.status !== "ready") return priceUnreadableText;
-      return `${formatTokenAmount(priceModel.amount, tokenMeta.metadata.decimals)} ${tokenMeta.metadata.symbol}`;
-    }
-
+    // A quote denominated in something that is not a token address - a seller
+    // naming a currency in words. Passed through as-is; there is nothing to
+    // convert and nothing to verify.
     return `${priceModel.amount} ${priceModel.token}`;
   })();
 

@@ -12,7 +12,9 @@ import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { convexClient } from "@/providers/convex-provider";
 import type { AgentCategory } from "@/types/agent";
 import { useAltanaWallet } from "@/wallet/altana-provider";
+import { usePaymentRates } from "@/hooks/use-payment-rates";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
+import { formatUsd } from "@/wallet/token-usd";
 import { useWallet } from "@/wallet/wallet-provider";
 
 const DEFAULT_MAX_ROWS = 6;
@@ -169,13 +171,36 @@ function AgentActivityContent({
     ...(jobs ?? []).map((job) => job.agentKey),
   ]);
 
+  /*
+   * One rate per DISTINCT payment token, resolved before the loop.
+   *
+   * Rules of hooks: a rate cannot be fetched per row inside a `for`. This also
+   * happens to be what you would want anyway — a list of twenty jobs paid in
+   * $U should read the $U price once, and two rows denominated in the same
+   * token must never disagree about what it is worth.
+   */
+  const prices = usePaymentRates(
+    (jobs ?? []).map((job) => ({
+      token: job.paymentToken,
+      decimals: job.paymentTokenDecimals,
+    })),
+  );
+
   const items: ActivityItem[] = [];
 
   for (const job of jobs ?? []) {
     const agent = agents.get(job.agentKey);
+    /*
+     * Dollars where a rate is readable, the token amount otherwise. `prices`
+     * is keyed by token address and resolved above the loop, because a hook
+     * cannot be called inside one — see the note on usePaymentRates.
+     */
     let amount: string | null = null;
     try {
-      amount = `${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol}`;
+      const rate = prices.get(job.paymentToken.toLowerCase()) ?? null;
+      amount = rate
+        ? formatUsd(BigInt(job.budgetRaw), job.paymentTokenDecimals, rate)
+        : `${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol}`;
     } catch {
       amount = null;
     }

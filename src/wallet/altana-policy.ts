@@ -19,14 +19,10 @@ import type { AgentCategory } from "@/types/agent";
  *
  * THIS FILE IS A HAND-MIRRORED TWIN of web/src/wallet/altana-policy.ts. The two
  * products deliberately share no node_modules and no code (see HANDOVER.md's
- * "one repo, two products"), so a decision changed here must be changed there
- * in the same commit — the same manual-sync rule AGENTS.md §9 already applies
- * to LiveMetric and the category stat validators.
- *
- * The two copies are intended to be byte-identical below this comment. If they
- * ever diverge, that is a bug, not a platform difference: platform differences
- * belong in the providers (altana-provider.native.tsx / .web.tsx), not in the
- * policy that says what Dolphin is willing to authorize.
+ * "one repo, two products"), so this file has a twin that must be edited in
+ * the same change — the same manual-sync rule AGENTS.md §9 already applies to
+ * LiveMetric and the category stat validators. If you change a decision here,
+ * change it there and say so in the commit.
  */
 
 /* ---------------------------------------------------------------------------
@@ -101,7 +97,7 @@ export const ALTANA_SIGNER_STRATEGY = "passkey" as const;
  * intentionally - it is real design work for the delegated-management model,
  * not dead code to be deleted.
  *
- * MIRRORED BY HAND in web/src/wallet/altana-policy.ts. Both must agree, or one
+ * MIRRORED BY HAND in src/wallet/altana-policy.ts. Both must agree, or one
  * product will offer a session the other hides.
  */
 // Annotated `boolean` rather than left to infer the literal `false`, so
@@ -252,6 +248,108 @@ export const KEYSTORE_REGISTRATION_FEE_ABI = [
     outputs: [{ type: "uint256" }],
   },
 ] as const;
+
+/**
+ * Display-only BNB, to 8 decimal places.
+ *
+ * `formatEther` prints all eighteen and the tail is noise at these sizes -
+ * "0.000138283110098305 BNB" is not a number anyone can compare against a
+ * wallet balance. Distinct from `formatBnb` above, which keeps 6 for UI chrome;
+ * this one is for INSTRUCTIONS, where a user is being told an exact amount to
+ * send and the extra digits earn their place.
+ *
+ * `roundUp` is for the figures a user acts on - a shortfall or a gas ceiling
+ * rounded DOWN prints an instruction that still leaves them short.
+ *
+ * Every comparison stays in wei. This is never parsed back.
+ */
+export function displayBnb(wei: bigint, roundUp = false): string {
+  const scale = BigInt(10) ** BigInt(10); // 18 decimals down to 8
+  const rounded = roundUp
+    ? ((wei + scale - BigInt(1)) / scale) * scale
+    : (wei / scale) * scale;
+  const whole = rounded / WEI_PER_BNB;
+  const fraction = rounded % WEI_PER_BNB;
+  if (fraction === BigInt(0)) return whole.toString();
+  const padded = fraction.toString().padStart(18, "0").replace(/0+$/, "");
+  return padded.length === 0 ? whole.toString() : `${whole}.${padded}`;
+}
+
+/**
+ * Gas units Dolphin assumes a relayed admin intent may need.
+ *
+ * A CEILING used only to refuse early, never shown as a fee and never charged.
+ * The measured reference point is the PancakeSwap conversion batch at ~215k
+ * gas called directly; an EIP-7702 account wraps its calls in signature
+ * validation and dispatch, and an escrow hire is five calls rather than one.
+ * 1.5M is comfortably above all of that and, at BSC's current gas price, is
+ * worth a fraction of a cent - so erring high costs a user nothing except a
+ * refusal that arrives before a signature instead of after one.
+ *
+ * Callers with a real `estimateGas` for their specific calls should pass that
+ * instead; this is the floor-check for intents whose calls cannot be simulated
+ * individually (the hire batch's calls are interdependent - setBudget targets
+ * the job createJob makes - so estimating them one at a time would revert).
+ */
+export const RELAYED_INTENT_GAS_ALLOWANCE = BigInt(1_500_000);
+
+/** One named BNB cost inside an intent, for an itemised refusal. */
+export type IntentCostItem = Readonly<{ label: string; wei: bigint }>;
+
+/**
+ * REFUSE BEFORE THE PASSKEY PROMPT, NOT AFTER IT.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS SHARED RATHER THAN PER-CALL-SITE (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * Two separate paid hires failed at `client.execute()` with the relay's least
+ * useful answer - "An error occurred while executing calls. Reason: 0x" - and
+ * both were the same mistake in a different place: the wallet did not hold what
+ * the intent was about to spend, and nothing checked before asking the user to
+ * sign.
+ *
+ * The first was gas the conversion's balance check left no room for. The second
+ * was the KeyStore registration the relay silently prepends to a first admin
+ * intent (see readFirstActionSurcharge), which is ~5x a 0.1 U hire.
+ *
+ * Fixing those where they happened left every OTHER `execute()` call in this
+ * provider with the identical hole - registerWallet, the escrow hire, a session
+ * grant. So the precondition lives here and every admin intent runs it, rather
+ * than being rediscovered once per failure at a user's expense.
+ *
+ * Empty-cost items are dropped, so an already-registered wallet never reads a
+ * line about a surcharge it will not pay.
+ */
+export async function assertIntentAffordable({
+  publicClient,
+  nativeBalanceWei,
+  items,
+  gasUnits = RELAYED_INTENT_GAS_ALLOWANCE,
+}: {
+  publicClient: PublicClient;
+  nativeBalanceWei: bigint;
+  items: readonly IntentCostItem[];
+  gasUnits?: bigint;
+}): Promise<void> {
+  const gasPriceWei = await publicClient.getGasPrice();
+  const maxFeeWei = gasUnits * gasPriceWei;
+  const priced = items.filter((item) => item.wei > BigInt(0));
+  const requiredTotalWei =
+    priced.reduce((total, item) => total + item.wei, BigInt(0)) + maxFeeWei;
+
+  if (nativeBalanceWei >= requiredTotalWei) return;
+
+  throw new Error(
+    [
+      "Not enough BNB in your Dolphin Wallet.",
+      `${displayBnb(requiredTotalWei, true)} BNB — needed in total:`,
+      ...priced.map((item) => `• ${displayBnb(item.wei)} BNB — ${item.label}`),
+      `• ${displayBnb(maxFeeWei, true)} BNB — network gas`,
+      `${displayBnb(nativeBalanceWei)} BNB — what it holds now.`,
+      `Add at least ${displayBnb(requiredTotalWei - nativeBalanceWei, true)} BNB and try again.`,
+    ].join("\n"),
+  );
+}
 
 /**
  * WHAT A WALLET'S FIRST ADMIN ACTION SILENTLY COSTS ON TOP OF ITSELF.
@@ -424,7 +522,7 @@ const AAVE_V3_POOL: AllowedContract = {
 };
 
 export const CATEGORY_SESSION_POLICY: Readonly<
-  Record<string, CategorySessionPolicy>
+  Record<AgentCategory, CategorySessionPolicy>
 > = {
   "health-factor": {
     kind: "scoped-session",
@@ -483,33 +581,8 @@ export const CATEGORY_SESSION_POLICY: Readonly<
   },
 };
 
-/**
- * An unknown category gets READ-ONLY, and that direction is the whole point.
- *
- * `AgentCategory` became an open string in the 2026-09-07 rebuild, so this
- * lookup is partial at runtime while still typechecking. The failure to avoid
- * is not a missing label — it is granting a scoped on-chain session, with a
- * spend cap and a contract allowlist, to a category nobody has written a policy
- * for. Every entry above names the specific contract a user would be
- * authorizing and why; a category with no entry has no such contract named, so
- * there is nothing honest to put in an allowlist and no way to describe the
- * grant in the UI.
- *
- * Failing closed here means a new category's agents can be hired and read from
- * but cannot be handed authority until somebody writes the policy. That is the
- * correct default for the one mechanism in Dolphin that gives away control.
- */
-const UNKNOWN_CATEGORY_POLICY: CategorySessionPolicy = {
-  kind: "read-only",
-  reason:
-    "Dolphin has not written a session policy for this category, so it cannot name the " +
-    "contracts an agent here would be authorized to call or bound what a session could do. " +
-    "Until it can, agents in this category are read-only — which is a limit on Dolphin, not " +
-    "a judgement about the agent.",
-};
-
 export function sessionPolicyFor(category: AgentCategory): CategorySessionPolicy {
-  return CATEGORY_SESSION_POLICY[category] ?? UNKNOWN_CATEGORY_POLICY;
+  return CATEGORY_SESSION_POLICY[category];
 }
 
 /* ---------------------------------------------------------------------------

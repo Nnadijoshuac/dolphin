@@ -250,6 +250,108 @@ export const KEYSTORE_REGISTRATION_FEE_ABI = [
 ] as const;
 
 /**
+ * Display-only BNB, to 8 decimal places.
+ *
+ * `formatEther` prints all eighteen and the tail is noise at these sizes -
+ * "0.000138283110098305 BNB" is not a number anyone can compare against a
+ * wallet balance. Distinct from `formatBnb` above, which keeps 6 for UI chrome;
+ * this one is for INSTRUCTIONS, where a user is being told an exact amount to
+ * send and the extra digits earn their place.
+ *
+ * `roundUp` is for the figures a user acts on - a shortfall or a gas ceiling
+ * rounded DOWN prints an instruction that still leaves them short.
+ *
+ * Every comparison stays in wei. This is never parsed back.
+ */
+export function displayBnb(wei: bigint, roundUp = false): string {
+  const scale = BigInt(10) ** BigInt(10); // 18 decimals down to 8
+  const rounded = roundUp
+    ? ((wei + scale - BigInt(1)) / scale) * scale
+    : (wei / scale) * scale;
+  const whole = rounded / WEI_PER_BNB;
+  const fraction = rounded % WEI_PER_BNB;
+  if (fraction === BigInt(0)) return whole.toString();
+  const padded = fraction.toString().padStart(18, "0").replace(/0+$/, "");
+  return padded.length === 0 ? whole.toString() : `${whole}.${padded}`;
+}
+
+/**
+ * Gas units Dolphin assumes a relayed admin intent may need.
+ *
+ * A CEILING used only to refuse early, never shown as a fee and never charged.
+ * The measured reference point is the PancakeSwap conversion batch at ~215k
+ * gas called directly; an EIP-7702 account wraps its calls in signature
+ * validation and dispatch, and an escrow hire is five calls rather than one.
+ * 1.5M is comfortably above all of that and, at BSC's current gas price, is
+ * worth a fraction of a cent - so erring high costs a user nothing except a
+ * refusal that arrives before a signature instead of after one.
+ *
+ * Callers with a real `estimateGas` for their specific calls should pass that
+ * instead; this is the floor-check for intents whose calls cannot be simulated
+ * individually (the hire batch's calls are interdependent - setBudget targets
+ * the job createJob makes - so estimating them one at a time would revert).
+ */
+export const RELAYED_INTENT_GAS_ALLOWANCE = BigInt(1_500_000);
+
+/** One named BNB cost inside an intent, for an itemised refusal. */
+export type IntentCostItem = Readonly<{ label: string; wei: bigint }>;
+
+/**
+ * REFUSE BEFORE THE PASSKEY PROMPT, NOT AFTER IT.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS SHARED RATHER THAN PER-CALL-SITE (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * Two separate paid hires failed at `client.execute()` with the relay's least
+ * useful answer - "An error occurred while executing calls. Reason: 0x" - and
+ * both were the same mistake in a different place: the wallet did not hold what
+ * the intent was about to spend, and nothing checked before asking the user to
+ * sign.
+ *
+ * The first was gas the conversion's balance check left no room for. The second
+ * was the KeyStore registration the relay silently prepends to a first admin
+ * intent (see readFirstActionSurcharge), which is ~5x a 0.1 U hire.
+ *
+ * Fixing those where they happened left every OTHER `execute()` call in this
+ * provider with the identical hole - registerWallet, the escrow hire, a session
+ * grant. So the precondition lives here and every admin intent runs it, rather
+ * than being rediscovered once per failure at a user's expense.
+ *
+ * Empty-cost items are dropped, so an already-registered wallet never reads a
+ * line about a surcharge it will not pay.
+ */
+export async function assertIntentAffordable({
+  publicClient,
+  nativeBalanceWei,
+  items,
+  gasUnits = RELAYED_INTENT_GAS_ALLOWANCE,
+}: {
+  publicClient: PublicClient;
+  nativeBalanceWei: bigint;
+  items: readonly IntentCostItem[];
+  gasUnits?: bigint;
+}): Promise<void> {
+  const gasPriceWei = await publicClient.getGasPrice();
+  const maxFeeWei = gasUnits * gasPriceWei;
+  const priced = items.filter((item) => item.wei > BigInt(0));
+  const requiredTotalWei =
+    priced.reduce((total, item) => total + item.wei, BigInt(0)) + maxFeeWei;
+
+  if (nativeBalanceWei >= requiredTotalWei) return;
+
+  throw new Error(
+    [
+      "Not enough BNB in your Dolphin Wallet.",
+      `${displayBnb(requiredTotalWei, true)} BNB — needed in total:`,
+      ...priced.map((item) => `• ${displayBnb(item.wei)} BNB — ${item.label}`),
+      `• ${displayBnb(maxFeeWei, true)} BNB — network gas`,
+      `${displayBnb(nativeBalanceWei)} BNB — what it holds now.`,
+      `Add at least ${displayBnb(requiredTotalWei - nativeBalanceWei, true)} BNB and try again.`,
+    ].join("\n"),
+  );
+}
+
+/**
  * WHAT A WALLET'S FIRST ADMIN ACTION SILENTLY COSTS ON TOP OF ITSELF.
  *
  * ---------------------------------------------------------------------------

@@ -1,12 +1,13 @@
 import {
   encodeFunctionData,
-  formatEther,
   formatUnits,
   getAddress,
   type Address,
   type Hex,
   type PublicClient,
 } from "viem";
+
+import { assertIntentAffordable, displayBnb } from "./altana-policy";
 
 /**
  * PancakeSwap V3 BNB -> payment-token conversion for paid hires.
@@ -238,29 +239,6 @@ export async function quoteBnbForExactTokenOutput({
  */
 const SMART_ACCOUNT_GAS_HEADROOM = BigInt(2);
 
-/**
- * Display-only BNB. Every comparison above stays in wei; this is never parsed
- * back and never decides anything.
- *
- * Eight decimal places, because `formatEther` prints all eighteen and the tail
- * is noise on amounts this small - "0.000138283110098305 BNB" is a number
- * nobody can read against their wallet balance, and the digits past the eighth
- * are worth less than a millionth of a cent.
- *
- * `roundUp` exists for the figures a user is told to ACT on - the shortfall and
- * the gas ceiling. Rounding those down produces an instruction that still
- * leaves them short, which is the one way this message could waste the trip it
- * exists to save.
- */
-function displayBnb(wei: bigint, roundUp = false): string {
-  const scale = BigInt(10) ** BigInt(10); // 18 decimals down to 8
-  const rounded = roundUp
-    ? ((wei + scale - BigInt(1)) / scale) * scale
-    : (wei / scale) * scale;
-  const text = formatEther(rounded);
-  return text.includes(".") ? text.replace(/0+$/, "").replace(/\.$/, "") : text;
-}
-
 export type ConversionPreflight = Readonly<{
   /** Gas units the swap itself needs, measured against live chain state. */
   gasUnits: string;
@@ -353,38 +331,27 @@ export async function preflightBnbConversion({
   const maxFeeWei = gasUnits * SMART_ACCOUNT_GAS_HEADROOM * gasPriceWei;
   const requiredTotalWei = call.value + firstActionSurchargeWei + maxFeeWei;
 
-  if (nativeBalanceWei < requiredTotalWei) {
-    /*
-     * ITEMISED, because a single total is not actionable.
-     *
-     * The first version of this message ran the figures together in a sentence
-     * at full `formatEther` precision - "needs 0.000138283110098305 BNB for the
-     * swap plus about 0.0000215007 BNB" - and a reader could not tell at a
-     * glance what the money was for or how much to send. Same facts, one per
-     * line, rounded to where the digits stop meaning anything.
-     *
-     * The registration line only appears when it is really going to be charged,
-     * and names what it buys. It is the largest number on the list by several
-     * times, it is charged once per wallet forever, and a user who was not told
-     * it existed would read it as the hire having silently cost five times its
-     * price.
-     */
-    throw new Error(
-      [
-        "Not enough BNB in your Dolphin Wallet.",
-        `${displayBnb(requiredTotalWei, true)} BNB — needed in total:`,
-        `• ${displayBnb(call.value)} BNB — hire price (${priceLabel}, bought with BNB)`,
-        ...(firstActionSurchargeWei > BigInt(0)
-          ? [
-              `• ${displayBnb(firstActionSurchargeWei)} BNB — one-time wallet setup, charged once so this wallet is recoverable from your passkey`,
-            ]
-          : []),
-        `• ${displayBnb(maxFeeWei, true)} BNB — network gas`,
-        `${displayBnb(nativeBalanceWei)} BNB — what it holds now.`,
-        `Add at least ${displayBnb(requiredTotalWei - nativeBalanceWei, true)} BNB and try again.`,
-      ].join("\n"),
-    );
-  }
+  /*
+   * ITEMISED AND SHARED. The message this produces is the same one every other
+   * admin intent produces - see assertIntentAffordable - because a user should
+   * not have to learn a second format depending on which step ran out of BNB.
+   * This path passes its OWN measured gas units rather than the default
+   * allowance: the swap is a single call and estimateGas above measured it
+   * exactly, which beats a ceiling.
+   */
+  await assertIntentAffordable({
+    publicClient,
+    nativeBalanceWei,
+    gasUnits: gasUnits * SMART_ACCOUNT_GAS_HEADROOM,
+    items: [
+      { label: `hire price (${priceLabel}, bought with BNB)`, wei: call.value },
+      {
+        label:
+          "one-time wallet setup, charged once so this wallet is recoverable from your passkey",
+        wei: firstActionSurchargeWei,
+      },
+    ],
+  });
 
   return {
     gasUnits: gasUnits.toString(),

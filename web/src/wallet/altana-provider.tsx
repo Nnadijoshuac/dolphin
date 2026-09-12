@@ -39,6 +39,7 @@ import {
   ALTANA_WALLET_LABEL,
   KEYSTORE_GET_KEYS_ABI,
   KEYSTORE_REGISTRATION_FEE_ABI,
+  assertIntentAffordable,
   buildSessionPermissions,
   expiryFromNow,
   readFirstActionSurcharge,
@@ -624,6 +625,36 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     const wallet = getAltanaSnapshot();
     if (!wallet) throw new Error("No Dolphin Wallet on this device.");
 
+    /*
+     * Checked before the passkey prompt, for the reason in
+     * assertIntentAffordable. The wallet panel already refuses to offer this
+     * button below the fee, but that check compares against the fee ALONE and
+     * this intent also has to pay gas - so a wallet holding exactly the fee
+     * passed it and then failed at the relay with "Reason: 0x".
+     */
+    const [nativeBalance, surchargeWei] = await Promise.all([
+      altanaClient().balances({
+        wallet: { address: wallet.address },
+        chainId: ALTANA_NETWORK.chainId,
+      }),
+      readFirstActionSurcharge({
+        publicClient: keystoreReader,
+        keyStore: ALTANA_NETWORK.keyStore as Address,
+        keyStoreController: ALTANA_NETWORK.keyStoreController as Address,
+        walletAddress: wallet.address as Address,
+      }),
+    ]);
+    await assertIntentAffordable({
+      publicClient: keystoreReader,
+      nativeBalanceWei: nativeBalance.native,
+      items: [
+        {
+          label: "wallet setup, so your passkey can rebuild this wallet",
+          wei: surchargeWei,
+        },
+      ],
+    });
+
     setIsBusy(true);
     setError(null);
     try {
@@ -753,6 +784,42 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
             `Wallet holds ${holding.raw.toString()}. Fund the wallet before paying.`,
         );
       }
+
+      /*
+       * THE SAME PRECONDITION, ON THE PATH THAT DOES NOT CONVERT.
+       *
+       * The escrow itself is denominated in $U and the balance check above
+       * covers it - but the INTENT still spends BNB: the relay's gas, plus the
+       * KeyStore registration it prepends when this is the wallet's first admin
+       * action. A wallet funded with $U and no BNB reached `execute()` and got
+       * "Reason: 0x", which is the same failure the conversion path already
+       * guards. Gas uses the shared allowance rather than a measurement: the
+       * hire batch's five calls are interdependent (setBudget targets the job
+       * createJob makes), so simulating them one at a time would revert.
+       */
+      const [nativeBalance, surchargeWei] = await Promise.all([
+        altanaClient().balances({
+          wallet: { address: wallet.address },
+          chainId: ALTANA_NETWORK.chainId,
+        }),
+        readFirstActionSurcharge({
+          publicClient: keystoreReader,
+          keyStore: ALTANA_NETWORK.keyStore as Address,
+          keyStoreController: ALTANA_NETWORK.keyStoreController as Address,
+          walletAddress: wallet.address as Address,
+        }),
+      ]);
+      await assertIntentAffordable({
+        publicClient: keystoreReader,
+        nativeBalanceWei: nativeBalance.native,
+        items: [
+          {
+            label:
+              "one-time wallet setup, charged once so this wallet is recoverable from your passkey",
+            wei: surchargeWei,
+          },
+        ],
+      });
 
       setIsBusy(true);
       setError(null);

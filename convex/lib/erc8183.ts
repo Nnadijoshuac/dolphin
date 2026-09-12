@@ -174,6 +174,51 @@ function findEnvelopePart(result: Record<string, unknown>): Record<string, unkno
   return null;
 }
 
+/**
+ * ANY data part carrying a seller's signature — whatever shape it is in.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS SEPARATE FROM findEnvelopePart (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * `findEnvelopePart` requires a `response` key, because that is the shape
+ * chainhelix and bnb-lp return. It is not the only shape sellers sign.
+ *
+ * Read off the chain from job #56680 — SUBMITTED, delivered, so a seller
+ * demonstrably ACCEPTED it — the anchored description was a FLAT quote:
+ *
+ *   { chain_id, currency, negotiated_at, negotiation_hash, price,
+ *     provider_sig, quote_expires_at, task, terms{...},
+ *     verifying_contract, version }
+ *
+ * No `request`, no `response`, no hashes of either. Had Dolphin quoted that
+ * seller, `findEnvelopePart` would have returned null, `signedEnvelope` would
+ * have been null, and the hire would have anchored prose — the exact failure
+ * that left job #56783 refused.
+ *
+ * So the rule the evidence actually supports is not "find the envelope shape we
+ * know". It is: ANCHOR WHAT THE SELLER SIGNED, whatever it looks like. Both
+ * observed shapes carry `negotiation_hash` and `provider_sig`, because those
+ * are what a seller needs to recognise its own quote, and that is the only
+ * thing worth matching on.
+ */
+function findSignedPart(result: Record<string, unknown>): Record<string, unknown> | null {
+  const parts = result.parts;
+  if (!Array.isArray(parts)) return null;
+  for (const part of parts) {
+    const record = asRecord(part);
+    const data = record ? asRecord(record.data) : null;
+    if (!data) continue;
+    if (
+      typeof data.negotiation_hash === "string" ||
+      typeof data.provider_sig === "string" ||
+      asRecord(data.response)
+    ) {
+      return data;
+    }
+  }
+  return null;
+}
+
 export class QuoteRejected extends Error {}
 
 /**
@@ -194,6 +239,8 @@ export function normalizeQuote(
   }
 
   const envelope = findEnvelopePart(result);
+  // Anchored into the job description - see the note on findSignedPart.
+  const signedPart = findSignedPart(result) ?? envelope;
   let dialect: QuoteDialect;
   let priceRaw: unknown;
   let paymentToken: unknown;
@@ -308,12 +355,17 @@ export function normalizeQuote(
     providerSignature,
     taskDescription: expected.taskDescription,
     /*
-     * The envelope PART, not the whole JSON-RPC result. The seller signed the
+     * The signed PART, not the whole JSON-RPC result. The seller signed the
      * negotiation, not the transport that carried it, and the kernel caps a
      * description at 4096 bytes - so anchoring the wrapper as well would spend
      * that budget on `jsonrpc`, `id` and `taskId` fields no seller checks.
+     *
+     * `findSignedPart`, not `findEnvelopePart`: a seller that returns a FLAT
+     * signed quote has no `response` key, and job #56680 on-chain proves that
+     * shape is one sellers accept. Matching on the signature rather than on a
+     * known layout is what makes this work for both.
      */
-    signedEnvelope: envelope ? JSON.stringify(envelope) : null,
+    signedEnvelope: signedPart ? JSON.stringify(signedPart) : null,
     deliverables,
     rawResponse,
   };

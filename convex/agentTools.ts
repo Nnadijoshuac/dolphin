@@ -39,6 +39,36 @@ import { readExecutionCapability } from "./lib/toolCapability";
 
 const TOOL_ARGUMENT_LIMIT = 32;
 
+/** What this action returns. Named so the handler can be annotated - see below. */
+type BuiltAgentTransaction = {
+  agentName: string;
+  toolName: string;
+  plan: {
+    chainId: number;
+    calls: { to: string; data: string; value: string; label: string | null }[];
+    atomicRequired: boolean;
+    payer: string | null;
+    summary: Record<string, string>;
+    raw: string;
+  };
+};
+
+/**
+ * The slice of the public agent record this action reads.
+ *
+ * Annotated rather than inferred for the same reason the return type below is:
+ * `ctx.runQuery(api.agents.get, …)` resolves through the generated `api`, which
+ * includes THIS module, so inferring it needs this module's type, which needs
+ * this inference. TS7022. Naming the shape breaks the cycle without widening
+ * anything - every field below is one this handler actually uses.
+ */
+type CallableAgent = {
+  name: string;
+  protocol: "a2a" | "mcp";
+  skills: { name: string }[];
+  services: { endpoint: string }[];
+};
+
 export const buildAgentTransaction = action({
   args: {
     agentKey: v.string(),
@@ -53,8 +83,12 @@ export const buildAgentTransaction = action({
       v.union(v.string(), v.number(), v.boolean(), v.array(v.string())),
     ),
   },
-  handler: async (ctx, { agentKey, toolName, toolArguments }) => {
-    const agent = await ctx.runQuery(api.agents.get, { reference: agentKey });
+  // Return type annotated explicitly: TS7023, same cycle recordJobPayment
+  // documents in agentPayments.ts.
+  handler: async (ctx, { agentKey, toolName, toolArguments }): Promise<BuiltAgentTransaction> => {
+    const agent = (await ctx.runQuery(api.agents.get, {
+      reference: agentKey,
+    })) as CallableAgent | null;
     if (!agent) {
       throw new Error(`buildAgentTransaction: agent ${agentKey} is not in Dolphin's catalog.`);
     }
@@ -66,7 +100,7 @@ export const buildAgentTransaction = action({
     }
 
     const capability = readExecutionCapability(
-      agent.skills.map((skill: { name: string }) => ({ name: skill.name })),
+      agent.skills.map((skill) => ({ name: skill.name })),
       "mcp",
     );
     if (!capability.calldataTools.includes(toolName)) {

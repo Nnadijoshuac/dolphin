@@ -8,11 +8,13 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as agentHires from "../agentHires.js";
 import type * as agentPayments from "../agentPayments.js";
 import type * as agentRetention from "../agentRetention.js";
 import type * as agentReviews from "../agentReviews.js";
 import type * as agentSessions from "../agentSessions.js";
+import type * as agentTools from "../agentTools.js";
 import type * as agents from "../agents.js";
 import type * as categoryStats from "../categoryStats.js";
 import type * as categoryStatsValidators from "../categoryStatsValidators.js";
@@ -20,6 +22,7 @@ import type * as crons from "../crons.js";
 import type * as discovery from "../discovery.js";
 import type * as dolphin from "../dolphin.js";
 import type * as facets from "../facets.js";
+import type * as lib_agentTransaction from "../lib/agentTransaction.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
 import type * as lib_categorize from "../lib/categorize.js";
 import type * as lib_dataSources from "../lib/dataSources.js";
@@ -37,6 +40,7 @@ import type * as lib_safeFetch from "../lib/safeFetch.js";
 import type * as lib_screen from "../lib/screen.js";
 import type * as lib_statsCategory from "../lib/statsCategory.js";
 import type * as lib_statsHistory from "../lib/statsHistory.js";
+import type * as lib_toolCapability from "../lib/toolCapability.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as model_agent from "../model/agent.js";
 import type * as protocols_aave from "../protocols/aave.js";
@@ -55,11 +59,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   agentHires: typeof agentHires;
   agentPayments: typeof agentPayments;
   agentRetention: typeof agentRetention;
   agentReviews: typeof agentReviews;
   agentSessions: typeof agentSessions;
+  agentTools: typeof agentTools;
   agents: typeof agents;
   categoryStats: typeof categoryStats;
   categoryStatsValidators: typeof categoryStatsValidators;
@@ -67,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   discovery: typeof discovery;
   dolphin: typeof dolphin;
   facets: typeof facets;
+  "lib/agentTransaction": typeof lib_agentTransaction;
   "lib/bscClient": typeof lib_bscClient;
   "lib/categorize": typeof lib_categorize;
   "lib/dataSources": typeof lib_dataSources;
@@ -84,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   "lib/screen": typeof lib_screen;
   "lib/statsCategory": typeof lib_statsCategory;
   "lib/statsHistory": typeof lib_statsHistory;
+  "lib/toolCapability": typeof lib_toolCapability;
   "lib/walletAuth": typeof lib_walletAuth;
   "model/agent": typeof model_agent;
   "protocols/aave": typeof protocols_aave;

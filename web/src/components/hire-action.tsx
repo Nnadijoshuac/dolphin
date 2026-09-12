@@ -59,6 +59,39 @@ function shortAddress(value: string | null) {
  * reads: the price, and what the button will do.
  */
 
+/**
+ * The three steps a hire runs through, in order. Only used to explain a
+ * failure, so it is deliberately coarser than the progress labels.
+ */
+type HireStage = "identity" | "payment" | "record";
+
+/**
+ * What to say when the thrown error carried nothing renderable of its own.
+ *
+ * Only reached when `toUserMessage` finds no usable text, which after the
+ * 2026-09-12 change to wallet-errors.ts is rare - a viem or Altana failure now
+ * arrives with its own `shortMessage` and says what actually went wrong. These
+ * are the last resort, and each one is scoped to a step so it cannot assert
+ * something about a step that never ran.
+ */
+const HIRE_STAGE_FALLBACK: Readonly<Record<HireStage, string>> = {
+  identity:
+    "Dolphin could not confirm your wallet, so nothing was signed and nothing was spent. Try again.",
+  /*
+   * Deliberately does NOT say "nothing was spent".
+   *
+   * This step funds an on-chain escrow and then records it. If the funding
+   * batch succeeded and the verification after it did not, the money HAS moved
+   * and telling the user otherwise would be the exact kind of plausible,
+   * comforting, unverified claim AGENTS.md §5 exists to stop. It points at the
+   * wallet's own activity instead, which is the only authority on this.
+   */
+  payment:
+    "Paying this agent did not finish. Check your Dolphin Wallet's activity before trying again, in case the escrow was funded.",
+  record:
+    "The hire could not be recorded. Try again.",
+};
+
 export function HireAction({ agent }: { agent: Agent }) {
   const router = useRouter();
   const wallet = useWallet();
@@ -142,7 +175,7 @@ export function HireAction({ agent }: { agent: Agent }) {
       address = await wallet.connect();
       if (!address) {
         setState({ kind: "idle" });
-        track("hire_failed", { agentKey: agent.agentKey, reason: "declined" });
+        track("hire_failed", { agentKey: agent.agentKey, reason: "declined", stage: "identity" });
         return null;
       }
       track("wallet_connected", { connector: "identity", surface: "agent" });
@@ -154,7 +187,7 @@ export function HireAction({ agent }: { agent: Agent }) {
       sessionToken = await session.signIn(address);
       if (!sessionToken) {
         setState({ kind: "idle" });
-        track("hire_failed", { agentKey: agent.agentKey, reason: "declined" });
+        track("hire_failed", { agentKey: agent.agentKey, reason: "declined", stage: "identity" });
         return null;
       }
       track("wallet_signed_in", { surface: "agent" });
@@ -243,6 +276,18 @@ export function HireAction({ agent }: { agent: Agent }) {
    * quietly instead of stacking a second message on top of the real one.
    */
   async function runHire(jobId: string | null) {
+    /*
+     * WHICH STEP WAS RUNNING, so a failure can say so.
+     *
+     * Every failure used to fall back to "The hire could not be recorded",
+     * including the ones that happened before recording was ever attempted.
+     * On a paid hire that sentence was usually false and always unhelpful: a
+     * quote that was declined, a wallet short of BNB and an escrow that never
+     * funded all reported that the RECORD step failed, which is the one step
+     * that had not run. The stage is tracked here rather than inferred in the
+     * catch because only the try block knows how far it got.
+     */
+    let stage: HireStage = "identity";
     setState({ kind: "hiring", label: "Hiring…" });
     track("hire_started", {
       agentKey: agent.agentKey,
@@ -255,18 +300,24 @@ export function HireAction({ agent }: { agent: Agent }) {
 
       let paymentJobId = jobId;
       if (priceRequiresPayment && paymentJobId === null) {
+        stage = "payment";
         const paid = await payForHire(identity.address);
         paymentJobId = paid.jobId;
         setPaidJobId(paid.jobId);
       }
 
+      stage = "record";
       await recordHire(identity.sessionToken, paymentJobId);
     } catch (cause) {
-      setState({
-        kind: "error",
-        message: toUserMessage(cause, "The hire could not be recorded. Try again."),
-      });
-      track("hire_failed", { agentKey: agent.agentKey, reason: "error" });
+      /*
+       * The raw cause, once, for whoever has to diagnose this. `toUserMessage`
+       * deliberately reduces it to one line, and a support conversation that
+       * starts from that line alone has nothing to go on - there was no console
+       * output on this path at all before.
+       */
+      console.error(`[hire:${stage}] ${agent.agentKey}`, cause);
+      setState({ kind: "error", message: toUserMessage(cause, HIRE_STAGE_FALLBACK[stage]) });
+      track("hire_failed", { agentKey: agent.agentKey, reason: "error", stage });
     }
   }
 

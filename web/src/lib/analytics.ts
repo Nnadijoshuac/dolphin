@@ -115,6 +115,16 @@ export type AnalyticsEvents = {
   hire_failed: {
     agentKey: string;
     reason: "declined" | "price_unresolved" | "payment_outstanding" | "error";
+    /**
+     * WHICH STEP it died on. Added 2026-09-12, because `reason: "error"` made
+     * every failure after the button press look alike: a seller declining to
+     * quote, a wallet short of BNB and a rejected hire record were one number.
+     * Those have completely different causes and completely different fixes,
+     * and "where does a paid hire actually break" is unanswerable without this.
+     *
+     * A closed enum, no message text - the rule above this type is unchanged.
+     */
+    stage: "identity" | "payment" | "record";
   };
   /** A hire was ended. Retention's numerator depends on this being real. */
   hire_cancelled: { agentKey: string };

@@ -78,10 +78,12 @@ describe("analytics", () => {
   it("records a failed hire as a kind, not a message", () => {
     // Messages carry user data and vendor strings; kinds are comparable across
     // releases and cannot leak a revert payload or an RPC URL.
-    track("hire_failed", { agentKey: "56:0xabc:1", reason: "declined" });
+    track("hire_failed", { agentKey: "56:0xabc:1", reason: "declined", stage: "identity" });
 
     const [, properties] = vi.mocked(vercelTrack).mock.calls[0];
     expect((properties as { reason: string }).reason).toBe("declined");
+    // The step is a closed enum too, for the same reason the kind is one.
+    expect((properties as { stage: string }).stage).toBe("identity");
     expect(Object.keys(properties as object)).not.toContain("message");
   });
 });

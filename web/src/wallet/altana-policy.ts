@@ -9,7 +9,7 @@
 // agent-side execution runtime are designed.
 // ─────────────────────────────────────────────────────────
 
-import type { Address } from "viem";
+import type { Address, PublicClient } from "viem";
 
 import type { AgentCategory } from "@/types/agent";
 
@@ -248,6 +248,57 @@ export const KEYSTORE_REGISTRATION_FEE_ABI = [
     outputs: [{ type: "uint256" }],
   },
 ] as const;
+
+/**
+ * WHAT A WALLET'S FIRST ADMIN ACTION SILENTLY COSTS ON TOP OF ITSELF.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS HAS TO BE READ BEFORE SPENDING (2026-09-12)
+ * ---------------------------------------------------------------------------
+ * The Altana relay is not a passive courier. `submitCalls` (its own comment
+ * calls itself "the universal choke point for every userOp leaving the SDK")
+ * checks whether the wallet has registered its admin authority in KeyStore, and
+ * if it has not, PREPENDS an `initialRegisterKey` call to the batch carrying
+ * `value: getRegistrationFeeInWei()`. Free batching, automatic, and completely
+ * invisible to the caller.
+ *
+ * Measured on BSC 2026-09-12 that fee is ~0.00068 BNB — roughly FIVE TIMES the
+ * ~0.00014 BNB a 0.1 U hire converts. So a wallet funded for the thing it is
+ * actually buying is short by a multiple of it on its first purchase, and the
+ * only symptom is the relay answering "An error occurred while executing
+ * calls."
+ *
+ * Returns 0 once the wallet is registered, which is why this is a first-action
+ * surcharge and not a fee: the second hire from the same wallet pays nothing.
+ * The fee is oracle-priced, so it is read live and never written down.
+ */
+export async function readFirstActionSurcharge({
+  publicClient,
+  keyStore,
+  keyStoreController,
+  walletAddress,
+}: {
+  publicClient: PublicClient;
+  keyStore: Address;
+  keyStoreController: Address;
+  walletAddress: Address;
+}): Promise<bigint> {
+  const keys = await publicClient.readContract({
+    address: keyStore,
+    abi: KEYSTORE_GET_KEYS_ABI,
+    functionName: "getKeys",
+    args: [walletAddress],
+  });
+  // The SDK's own rule, quoted in internal/keystore.d.ts: "Empty array = not
+  // yet registered." Nothing is inferred beyond that.
+  if (keys.length > 0) return BigInt(0);
+
+  return publicClient.readContract({
+    address: keyStoreController,
+    abi: KEYSTORE_REGISTRATION_FEE_ABI,
+    functionName: "getRegistrationFeeInWei",
+  });
+}
 
 /**
  * What a user is told about their own wallet's recoverability. Deliberately

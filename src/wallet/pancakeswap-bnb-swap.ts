@@ -310,12 +310,19 @@ export async function preflightBnbConversion({
   call,
   conversion,
   nativeBalanceWei,
+  firstActionSurchargeWei = BigInt(0),
 }: {
   publicClient: PublicClient;
   account: Address;
   call: { to: Address; data: Hex; value: bigint };
   conversion: BnbConversionQuote;
   nativeBalanceWei: bigint;
+  /**
+   * BNB the relay will bundle AHEAD of this swap in the same intent - the
+   * KeyStore registration the SDK prepends to a wallet's first admin action.
+   * See readFirstActionSurcharge in altana-policy.ts. Zero once registered.
+   */
+  firstActionSurchargeWei?: bigint;
 }): Promise<ConversionPreflight> {
   const priceLabel = `${formatUnits(
     BigInt(conversion.tokenShortfallRaw),
@@ -344,23 +351,34 @@ export async function preflightBnbConversion({
   ]);
 
   const maxFeeWei = gasUnits * SMART_ACCOUNT_GAS_HEADROOM * gasPriceWei;
-  const requiredTotalWei = call.value + maxFeeWei;
+  const requiredTotalWei = call.value + firstActionSurchargeWei + maxFeeWei;
 
   if (nativeBalanceWei < requiredTotalWei) {
     /*
      * ITEMISED, because a single total is not actionable.
      *
-     * The first version of this message ran the three figures together in a
-     * sentence at full `formatEther` precision - "needs 0.000138283110098305
-     * BNB for the swap plus about 0.0000215007 BNB" - and a reader could not
-     * tell at a glance what the money was for or how much to send. Same facts,
-     * one per line, rounded to where the digits stop meaning anything.
+     * The first version of this message ran the figures together in a sentence
+     * at full `formatEther` precision - "needs 0.000138283110098305 BNB for the
+     * swap plus about 0.0000215007 BNB" - and a reader could not tell at a
+     * glance what the money was for or how much to send. Same facts, one per
+     * line, rounded to where the digits stop meaning anything.
+     *
+     * The registration line only appears when it is really going to be charged,
+     * and names what it buys. It is the largest number on the list by several
+     * times, it is charged once per wallet forever, and a user who was not told
+     * it existed would read it as the hire having silently cost five times its
+     * price.
      */
     throw new Error(
       [
         "Not enough BNB in your Dolphin Wallet.",
         `${displayBnb(requiredTotalWei, true)} BNB — needed in total:`,
         `• ${displayBnb(call.value)} BNB — hire price (${priceLabel}, bought with BNB)`,
+        ...(firstActionSurchargeWei > BigInt(0)
+          ? [
+              `• ${displayBnb(firstActionSurchargeWei)} BNB — one-time wallet setup, charged once so this wallet is recoverable from your passkey`,
+            ]
+          : []),
         `• ${displayBnb(maxFeeWei, true)} BNB — network gas`,
         `${displayBnb(nativeBalanceWei)} BNB — what it holds now.`,
         `Add at least ${displayBnb(requiredTotalWei - nativeBalanceWei, true)} BNB and try again.`,

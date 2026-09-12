@@ -35,6 +35,7 @@ import {
   KEYSTORE_REGISTRATION_FEE_ABI,
   buildSessionPermissions,
   expiryFromNow,
+  readFirstActionSurcharge,
   sessionPolicyFor,
   type RecoverabilityState,
 } from "./altana-policy";
@@ -736,12 +737,26 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
          * transaction - the same mistake convex/lib/probe.ts is on the record
          * for making against the hire path.
          */
+        /*
+         * The relay prepends a KeyStore registration to a wallet's FIRST admin
+         * intent, carrying its own BNB value - roughly 5x a 0.1 U hire. Read it
+         * here so the refusal below can name it, instead of the relay failing on
+         * a cost nothing ever mentioned.
+         */
+        const firstActionSurchargeWei = await readFirstActionSurcharge({
+          publicClient: keystoreReader,
+          keyStore: ALTANA_NETWORK.keyStore as Address,
+          keyStoreController: ALTANA_NETWORK.keyStoreController as Address,
+          walletAddress: current.address as Address,
+        });
+
         await preflightBnbConversion({
           publicClient: keystoreReader,
           account: current.address as Address,
           call: swapCall,
           conversion,
           nativeBalanceWei: nativeBalance.native,
+          firstActionSurchargeWei,
         });
 
         setIsBusy(true);

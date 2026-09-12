@@ -435,26 +435,55 @@ textarea:focus-visible {
 
 /* ═══════════════════════════════════════════════════════════════
    WALLET PAGE DESIGN SYSTEM
+   ═══════════════════════════════════════════════════════════════
+
+   Rewritten 2026-09-12 alongside components/altana-wallet-panel.tsx.
+
+   Roughly 150 lines of orphaned rules were removed in the same pass —
+   .wallet-setup__*, .wallet-balance-card__*, .wallet-divider,
+   .wallet-status-badge, .wallet-live-dot, .wallet-meta-row, .wcard__footer,
+   .wcard__addr-pill, .wcard__title, .wcard__sub, .wcard__ext-link,
+   .wcard__hero-balance and friends. None of them had a single call site left
+   in src/**. They are not kept "just in case": dead CSS in a file this size is
+   how the next person ends up styling against a class nothing renders.
+
+   Three rules govern everything below:
+
+   1. ONE elevation cue per element. A hairline border OR a shadow, never a
+      hairline sitting under a wide soft shadow — that reads as a rendering
+      artefact rather than as depth. The hero is the single raised surface on
+      the page; cards are bordered and flat.
+   2. Radii are 12px for cards and 10px for controls. Pills are reserved for
+      things that are genuinely pill-shaped: the network chip, the badge.
+   3. Every number that a person compares against another number is
+      tabular-nums. Balances that jump a pixel left and right as they refresh
+      are the cheapest possible tell that a wallet is not serious.
+
+   Amber (--accent) is this palette's WARNING colour as well as its brand
+   colour, which is why the agent card no longer carries an amber wash: a card
+   that is permanently tinted the same shade as the "not recoverable" banner
+   reads as permanently alarmed. The card is distinguished by a 2px top rail
+   and its avatar instead — present, not shouting.
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Shared primitives ── */
 
 .wallet-loading { max-width: 640px; }
 
+.wallet-dashboard { display: flex; flex-direction: column; gap: 1.75rem; }
+
 .wallet-action-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  min-height: 2.75rem;
   width: 100%;
-  min-height: 3rem;
   padding-inline: 1.25rem;
-  /* 8px: a control sits inside a 12px card, so its radius has to be smaller
-     than its container's or the nesting reads as sloppy rather than concentric. */
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
+  border-radius: 0.625rem;
+  font-size: 0.85rem;
   font-weight: 650;
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 160ms ease;
+  letter-spacing: -0.01em;
 }
 .wallet-action-btn:disabled { cursor: wait; opacity: 0.55; }
 .wallet-action-btn--accent { background: var(--accent); color: var(--ink); }
@@ -471,435 +500,221 @@ textarea:focus-visible {
 .wallet-copy-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  min-height: 1.875rem;
-  padding: 0 0.625rem;
+  gap: 0.3rem;
+  flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
-  background: var(--paper);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 650;
   color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 600;
 }
 .wallet-copy-btn:hover { background: var(--canvas); color: var(--ink); }
 
 .wallet-error-banner {
-  border-left: 2px solid var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: 0.75rem;
   background: var(--danger-soft);
   padding: 0.75rem 1rem;
-  font-size: 0.78rem;
-  font-weight: 500;
+  font-size: 0.8rem;
   line-height: 1.55;
   color: var(--danger);
-  border-radius: 0 0.5rem 0.5rem 0;
 }
+
 .wallet-inline-error { font-size: 0.75rem; line-height: 1.55; color: var(--danger); }
 
-.wallet-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.3rem 0.75rem;
+.wallet-count-badge {
   border-radius: 99px;
+  background: var(--paper-muted);
+  padding: 0.25rem 0.7rem;
   font-size: 0.7rem;
-  font-weight: 650;
-}
-.wallet-status-badge--idle { background: var(--paper-muted); color: var(--faint); }
-.wallet-status-badge--ok { background: var(--success-soft); color: var(--success); }
-
-.wallet-live-dot {
-  display: block;
-  height: 0.5rem;
-  width: 0.5rem;
-  border-radius: 50%;
-  background: var(--success);
+  font-weight: 700;
+  color: var(--muted);
   flex-shrink: 0;
 }
-.wallet-count-badge {
-  display: inline-block;
-  padding: 0.25rem 0.625rem;
+
+/* ═══════════════════════════════════════════════════════════════
+   HERO — the total, the network, the actions
+   ═══════════════════════════════════════════════════════════════
+
+   The page's entry point and the only raised surface on it. Everything here
+   exists to answer "how much do I have, on what chain, and what can I do with
+   it" before the eye reaches anything else.
+
+   The figure is one size at every breakpoint band rather than free-scaling
+   text, and it is tabular so that "0.004821" and "0.004822" occupy exactly the
+   same pixels. A balance that shifts horizontally as it settles looks like a
+   glitch even when the number is right.
+   ═══════════════════════════════════════════════════════════════ */
+
+.wallet-hero {
+  position: relative;
+  overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 99px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
+  border-radius: 1rem;
+  background:
+    radial-gradient(
+      120% 140% at 100% 0%,
+      color-mix(in srgb, var(--accent-soft) 55%, transparent) 0%,
+      transparent 58%
+    ),
+    var(--paper-strong);
+  box-shadow: var(--shadow-soft);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
 }
-.wallet-divider {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  margin-block: 1.25rem;
-  color: var(--faint);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.wallet-divider__line { flex: 1; height: 1px; background: var(--line); }
 
-/* ── Setup (no-wallet) ── */
-
-.wallet-setup {
-  display: grid;
-  gap: 3.5rem;
-  padding-block: clamp(1rem, 3vw, 2.5rem);
-}
-@media (min-width: 900px) {
-  .wallet-setup { grid-template-columns: 1fr 400px; align-items: start; }
-}
-.wallet-setup__headline {
-  margin-top: 0.75rem;
-  font-size: clamp(2rem, 5vw, 3.2rem);
-  font-weight: 700;
-  letter-spacing: -0.055em;
-  line-height: 1.05;
-  color: var(--ink);
-}
-.wallet-setup__sub {
-  margin-top: 1rem;
-  max-width: 46ch;
-  font-size: 1rem;
-  line-height: 1.65;
-  color: var(--muted);
-}
-.wallet-setup__pillars {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  margin-top: 2.5rem;
-  border-top: 1px solid var(--line);
-}
-.wallet-setup__pillar {
+.wallet-hero__head {
   display: flex;
   align-items: flex-start;
-  gap: 1rem;
-  padding-block: 1rem;
-  border-bottom: 1px solid var(--line);
-}
-.wallet-setup__pillar-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.625rem;
-  background: var(--accent-soft);
-  color: var(--accent-ink);
-}
-.wallet-setup__pillar-label { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
-.wallet-setup__pillar-note { margin-top: 0.2rem; font-size: 0.8rem; line-height: 1.5; color: var(--muted); }
-
-.wallet-setup__card {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 1.5rem;
-  border-radius: 1.25rem;
-}
-.wallet-setup__card-header {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
 }
-.wallet-setup__card-title { font-size: 0.9rem; font-weight: 700; color: var(--ink); }
-.wallet-setup__recovery-note {
-  margin-top: 1.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
-  font-size: 0.75rem;
+
+.wallet-hero__heading {
+  margin-top: 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.wallet-hero__figure {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+  font-size: clamp(2.5rem, 6vw, 3.75rem);
+  font-weight: 680;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+/* The non-answer. Set well below the figure's size and in muted ink so it can
+   never be read as a balance, and as a word rather than a mark so it can never
+   be read as a loading skeleton — an em-dash at the figure's size is a 60px
+   bar, which is exactly what it looked like. Same top margin as the figure, so
+   the hero does not jump when a real number replaces it. */
+.wallet-hero__placeholder {
+  margin-top: 0.875rem;
+  font-size: 1.5rem;
+  font-weight: 620;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--faint);
+}
+
+.wallet-hero__unit {
+  font-size: 1.05rem;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+}
+
+.wallet-hero__eye {
+  align-self: center;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wallet-hero__eye:hover { background: var(--canvas); color: var(--ink); }
+
+.wallet-hero__caption {
+  margin-top: 0.625rem;
+  max-width: 62ch;
+  font-size: 0.8rem;
   line-height: 1.6;
   color: var(--muted);
 }
-.wallet-setup__recovery-note summary { cursor: pointer; font-weight: 650; color: var(--ink); }
-.wallet-setup__recovery-note summary:hover { text-decoration: underline; text-underline-offset: 3px; }
-.wallet-setup__recovery-note p { margin-top: 0.625rem; }
 
-/* ── Dashboard (connected) ── */
+/* The action row never changes height or count between states — a disabled
+   action still occupies its slot, so the hero does not reflow as accounts
+   connect. */
+.wallet-hero__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.625rem;
+  margin-top: 1.5rem;
+  max-width: 30rem;
+}
 
-.wallet-dashboard { display: flex; flex-direction: column; gap: 2.5rem; }
-
-.wallet-balance-card { overflow: hidden; border-radius: 1.25rem; }
-.wallet-balance-card__top {
+.wallet-quick {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.875rem 1.375rem;
-  border-bottom: 1px solid var(--line);
-}
-.wallet-balance-card__badge { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 700; color: var(--ink); }
-.wallet-balance-card__network { font-size: 0.72rem; color: var(--faint); }
-.wallet-balance-card__body { padding: 2rem 1.5rem 1.75rem; }
-@media (min-width: 640px) { .wallet-balance-card__body { padding: 2.5rem 2rem; } }
-.wallet-balance-card__label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
-.wallet-balance-card__amount { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
-.wallet-balance-card__figure {
-  font-size: clamp(2.5rem, 8vw, 4rem);
-  font-weight: 700;
-  letter-spacing: -0.065em;
-  color: var(--ink);
-  line-height: 1;
-}
-.wallet-balance-card__figure--error { color: var(--danger); }
-.wallet-balance-card__figure--muted { color: var(--faint); }
-.wallet-balance-card__unit { margin-left: 0.5rem; font-size: 1.25rem; font-weight: 400; color: var(--muted); letter-spacing: -0.02em; }
-.wallet-balance-card__footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.875rem 1.5rem;
-  border-top: 1px solid var(--line);
-}
-@media (min-width: 640px) { .wallet-balance-card__footer { padding-inline: 2rem; } }
-.wallet-balance-card__address { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
-.wallet-balance-card__addr-text { font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.8rem; font-weight: 500; color: var(--ink); }
-.wallet-balance-card__bscscan { font-size: 0.72rem; font-weight: 600; color: var(--muted); text-decoration: none; }
-.wallet-balance-card__bscscan:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-.wallet-balance-card__refresh { font-size: 0.72rem; font-weight: 600; color: var(--muted); flex-shrink: 0; }
-.wallet-balance-card__refresh:hover:not(:disabled) { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-.wallet-balance-card__refresh:disabled { opacity: 0.5; }
-
-.wallet-fund-banner {
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: 0.75rem;
-  background: var(--accent-soft);
-  padding: 1rem 1.125rem;
-}
-/* Flat inside the recoverability card: a bordered box within a bordered box
-   is a nested card, and two stacked frames make the inner one look like an
-   error rather than a next step. Inside, the tint alone carries it. */
-.wallet-recoverability .wallet-fund-banner {
-  border: 0;
-  border-radius: 0.5rem;
-  margin-top: 0.75rem;
-}
-.wallet-fund-banner__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.wallet-fund-banner__title { font-size: 0.82rem; font-weight: 700; color: var(--accent-ink); }
-.wallet-fund-banner__address { display: block; margin-top: 0.5rem; font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.72rem; word-break: break-all; color: var(--ink); }
-.wallet-fund-banner__hint { margin-top: 0.375rem; font-size: 0.75rem; line-height: 1.55; color: var(--accent-ink); opacity: 0.8; }
-
-/* Warning banner: sits at the top of the page, full width, with a colored
-   left accent bar. The recoverability notice reads as a page-level alert. */
-.wallet-recoverability {
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.875rem;
+  padding-inline: 0.5rem;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--muted);
-  border-radius: 0.5rem;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
-  background: color-mix(in srgb, var(--paper) 60%, transparent);
-}
-.wallet-recoverability--ok {
-  border-left-color: var(--success);
-  background: color-mix(in srgb, var(--success) 5%, var(--paper));
-}
-.wallet-recoverability--warn {
-  border-left-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 6%, var(--paper));
-}
-.wallet-recoverability__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.wallet-recoverability__title { font-size: 0.78rem; font-weight: 700; color: var(--ink); }
-.wallet-recoverability--ok .wallet-recoverability__title { color: var(--success); }
-.wallet-recoverability--warn .wallet-recoverability__title { color: var(--danger); }
-.wallet-recoverability__recheck { font-size: 0.68rem; font-weight: 600; color: var(--muted); }
-.wallet-recoverability__recheck:hover:not(:disabled) { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-.wallet-recoverability__recheck:disabled { opacity: 0.5; }
-.wallet-recoverability__body { margin-top: 0.25rem; font-size: 0.75rem; line-height: 1.55; color: var(--muted); }
-
-.wallet-section__header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 1.25rem;
-  border-bottom: 1px solid var(--line);
-}
-.wallet-section__title { margin-top: 0.375rem; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.04em; color: var(--ink); }
-
-.wallet-activity > header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-bottom: 1.25rem;
-  border-bottom: 1px solid var(--line);
-}
-.wallet-activity h2 {
-  margin-top: 0.375rem;
-  font-size: 1.3rem;
-  font-weight: 700;
-  letter-spacing: -0.04em;
+  border-radius: 0.625rem;
+  background: var(--paper);
   color: var(--ink);
-}
-.wallet-activity > header a {
-  font-size: 0.78rem;
-  font-weight: 650;
-  color: var(--muted);
   text-decoration: none;
 }
-.wallet-activity > header a:hover {
-  color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.wallet-activity-list { border-bottom: 1px solid var(--line); }
-.wallet-activity-row {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  padding-block: 1rem;
-  border-bottom: 1px solid var(--line);
-  color: inherit;
-  text-decoration: none;
-}
-.wallet-activity-row:last-child { border-bottom: 0; }
-.wallet-activity-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-}
-.wallet-activity-icon > [aria-hidden="true"] {
-  border-radius: 999px;
-}
-.wallet-activity-row > div {
-  min-width: 0;
-  flex: 1;
-}
-.wallet-activity-row h3 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-.wallet-activity-row p {
-  margin-top: 0.18rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.76rem;
-  color: var(--muted);
-}
-.wallet-activity-row > strong {
-  max-width: 34%;
-  overflow-wrap: anywhere;
-  text-align: right;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-.wallet-activity-empty {
-  padding: 2rem 0.5rem;
-  text-align: center;
-}
-.wallet-activity-empty > span {
-  display: grid;
-  place-items: center;
-  width: 3rem;
-  height: 3rem;
-  margin: 0 auto 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+.wallet-quick:hover:not(:disabled) {
   background: var(--canvas);
-  color: var(--ink);
+  border-color: var(--line-strong);
 }
-.wallet-activity-empty h3 {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-.wallet-activity-empty p {
-  margin-top: 0.25rem;
+.wallet-quick:disabled { opacity: 0.45; cursor: not-allowed; }
+.wallet-quick__icon { display: flex; color: var(--muted); }
+.wallet-quick:hover:not(:disabled) .wallet-quick__icon { color: var(--accent-ink); }
+.wallet-quick__label {
   font-size: 0.8rem;
-  line-height: 1.55;
-  color: var(--muted);
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
-.wallet-empty-permissions { display: flex; align-items: flex-start; gap: 1rem; padding-block: 2rem; }
-.wallet-empty-permissions__icon {
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; width: 2.5rem; height: 2.5rem;
-  border-radius: 0.75rem; background: var(--success-soft); color: var(--success);
+/* ── Network chip ──
+   A pill, not 0.7rem grey text in a gap between sections. Which chain an
+   address belongs to is the fact that decides whether sending to it loses the
+   money; it is not a footnote. */
+.wnet-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--paper);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--ink);
 }
-.wallet-empty-permissions__title { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
-.wallet-empty-permissions__sub { margin-top: 0.25rem; font-size: 0.8rem; line-height: 1.55; color: var(--muted); }
-
-.wallet-sessions-list { list-style: none; margin: 0; padding: 0; }
-.wallet-session-row { padding-block: 1.25rem; border-bottom: 1px solid var(--line); }
-.wallet-session-row__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.wallet-session-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.5rem; }
-.wallet-session-dot { display: inline-block; width: 0.4375rem; height: 0.4375rem; border-radius: 50%; flex-shrink: 0; }
-.wallet-session-dot--ok { background: var(--success); }
-.wallet-session-dot--warn { background: var(--accent); }
-.wallet-session-row__name { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
-.wallet-session-row__id { font-size: 0.72rem; color: var(--faint); }
-.wallet-revoke-btn { flex-shrink: 0; font-size: 0.75rem; font-weight: 650; color: var(--muted); }
-.wallet-revoke-btn:hover:not(:disabled) { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
-.wallet-revoke-btn:disabled { opacity: 0.5; }
-
-.wallet-session-row__chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 0.875rem; }
-@media (max-width: 500px) { .wallet-session-row__chips { grid-template-columns: 1fr 1fr; } }
-.wallet-chip { background: var(--canvas); border-radius: 0.625rem; padding: 0.5rem 0.75rem; }
-.wallet-chip__label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
-.wallet-chip__value { margin-top: 0.2rem; font-size: 0.78rem; font-weight: 650; color: var(--ink); }
-.wallet-chip__value--warn { color: var(--accent-ink); }
-.wallet-chip__sub { font-weight: 400; color: var(--muted); }
-.wallet-session-row__tx { display: inline-block; margin-top: 0.625rem; font-size: 0.7rem; font-weight: 600; color: var(--muted); }
-.wallet-session-row__tx:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
-
-.wallet-past-sessions { padding-top: 1.25rem; border-top: 1px solid var(--line); }
-.wallet-past-sessions > summary { cursor: pointer; font-size: 0.82rem; font-weight: 650; color: var(--ink); }
-.wallet-past-sessions > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
-.wallet-past-sessions__list { list-style: none; margin: 0.875rem 0 0; padding: 0; border-top: 1px solid var(--line); }
-.wallet-past-sessions__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 0.75rem; border-bottom: 1px solid var(--line); }
-.wallet-past-sessions__name { font-size: 0.82rem; font-weight: 650; color: var(--ink); }
-.wallet-past-sessions__meta { margin-top: 0.125rem; font-size: 0.72rem; color: var(--muted); }
-.wallet-past-sessions__status { font-size: 0.72rem; text-transform: capitalize; color: var(--faint); flex-shrink: 0; }
-
-.wallet-danger-zone {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1.25rem;
-  padding-top: 2rem;
-  border-top: 1px solid var(--line);
+.wnet-chip__dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
 }
-.wallet-danger-zone__title { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
-.wallet-danger-zone__sub { margin-top: 0.25rem; max-width: 48ch; font-size: 0.8rem; line-height: 1.55; color: var(--muted); }
-.wallet-danger-zone__trigger { font-size: 0.8rem; font-weight: 650; color: var(--muted); flex-shrink: 0; }
-.wallet-danger-zone__trigger:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
-.wallet-danger-zone__confirm { flex-shrink: 0; }
-.wallet-danger-zone__confirm-label { font-size: 0.78rem; font-weight: 700; color: var(--ink); margin-bottom: 0.75rem; }
-.wallet-danger-zone__confirm-actions { display: flex; gap: 0.5rem; }
-.wallet-danger-zone__confirm-actions .wallet-action-btn { min-height: 2.375rem; font-size: 0.78rem; padding-inline: 1rem; }
-
-/* Identity wallet section */
-.wallet-identity-section { margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
-.wallet-identity-section__content { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1.25rem; }
-.wallet-identity-section__label { font-size: 0.78rem; font-weight: 700; color: var(--muted); }
-.wallet-identity-section__sub { margin-top: 0.25rem; max-width: 52ch; font-size: 0.75rem; line-height: 1.55; color: var(--faint); }
-.wallet-identity-section__action { flex-shrink: 0; min-width: 180px; }
-.wallet-identity-disconnect { font-size: 0.75rem; font-weight: 650; color: var(--muted); }
-.wallet-identity-disconnect:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
+.wnet-chip__id {
+  padding-left: 0.4rem;
+  border-left: 1px solid var(--line);
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ═══════════════════════════════════════════════════════════════
-   DUAL WALLET CARDS
+   ACCOUNT CARDS
    ═══════════════════════════════════════════════════════════════ */
 
-/* Grid container */
 .wallet-dual-section {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   align-items: stretch;
 }
-@media (max-width: 640px) {
+@media (max-width: 800px) {
   .wallet-dual-section { grid-template-columns: 1fr; }
 }
 /* No single-column modifier, deliberately. Both slots are always rendered -
@@ -907,31 +722,11 @@ textarea:focus-visible {
    columns regardless of what is connected. The shape of this screen is a
    constant, not a function of wallet state. */
 
-/* Network / refresh row between cards and permissions */
-.wallet-meta-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: -0.75rem; /* pull slightly closer to cards */
-}
-.wallet-meta-row__network {
-  font-size: 0.7rem;
-  color: var(--faint);
-  letter-spacing: 0.03em;
-}
-
-/* ── Shared card anatomy ──
-   Elevation is declared ONCE, as a 1px border. No box-shadow: a hairline
-   border sitting under a wide soft shadow is the "ghost card" — two competing
-   depth cues that read as sloppy rather than layered. Radius is 12px, the
-   same value every card on this screen uses; pill radii are reserved for
-   genuinely pill-shaped small controls. */
 .wcard {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.625rem;
   padding: 1.25rem;
   border: 1px solid var(--line);
   border-radius: 0.75rem;
@@ -940,32 +735,39 @@ textarea:focus-visible {
   transition: border-color 160ms ease;
 }
 
-/* identity block: avatar + label/address stack */
+/* The 2px top rail is the whole distinction between the two cards, plus the
+   avatar. It replaces a full amber wash — see the note at the top of this
+   block on why a permanently tinted card was the wrong signal. */
+.wcard::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--line-strong);
+}
+.wcard--agent::before { background: var(--accent); }
+.wcard--empty::before { opacity: 0.4; }
+
+.wcard__top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .wcard__ident {
   display: flex;
   align-items: center;
   gap: 0.625rem;
   min-width: 0;
 }
+.wcard__ident-text { min-width: 0; }
 .wcard__avatar {
-  width: 32px;
-  height: 32px;
-  flex: none;
   border-radius: 0.5rem;
   background: var(--canvas);
   border: 1px solid var(--line);
 }
-.wcard__addr-inline {
-  display: block;
-  margin-top: 0.1rem;
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.68rem;
-  font-weight: 500;
-  color: var(--faint);
-  letter-spacing: 0.01em;
-}
 
-/* eyebrow label row */
 .wcard__eyebrow {
   display: flex;
   align-items: center;
@@ -974,17 +776,83 @@ textarea:focus-visible {
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;
+  color: var(--muted);
 }
-.wcard__eyebrow-icon {
-  font-size: 0.75rem;
-  line-height: 1;
+.wcard--agent .wcard__eyebrow { color: var(--accent-ink); }
+
+/* The truncated address is a BUTTON, because a truncated address is not an
+   address — it is a label for one. Clicking it opens the receive sheet, which
+   is where the full string, the copy control and the network warning live. */
+.wcard__addr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+  margin-left: -0.35rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.375rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--faint);
+}
+.wcard__addr-btn:hover { background: var(--canvas); color: var(--ink); }
+
+.wcard__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  border-radius: 99px;
+  background: var(--paper-muted);
+  padding: 0.25rem 0.6rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Card balance — deliberately SMALLER than the hero ──
+   Both cards used to carry a clamp(1.9rem, 4vw, 2.6rem) figure, side by side
+   and identical in weight, so the screen had two equal entry points and
+   therefore none. The total upstairs is the answer; these are the breakdown. */
+.wcard__balance-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.wcard__balance-figure {
+  font-size: 1.6rem;
+  font-weight: 680;
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.wcard__balance-line--muted .wcard__balance-figure {
+  font-size: 1.15rem;
+  font-weight: 620;
+  color: var(--faint);
+}
+.wcard__balance-unit {
+  font-size: 0.78rem;
+  font-weight: 550;
+  color: var(--muted);
+}
+
+.wcard__hero-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
 }
 
 /* ── Empty / prompt state — same slot, same size, different content ── */
 .wcard--empty {
   justify-content: flex-start;
   background: var(--paper);
-  border-style: dashed;
 }
 .wcard__empty-title {
   margin: 0.5rem 0 0;
@@ -1022,242 +890,421 @@ textarea:focus-visible {
 }
 .wcard__empty-link:disabled { opacity: 0.5; cursor: wait; }
 
-/* title */
-.wcard__title {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-  line-height: 1.2;
-}
-
-/* subtitle */
-.wcard__sub {
-  margin: -0.25rem 0 0;
-  font-size: 0.72rem;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-/* balance row */
-.wcard__balance {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: auto;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--line);
-}
-.wcard__balance-figure {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.055em;
-  color: var(--ink);
-  line-height: 1;
-}
-.wcard__balance-unit {
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: var(--muted);
-  align-self: flex-end;
-  padding-bottom: 0.1rem;
-}
-.wcard__balance--muted { font-size: 1.25rem; font-weight: 600; color: var(--faint); }
-.wcard__balance--error { font-size: 1.1rem; font-weight: 600; color: var(--danger); }
-
-/* footer (address + copy) */
-.wcard__footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  padding-top: 0.625rem;
-  border-top: 1px solid var(--line);
-}
-.wcard__addr {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--ink);
-  min-width: 0;
-}
-.wcard__addr-placeholder {
-  font-size: 0.72rem;
-  color: var(--faint);
-  font-style: italic;
-}
-.wcard__ext-link {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-decoration: none;
-}
-.wcard__ext-link:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-
-/* ── Agent card — amber accent ── */
-.wcard--agent {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 30%, var(--paper-strong));
-}
-.wcard--agent .wcard__eyebrow {
-  color: var(--accent-ink);
-}
-.wcard--agent .wcard__balance { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
-.wcard--agent .wcard__footer { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
-
-/* The 5rem lightning watermark that sat here is gone. A giant glyph at 4.5%
-   opacity behind real content is decoration standing in for design; the amber
-   tint and the bot avatar already distinguish this card. */
-
-/* ── Identity card — neutral ── */
-.wcard--identity .wcard__eyebrow {
-  color: var(--muted);
-}
-
-/* ─────── New card anatomy (OpenSea-style) ─────── */
-
-/* top row: eyebrow + address pill */
-.wcard__top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-.wcard__addr-pill {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.65rem;
-  font-weight: 500;
-  color: var(--faint);
-  background: var(--canvas);
-  border: 1px solid var(--line);
-  border-radius: 99px;
-  padding: 0.2rem 0.625rem;
-  letter-spacing: 0.01em;
-}
-.wcard--agent .wcard__addr-pill {
-  background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-  color: var(--accent-ink);
-}
-
-/* hero balance */
-.wcard__hero-balance {
-  margin: 0.5rem 0 0;
-  font-size: clamp(1.9rem, 4vw, 2.6rem);
-  font-weight: 750;
-  letter-spacing: -0.065em;
-  color: var(--ink);
-  line-height: 1.05;
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-.wcard__hero-balance--muted { color: var(--faint); }
-.wcard__hero-balance--error { color: var(--danger); font-size: 1.4rem; }
-.wcard__hero-unit {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: -0.01em;
-}
-.wcard__hero-sub {
-  margin: 0.2rem 0 0;
-  font-size: 0.72rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-/* quick-action button bar */
-.wcard__actions {
-  display: flex;
-  gap: 0.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
-}
-.wcard--agent .wcard__actions { border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
-.wcard__actions--disabled { opacity: 0.45; pointer-events: none; }
-
-.wcard__action {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-  flex: 1;
-  padding: 0.6rem 0.4rem;
-  border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  background: var(--canvas);
-  text-decoration: none;
-  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
-}
-.wcard__action:hover:not(:disabled) {
-  background: var(--paper-strong);
-  border-color: var(--line-strong);
-  transform: translateY(-1px);
-}
-.wcard__action:active:not(:disabled) { transform: translateY(0); }
-.wcard__action:disabled { opacity: 0.4; cursor: not-allowed; }
-.wcard--agent .wcard__action {
-  background: color-mix(in srgb, var(--accent-soft) 25%, var(--canvas));
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-}
-.wcard--agent .wcard__action:hover:not(:disabled) {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
-}
-
-.wcard__action-icon {
-  font-size: 1rem;
-  line-height: 1;
-  display: block;
-}
-.wcard__action-label {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-/* asset list */
+/* ── Asset list ── */
 .wcard__asset-list {
   margin-top: auto;
   padding-top: 0.75rem;
   border-top: 1px solid var(--line);
 }
-.wcard--agent .wcard__asset-list { border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
 
 .wcard__asset-row {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0 0.625rem;
   padding: 0.5rem 0;
 }
 .wcard__asset-row + .wcard__asset-row { border-top: 1px solid var(--line); }
-.wcard__asset-icon { display: flex; align-items: center; justify-content: center; }
+.wcard__asset-icon { display: flex; align-items: center; justify-content: center; grid-row: 1 / 3; }
 .wcard__asset-name { font-size: 0.82rem; font-weight: 650; color: var(--ink); }
-.wcard__asset-sub { font-size: 0.68rem; color: var(--faint); text-align: left; grid-column: 2; margin-top: -0.2rem; align-self: start; }
+.wcard__asset-sub { grid-column: 2; font-size: 0.68rem; color: var(--faint); margin-top: -0.15rem; }
 .wcard__asset-amount {
-  font-size: 0.78rem;
-  font-weight: 650;
-  color: var(--ink);
-  text-align: right;
-  grid-column: 4;
+  grid-column: 3;
   grid-row: 1 / 3;
   align-self: center;
+  text-align: right;
   font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.78rem;
+  font-weight: 650;
   letter-spacing: -0.02em;
-}
-.wcard__asset-row--empty {
-  border-top: 1px solid var(--line);
-  padding: 0.75rem 0 0.25rem;
-}
-.wcard__asset-row-hint {
-  font-size: 0.72rem;
-  color: var(--faint);
-  font-style: italic;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
+/* Footer slot: whichever single control belongs to this account. */
+.wcard__connect {
+  margin-top: 0.875rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RECEIVE SHEET
+   ═══════════════════════════════════════════════════════════════
+
+   Native <dialog>, so ::backdrop, Escape, focus containment and the top layer
+   are the platform's problem rather than ours. The element itself is reset to
+   nothing and .receive-sheet__panel is the visible card — otherwise the UA's
+   default border and max-width fight the layout.
+   ═══════════════════════════════════════════════════════════════ */
+
+.receive-sheet {
+  margin: auto;
+  border: 0;
+  padding: 0;
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+}
+.receive-sheet::backdrop {
+  background: rgb(var(--scrim-canvas) / 72%);
+  backdrop-filter: blur(3px);
+}
+
+.receive-sheet__panel {
+  width: min(92vw, 26rem);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper-strong);
+  box-shadow: var(--shadow-float);
+  padding: 1.5rem;
+}
+
+.receive-sheet__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.receive-sheet__avatar {
+  border-radius: 0.625rem;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+}
+.receive-sheet__head-text { flex: 1; min-width: 0; }
+.receive-sheet__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.receive-sheet__note {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.receive-sheet__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.875rem;
+  height: 1.875rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  color: var(--muted);
+}
+.receive-sheet__close:hover { background: var(--canvas); color: var(--ink); }
+
+.receive-sheet__qr-gap {
+  margin-top: 1.25rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 0.75rem;
+  background: var(--canvas);
+  padding: 0.875rem 1rem;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* The address gets its own block at a readable size, breaking on characters
+   rather than being truncated. First-six and last-four are the segments people
+   are told to check, so they carry the ink and the middle recedes — the
+   comparison the user is actually asked to make is the one the type supports. */
+.receive-sheet__address {
+  display: block;
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--canvas);
+  padding: 0.875rem 1rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+  user-select: all;
+}
+/* nowrap on the edges is the point of the whole treatment. break-all applies
+   to the block, and it split the last four characters across two lines as
+   "…Cd5" / "80d" — which is precisely the group the user is being asked to
+   compare against what they paste. Only the middle may break. */
+.receive-sheet__address-edge { color: var(--ink); font-weight: 700; white-space: nowrap; }
+.receive-sheet__address-mid { color: var(--faint); font-weight: 400; }
+
+.receive-sheet__copy { margin-top: 0.875rem; }
+
+.receive-sheet__status {
+  min-height: 2.25rem;
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.receive-sheet__network {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  border-radius: 0.625rem;
+  background: var(--accent-soft);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+.receive-sheet__network > :first-child { flex-shrink: 0; margin-top: 0.15rem; }
+
+.receive-sheet__explorer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-decoration: none;
+}
+.receive-sheet__explorer:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   FUNDING / RECOVERABILITY
+   ═══════════════════════════════════════════════════════════════ */
+
+.wallet-fund-banner {
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 0.75rem;
+  background: var(--accent-soft);
+  padding: 1rem 1.125rem;
+}
+.wallet-recoverability .wallet-fund-banner {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--paper));
+}
+.wallet-fund-banner__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.wallet-fund-banner__title { font-size: 0.82rem; font-weight: 700; color: var(--accent-ink); }
+.wallet-fund-banner__address { display: block; margin-top: 0.5rem; font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.72rem; word-break: break-all; color: var(--ink); }
+.wallet-fund-banner__hint { margin-top: 0.375rem; font-size: 0.75rem; line-height: 1.55; color: var(--accent-ink); opacity: 0.8; }
+
+.wallet-recoverability {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: 0.75rem;
+  background: var(--paper);
+  padding: 1rem 1.125rem;
+}
+.wallet-recoverability--ok {
+  border-color: color-mix(in srgb, var(--success) 25%, var(--line));
+  border-left-color: var(--success);
+  background: color-mix(in srgb, var(--success-soft) 45%, var(--paper));
+}
+.wallet-recoverability--warn {
+  border-color: color-mix(in srgb, var(--danger) 25%, var(--line));
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger-soft) 45%, var(--paper));
+}
+.wallet-recoverability__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.wallet-recoverability__title { display: flex; align-items: center; gap: 0.45rem; font-size: 0.8rem; font-weight: 700; color: var(--ink); }
+.wallet-recoverability__icon { display: flex; }
+.wallet-recoverability--ok .wallet-recoverability__title { color: var(--success); }
+.wallet-recoverability--warn .wallet-recoverability__title { color: var(--danger); }
+.wallet-recoverability__recheck { font-size: 0.68rem; font-weight: 600; color: var(--muted); flex-shrink: 0; }
+.wallet-recoverability__recheck:hover:not(:disabled) { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.wallet-recoverability__recheck:disabled { opacity: 0.5; }
+.wallet-recoverability__body { margin-top: 0.375rem; max-width: 78ch; font-size: 0.75rem; line-height: 1.6; color: var(--muted); }
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTIONS — activity, permissions, device access
+   ═══════════════════════════════════════════════════════════════ */
+
+.wallet-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.wallet-section__title { margin-top: 0.375rem; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.04em; color: var(--ink); }
+
+.wallet-activity > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.wallet-activity h2 {
+  margin-top: 0.375rem;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.wallet-activity > header a {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-decoration: none;
+}
+.wallet-activity > header a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.wallet-activity-list { border-bottom: 1px solid var(--line); }
+.wallet-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding-block: 0.875rem;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+}
+.wallet-activity-row:last-child { border-bottom: 0; }
+.wallet-activity-row:hover { background: var(--paper); }
+.wallet-activity-icon {
+  flex-shrink: 0;
+  border-radius: 0.625rem;
+  overflow: hidden;
+}
+.wallet-activity-icon > [aria-hidden="true"] {
+  display: block;
+}
+.wallet-activity-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.wallet-activity-row h3 {
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wallet-activity-row p {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.wallet-activity-row > strong {
+  flex-shrink: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.wallet-activity-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding-block: 3rem;
+}
+.wallet-activity-empty > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: var(--paper-muted);
+  color: var(--faint);
+  margin-bottom: 0.875rem;
+}
+.wallet-activity-empty h3 {
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+.wallet-activity-empty p {
+  margin-top: 0.25rem;
+  max-width: 42ch;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.wallet-empty-permissions { display: flex; align-items: flex-start; gap: 1rem; padding-block: 2rem; }
+.wallet-empty-permissions__icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+.wallet-empty-permissions__title { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
+.wallet-empty-permissions__sub { margin-top: 0.25rem; font-size: 0.8rem; line-height: 1.55; color: var(--muted); }
+
+.wallet-sessions-list { list-style: none; margin: 0; padding: 0; }
+.wallet-session-row { padding-block: 1.25rem; border-bottom: 1px solid var(--line); }
+.wallet-session-row__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.wallet-session-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.5rem; }
+.wallet-session-dot { display: inline-block; width: 0.4375rem; height: 0.4375rem; border-radius: 50%; flex-shrink: 0; }
+.wallet-session-dot--ok { background: var(--success); }
+.wallet-session-dot--warn { background: var(--accent); }
+.wallet-session-row__name { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
+.wallet-session-row__id { font-size: 0.72rem; color: var(--faint); }
+.wallet-revoke-btn { flex-shrink: 0; font-size: 0.75rem; font-weight: 650; color: var(--muted); }
+.wallet-revoke-btn:hover:not(:disabled) { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
+.wallet-revoke-btn:disabled { opacity: 0.5; }
+
+.wallet-session-row__chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 0.875rem; }
+@media (max-width: 500px) { .wallet-session-row__chips { grid-template-columns: 1fr 1fr; } }
+.wallet-chip { background: var(--canvas); border-radius: 0.625rem; padding: 0.5rem 0.75rem; }
+.wallet-chip__label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.wallet-chip__value { margin-top: 0.2rem; font-size: 0.78rem; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.wallet-chip__value--warn { color: var(--accent-ink); }
+.wallet-chip__sub { font-weight: 400; color: var(--muted); }
+.wallet-session-row__tx { display: inline-block; margin-top: 0.625rem; font-size: 0.7rem; font-weight: 600; color: var(--muted); }
+.wallet-session-row__tx:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+
+.wallet-past-sessions { padding-top: 1.25rem; border-top: 1px solid var(--line); }
+.wallet-past-sessions > summary { cursor: pointer; font-size: 0.82rem; font-weight: 650; color: var(--ink); }
+.wallet-past-sessions > summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+.wallet-past-sessions__list { list-style: none; margin: 0.875rem 0 0; padding: 0; border-top: 1px solid var(--line); }
+.wallet-past-sessions__row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 0.75rem; border-bottom: 1px solid var(--line); }
+.wallet-past-sessions__name { font-size: 0.82rem; font-weight: 650; color: var(--ink); }
+.wallet-past-sessions__meta { margin-top: 0.125rem; font-size: 0.72rem; color: var(--muted); }
+.wallet-past-sessions__status { font-size: 0.72rem; text-transform: capitalize; color: var(--faint); flex-shrink: 0; }
+
+/* The destructive control is a bordered panel, not a bare row with a rule
+   above it. Something that removes an account from a device should look like
+   a section of its own rather than like the page running out. */
+.wallet-danger-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--paper);
+  padding: 1.25rem;
+}
+.wallet-danger-zone__title { font-size: 0.875rem; font-weight: 650; color: var(--ink); }
+.wallet-danger-zone__sub { margin-top: 0.25rem; max-width: 48ch; font-size: 0.8rem; line-height: 1.55; color: var(--muted); }
+.wallet-danger-zone__trigger { font-size: 0.8rem; font-weight: 650; color: var(--muted); flex-shrink: 0; }
+.wallet-danger-zone__trigger:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
+.wallet-danger-zone__confirm { flex-shrink: 0; }
+.wallet-danger-zone__confirm-label { font-size: 0.78rem; font-weight: 700; color: var(--ink); margin-bottom: 0.75rem; }
+.wallet-danger-zone__confirm-actions { display: flex; gap: 0.5rem; }
+.wallet-danger-zone__confirm-actions .wallet-action-btn { min-height: 2.375rem; font-size: 0.78rem; padding-inline: 1rem; }
+
+/* Identity wallet section — /account only. The wallet screen used to render
+   this too, restating a card it already showed; see wallet-client.tsx. */
+.wallet-identity-section { margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+.wallet-identity-section__content { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1.25rem; }
+.wallet-identity-section__label { font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+.wallet-identity-section__sub { margin-top: 0.25rem; max-width: 52ch; font-size: 0.75rem; line-height: 1.55; color: var(--faint); }
+.wallet-identity-section__action { flex-shrink: 0; min-width: 180px; }
+.wallet-identity-disconnect { font-size: 0.75rem; font-weight: 650; color: var(--muted); }
+.wallet-identity-disconnect:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }

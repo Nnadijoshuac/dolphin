@@ -104,7 +104,12 @@
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 0.95rem;
-  background: var(--paper-strong);
+  /* Raised, not sunk. It LOOKS like a text field but it is a button that opens
+     search — and material has to follow behaviour, not appearance, or it is
+     lying about what will happen when you touch it. */
+  background-color: var(--paper-strong);
+  background-image: var(--sheen);
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact), 0 8px 20px -10px var(--lift-ambient);
   padding: 0.55rem 0.6rem 0.55rem 1rem;
   color: var(--ink);
   box-shadow: 0 3px 0 var(--line-strong), var(--shadow-soft);
@@ -220,16 +225,39 @@
     color 140ms ease;
 }
 
+/*
+ * A chip is a KEY, so it behaves like one: raised at rest, travelling under
+ * the pointer, and latched DOWN while it is engaged. That last part is the
+ * whole reason to bother — a pressed-in toggle says "this is on" with the
+ * material itself, before the colour inversion has to say it again.
+ *
+ * The pressed inset is black at low alpha rather than --sink-top, because the
+ * active chip's ground is --ink, which FLIPS between themes. Black reads as a
+ * shadow on both a dark chip (light mode) and a light one (dark mode); a
+ * theme-aware token would be right on exactly one of them.
+ */
+.filterChip {
+  background-image: var(--sheen);
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact);
+}
+
 .filterChip:hover {
   border-color: var(--line-strong);
   color: var(--ink);
 }
 
+.filterChip:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px var(--sink-top);
+}
+
 .filterChipActive,
 .filterChipActive:hover {
   border-color: var(--ink);
-  background: var(--ink);
+  background-color: var(--ink);
+  background-image: none;
   color: var(--paper);
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / 30%);
 }
 
 /*
@@ -374,6 +402,8 @@
 .agentCard {
   color: inherit;
   text-decoration: none;
+  background-image: var(--sheen);
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact);
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease,
@@ -383,12 +413,16 @@
 .agentCard:hover,
 .agentCard:focus-visible {
   border-color: var(--accent-hover);
-  box-shadow: 0 5px 0 var(--accent-hover), var(--shadow-soft);
+  box-shadow:
+    inset 0 1px 0 var(--lift-edge),
+    0 5px 0 var(--accent-hover),
+    0 12px 24px -12px var(--lift-ambient);
   transform: translateY(-2px);
 }
 
+/* Fully down onto its ledge: the lit edge goes, a pressed inset arrives. */
 .agentCard:active {
-  box-shadow: 0 1px 0 var(--accent-hover);
+  box-shadow: 0 1px 0 var(--accent-hover), inset 0 2px 5px var(--sink-top);
   transform: translateY(2px);
 }
 

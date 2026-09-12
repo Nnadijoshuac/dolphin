@@ -1,4 +1,5 @@
 import { McpError, listMcpTools, openMcpSession, type McpSession } from "./mcpClient";
+import { isMutating } from "./toolCapability";
 import type { ToolDefinition } from "./openrouter";
 
 /**
@@ -89,35 +90,12 @@ export const MAX_TOOLS_TOTAL = 10;
  * Neither makes the denylist optional. It is the layer that stops the model
  * being ASKED to do these things at all.
  */
-const MUTATING_TOOL_PATTERNS = [
-  "borrow", "supply", "withdraw", "repay", "liquidat", "swap", "transfer",
-  "approve", "execute", "send", "buy", "sell", "stake", "claim", "mint",
-  "burn", "deposit", "bridge", "sign", "rebalance", "cancel", "pause",
-  "resume", "close", "open_position", "set_", "set-", "act", "trade",
-  "allocate", "migrate", "route",
-];
-
-/**
- * Verbs that are only mutating when they START the name.
- *
- * Kept separate because as substrings they are everywhere and harmless -
- * "asset" contains "set", "budget" contains "get", "created_at" contains
- * "create". `setEModeCategory` and `setUsageAsCollateral` both survived the
- * substring list on 2026-09-08 for exactly that reason: the pattern was written
- * as "set_" and these are camelCase.
+/*
+ * The patterns themselves now live in ./toolCapability, because the catalog
+ * needs the SAME answer to show a user whether an agent can act. Two copies of
+ * 'what is a write tool' would eventually disagree, and the copy that drifts
+ * would either hide a capability from a person or expose one to the model.
  */
-const MUTATING_PREFIXES = [
-  "set", "add", "remove", "update", "create", "delete", "enable", "disable",
-  "toggle", "start", "stop", "run",
-];
-
-function isMutating(toolName: string): boolean {
-  const name = toolName.toLowerCase();
-  if (MUTATING_PREFIXES.some((prefix) => name.startsWith(prefix))) return true;
-  // camelCase and snake_case both appear in this catalog, so match on the raw
-  // lowercased string rather than tokenizing.
-  return MUTATING_TOOL_PATTERNS.some((pattern) => name.includes(pattern));
-}
 
 /** OpenAI-compatible function names: letters, digits, underscore, hyphen. */
 const NAME_SAFE = /[^a-zA-Z0-9_-]/g;

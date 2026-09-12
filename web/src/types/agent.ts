@@ -282,6 +282,21 @@ export interface Agent {
    * escrow; "mcp" publishes tools you call directly. Mirrors the mobile type.
    */
   protocol: "a2a" | "mcp";
+  /**
+   * WHAT THIS AGENT CAN DO, derived by the backend from the tools it actually
+   * publishes rather than from its name or category.
+   *
+   * See convex/lib/toolCapability.ts. Three states and the middle one is the
+   * interesting one: `calldata` means the agent returns UNSIGNED transactions
+   * the user signs from their own wallet, so it can act without ever holding a
+   * key. `direct` means it publishes tools that perform the action, which needs
+   * authority Dolphin does not grant.
+   */
+  execution: {
+    kind: "none" | "calldata" | "direct";
+    writeTools: string[];
+    calldataTools: string[];
+  };
   /** Seed for the client's deterministic avatar when `iconUrl` is null. */
   iconSeed: string;
   iconSource: "publisher" | "cached" | "generated";

@@ -28,6 +28,7 @@
  */
 
 import type { Doc } from "../_generated/dataModel";
+import { readExecutionCapability } from "./toolCapability";
 import { hasLiveStats, statsCategoryFor } from "./statsCategory";
 
 export interface DataSourceLabel {
@@ -228,6 +229,23 @@ export function toPublicAgent(row: Doc<"agents">) {
      * agent publishes two services.
      */
     protocol: row.protocol,
+
+    /**
+     * WHAT THIS AGENT CAN DO, read off the tools it actually publishes.
+     *
+     * Derived here rather than stored (AGENTS.md §9 - re-derive what costs
+     * microseconds) from `row.skills`, which the probe records unfiltered
+     * straight from the agent's own card or MCP tool list.
+     *
+     * It is the answer to the first question anyone has about an agent and the
+     * catalog had no field for it. Measured 2026-09-12: the six agents in the
+     * "trading" category publish only `explain_strategy`, `list_agents`,
+     * `get_hire_link` and `top_traders` - none of them trades - while five
+     * agents filed under health-factor, yield, rebalancing and payments publish
+     * real Aave V3 and PancakeSwap V3 writes. A name said one thing and the
+     * tool list said another, and only the name was on screen.
+     */
+    execution: readExecutionCapability(row.skills, row.protocol),
 
     x402Supported: live(row.x402Supported, row.lastVerifiedAt, AGENT_DATA_SOURCES.scan),
     /**

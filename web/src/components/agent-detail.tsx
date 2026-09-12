@@ -244,6 +244,23 @@ function TechnicalDetailsAccordion({
     ["ERC-8004 Token", `#${agent.tokenId}`],
     ["Network", "BNB Smart Chain (Chain ID: 56)"],
     ["Protocol Type", agent.protocol === "mcp" ? "MCP Server" : "A2A Agent"],
+    /*
+     * READ OFF THE TOOL LIST, NOT THE NAME.
+     *
+     * Measured 2026-09-12: every agent in the "trading" category publishes only
+     * reads, while agents filed under health-factor and yield publish real Aave
+     * V3 writes. The name and the capability disagreed and only the name was on
+     * screen, so this states the capability beside it. Evidence, not a claim -
+     * the count is the agent's own published tools.
+     */
+    [
+      "Can it act?",
+      agent.execution.kind === "calldata"
+        ? `Builds transactions you sign (${agent.execution.calldataTools.length} tools)`
+        : agent.execution.kind === "direct"
+          ? `Publishes ${agent.execution.writeTools.length} on-chain write tools`
+          : "Reads and reports only",
+    ],
     ["Identity Registry", shortAddress(agent.registryAddress)],
     ["Publisher Address", shortAddress(agent.publisherAddress)],
     ["Agent Wallet", shortAddress(agent.agentWallet)],

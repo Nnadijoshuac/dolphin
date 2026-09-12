@@ -75,9 +75,28 @@ const STEPS: readonly Step[] = [
     ],
   },
   {
+    /*
+     * The title used to be "Hiring costs nothing and grants nothing".
+     *
+     * Every word of that was true, and it made the product explain - on slide
+     * three of four, before the reader had done anything - that its primary
+     * action is defined by what it withholds. Two negations as the headline of
+     * a conversion step is a self-own, and it arrives earlier in the funnel
+     * than the same admission on My agents, which the 2026-09-06 audit called
+     * admirably honest and commercially fatal.
+     *
+     * The facts are unchanged and none of them is softened; the order is. Say
+     * what hiring DOES, then what it does not cost and does not grant - which
+     * is reassurance rather than apology, and is the actual reason a cautious
+     * person should be willing to press the button.
+     *
+     * This is a copy fix on a real gap. Hiring is still a saved record: when
+     * it produces an artifact - a tool call run against the agent, an answer
+     * kept - this slide should describe that instead.
+     */
     eyebrow: "What hiring does",
-    title: "Hiring costs nothing and grants nothing",
-    body: "Hiring records the agent against your wallet address so you can find it again and review it later. It is not a payment, and it does not let the agent touch your funds.",
+    title: "Hiring saves an agent to your wallet",
+    body: "It records the agent against your address so you can find it again, keep track of it, and review it once you have had it a day. No money moves and no permission is granted — paying an agent for a task is a separate, deliberate step.",
     points: [
       "No agent can spend from your wallet. There is no approval to give.",
       "Paying for a task is a separate, deliberate choice, and the money is held in escrow on the chain until the work is delivered.",

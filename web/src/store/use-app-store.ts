@@ -24,10 +24,28 @@ import { createJSONStorage, persist } from "zustand/middleware";
  * The persisted key is bumped to v2 so a browser holding the old shape drops
  * the dead array rather than carrying it forever.
  */
+/**
+ * Which denomination the wallet screen shows. Persisted because it is a
+ * preference, not a session detail — someone who thinks in dollars thinks in
+ * dollars tomorrow too, and asking again every visit is the kind of small
+ * forgetting that makes software feel rented.
+ *
+ * BNB is the default: it is the only figure Dolphin can always show. USD needs
+ * a live Chainlink round (see wallet/bnb-price.ts) and is refused when that
+ * round cannot be read — the preference is remembered, but it never forces a
+ * dollar figure into existence.
+ */
+export type DisplayCurrency = "BNB" | "USD";
+
 interface AppState {
   hasCompletedOnboarding: boolean;
   chatHistory: ChatHistoryEntry[];
   recentSearches: string[];
+  displayCurrency: DisplayCurrency;
+  /** Shoulder-surfing cover for balances. Per device, deliberately. */
+  hideBalances: boolean;
+  setDisplayCurrency: (currency: DisplayCurrency) => void;
+  toggleHideBalances: () => void;
   setHasCompletedOnboarding: (isComplete: boolean) => void;
   addRecentSearch: (query: string) => void;
   removeRecentSearch: (query: string) => void;
@@ -70,6 +88,10 @@ function migratePersistedState(persistedState: unknown): Partial<AppState> {
     hasCompletedOnboarding: legacy.hasCompletedOnboarding === true,
     chatHistory,
     recentSearches,
+    // Anything that is not the literal "USD" falls back to BNB — the figure
+    // Dolphin can always show without a price feed.
+    displayCurrency: legacy.displayCurrency === "USD" ? "USD" : "BNB",
+    hideBalances: legacy.hideBalances === true,
   };
 }
 
@@ -79,6 +101,11 @@ export const useAppStore = create<AppState>()(
       hasCompletedOnboarding: false,
       chatHistory: [],
       recentSearches: [],
+      displayCurrency: "BNB",
+      hideBalances: false,
+      setDisplayCurrency: (displayCurrency) => set({ displayCurrency }),
+      toggleHideBalances: () =>
+        set((state) => ({ hideBalances: !state.hideBalances })),
       setHasCompletedOnboarding: (isComplete) =>
         set({ hasCompletedOnboarding: isComplete }),
       addRecentSearch: (query) => {
@@ -125,8 +152,12 @@ export const useAppStore = create<AppState>()(
         hasCompletedOnboarding: state.hasCompletedOnboarding,
         chatHistory: state.chatHistory,
         recentSearches: state.recentSearches,
+        displayCurrency: state.displayCurrency,
+        hideBalances: state.hideBalances,
       }),
-      version: 3,
+      // 4: added displayCurrency + hideBalances. migratePersistedState defaults
+      // both, so an older persisted blob upgrades rather than being discarded.
+      version: 4,
       migrate: migratePersistedState,
     },
   ),

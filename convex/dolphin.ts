@@ -1159,10 +1159,19 @@ export const ask = action({
       const catalogSummary = liveCatalog
         .map(
           (a) =>
-            `- "${a.name}" [Category: ${a.category}, Rank: ${a.rank}, Protocol: ${a.protocol}] (agentKey: "${a.agentKey}", agentWallet: "${a.agentWallet}", pricing: "${a.pricing}"): ${a.tagline}`,
+            `- "${a.name}" [Category: ${a.category}, Protocol: ${a.protocol}] (agentKey: "${a.agentKey}", agentWallet: "${a.agentWallet}", pricing: "${a.pricing}"): ${a.tagline}`,
         )
         .join("\n");
 
+      /*
+       * The catalog block is ORDERED, and the order is `rank` descending - but
+       * the rank NUMBER is deliberately not in it. convex/lib/rank.ts is
+       * explicit that rank is shelf position, not a quality score, and that
+       * "nothing derived from it is ever rendered as a number to a user". A
+       * model handed `Rank: 640` will repeat it as one, which is exactly the
+       * rendering that file forbids. The sequence carries the ordering; the
+       * integer would only invite a claim about it.
+       */
       synthesisContext += `\n\nAUTHORITATIVE LIVE MARKETPLACE CATALOG FROM CONVEX DATABASE (${liveCatalog.length} verified live agents currently active):
 ${catalogSummary}
 
@@ -1173,12 +1182,22 @@ CRITICAL POWERS & REASONING GUIDELINES:
    - NEVER reply with an interrogating bulleted questionnaire ("Which assets? What's your risk tolerance? What's your time horizon?").
    - NEVER say "Once you provide these details, I can: 1. Check live status... 2. Pull data...". That is bureaucratic stalling and terrible UX.
    - INSTEAD: ACT AS AN EXPERT STRATEGIST RIGHT AWAY.
-   - For trading bots:
-     * Feature [PancakeSwap Grid Trader] (Rank 1): It is the premier verified trading bot in the marketplace right now. It implements a configurable geometric grid on PancakeSwap v3 concentrated liquidity pools. All simulation and inspect tools are 100% free and gasless, allowing users to test ranges and order layouts without spending gas (only paid reporting is a micro-fee via x402).
-     * Contrast it with other live options like [Hevo BNB Grid Agent] or [4LPHA Pancake Grid Agent].
-     * Explain the trade-offs (accumulating LP/grid fees in sideways markets vs drawdown in strong trends).
-     * Conclude with ONE simple next step (e.g. asking if they want to simulate a grid on BNB/USDT or inspect an existing grid).
-3. AGENT SELECTION & COMPARISON: Never blindly pick or default to 4LPHA. When a user asks for recommendations or comparisons, read through the top-ranked agents in that category (e.g. for grid trading: compare PancakeSwap Grid Trader vs Hevo Grid vs 4LPHA Grid Agent; for lending health: compare Venus Liquidation Guard vs Brain on BNB Venus Health Factor Monitor). Explain their differences, read-only vs execution capabilities, pricing, and tradeoffs.
+   - Name 2-3 candidates FROM THE CATALOG BLOCK ABOVE, in the order they appear
+     there, and say what separates them using the fields that block carries:
+     category, protocol, pricing, and what the tagline says each one does.
+   - Explain the MECHANICS of the job from domain knowledge - e.g. a grid
+     accumulates fees in a ranging market and carries inventory risk in a
+     trending breakout. Mechanics you may explain. Performance you may not,
+     unless a tool returned it in this turn.
+   - Conclude with ONE simple next step (e.g. asking whether they want to
+     simulate a grid on BNB/USDT or inspect an existing one).
+3. AGENT SELECTION & COMPARISON: Never default to one publisher. Several
+   publishers ship whole suites here, so a category listing can look diverse and
+   be one vendor - when you compare, prefer candidates from DIFFERENT
+   publishers, and say when you could not find any. Compare on read-only vs
+   execution capability, pricing, and tradeoffs. Do NOT assert an ordering as
+   the marketplace's - Dolphin publishes no ranking. "I'd start with X because
+   Y" is yours to say; "X is Rank 1" is not.
 4. AGENT WALLET vs USER WALLET: Master this architectural difference:
    - The Agent Wallet (e.g. 0x38c6fc4a... or as listed in the catalog above) is the autonomous bot's on-chain execution address.
    - The User Wallet is the user's personal connected Web3 wallet (MetaMask/Rabby/Trust). Users retain 100% custody of their funds and only grant scoped session permissions (via Altana) or fund discrete escrow contracts (ERC-8183).
@@ -1248,7 +1267,7 @@ Keep it magnetic, warm, and conversational.`;
 
       messages[0] = { role: "system", content: synthesisContext };
 
-      let final: { content: string; model: string };
+      let final: { content: string; model: string | null };
       try {
         final = await chatCompletion({ messages });
       } catch (synthesisError) {
@@ -1260,26 +1279,40 @@ Keep it magnetic, warm, and conversational.`;
           venusTelemetry: liveVenusTelemetry,
           seedAgentKey,
         });
+        /*
+         * `model: null` because NO MODEL PRODUCED THIS. The previous value here
+         * was the string "dolphin-failsafe-engine", which named a model that
+         * does not exist and made a template indistinguishable from a synthesis
+         * in the one field that recorded the difference. Null is what the schema
+         * already means by "no model has answered" - see dolphinMessages.model.
+         */
         final = {
           content: fallbackText,
-          model: "dolphin-failsafe-engine",
+          model: null,
         };
       }
+
+      /*
+       * A model that returned an EMPTY body did not answer either, so this is
+       * the same substitution as the catch above and has to be labelled the
+       * same way. It used to keep `final.model`, which attributed a template to
+       * whichever model had just declined to write anything.
+       */
+      const answered = final.content.trim().length > 0;
 
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
         messageId: assistantId,
         status: "complete",
-        content:
-          final.content.trim().length > 0
-            ? final.content
-            : buildResilientMarketplaceResponse({
-                query: text,
-                catalog: liveCatalog,
-                userAddress: activeUserAddress,
-                venusTelemetry: liveVenusTelemetry,
-                seedAgentKey,
-              }),
-        model: final.model,
+        content: answered
+          ? final.content
+          : buildResilientMarketplaceResponse({
+              query: text,
+              catalog: liveCatalog,
+              userAddress: activeUserAddress,
+              venusTelemetry: liveVenusTelemetry,
+              seedAgentKey,
+            }),
+        model: answered ? final.model : null,
       });
     } catch (cause) {
       /*
@@ -1475,8 +1508,49 @@ function humanizeError(cause: unknown): string {
 }
 
 /**
- * Resilient, high-signal response generator that synthesizes an authoritative answer
- * directly from the live database catalog when upstream LLM calls fail or degrade.
+ * WHAT TO SAY WHEN NO MODEL ANSWERED.
+ *
+ * ===========================================================================
+ * WHAT THIS REPLACED, AND WHY IT HAD TO GO (2026-09-12)
+ * ===========================================================================
+ * The previous version wrote a confident marketplace answer from hand-written
+ * templates and returned it as though a model had produced it. Five separate
+ * things in it were untrue, and one was dangerous:
+ *
+ *  1. DANGEROUS. When the Venus read returned NOTHING, it told the user:
+ *     "I checked your connected wallet (0x...) on Venus Core Pool. No active
+ *     borrow or liquidation risk was detected - your collateral is completely
+ *     unencumbered and safe." Nothing had been checked. That is a financial
+ *     safety finding about a real address, asserted from the absence of data,
+ *     in the exact scenario where the data was missing BECAUSE something
+ *     failed. A user with a borrow near liquidation would have been told they
+ *     were safe.
+ *  2. It rendered rank as an ordinal - "(Rank 2)", "(Rank 7)", "Marketplace
+ *     Rank: #${rank} of ${n}". `rank` is a 0-800ish SCORE, so that last one
+ *     printed things like "#640 of 43". convex/lib/rank.ts is explicit that
+ *     rank is shelf position, not quality, and that nothing derived from it is
+ *     ever rendered as a number to a user.
+ *  3. It called one publisher's agent "the premier verified trading bot" and
+ *     another "our top-ranked verified option". Nothing measures either claim;
+ *     grid-trading has no live metric at all by construction.
+ *  4. It named specific agents that may not be live - "[Hevo BNB Grid Agent]",
+ *     "[4LPHA Pancake Grid Agent]" - and fell back to a hardcoded
+ *     "PancakeSwap Grid Trader" when the catalog came back EMPTY, i.e. it
+ *     named an agent precisely when it knew nothing.
+ *  5. It described the 300k unlisted registrations as "spam registrations".
+ *     Most are simply unreachable, which is a different claim.
+ *
+ * ===========================================================================
+ * THE RULE THIS FILE NOW FOLLOWS
+ * ===========================================================================
+ * A failed synthesis is not a licence to impersonate one. This says plainly
+ * that the model did not answer, then offers only what the catalog itself
+ * carries - names, categories, protocols, pricing, taglines - with no ordering
+ * claim, no superlative, and no finding about the user's own position.
+ *
+ * Call sites store `model: null` alongside it. A reader of `dolphinMessages`
+ * can then tell a model answer from this one, which the old
+ * "dolphin-failsafe-engine" label actively prevented.
  */
 function buildResilientMarketplaceResponse(options: {
   query: string;
@@ -1495,10 +1569,52 @@ function buildResilientMarketplaceResponse(options: {
   venusTelemetry?: string | null;
   seedAgentKey?: string | null;
 }): string {
-  const { query, catalog, userAddress, venusTelemetry, seedAgentKey } = options;
+  const { query, catalog, venusTelemetry, seedAgentKey } = options;
   const q = query.toLowerCase();
 
-  // 1. Venus / Liquidation / Collateral Health
+  const preamble =
+    "Dolphin's model did not answer that one, so this is the catalog speaking " +
+    "directly rather than an interpretation of it.";
+
+  /** One catalog row, rendered from its own fields only. */
+  const describe = (a: (typeof catalog)[number]) => {
+    const bareId = a.agentKey.split(":").pop() ?? a.agentKey;
+    return `- **[${a.name}](/agent/${bareId})** — ${a.category} · ${a.protocol} · ${a.pricing}\n  ${a.tagline}`;
+  };
+
+  /*
+   * Substring match over the row's own text. Deliberately dumb: this runs when
+   * the smart path is already unavailable, and a wrong-but-confident category
+   * guess is how the old version ended up naming agents it had not matched.
+   */
+  const matching = (terms: string[]) =>
+    catalog
+      .filter((a) => {
+        const haystack =
+          `${a.category} ${a.name} ${a.tagline} ${a.skills}`.toLowerCase();
+        return terms.some((t) => haystack.includes(t));
+      })
+      .slice(0, 3);
+
+  /*
+   * The agent the user was already looking at. Its own record, nothing more -
+   * no appraisal, no rank, no verification claim beyond the fact that it is
+   * listed, which is itself the claim that it answered a probe.
+   */
+  if (seedAgentKey) {
+    const target = catalog.find(
+      (a) => a.agentKey === seedAgentKey || a.agentKey.endsWith(`:${seedAgentKey}`),
+    );
+    if (target) {
+      return `${preamble}\n\nThis is the record for **${target.name}** as the catalog holds it:\n\n${describe(target)}\n\nIt is listed because Dolphin called its endpoint and it answered. That is a statement about reachability, not about how well it does the job.`;
+    }
+  }
+
+  /*
+   * A live Venus read that ALREADY SUCCEEDED is the one real fact available on
+   * this path, so it is worth repeating. The branch where it is missing says
+   * so, and says nothing else - see item 1 in the header.
+   */
   if (
     q.includes("venus") ||
     q.includes("health") ||
@@ -1506,86 +1622,34 @@ function buildResilientMarketplaceResponse(options: {
     q.includes("collateral") ||
     q.includes("ratio")
   ) {
+    const candidates = matching(["health", "venus", "liquidat", "lend"]);
+    const list = candidates.length > 0 ? `\n\n${candidates.map(describe).join("\n")}` : "";
+
     if (venusTelemetry) {
-      return `Here is your live, verified on-chain position from the Venus Comptroller on BNB Smart Chain:\n\n${venusTelemetry}\n\nFor continuous autonomous monitoring and liquidation protection, I recommend checking [Venus Liquidation Guard] (Rank 2) or [Brain on BNB] (Rank 7) in the marketplace.`;
+      return `${preamble}\n\nYour position, read live from the Venus Comptroller on BNB Smart Chain:\n\n${venusTelemetry}${list}`;
     }
-    if (userAddress) {
-      return `I checked your connected wallet (${userAddress}) on Venus Core Pool. No active borrow or liquidation risk was detected — your collateral is completely unencumbered and safe.\n\nTo configure automated liquidation alerts or auto-repay protection, explore [Venus Liquidation Guard] or [Brain on BNB].`;
-    }
-    return `To check Venus liquidation health, connect your wallet in the top bar or share your 0x address.\n\nOur marketplace features dedicated Venus monitoring agents like [Venus Liquidation Guard] and [Brain on BNB] that track health factors and collateral buffers in real time.`;
+    return `${preamble}\n\nI could not read a Venus position this turn, so I have nothing to say about your collateral either way — an unread position is not a safe one. Try again in a moment, or open the agent's page to see its own live reads.${list}`;
   }
 
-  // 2. Trading / Grid Bots
-  if (
-    q.includes("trading") ||
-    q.includes("grid") ||
-    q.includes("bot") ||
-    q.includes("trade") ||
-    q.includes("swap") ||
-    q.includes("arbitrage")
-  ) {
-    const gridAgent =
-      catalog.find(
-        (a) =>
-          a.category.toLowerCase().includes("grid") ||
-          a.name.toLowerCase().includes("grid") ||
-          a.rank === 1,
-      ) ?? catalog[0];
-    const gridName = gridAgent ? gridAgent.name : "PancakeSwap Grid Trader";
-    return `The **[${gridName}]** is the premier verified trading bot in our marketplace right now.
+  const topic: Array<{ terms: string[]; match: string[] }> = [
+    { terms: ["yield", "apy", "farm", "interest", "earn", "lend"], match: ["yield", "lend", "apy", "farm"] },
+    { terms: ["trading", "grid", "bot", "trade", "swap", "arbitrage"], match: ["grid", "trad", "swap"] },
+    { terms: ["rebalanc", "lp", "liquidity", "range"], match: ["rebalanc", "liquidity", "range"] },
+  ];
 
-- **Strategy**: Executes an automated geometric grid across PancakeSwap v3 concentrated liquidity pools to capture trading fees during market fluctuations.
-- **Gasless Simulation**: All state, layout, and simulation tools are 100% free and gasless, allowing you to model price ranges and level spacing before deploying capital.
-- **Alternative Bots**: You can also evaluate **[Hevo BNB Grid Agent]** and **[4LPHA Pancake Grid Agent]** for different risk/spread profiles.
-
-Would you like to simulate an order layout on BNB/USDT, or inspect an existing grid?`;
-  }
-
-  // 3. Yield / Lending
-  if (
-    q.includes("yield") ||
-    q.includes("apy") ||
-    q.includes("farm") ||
-    q.includes("interest") ||
-    q.includes("earn") ||
-    q.includes("lend")
-  ) {
-    return `For yield optimization on BNB Chain, our top-ranked verified option is the **[BNB Chain Yield Router]**.
-
-- **Protocol**: Actively monitors and routes liquidity between Venus lending pools and PancakeSwap liquidity pools for optimized risk-adjusted APY.
-- **Custody**: Zero-custody architecture — funds remain under your wallet's control, with execution scoped via discrete approvals.
-- **Lending Alternative**: You can also inspect individual supply APYs across Venus markets with **[Venus Liquidation Guard]**.
-
-Would you like to compare lending rates versus LP fee yields for BNB or USDT?`;
-  }
-
-  // 4. Target Agent Inquiry
-  if (seedAgentKey) {
-    const target = catalog.find(
-      (a) => a.agentKey === seedAgentKey || a.agentKey.endsWith(`:${seedAgentKey}`),
-    );
-    if (target) {
-      const bareId = target.agentKey.split(":").pop() ?? target.agentKey;
-      return `Here is the live verified appraisal for **[${target.name}]**:
-
-- **Category & Protocol**: ${target.category} on ${target.protocol}
-- **Marketplace Rank**: #${target.rank} of ${catalog.length} verified live agents
-- **Pricing**: ${target.pricing}
-- **Overview**: ${target.tagline}
-
-All tools for this agent have been verified against ERC-8004 registry standards on BNB Chain. You can interact directly with it on its [agent page](/agent/${bareId}).`;
+  for (const { terms, match } of topic) {
+    if (terms.some((t) => q.includes(t))) {
+      const candidates = matching(match);
+      if (candidates.length === 0) break;
+      return `${preamble}\n\nThese are the listed agents whose own records mention that work:\n\n${candidates.map(describe).join("\n")}\n\nThey are ordered as the catalog stores them, which is not a quality ranking — Dolphin does not publish one.`;
     }
   }
 
-  // 5. Conversational / General Greeting
-  return `Good day! I'm Dolphin — the intelligence engine of the Dolphin Agent Marketplace on BNB Smart Chain.
+  if (catalog.length === 0) {
+    return `${preamble}\n\nThe catalog is also unreachable right now, so I have nothing to show you. This is a Dolphin outage, not an empty marketplace.`;
+  }
 
-I continuously monitor **${catalog.length} verified, live autonomous agents** running across Venus, PancakeSwap, and other BSC protocols — filtered from over 300,000 spam registrations.
+  return `${preamble}\n\nDolphin lists **${catalog.length} agents** that answered when it called them, out of a registry of more than 300,000 identities — the rest did not respond, which is a statement about reachability rather than intent.
 
-Whether you are looking to:
-- Deploy an automated **[Grid Trading Bot](/category/grid-trading)**
-- Monitor your **[Venus Collateral & Liquidation Health](/category/health-factor)**
-- Route capital for optimal **[DeFi Yields](/category/yield)**
-
-What would you like to explore today?`;
+You can browse by the job you want done: [lending health](/category/health-factor), [yield](/category/yield), [rebalancing](/category/rebalancing), or [grid trading](/category/grid-trading).`;
 }

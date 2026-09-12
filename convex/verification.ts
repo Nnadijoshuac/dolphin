@@ -272,6 +272,12 @@ export const verifyOne = internalAction({
         skills: probe.skills,
         protocol: probe.protocol ?? "a2a",
         endpoint: probe.probedEndpoint ?? "",
+        /*
+         * Carried separately from `protocol` on purpose - an agent can run
+         * both transports and `protocol` names only the primary. See the
+         * dual-protocol note in lib/probe.ts's probeAgent.
+         */
+        mcpEndpoint: probe.mcpEndpoint,
         pricing: probe.pricing,
         x402Supported: detail.x402Supported,
         feedbackCount: detail.feedbackCount,
@@ -315,6 +321,8 @@ const catalogValidator = v.object({
   ),
   protocol: v.union(v.literal("a2a"), v.literal("mcp")),
   endpoint: v.string(),
+  /** The MCP server that answered, independently of `protocol`. See probe.ts. */
+  mcpEndpoint: v.optional(v.union(v.string(), v.null())),
   pricing: v.union(
     v.object({
       amountRaw: v.string(),

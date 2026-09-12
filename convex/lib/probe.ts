@@ -144,6 +144,15 @@ export interface ProbeResult {
   probedEndpoint: string | null;
   /** From the agent's own card. Drives categorization and the detail page. */
   skills: ProbeSkill[];
+  /**
+   * The MCP server that answered, when one did — INDEPENDENTLY of `protocol`.
+   *
+   * An agent can run both transports. `protocol` names the primary one (what a
+   * hire negotiates over); this names the MCP surface whether or not it is
+   * primary, so a dual-protocol agent's tools stay callable. Null when the
+   * agent runs no MCP server or its MCP server did not answer.
+   */
+  mcpEndpoint: string | null;
   /** The agent's own name, when its card publishes one. */
   cardName: string | null;
   /** Populated only when a negotiate call returned a quote we could validate. */
@@ -161,6 +170,8 @@ function fail(
     detail: detail.slice(0, 300),
     protocol: null,
     probedEndpoint: null,
+    /* A failed probe reached no MCP server. `extras` may still name one. */
+    mcpEndpoint: null,
     skills: [],
     cardName: null,
     pricing: null,
@@ -476,6 +487,8 @@ async function probeA2A(
           failureClass: null,
           detail: `Publishes a menu of ${menu.length} service${menu.length === 1 ? "" : "s"} over its A2A endpoint.`,
           protocol: "a2a",
+          /* Set by the caller if an MCP server also answers. See probeAgent. */
+          mcpEndpoint: null,
           probedEndpoint: target,
           skills,
           cardName,
@@ -543,6 +556,8 @@ async function probeA2A(
         "Returned a payable quote for the A2A negotiate call a hire begins with. It publishes no separate service menu, which is optional.",
       protocol: "a2a",
       probedEndpoint: target,
+      /* Set by the caller if an MCP server also answers. See probeAgent. */
+      mcpEndpoint: null,
       skills,
       cardName,
       pricing: {
@@ -692,6 +707,8 @@ async function probeMCP(endpoint: string): Promise<ProbeResult> {
       `${list.length} tool${list.length === 1 ? "" : "s"}.`.replace(/\s+/g, " "),
     protocol: "mcp",
     probedEndpoint: endpoint,
+    /* MCP IS the transport here, so it is also the MCP surface. */
+    mcpEndpoint: endpoint,
     skills,
     cardName: typeof serverInfo?.name === "string" ? serverInfo.name : null,
     // MCP has no price negotiation in the ERC-8183 sense. Null is the honest
@@ -736,16 +753,75 @@ export async function probeAgent(input: ProbeInput): Promise<ProbeResult> {
   const a2a = callable.filter((service) => !isMcpLabel(service.name));
   const mcp = callable.filter((service) => isMcpLabel(service.name));
 
+  /*
+   * ===========================================================================
+   * AN AGENT IS NOT ONE PROTOCOL. (2026-09-12)
+   * ===========================================================================
+   * This used to `return result` the moment A2A answered, so an agent that
+   * speaks BOTH had its MCP server silently discarded: never probed, no tool
+   * list, no callable surface anywhere in the product. `protocol` recorded
+   * whichever transport was tried first, and the other one ceased to exist as
+   * far as Dolphin was concerned.
+   *
+   * That is a modelling defect rather than a missing feature. 8004scan carries
+   * `a2a_endpoint`, `mcp_server` and `x402_supported` as INDEPENDENT fields and
+   * `services` as a keyed object - it models an agent as a set of capabilities,
+   * and Dolphin was flattening that set to one enum on ingest, irreversibly.
+   *
+   * Measured 2026-09-12, before changing anything: of the 43 live agents, 9 are
+   * recorded A2A and NONE of those nine also publishes an mcp_server - so the
+   * bug was costing nothing that day. It was still worth fixing, because the
+   * shape foreclosed it: no amount of catalog growth could have surfaced a
+   * dual-protocol agent's tools while this returned early.
+   *
+   * Now both are probed when both are advertised and the results are merged.
+   * `protocol` remains the PRIMARY transport - what a hire negotiates over, and
+   * what the rest of the product keys on - while `mcpEndpoint` and the per-skill
+   * `transport` tag keep the second surface addressable.
+   */
+  let primary: ProbeResult | null = null;
+
   if (a2a.length > 0) {
     const result = await probeA2A(a2a, input.agentWallet);
-    if (result.state === "live" || mcp.length === 0) return result;
+    if (result.state === "live") primary = result;
+    else if (mcp.length === 0) return result;
     // A2A failed and there is an MCP server to try. Fall through rather than
     // reporting the agent dead on the strength of one transport.
   }
 
   if (mcp.length > 0) {
-    return probeMCP(mcp[0].endpoint);
+    const mcpResult = await probeMCP(mcp[0].endpoint);
+
+    /* No live A2A: MCP is the agent, exactly as before. */
+    if (!primary) return mcpResult;
+
+    /*
+     * Both answered. Keep A2A as primary - it is the transport a paid hire is
+     * negotiated over - and fold the MCP surface in beside it. A merge is the
+     * only honest record here: reporting either alone would delete a service
+     * the publisher is running.
+     */
+    if (mcpResult.state === "live") {
+      return {
+        ...primary,
+        mcpEndpoint: mcpResult.probedEndpoint,
+        skills: [...primary.skills, ...mcpResult.skills].slice(0, 60),
+        detail: `${primary.detail} It also runs an MCP server, which answered separately.`,
+      };
+    }
+
+    /*
+     * A2A live, MCP advertised but dead. Still the primary's verdict - one
+     * broken transport does not make a working agent unavailable - but the
+     * failure is worth saying out loud rather than hiding behind the success.
+     */
+    return {
+      ...primary,
+      detail: `${primary.detail} It also advertises an MCP server, which did not answer.`,
+    };
   }
+
+  if (primary) return primary;
 
   return fail("no-endpoint", "No callable endpoint remained after filtering reference-only labels.");
 }

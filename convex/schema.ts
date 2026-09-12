@@ -147,6 +147,23 @@ export default defineSchema({
      * previous probe reported for nine agents, five of which sell.
      */
     endpoint: v.string(),
+    /**
+     * The agent's MCP server, when it runs one that answers — INDEPENDENT of
+     * `protocol`.
+     *
+     * `protocol` is a single enum and an agent is not a single protocol.
+     * 8004scan models `a2a_endpoint`, `mcp_server` and `x402_supported` as
+     * separate fields and `services` as a keyed object; collapsing that to one
+     * value on ingest threw a running service away irreversibly. The probe used
+     * to return the moment A2A answered, so a dual agent's tools were never
+     * even fetched.
+     *
+     * `protocol` still names the PRIMARY transport - what a paid hire is
+     * negotiated over - and this keeps the tool surface addressable beside it.
+     * Optional: rows written before 2026-09-12 do not carry it, and for those
+     * an MCP-primary agent's `endpoint` is still the MCP server.
+     */
+    mcpEndpoint: v.optional(v.union(v.string(), v.null())),
 
     // --- Marketplace ----------------------------------------------------
     /**

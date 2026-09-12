@@ -33,9 +33,11 @@ import type { Agent } from "@/types/agent";
  *    re-calling a stranger's server, which is a real freshness caveat and gets
  *    the same treatment every other value on this page gets: the age is shown.
  *
- * Only offered for MCP agents with at least one non-write tool. An A2A agent
- * is commissioned over escrow and publishes nothing to call, and a write tool
- * is refused by the backend regardless of what this renders.
+ * Offered for any agent running an MCP server Dolphin has reached - which is
+ * NOT the same as `protocol === "mcp"`, because an agent can speak both and
+ * `protocol` names only the primary transport. A pure A2A agent is
+ * commissioned over escrow and publishes nothing to call, and a write tool is
+ * refused by the backend regardless of what this renders.
  */
 
 function relativeAge(calledAt: number): string {
@@ -56,7 +58,12 @@ export function AgentTrialPanel({ agent }: { agent: Agent }) {
   const [failure, setFailure] = useState<string | null>(null);
   const [running, setRunning] = useState<string | null>(null);
 
-  if (agent.protocol !== "mcp") return null;
+  /*
+   * Keyed on the MCP SURFACE, not the primary protocol. An A2A-primary agent
+   * can still run an MCP server, and `protocol !== "mcp"` would hide its tools
+   * - the same collapse the probe used to make before 2026-09-12.
+   */
+  if (!agent.mcpEndpoint) return null;
 
   /*
    * `previewableTools` is the agent's OWN schema saying a tool needs no

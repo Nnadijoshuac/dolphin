@@ -91,8 +91,12 @@ type TrialAgent = {
   name: string;
   protocol: "a2a" | "mcp";
   skills: { name: string }[];
-  services: { endpoint: string }[];
-  endpoint: string;
+  /**
+   * The MCP server, independent of `protocol` - an agent can run both
+   * transports. See mcpEndpointFor in lib/publicAgent.ts.
+   */
+  mcpEndpoint: string | null;
+  previewableTools: string[];
 };
 
 /* ---------------------------------------------------------------------------
@@ -206,10 +210,16 @@ export const tryAgentTool = action({
     if (!agent) {
       throw new Error("That agent is not in Dolphin's catalog.");
     }
-    if (agent.protocol !== "mcp") {
+    /*
+     * Gated on the MCP SURFACE, not on the primary protocol. An agent whose
+     * primary transport is A2A can still run an MCP server, and refusing it
+     * here on `protocol !== "mcp"` was the same collapse the probe used to
+     * make - see the dual-protocol note in lib/probe.ts.
+     */
+    if (!agent.mcpEndpoint) {
       throw new Error(
-        `${agent.name} is an A2A agent. Those are commissioned over ERC-8183 escrow and deliver a ` +
-          "result; they publish no tools to call directly.",
+        `${agent.name} runs no MCP server that Dolphin has reached. A2A agents are commissioned ` +
+          "over ERC-8183 escrow and deliver a result; they publish no tools to call directly.",
       );
     }
 
@@ -258,10 +268,7 @@ export const tryAgentTool = action({
       );
     }
 
-    const endpoint = agent.services[0]?.endpoint ?? agent.endpoint;
-    if (!endpoint) {
-      throw new Error(`${agent.name} publishes no MCP endpoint to call.`);
-    }
+    const endpoint = agent.mcpEndpoint;
 
     const startedAt = Date.now();
 

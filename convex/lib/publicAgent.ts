@@ -142,6 +142,23 @@ function unavailableLiveStats(categorySlug: string) {
  * exactly what it does and does not claim. The user is never shown this as the
  * publisher's price; the price they pay comes from the agent's own live quote.
  */
+/**
+ * The MCP server to call for this agent, or null.
+ *
+ * NOT the same question as `row.protocol === "mcp"`. An agent can run both
+ * transports; `protocol` names only the primary one, and before 2026-09-12 the
+ * probe returned the moment A2A answered so a dual agent's MCP server was
+ * never even contacted. `mcpEndpoint` is recorded independently of protocol.
+ *
+ * The fallback covers rows written before that field existed: for those, an
+ * MCP-primary agent's `endpoint` IS its MCP server. An A2A-primary legacy row
+ * yields null, which is correct - nothing ever probed its MCP side, so Dolphin
+ * has no endpoint it can claim answers. The next re-probe fills it in.
+ */
+function mcpEndpointFor(row: Doc<"agents">): string | null {
+  return row.mcpEndpoint ?? (row.protocol === "mcp" ? row.endpoint : null);
+}
+
 function priceModelFor(row: Doc<"agents">, asOf: string) {
   if (row.pricing) {
     return live(
@@ -227,12 +244,20 @@ export function toPublicAgent(row: Doc<"agents">) {
      * not-known is not offered. convex/agentTrials.ts re-checks the live
      * schema before calling regardless, so this only decides what is shown.
      */
-    previewableTools:
-      row.protocol === "mcp"
-        ? row.skills
-            .filter((skill) => skill.requiresInput === false)
-            .map((skill) => skill.name)
-        : [],
+    previewableTools: mcpEndpointFor(row)
+      ? row.skills
+          /*
+           * `requiresInput === false` does the transport filtering for free.
+           * Only an MCP tool ever gets a boolean here - an A2A skill is prose
+           * with no signature and records null (see ProbeSkill) - so on a
+           * DUAL-protocol agent, whose skills array holds both surfaces
+           * merged, this selects exactly the callable MCP tools.
+           */
+          .filter((skill) => skill.requiresInput === false)
+          .map((skill) => skill.name)
+      : [],
+    /** The MCP server to call, whether or not MCP is the primary transport. */
+    mcpEndpoint: mcpEndpointFor(row),
     tags: row.tags,
     services: [{ name: row.protocol, endpoint: row.endpoint, version: null }],
     /**

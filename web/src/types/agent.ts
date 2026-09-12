@@ -252,6 +252,16 @@ export interface Agent {
    * never offered. See previewableTools in convex/lib/publicAgent.ts.
    */
   previewableTools: string[];
+  /**
+   * The agent's MCP server, when it runs one Dolphin has reached — INDEPENDENT
+   * of `protocol`.
+   *
+   * An agent can speak both A2A and MCP; `protocol` names only the primary
+   * transport. Test this, not `protocol === "mcp"`, when asking "can I call a
+   * tool on this agent". Null for a pure A2A agent and for any record probed
+   * before 2026-09-12.
+   */
+  mcpEndpoint: string | null;
   services: AgentService[];
   x402Supported: LiveMetric<boolean>;
   isActive: LiveMetric<boolean>;

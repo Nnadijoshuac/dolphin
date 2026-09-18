@@ -76,8 +76,12 @@ const BACKFILL_PAGES_PER_RUN = 8;
 const FILTER_FAILURES_BEFORE_FALLBACK = 3;
 
 export interface DiscoveryReport {
-  mode: "incremental" | "backfill" | "fallback";
+  mode: "incremental" | "backfill" | "incremental+backfill" | "fallback";
   pages: number;
+  /** Backfill pages whose ground the cursor actually advanced over this cycle. */
+  backfillPagesAdvanced: number;
+  /** Backfill pages that failed after their retries and will be re-walked. */
+  backfillPagesFailed: number;
   seen: number;
   malformed: number;
   screenedOut: number;
@@ -123,11 +127,34 @@ export const run = internalAction({
     let registryTotal: number | null = null;
     let filterFailed = false;
 
-    const collect = (page: { items: ScanListItem[]; total: number | null; malformed: number }) => {
+    /*
+     * THE INCREMENTAL HIGH-WATER MARK IS FED BY THE INCREMENTAL WALK ALONE.
+     *
+     * It used to be the max `created_at` over every record seen in the cycle,
+     * which was safe only because the two walks were mutually exclusive. Now
+     * that both run in one cycle it would be a silent data-loss bug: the
+     * backfill walks `desc` from a deep offset and can surface a record newer
+     * than the incremental frontier, which would drag `lastCreatedAt` past
+     * thousands of registrations the incremental walk had not reached yet.
+     * Those would never be returned by `created_after` again.
+     */
+    let newestIncrementalCreatedAt = lastCreatedAtBefore;
+
+    const collect = (
+      page: { items: ScanListItem[]; total: number | null; malformed: number },
+      isIncremental: boolean,
+    ) => {
       if (page.total !== null) registryTotal = page.total;
       malformed += page.malformed;
       for (const item of page.items) {
         if (!seen.has(item.agentKey)) seen.set(item.agentKey, item);
+        if (
+          isIncremental &&
+          item.createdAt &&
+          (newestIncrementalCreatedAt === null || item.createdAt > newestIncrementalCreatedAt)
+        ) {
+          newestIncrementalCreatedAt = item.createdAt;
+        }
       }
       return page.items.length + page.malformed;
     };
@@ -157,9 +184,12 @@ export const run = internalAction({
      * A failure leaves the offset where it is, so the next cycle retries the
      * same range.
      */
-    const fetchFiltered = async (params: string): Promise<number | null> => {
+    const fetchFiltered = async (
+      params: string,
+      isIncremental = false,
+    ): Promise<number | null> => {
       try {
-        return collect(await withRetry(() => fetchAgentPage(params)));
+        return collect(await withRetry(() => fetchAgentPage(params)), isIncremental);
       } catch (cause) {
         if (cause instanceof ScanError && cause.retryable) filterFailed = true;
         note(cause);
@@ -167,15 +197,35 @@ export const run = internalAction({
       }
     };
 
-    let mode: DiscoveryReport["mode"] = useBackfill ? "backfill" : "incremental";
     let backfillOffset = state?.backfillOffset ?? 0;
     let backfillPhase = state?.backfillPhase ?? "a2a";
     let backfillCompletedAt = state?.backfillCompletedAt ?? null;
+    let backfillPagesAdvanced = 0;
+    let backfillPagesFailed = 0;
 
     const filterUnavailable = (state?.filterFailures ?? 0) >= FILTER_FAILURES_BEFORE_FALLBACK;
-    if (filterUnavailable) mode = "fallback";
+    const mode: DiscoveryReport["mode"] = filterUnavailable
+      ? "fallback"
+      : useBackfill
+        ? "incremental+backfill"
+        : "incremental";
 
-    if (mode === "incremental") {
+    /*
+     * THE INCREMENTAL WALK RUNS EVERY CYCLE, BACKFILL OR NOT.
+     *
+     * It used to be the `else` branch of the backfill, so while
+     * `backfillCompletedAt` was null the incremental sweep never ran at all.
+     * Measured 2026-09-18: the backfill had been stalled at offset 9,600 for
+     * eleven days, which meant `lastCreatedAt` had been frozen at
+     * 2026-09-08T16:25:49Z for ten of them and roughly 13,000 new registrations
+     * had never been looked at. The catch-up over the existing population and
+     * the watch on new registrations are different jobs; one must not be able
+     * to starve the other.
+     *
+     * In the steady state this is one request, so running it unconditionally
+     * costs essentially nothing against a 100,000/day allowance.
+     */
+    if (mode !== "fallback") {
       /*
        * THE STEADY STATE. `created_after` with an ascending sort is a
        * high-water mark: token ids only increase and a registration's
@@ -190,11 +240,14 @@ export const run = internalAction({
         const count = await fetchFiltered(
           `is_active=any&created_after=${encodeURIComponent(since)}` +
             `&sort_by=created_at&sort_order=asc&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`,
+          true,
         );
         // A failed page stops this cycle without claiming there is no more data.
         if (count === null || count < PAGE_SIZE) break;
       }
-    } else if (mode === "backfill") {
+    }
+
+    if (mode === "incremental+backfill") {
       /*
        * THE ONE-TIME CATCH-UP over the population that already exists. Walks
        * `has_a2a=true` (27,806) then `has_mcp=true` (5,474) rather than the
@@ -228,10 +281,32 @@ export const run = internalAction({
         { length: BACKFILL_PAGES_PER_RUN },
         (_, i) => backfillOffset + i * PAGE_SIZE,
       );
-      let shortPage = false;
-      let pageFailed = false;
+      /*
+       * ---------------------------------------------------------------------
+       * ADVANCE OVER THE CONTIGUOUS PREFIX, NOT ALL-OR-NOTHING
+       * ---------------------------------------------------------------------
+       * This used to advance the offset by the whole batch only when EVERY page
+       * succeeded, and leave it exactly where it was otherwise. That is correct
+       * - it can never skip - and against this API it is also a livelock.
+       *
+       * 8004scan returns an intermittent HTTP 500 at ~10.5s on filtered queries.
+       * Each page already retries three times, and a page still fails often
+       * enough that all eight surviving is rare: measured 2026-09-18, the offset
+       * had moved from 0 to 9,600 in eleven days - twelve advances out of ~528
+       * runs, about 2%. Every other run fetched, screened and threw away the
+       * same ~500 records, which is where `seenTotal` 267,840 against a 33,527
+       * slice came from. The counters were re-walks, not population.
+       *
+       * Advancing over the leading run of pages that actually succeeded keeps
+       * the no-skip guarantee exactly - the first failed offset is where the
+       * next cycle resumes - while making progress monotonic. Pages after a gap
+       * are simply re-walked, which costs one idempotent upsert comparison each.
+       */
+      const outcomes: ("ok" | "short" | "failed")[] = offsets.map(() => "failed");
       await withConcurrency(
-        offsets.map((offset) => async () => {
+        offsets.map((offset, index) => async () => {
+          // Out of budget: leave this page "failed" so the cursor stops short of
+          // it rather than claiming ground that was never read.
           if (Date.now() > startedAt + budget) return;
           pages++;
           const count = await fetchFiltered(
@@ -239,22 +314,28 @@ export const run = internalAction({
               `&limit=${PAGE_SIZE}&offset=${offset}`,
           );
           // ONLY a successful short page means end-of-data. See fetchFiltered.
-          if (count !== null && count < PAGE_SIZE) shortPage = true;
-          if (count === null) pageFailed = true;
+          outcomes[index] = count === null ? "failed" : count < PAGE_SIZE ? "short" : "ok";
         }),
         REQUEST_CONCURRENCY,
         note,
       );
-      /*
-       * The offset only advances over ground actually covered. If any page in
-       * this batch failed, the range is re-walked next cycle rather than
-       * skipped - a failed read must never look like a completed one.
-       */
-      if (!pageFailed) backfillOffset += offsets.length * PAGE_SIZE;
 
-      // Completion requires a clean pass. A batch with any failed page cannot
-      // conclude anything about where the data ends.
-      if (shortPage && !pageFailed) {
+      while (
+        backfillPagesAdvanced < outcomes.length &&
+        outcomes[backfillPagesAdvanced] !== "failed"
+      ) {
+        backfillPagesAdvanced++;
+      }
+      backfillPagesFailed = outcomes.filter((outcome) => outcome === "failed").length;
+      backfillOffset += backfillPagesAdvanced * PAGE_SIZE;
+
+      /*
+       * End-of-data only counts inside the advanced prefix. A short page there
+       * is genuinely the end, because every page before it was read. A short
+       * page sitting behind a failed one proves nothing yet.
+       */
+      const shortPage = outcomes.slice(0, backfillPagesAdvanced).includes("short");
+      if (shortPage) {
         // Walked off the end of this filter. Move to the next phase, or finish.
         if (backfillPhase === "a2a") {
           backfillPhase = "mcp";
@@ -265,7 +346,9 @@ export const run = internalAction({
           backfillCompletedAt = new Date().toISOString();
         }
       }
-    } else {
+    }
+
+    if (mode === "fallback") {
       /*
        * FALLBACK. The filter has failed repeatedly, so walk unfiltered and do
        * the protocol check here instead. Slower and correct, rather than
@@ -294,16 +377,16 @@ export const run = internalAction({
       agentKey: string;
       sourceUpdatedAt: string | null;
     }[] = [];
-    let newestCreatedAt = lastCreatedAtBefore;
+    /*
+     * The high-water mark advances over every record the INCREMENTAL walk saw,
+     * judged or not - a rejected record still advances the cursor, which is what
+     * stops the next cycle re-reading it. It is accumulated in `collect`, where
+     * the walk that produced the record is still known; see the note there for
+     * why the backfill's records must not feed it.
+     */
+    const newestCreatedAt = newestIncrementalCreatedAt;
 
     for (const item of seen.values()) {
-      // Track the high-water mark over EVERY record seen, judged or not - a
-      // rejected record still advances the cursor, which is what stops the next
-      // cycle re-reading it.
-      if (item.createdAt && (newestCreatedAt === null || item.createdAt > newestCreatedAt)) {
-        newestCreatedAt = item.createdAt;
-      }
-
       if (!hasCallableProtocol(item)) {
         noCallableProtocol++;
         continue;
@@ -332,7 +415,8 @@ export const run = internalAction({
     const summary =
       `${mode}: ${pages} pages, ${seen.size} records; ${candidates.length} candidates ` +
       `(${newCandidates} new); ${screenedOut} screened out, ${noCallableProtocol} with no ` +
-      `callable protocol, ${malformed} malformed; ${elapsedMs}ms`;
+      `callable protocol, ${malformed} malformed; backfill +${backfillPagesAdvanced} pages ` +
+      `(${backfillPagesFailed} failed) to offset ${backfillOffset}; ${elapsedMs}ms`;
 
     await ctx.runMutation(internal.discovery.writeCursor, {
       lastCreatedAt: newestCreatedAt,
@@ -353,6 +437,8 @@ export const run = internalAction({
     return {
       mode,
       pages,
+      backfillPagesAdvanced,
+      backfillPagesFailed,
       seen: seen.size,
       malformed,
       screenedOut,

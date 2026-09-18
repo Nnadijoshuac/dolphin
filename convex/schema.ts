@@ -371,6 +371,21 @@ export default defineSchema({
 
     /** The one-time catch-up over the existing endpoint-publishing population. */
     backfillOffset: v.number(),
+    /**
+     * The backfill's keyset window: `created_before` for the current walk, or
+     * null for the newest window.
+     *
+     * Measured 2026-09-18: 8004scan rejects `offset` above 10,000 outright -
+     * HTTP 422, `"Input should be less than or equal to 10000"`. Offset paging
+     * therefore tops out at 10,100 records, against an `has_a2a` slice of
+     * 33,527, so roughly 23,000 A2A agents were permanently unreachable by
+     * walking offsets alone. When a window exhausts its 10,000, this moves to
+     * the oldest `created_at` it saw and the offset resets, which chains
+     * windows indefinitely.
+     *
+     * Optional because the row predates the field.
+     */
+    backfillBefore: v.optional(v.union(v.string(), v.null())),
     backfillCompletedAt: v.union(v.string(), v.null()),
     /** Which filtered query the backfill is currently walking. */
     backfillPhase: v.union(v.literal("a2a"), v.literal("mcp"), v.literal("done")),

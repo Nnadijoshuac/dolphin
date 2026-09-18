@@ -72,6 +72,23 @@ const RUN_BUDGET_MS = 240_000;
 /** Pages of the one-time backfill to attempt per cycle. */
 const BACKFILL_PAGES_PER_RUN = 8;
 
+/**
+ * The highest `offset` 8004scan will accept.
+ *
+ * Measured 2026-09-18 against the live API, which is explicit about it:
+ *
+ *   GET /agents?...&has_a2a=true&offset=10100
+ *   422 {"detail":[{"type":"less_than_equal","loc":["query","offset"],
+ *        "msg":"Input should be less than or equal to 10000","ctx":{"le":10000}}]}
+ *
+ * So one query exposes at most 10,100 records however it is paged. The
+ * `has_a2a` slice was 33,527 on the same day, and the walk had been sitting at
+ * offset 9,600 - about 400 records short of a wall nobody knew was there.
+ * `created_before` is the way through it: it is honoured, it re-reports `total`
+ * for the narrowed window, and it can be chained.
+ */
+const MAX_OFFSET = 10_000;
+
 /** After this many consecutive filter failures, walk unfiltered instead. */
 const FILTER_FAILURES_BEFORE_FALLBACK = 3;
 
@@ -82,6 +99,10 @@ export interface DiscoveryReport {
   backfillPagesAdvanced: number;
   /** Backfill pages that failed after their retries and will be re-walked. */
   backfillPagesFailed: number;
+  /** 1 when this cycle moved the backfill past the API's offset ceiling. */
+  backfillWindowsRolled: number;
+  /** The `created_before` edge the backfill will resume from, if any. */
+  backfillBefore: string | null;
   seen: number;
   malformed: number;
   screenedOut: number;
@@ -124,7 +145,7 @@ export const run = internalAction({
     const seen = new Map<string, ScanListItem>();
     let pages = 0;
     let malformed = 0;
-    let registryTotal: number | null = null;
+    let registryTotal: number | null = state?.registryTotal ?? null;
     let filterFailed = false;
 
     /*
@@ -139,21 +160,43 @@ export const run = internalAction({
      * Those would never be returned by `created_after` again.
      */
     let newestIncrementalCreatedAt = lastCreatedAtBefore;
+    /** The oldest `created_at` the backfill saw this cycle; the next window edge. */
+    let oldestBackfillCreatedAt: string | null = null;
 
     const collect = (
       page: { items: ScanListItem[]; total: number | null; malformed: number },
-      isIncremental: boolean,
+      walk: "incremental" | "backfill" | "fallback",
     ) => {
-      if (page.total !== null) registryTotal = page.total;
+      /*
+       * ONLY AN UNWINDOWED BACKFILL PAGE KNOWS THE SLICE TOTAL.
+       *
+       * Every walk here reports a `total`, but each reports the total of its
+       * OWN query: the incremental walk's is "records newer than the mark" and
+       * a windowed backfill page's is "records older than this edge" - 23,428
+       * for the first rolled window, against a real `has_a2a` slice of 33,527.
+       * The admin funnel renders this under the label "Registry total", so
+       * letting any page win would put a smaller, true-of-something-else number
+       * under a heading that claims otherwise. The last unwindowed reading is
+       * carried forward instead.
+       */
+      if (page.total !== null && walk === "backfill" && backfillBefore === null) {
+        registryTotal = page.total;
+      }
       malformed += page.malformed;
       for (const item of page.items) {
         if (!seen.has(item.agentKey)) seen.set(item.agentKey, item);
+        if (!item.createdAt) continue;
         if (
-          isIncremental &&
-          item.createdAt &&
+          walk === "incremental" &&
           (newestIncrementalCreatedAt === null || item.createdAt > newestIncrementalCreatedAt)
         ) {
           newestIncrementalCreatedAt = item.createdAt;
+        }
+        if (
+          walk === "backfill" &&
+          (oldestBackfillCreatedAt === null || item.createdAt < oldestBackfillCreatedAt)
+        ) {
+          oldestBackfillCreatedAt = item.createdAt;
         }
       }
       return page.items.length + page.malformed;
@@ -186,10 +229,10 @@ export const run = internalAction({
      */
     const fetchFiltered = async (
       params: string,
-      isIncremental = false,
+      walk: "incremental" | "backfill" | "fallback",
     ): Promise<number | null> => {
       try {
-        return collect(await withRetry(() => fetchAgentPage(params)), isIncremental);
+        return collect(await withRetry(() => fetchAgentPage(params)), walk);
       } catch (cause) {
         if (cause instanceof ScanError && cause.retryable) filterFailed = true;
         note(cause);
@@ -199,9 +242,11 @@ export const run = internalAction({
 
     let backfillOffset = state?.backfillOffset ?? 0;
     let backfillPhase = state?.backfillPhase ?? "a2a";
+    let backfillBefore = state?.backfillBefore ?? null;
     let backfillCompletedAt = state?.backfillCompletedAt ?? null;
     let backfillPagesAdvanced = 0;
     let backfillPagesFailed = 0;
+    let backfillWindowsRolled = 0;
 
     const filterUnavailable = (state?.filterFailures ?? 0) >= FILTER_FAILURES_BEFORE_FALLBACK;
     const mode: DiscoveryReport["mode"] = filterUnavailable
@@ -240,7 +285,7 @@ export const run = internalAction({
         const count = await fetchFiltered(
           `is_active=any&created_after=${encodeURIComponent(since)}` +
             `&sort_by=created_at&sort_order=asc&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`,
-          true,
+          "incremental",
         );
         // A failed page stops this cycle without claiming there is no more data.
         if (count === null || count < PAGE_SIZE) break;
@@ -277,10 +322,49 @@ export const run = internalAction({
        * most likely to still answer.
        */
       const filter = backfillPhase === "mcp" ? "has_mcp=true" : "has_a2a=true";
+      const window = backfillBefore
+        ? `&created_before=${encodeURIComponent(backfillBefore)}`
+        : "";
+      /*
+       * Never ask for an offset the API will reject. A batch that would cross
+       * the ceiling is truncated to the pages below it, and the window rolls
+       * over once those are read.
+       *
+       * The clamp matters as much as the filter. A cursor resting exactly ON
+       * the ceiling would otherwise produce an EMPTY batch, and an empty batch
+       * reads no records, so it learns no timestamp to wind the window back to
+       * and the walk stops there permanently - the same stall in a new place.
+       * Re-reading the last legal page is what makes the rollover possible.
+       */
+      /*
+       * Once the walk is inside a window, no page it fetches can report the
+       * size of the whole slice any more - so ask for it directly, one record
+       * deep, unwindowed. A single extra request every half hour is a cheap
+       * price for the admin funnel's first number being the thing it is
+       * labelled as rather than the last window's total.
+       *
+       * Deliberately NOT routed through `collect`: this page is asked for its
+       * `total` only, and its one record is the NEWEST in the slice, which has
+       * no business influencing the oldest-seen edge the rollover winds to.
+       */
+      if (backfillBefore !== null) {
+        try {
+          const head = await withRetry(() =>
+            fetchAgentPage(
+              `is_active=any&${filter}&sort_by=created_at&sort_order=desc&limit=1&offset=0`,
+            ),
+          );
+          if (head.total !== null) registryTotal = head.total;
+        } catch (cause) {
+          note(cause);
+        }
+      }
+
+      const startOffset = Math.min(backfillOffset, MAX_OFFSET);
       const offsets = Array.from(
         { length: BACKFILL_PAGES_PER_RUN },
-        (_, i) => backfillOffset + i * PAGE_SIZE,
-      );
+        (_, i) => startOffset + i * PAGE_SIZE,
+      ).filter((offset) => offset <= MAX_OFFSET);
       /*
        * ---------------------------------------------------------------------
        * ADVANCE OVER THE CONTIGUOUS PREFIX, NOT ALL-OR-NOTHING
@@ -310,8 +394,9 @@ export const run = internalAction({
           if (Date.now() > startedAt + budget) return;
           pages++;
           const count = await fetchFiltered(
-            `is_active=any&${filter}&sort_by=created_at&sort_order=desc` +
+            `is_active=any&${filter}${window}&sort_by=created_at&sort_order=desc` +
               `&limit=${PAGE_SIZE}&offset=${offset}`,
+            "backfill",
           );
           // ONLY a successful short page means end-of-data. See fetchFiltered.
           outcomes[index] = count === null ? "failed" : count < PAGE_SIZE ? "short" : "ok";
@@ -327,7 +412,7 @@ export const run = internalAction({
         backfillPagesAdvanced++;
       }
       backfillPagesFailed = outcomes.filter((outcome) => outcome === "failed").length;
-      backfillOffset += backfillPagesAdvanced * PAGE_SIZE;
+      backfillOffset = startOffset + backfillPagesAdvanced * PAGE_SIZE;
 
       /*
        * End-of-data only counts inside the advanced prefix. A short page there
@@ -340,11 +425,39 @@ export const run = internalAction({
         if (backfillPhase === "a2a") {
           backfillPhase = "mcp";
           backfillOffset = 0;
+          backfillBefore = null;
         } else {
           backfillPhase = "done";
           backfillOffset = 0;
+          backfillBefore = null;
           backfillCompletedAt = new Date().toISOString();
         }
+      } else if (backfillOffset > MAX_OFFSET && oldestBackfillCreatedAt !== null) {
+        /*
+         * WINDOW ROLLOVER. The offsets below the ceiling are read, and the data
+         * did not run out, so the rest of this filter lives beyond a boundary
+         * the API will not page to. Re-ask for the same filter restricted to
+         * records older than the oldest one seen, from offset 0.
+         *
+         * THE EDGE IS DELIBERATELY INCLUSIVE OF ITS OWN SECOND. `created_before`
+         * is strict, so winding to exactly `oldest` would drop any record
+         * sharing that timestamp that happened to fall on the far side of a page
+         * boundary. Winding to one second later re-reads that second instead,
+         * and a re-read costs one idempotent upsert comparison while a skip
+         * loses an agent silently - the same trade this walk already makes by
+         * going descending.
+         */
+        const edge = new Date(new Date(oldestBackfillCreatedAt).getTime() + 1000).toISOString();
+        /*
+         * ...but never at the cost of progress. If that second-wide overlap
+         * would leave the window where it already is, take the strict edge,
+         * which is always older than the current one. Only reachable if a
+         * single second held more than 10,100 registrations.
+         */
+        backfillBefore =
+          backfillBefore !== null && edge >= backfillBefore ? oldestBackfillCreatedAt : edge;
+        backfillOffset = 0;
+        backfillWindowsRolled = 1;
       }
     }
 
@@ -360,6 +473,7 @@ export const run = internalAction({
         const count = await fetchFiltered(
           `is_active=any&sort_by=created_at&sort_order=desc` +
             `&limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`,
+          "fallback",
         );
         if (count === null || count < PAGE_SIZE) break;
       }
@@ -416,11 +530,14 @@ export const run = internalAction({
       `${mode}: ${pages} pages, ${seen.size} records; ${candidates.length} candidates ` +
       `(${newCandidates} new); ${screenedOut} screened out, ${noCallableProtocol} with no ` +
       `callable protocol, ${malformed} malformed; backfill +${backfillPagesAdvanced} pages ` +
-      `(${backfillPagesFailed} failed) to offset ${backfillOffset}; ${elapsedMs}ms`;
+      `(${backfillPagesFailed} failed) to offset ${backfillOffset}` +
+      `${backfillWindowsRolled ? `, window rolled to before ${backfillBefore}` : ""}; ` +
+      `${elapsedMs}ms`;
 
     await ctx.runMutation(internal.discovery.writeCursor, {
       lastCreatedAt: newestCreatedAt,
       backfillOffset,
+      backfillBefore,
       backfillCompletedAt,
       backfillPhase,
       registryTotal,
@@ -439,6 +556,8 @@ export const run = internalAction({
       pages,
       backfillPagesAdvanced,
       backfillPagesFailed,
+      backfillWindowsRolled,
+      backfillBefore,
       seen: seen.size,
       malformed,
       screenedOut,
@@ -473,6 +592,7 @@ export const writeCursor = internalMutation({
   args: {
     lastCreatedAt: v.union(v.string(), v.null()),
     backfillOffset: v.number(),
+    backfillBefore: v.union(v.string(), v.null()),
     backfillCompletedAt: v.union(v.string(), v.null()),
     backfillPhase: v.union(v.literal("a2a"), v.literal("mcp"), v.literal("done")),
     registryTotal: v.union(v.number(), v.null()),
@@ -492,6 +612,7 @@ export const writeCursor = internalMutation({
     const patch = {
       lastCreatedAt: args.lastCreatedAt,
       backfillOffset: args.backfillOffset,
+      backfillBefore: args.backfillBefore,
       backfillCompletedAt: args.backfillCompletedAt,
       backfillPhase: args.backfillPhase,
       registryTotal: args.registryTotal,
@@ -619,6 +740,7 @@ export const getStats = query({
       backfill: {
         phase: cursor?.backfillPhase ?? "a2a",
         offset: cursor?.backfillOffset ?? 0,
+        before: cursor?.backfillBefore ?? null,
         completedAt: cursor?.backfillCompletedAt ?? null,
       },
       counters: {
@@ -673,6 +795,7 @@ export const rewindCursor = internalMutation({
     if (!existing) return;
     await ctx.db.patch(existing._id, {
       backfillOffset: 0,
+      backfillBefore: null,
       backfillPhase: "a2a",
       backfillCompletedAt: null,
     });

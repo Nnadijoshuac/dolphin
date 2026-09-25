@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { usePaginatedQuery, useQuery } from "convex/react";
 
 import { AGENT_DATA_SOURCES } from "@/constants/agents";
-import { api } from "@/convex/api";
+import { api, shelvesApi, type AgentShelfData } from "@/convex/api";
 import { CACHE_TTL, useCachedQuery } from "@/hooks/use-cached-query";
 import { convexClient } from "@/providers/convex-provider";
 import { verifyAgentRegistration } from "@/services/chain";
@@ -167,6 +167,23 @@ export function useCategoryFacets() {
     isLoading,
     isFromCache,
   };
+}
+
+/**
+ * Discover's store-front shelves (convex/shelves.ts). Precomputed server-side,
+ * one document, so the whole front page is one subscription. Cached like the
+ * catalog so a returning visitor sees the shelves before the socket opens.
+ */
+export function useAgentShelves() {
+  const args = convexClient ? {} : "skip";
+  const live = useQuery(shelvesApi.shelves.list, args);
+  const { data, isLoading } = useCachedQuery<{ shelves: AgentShelfData[] }>(
+    live as { shelves: AgentShelfData[] } | undefined,
+    "shelves.list",
+    args,
+    CACHE_TTL.catalog,
+  );
+  return { shelves: data?.shelves ?? [], isLoading };
 }
 
 /** Several specific agents by key, for pages that already know which they need. */

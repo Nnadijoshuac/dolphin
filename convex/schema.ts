@@ -395,6 +395,26 @@ export default defineSchema({
     .index("by_agent_day", ["agentKey", "day"])
     .index("by_day", ["day"]),
 
+  /**
+   * Discover's shelves, as data (2026-09-25). One row, rebuilt after every
+   * ranking run, so the store front costs one read and never sorts the catalog
+   * at request time. Holds keys only; `shelves.list` resolves them and drops
+   * any that are no longer live. See convex/lib/shelves.ts.
+   */
+  catalogShelves: defineTable({
+    key: v.string(),
+    shelves: v.array(
+      v.object({
+        id: v.string(),
+        title: v.string(),
+        subtitle: v.string(),
+        href: v.string(),
+        agentKeys: v.array(v.string()),
+      }),
+    ),
+    updatedAt: v.string(),
+  }).index("by_key", ["key"]),
+
   catalogFacets: defineTable({
     key: v.string(),
     categories: v.array(

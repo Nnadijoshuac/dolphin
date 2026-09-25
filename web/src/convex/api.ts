@@ -862,6 +862,22 @@ export type AdminOverview = {
   };
 };
 
+/** One Discover shelf, agents resolved and live-only. See convex/lib/shelves.ts. */
+export type AgentShelfData = {
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+  agents: Agent[];
+};
+
+/** convex/shelves.ts - Discover's store-front rows. */
+export const shelvesApi = anyApi as unknown as {
+  shelves: {
+    list: Query<Record<string, never>, { shelves: AgentShelfData[]; updatedAt: string | null }>;
+  };
+};
+
 /** Mirrors ENGAGEMENT_KINDS in convex/engagement.ts. */
 export type EngagementKind =
   | "impression"

@@ -1,0 +1,187 @@
+/*
+ * Discover's shelves. A horizontal row of compact tiles per theme, Play Store
+ * style: scroll-snapped, touch-scrollable on phones, arrow-scrollable on a
+ * desktop pointer. Tokens only - every colour is a variable from globals.css so
+ * both themes are right by construction.
+ */
+
+.shelf {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.title {
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.subtitle {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.controls {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.arrow {
+  display: none;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper-strong);
+  color: var(--muted);
+  transition:
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.arrow:hover,
+.arrow:focus-visible {
+  border-color: var(--accent-hover);
+  color: var(--ink);
+}
+
+.flip {
+  display: inline-flex;
+  transform: scaleX(-1);
+}
+
+/* Arrows only where there is a pointer to use them; phones swipe. */
+@media (hover: hover) and (pointer: fine) {
+  .arrow {
+    display: inline-flex;
+  }
+}
+
+.seeAll {
+  margin-left: 0.35rem;
+  color: var(--accent-ink);
+  font-size: 0.85rem;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.seeAll:hover,
+.seeAll:focus-visible {
+  text-decoration: underline;
+}
+
+.row {
+  display: grid;
+  /* Fixed, not a range: a short row must not stretch wider than a full one. */
+  grid-auto-columns: 10rem;
+  grid-auto-flow: column;
+  gap: 0.75rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 0.1rem;
+  padding: 0.15rem 0.1rem 0.6rem;
+  margin: 0;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.item {
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.tile {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--paper-strong);
+  background-image: var(--sheen);
+  padding: 0.85rem;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact);
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+a.tile:hover,
+a.tile:focus-visible {
+  border-color: var(--accent-hover);
+  transform: translateY(-2px);
+}
+
+a.tile:active {
+  transform: translateY(1px);
+}
+
+.name {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 0.75rem;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.category {
+  margin-top: 0.3rem;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  margin-top: auto;
+  padding-top: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.price {
+  color: var(--accent-ink);
+  font-weight: 650;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile,
+  .arrow {
+    transition: none;
+  }
+
+  a.tile:hover,
+  a.tile:focus-visible,
+  a.tile:active {
+    transform: none;
+  }
+}

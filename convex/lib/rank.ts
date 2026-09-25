@@ -59,7 +59,7 @@ export interface RankInput {
  * separately. Here the rest of the evidence still gets a say - the agent is
  * listed, just not near the top.
  */
-const TEST_MARKER = /\btest(ing|net)?\b|\bdemo\b|\bsandbox\b|\bplaceholder\b/i;
+export const TEST_MARKER = /\btest(ing|net)?\b|\bdemo\b|\bsandbox\b|\bplaceholder\b/i;
 
 /** Cheap saturating curve: rewards the first few of something, ignores the tail. */
 function saturate(value: number, scale: number, cap: number): number {

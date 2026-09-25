@@ -10,6 +10,7 @@
  * invalidates the list queries the whole site subscribes to.
  */
 
+import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import {
@@ -126,6 +127,10 @@ export const recomputeUsage = internalMutation({
       });
       changed++;
     }
+
+    // Shelves order by rank, so they follow every ranking run. The rebuild
+    // compares before writing, so an unchanged hour writes nothing.
+    await ctx.scheduler.runAfter(0, internal.shelves.rebuild, {});
 
     return { agents: agents.length, changed };
   },

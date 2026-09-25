@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentShelf, AgentShelfSkeleton } from "@/components/agent-shelf";
 import { CategoryGlyph } from "@/components/category-glyph";
 import {
   CatalogUnavailable,
@@ -24,6 +25,7 @@ import { SignalStrip } from "@/components/signal-strip";
 import { categoryDescription, categoryLabel } from "@/constants/agents";
 import {
   useAgentList,
+  useAgentShelves,
   useAgentSignals,
   useCategoryFacets,
 } from "@/hooks/use-agents";
@@ -278,6 +280,17 @@ export default function DiscoverPage() {
   /* One batched query for every card on the page, never one per card. */
   const signals = useAgentSignals(agents);
 
+  /*
+   * THE STORE FRONT (2026-09-25): themed shelves above the catalog, Play Store
+   * style, on the landing view only. Keyed on the URL's category rather than
+   * `selectedCategory`, because on a phone the catalog auto-selects its first
+   * category and that is not the reader asking to browse one.
+   */
+  const showShelves = requestedCategory === null;
+  const { shelves, isLoading: shelvesLoading } = useAgentShelves();
+  const shelfAgents = useMemo(() => shelves.flatMap((shelf) => shelf.agents), [shelves]);
+  const shelfSignals = useAgentSignals(shelfAgents);
+
   const catalogFilters = useMemo<readonly CatalogFilter[]>(
     () => [
       ...(!isMobile || facets.categories.length === 0 ? [ALL_AGENTS_FILTER] : []),
@@ -500,6 +513,18 @@ export default function DiscoverPage() {
        * visitor came for. See components/onboarding-prompt.tsx.
        */}
       <div className="desktop-only"><OnboardingPrompt /></div>
+
+      {showShelves && (shelvesLoading || shelves.length > 0) ? (
+        <div aria-label="Featured agents" className={`site-frame ${styles.shelves}`} role="region">
+          {shelvesLoading && shelves.length === 0 ? (
+            <AgentShelfSkeleton />
+          ) : (
+            shelves.map((shelf) => (
+              <AgentShelf key={shelf.id} shelf={shelf} signals={shelfSignals} />
+            ))
+          )}
+        </div>
+      ) : null}
 
       <section
         aria-labelledby="catalog-heading"

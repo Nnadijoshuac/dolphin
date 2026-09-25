@@ -130,6 +130,7 @@
   .mobile-discover-heading { display: flex; align-items: center; justify-content: space-between; padding: 4px 16px 10px; }
   .mobile-discover-heading h1 { font-size: 30px; font-weight: 900; letter-spacing: -1px; line-height: 38px; }
   .mobile-promo-rail { display: flex; gap: 16px; padding: 8px 16px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .mobile-promo-rail::-webkit-scrollbar { display: none; }
   .mobile-promo-card {
     display: flex; flex: 0 0 calc(90vw - 16px); height: 180px; align-items: end;
     padding: 16px; border: 1px solid var(--line); border-radius: 16px;

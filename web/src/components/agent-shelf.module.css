@@ -99,7 +99,11 @@
   padding: 0.15rem 0.1rem 0.6rem;
   margin: 0;
   list-style: none;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.row::-webkit-scrollbar {
+  display: none;
 }
 
 .item {

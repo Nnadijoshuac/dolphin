@@ -225,6 +225,28 @@ export default defineSchema({
      * that can change between pages shows duplicates and skips rows.
      */
     rank: v.number(),
+    /**
+     * `rank` in parts (2026-09-25): rank = baseRank + curation + usageRank.
+     *
+     * baseRank is what the probe's evidence earns (lib/rank.ts) and is written
+     * by applyVerification; usageRank is what wallet-backed use earns
+     * (lib/usageRank.ts) and is written by ranking.recomputeUsage. Each writer
+     * carries the other's part through, so neither erases the other. Optional
+     * because rows written before this existed carry only `rank`.
+     */
+    baseRank: v.optional(v.number()),
+    usageRank: v.optional(v.number()),
+    /** The counts behind usageRank, for shelves ("most hired") and for explaining an order. */
+    usage: v.optional(
+      v.object({
+        hirers: v.number(),
+        paidHirers: v.number(),
+        retainedHirers: v.number(),
+        completedJobs: v.number(),
+        reviews: v.number(),
+        computedAt: v.string(),
+      }),
+    ),
     /** name + description + skills + tags, lowercased. Feeds the search index. */
     searchText: v.string(),
     publishedAt: v.string(),

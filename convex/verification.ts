@@ -501,7 +501,9 @@ export const applyVerification = internalMutation({
     // an observation, so the probe must never clear it. Re-added to the rank
     // here rather than passed into computeRank, so there is one source of truth.
     const curated = existing?.curated ?? false;
-    const rank = c.rank + (curated ? 300 : 0);
+    // Usage is ranking.recomputeUsage's to write; a re-probe carries it through.
+    const usageRank = existing?.usageRank ?? 0;
+    const rank = Math.max(0, c.rank + (curated ? 300 : 0) + usageRank);
 
     const next = {
       agentKey: args.agentKey,
@@ -529,6 +531,7 @@ export const applyVerification = internalMutation({
       curated,
       status: "live" as const,
       rank,
+      baseRank: c.rank,
       searchText: buildSearchText(c),
       publishedAt: existing?.publishedAt ?? now,
       lastVerifiedAt: now,
@@ -563,6 +566,7 @@ export const applyVerification = internalMutation({
       existing.reputationScore !== next.reputationScore ||
       existing.status !== next.status ||
       existing.rank !== next.rank ||
+      existing.baseRank !== next.baseRank ||
       JSON.stringify(existing.tags) !== JSON.stringify(next.tags) ||
       JSON.stringify(existing.skills) !== JSON.stringify(next.skills) ||
       JSON.stringify(existing.pricing) !== JSON.stringify(next.pricing);

@@ -103,4 +103,24 @@ crons.interval(
   {},
 );
 
+/**
+ * Usage into rank (2026-09-25). Hourly: hires and reviews arrive at human pace,
+ * and `rank` is a pagination key, so it should move in steps rather than on
+ * every event. See convex/ranking.ts.
+ */
+crons.interval(
+  "fold wallet-backed usage into rank",
+  { hours: 1 },
+  internal.ranking.recomputeUsage,
+  {},
+);
+
+/** Anonymous engagement past its retention window. See convex/engagement.ts. */
+crons.interval(
+  "prune old engagement counters",
+  { hours: 24 },
+  internal.engagement.prune,
+  {},
+);
+
 export default crons;

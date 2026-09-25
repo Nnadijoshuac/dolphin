@@ -51,6 +51,9 @@
 
 import { track as vercelTrack } from "@vercel/analytics";
 
+import type { EngagementKind } from "@/convex/api";
+import { recordEngagement } from "@/lib/engagement-sink";
+
 /** Where in the app an event happened. Kept small on purpose. */
 export type AnalyticsSurface =
   | "discover"
@@ -174,7 +177,31 @@ export type AnalyticsEventName = keyof AnalyticsEvents;
  */
 type Flat = Record<string, string | number | boolean | null>;
 
+/**
+ * The events the backend also counts, per agent - see lib/engagement-sink.ts.
+ * Only agent-keyed events, and only the key travels; every other property
+ * stays with Vercel.
+ */
+const ENGAGEMENT_KIND: Partial<Record<AnalyticsEventName, EngagementKind>> = {
+  agent_card_opened: "open",
+  agent_viewed: "view",
+  agent_tool_previewed: "toolPreview",
+  hire_started: "hireStart",
+  hire_completed: "hireCompletion",
+  hire_failed: "hireFailure",
+};
+
 function send(name: string, properties: Flat) {
+  // Separate from the Vercel call below, so one transport failing cannot cost
+  // the other its event.
+  try {
+    const kind = ENGAGEMENT_KIND[name as AnalyticsEventName];
+    if (kind && typeof properties.agentKey === "string") {
+      recordEngagement(properties.agentKey, kind);
+    }
+  } catch {
+    // See the note on the catch below.
+  }
   try {
     vercelTrack(name, properties);
   } catch {

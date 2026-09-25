@@ -28,6 +28,7 @@ import {
   useCategoryFacets,
 } from "@/hooks/use-agents";
 import { track } from "@/lib/analytics";
+import { useImpression } from "@/hooks/use-impression";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import type { AgentSignals } from "@/hooks/use-agents";
 import type { Agent, AgentCategory } from "@/types/agent";
@@ -101,11 +102,13 @@ function DiscoverAgentCard({
   const label = categoryLabel(agent.category);
   const recordLabel =
     agent.recordStatus === "indexed" ? "Indexed record" : "Editorial record";
+  const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
 
   return (
     <Link
       className={styles.agentCard}
       href={`/agent/${agent.tokenId}`}
+      ref={impressionRef}
       onClick={() =>
         track("agent_card_opened", {
           agentKey: agent.agentKey,

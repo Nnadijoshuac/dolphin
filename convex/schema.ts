@@ -342,6 +342,37 @@ export default defineSchema({
    * appears in the registry appears in the UI without a code change, which is
    * the point of `categorySlug` being an open string.
    */
+  /**
+   * HOW PEOPLE USE THE CATALOG, per agent per UTC day. Anonymous counters only.
+   *
+   * Added 2026-09-25 so the product can learn from its users: which agents are
+   * seen, opened, tried and hired, and where people drop off. Vercel Analytics
+   * already records the same funnel, but nothing on the backend can read it, so
+   * nothing could ever act on it.
+   *
+   * NO IDENTITY OF ANY KIND - see web/src/lib/analytics.ts's rule. And because
+   * anyone can call the mutation that fills this, NOTHING HERE MAY RAISE AN
+   * AGENT'S RANK. A counter a stranger can increment is fine for understanding
+   * behaviour and worthless as evidence of quality; wallet-backed hires and
+   * reviews (agentHires, agentReviews, agentJobs) are what ranking may trust.
+   *
+   * Bounded by agents x days and pruned past ENGAGEMENT_RETENTION_DAYS.
+   */
+  agentEngagement: defineTable({
+    agentKey: v.string(),
+    /** UTC "YYYY-MM-DD". */
+    day: v.string(),
+    impressions: v.number(),
+    opens: v.number(),
+    views: v.number(),
+    toolPreviews: v.number(),
+    hireStarts: v.number(),
+    hireCompletions: v.number(),
+    hireFailures: v.number(),
+  })
+    .index("by_agent_day", ["agentKey", "day"])
+    .index("by_day", ["day"]),
+
   catalogFacets: defineTable({
     key: v.string(),
     categories: v.array(

@@ -7,6 +7,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { SignalStrip } from "@/components/signal-strip";
 import { categoryLabel } from "@/constants/agents";
 import type { AgentSignals } from "@/hooks/use-agents";
+import { useImpression } from "@/hooks/use-impression";
 import { track, type AnalyticsSurface } from "@/lib/analytics";
 import type { Agent, LiveMetric, LiveMetricStatus } from "@/types/agent";
 
@@ -151,11 +152,13 @@ export function AgentCard({
   const displayPublisher = agent.publisher?.startsWith("0x")
     ? `${agent.publisher.slice(0, 6)}…${agent.publisher.slice(-4)}`
     : agent.publisher || "Publisher not listed";
+  const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
 
   return (
     <Link
       className={`interactive group block border-t border-line py-5 no-underline first:border-t-0 sm:py-6 ${className}`}
       href={`/agent/${agent.tokenId}`}
+      ref={impressionRef}
       onClick={() =>
         track("agent_card_opened", {
           agentKey: agent.agentKey,

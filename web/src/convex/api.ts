@@ -862,6 +862,46 @@ export type AdminOverview = {
   };
 };
 
+/** Mirrors ENGAGEMENT_KINDS in convex/engagement.ts. */
+export type EngagementKind =
+  | "impression"
+  | "open"
+  | "view"
+  | "toolPreview"
+  | "hireStart"
+  | "hireCompletion"
+  | "hireFailure";
+
+export type EngagementCounters = {
+  impressions: number;
+  opens: number;
+  views: number;
+  toolPreviews: number;
+  hireStarts: number;
+  hireCompletions: number;
+  hireFailures: number;
+};
+
+/** convex/engagement.ts - the anonymous per-agent funnel. */
+export const engagementApi = anyApi as unknown as {
+  engagement: {
+    record: Mutation<
+      { events: { agentKey: string; kind: EngagementKind }[] },
+      { accepted: number }
+    >;
+    summary: Query<
+      { days?: number },
+      {
+        days: number;
+        since: string;
+        overall: EngagementCounters;
+        agents: ({ agentKey: string } & EngagementCounters)[];
+        truncated: boolean;
+      }
+    >;
+  };
+};
+
 export const adminApi = anyApi as unknown as {
   admin: {
     getOverview: Query<Record<string, never>, AdminOverview>;

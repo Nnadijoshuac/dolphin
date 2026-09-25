@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AgentIcon } from "@/components/agent-icon";
 import { categoryLabel } from "@/constants/agents";
 import type { AgentSignals } from "@/hooks/use-agents";
+import { useImpression } from "@/hooks/use-impression";
 import { useNow } from "@/hooks/use-now";
 import { track, type AnalyticsSurface } from "@/lib/analytics";
 import type { Agent } from "@/types/agent";
@@ -64,10 +65,12 @@ export function MobileAgentRow({ agent, signals, surface = "search", onOpen }: {
   /* Server snapshot is 0, so the age is omitted until the client knows the
      time rather than hydrating a mismatch. See use-now.ts. */
   const now = useNow();
+  const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
 
   return (
     <Link
       className="mobile-agent-row"
+      ref={impressionRef}
       href={`/agent/${encodeURIComponent(agent.tokenId ?? (agent.agentKey.includes(":") ? agent.agentKey.split(":").pop()! : agent.agentKey))}`}
       onClick={() => {
         onOpen?.();

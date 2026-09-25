@@ -1,9 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@vercel/analytics", () => ({ track: vi.fn() }));
+vi.mock("@/lib/engagement-sink", () => ({ recordEngagement: vi.fn() }));
 
 import { track as vercelTrack } from "@vercel/analytics";
 import { track } from "@/lib/analytics";
+import { recordEngagement } from "@/lib/engagement-sink";
 
 /**
  * The analytics module's job is as much about what it CANNOT send as what it
@@ -14,6 +16,38 @@ import { track } from "@/lib/analytics";
 describe("analytics", () => {
   beforeEach(() => {
     vi.mocked(vercelTrack).mockClear();
+    vi.mocked(recordEngagement).mockClear();
+  });
+
+  it("mirrors an agent event to the backend as a key and a kind only", () => {
+    track("agent_card_opened", { agentKey: "56:0xabc:7", category: "yield", surface: "search" });
+
+    // Exactly two arguments: the public listing and what happened to it. The
+    // category and surface stay with Vercel.
+    expect(recordEngagement).toHaveBeenCalledWith("56:0xabc:7", "open");
+    expect(vi.mocked(recordEngagement).mock.calls[0]).toHaveLength(2);
+  });
+
+  it("does not mirror events that are not about an agent", () => {
+    track("wallet_connected", { connector: "identity", surface: "agent" });
+    track("search_submitted", { queryLength: 3, category: null, resultCount: 0 });
+
+    expect(recordEngagement).not.toHaveBeenCalled();
+  });
+
+  it("still sends to Vercel when the backend sink throws", () => {
+    vi.mocked(recordEngagement).mockImplementationOnce(() => {
+      throw new Error("offline");
+    });
+
+    expect(() =>
+      track("hire_started", { agentKey: "56:0xabc:7", category: "yield", requiresPayment: true }),
+    ).not.toThrow();
+    expect(vercelTrack).toHaveBeenCalledWith("hire_started", {
+      agentKey: "56:0xabc:7",
+      category: "yield",
+      requiresPayment: true,
+    });
   });
 
   it("forwards a declared event with its properties", () => {

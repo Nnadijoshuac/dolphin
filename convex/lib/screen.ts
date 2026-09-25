@@ -99,6 +99,16 @@ const CAMPAIGN_TEMPLATES: readonly { marker: string; note: string }[] = [
    * registry today.
    */
   { marker: "registered through termix", note: "TermiX bulk registrations - 57/100 of the newest A2A page, 2026-09-07" },
+  /*
+   * ADDED 2026-09-25, after a full prod backfill put all three series on the
+   * live catalog in one afternoon. Each is one publisher's template repeated
+   * across tokens, several under DIFFERENT owner wallets - the clones are what
+   * a sybil registration looks like, and a marketplace judged on data quality
+   * cannot list ten copies of one seller as ten agents.
+   */
+  { marker: "erc-8183 seller agent (bubbleai-agent)", note: "bubbleaiagent - 10 clones, 212769-213432, 10 owner wallets" },
+  { marker: "bubble ai erc-8183 seller agent", note: "bubbleai - 198999, same family" },
+  { marker: "ai agent for autonomous defi trading on bnb chain. operated by singularry", note: "Singularry SLY series - 116170, 116972, 120028, 124595, 124647" },
 ];
 
 /**

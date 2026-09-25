@@ -41,6 +41,7 @@ import {
 import { buildTags, categorize } from "./lib/categorize";
 import { probeAgent } from "./lib/probe";
 import { computeRank } from "./lib/rank";
+import { screenAgent } from "./lib/screen";
 import { parseAgentKey } from "./model/agent";
 import { fetchAgentDetail, withRetry } from "./sources/scan8004";
 
@@ -181,6 +182,24 @@ export const verifyOne = internalAction({
         probedEndpoint: null,
         protocol: null,
         catalog: null,
+      });
+      return;
+    }
+
+    /*
+     * THE SCREEN RUNS AGAIN HERE, not only at discovery (2026-09-25).
+     *
+     * Discovery screens a record once and never fetches it again, so a rule
+     * added later never reached an agent that was already a candidate - the
+     * bubbleai clones and the Singularry series were listed for exactly that
+     * reason. Re-screening on every probe means a new rule delists everything
+     * it matches within one probe cycle, and costs a string match.
+     */
+    const screened = screenAgent(detail.name, detail.description);
+    if (screened.verdict === "reject") {
+      await ctx.runMutation(internal.verification.applyScreenRejection, {
+        agentKey,
+        rule: screened.rule ?? "unknown",
       });
       return;
     }
@@ -610,6 +629,50 @@ export const setCurated = internalMutation({
     }
     const delta = curated === row.curated ? 0 : curated ? 300 : -300;
     await ctx.db.patch(row._id, { curated, rank: Math.max(0, row.rank + delta) });
+  },
+});
+
+/**
+ * Takes a screened-out agent off the catalog at once.
+ *
+ * Unlike a failed probe this is NOT noise to be survived three times: the
+ * screen is deterministic, so a registration that matches a spam rule now will
+ * match it on every future probe. The row is kept, as every delist keeps it, so
+ * a link to it still resolves; it simply stops being `live`.
+ */
+export const applyScreenRejection = internalMutation({
+  args: { agentKey: v.string(), rule: v.string() },
+  handler: async (ctx, { agentKey, rule }) => {
+    const now = new Date().toISOString();
+    const fields = {
+      state: "invalid" as const,
+      failureClass: null,
+      detail: `Screened out by the "${rule}" rule; not a hireable service.`,
+      probedEndpoint: null,
+      protocol: null,
+      lastProbeAt: now,
+      nextProbeAt: new Date(Date.now() + INVALID_RECHECK_MS).toISOString(),
+    };
+    const verification = await ctx.db
+      .query("agentVerification")
+      .withIndex("by_key", (q) => q.eq("agentKey", agentKey))
+      .unique();
+    if (verification) {
+      await ctx.db.patch(verification._id, {
+        ...fields,
+        attempts: verification.attempts + 1,
+        consecutiveFailures: verification.consecutiveFailures + 1,
+      });
+    }
+
+    const existing = await ctx.db
+      .query("agents")
+      .withIndex("by_key", (q) => q.eq("agentKey", agentKey))
+      .unique();
+    if (existing && existing.status !== "unavailable") {
+      await ctx.db.patch(existing._id, { status: "unavailable" });
+      await ctx.scheduler.runAfter(0, internal.facets.recompute, {});
+    }
   },
 });
 

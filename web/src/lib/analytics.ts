@@ -41,7 +41,7 @@
  * TRANSPORT
  * ===========================================================================
  * Vercel Web Analytics, because the site is already on Vercel
- * (https://dolphinamp.vercel.app), it is cookieless, it needs no consent banner
+ * (https://www.dolphinamp.xyz), it is cookieless, it needs no consent banner
  * in most jurisdictions, and it adds no vendor. `@vercel/analytics` no-ops off
  * Vercel, so local development and CI stay silent without a branch here.
  *

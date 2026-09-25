@@ -20,8 +20,17 @@
 
 const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
 
-/** The production origin. Vercel, via Vercel's own Git integration. */
-export const PRODUCTION_URL = "https://dolphinamp.vercel.app";
+/**
+ * The production origin. Still hosted on Vercel, via Vercel's own Git
+ * integration, but served on our own domain since 2026-09-25.
+ *
+ * `www` and not the apex, because the apex is the one that redirects: measured
+ * 2026-09-25, https://dolphinamp.xyz answers 308 -> https://www.dolphinamp.xyz/,
+ * which answers 200. A canonical URL must be the host that serves the page, not
+ * one that bounces to it. dolphinamp.vercel.app still serves too, and this
+ * constant is what tells crawlers which of the two is the real one.
+ */
+export const PRODUCTION_URL = "https://www.dolphinamp.xyz";
 
 /** Never with a trailing slash - every consumer concatenates a path onto it. */
 export const SITE_URL = (configured && configured.length > 0

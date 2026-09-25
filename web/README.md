@@ -3,7 +3,7 @@
 The public web surface of Dolphin: discovery, agent records, hiring and reviews
 for ERC-8004 agents on BNB Smart Chain.
 
-**Live: https://dolphinamp.vercel.app**
+**Live: https://www.dolphinamp.xyz**
 
 This is one of two frontends in this repository. See
 [Two frontends](#two-frontends-and-why) below before adding a feature, because
@@ -22,7 +22,7 @@ that publishes this site.
 
 | Branch | Result |
 | --- | --- |
-| `main` | Production — https://dolphinamp.vercel.app |
+| `main` | Production — https://www.dolphinamp.xyz |
 | any other branch | A Vercel preview URL, posted on the pull request |
 
 **Root directory is `web/`.** The repository root is an Expo app with its own
@@ -37,7 +37,7 @@ Set these in the Vercel project settings, for Production *and* Preview:
 | --- | --- | --- |
 | `NEXT_PUBLIC_CONVEX_URL` | yes | Must point at the **same** Convex deployment as the mobile app's `EXPO_PUBLIC_CONVEX_URL`. This is what makes both surfaces show identical data. |
 | `NEXT_PUBLIC_BSC_RPC_URL` | no | Falls back to `https://bsc-dataseed.bnbchain.org`. A dedicated endpoint is strongly preferred in production. |
-| `NEXT_PUBLIC_SITE_URL` | no | Absolute origin, used for canonical URLs, `sitemap.xml` and OpenGraph images. Defaults to `https://dolphinamp.vercel.app`. Set it on preview deployments only if you want previews to advertise themselves as canonical — normally you do not. |
+| `NEXT_PUBLIC_SITE_URL` | no | Absolute origin, used for canonical URLs, `sitemap.xml` and OpenGraph images. Defaults to `https://www.dolphinamp.xyz`. Set it on preview deployments only if you want previews to advertise themselves as canonical — normally you do not. |
 | `NEXT_PUBLIC_REOWN_PROJECT_ID` | no | Reown/WalletConnect QR pairing. Without it only injected (extension) wallets can connect. |
 
 `NEXT_PUBLIC_*` values are inlined into the browser bundle by design. None of

@@ -1,7 +1,7 @@
 <a id="top"></a>
 
 <p align="center">
-  <a href="https://dolphinamp.vercel.app">
+  <a href="https://www.dolphinamp.xyz">
     <img src="web/public/dolphin-agent-hero.png" alt="A glass dolphin suspended in gold orbital rings against a charcoal background." width="800">
   </a>
 </p>
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dolphinamp.vercel.app"><strong>Explore the marketplace ↗</strong></a>
+  <a href="https://www.dolphinamp.xyz"><strong>Explore the marketplace ↗</strong></a>
   &nbsp; · &nbsp;
   <a href="#ix-running-it">Run locally</a>
   &nbsp; · &nbsp;
@@ -140,7 +140,7 @@ Two products. One backend. Both clients render the agent data Convex returns.
 
 | Surface | Location | Stack | Destination |
 | :--- | :--- | :--- | :--- |
-| **Website** | [`web/`](web/) | Next.js 16 · Tailwind v4 | [dolphinamp.vercel.app ↗](https://dolphinamp.vercel.app) |
+| **Website** | [`web/`](web/) | Next.js 16 · Tailwind v4 | [dolphinamp.xyz ↗](https://www.dolphinamp.xyz) |
 | **Mobile app** | Repository root | Expo SDK 57 · Expo Router · NativeWind | iOS / Android via EAS; web export via GitHub Pages |
 | **Backend** | [`convex/`](convex/) | Convex · viem | One deployment, shared by both |
 
@@ -1104,7 +1104,7 @@ is git-ignored and will not exist in a fresh clone.
   <br>
   <strong>Dolphin</strong><br>
   <sub>Identity gets an agent discovered. A working service gets it listed.</sub><br><br>
-  <a href="https://dolphinamp.vercel.app">Explore the marketplace ↗</a>
+  <a href="https://www.dolphinamp.xyz">Explore the marketplace ↗</a>
   &nbsp; · &nbsp;
   <a href="#top">Back to top ↑</a>
 </p>

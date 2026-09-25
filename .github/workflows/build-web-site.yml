@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # THE SITE IS DEPLOYED. THIS WORKFLOW IS NOT WHAT DEPLOYS IT.
 # ---------------------------------------------------------------------------
-# https://dolphinamp.vercel.app is the live website, published by VERCEL'S OWN
+# https://www.dolphinamp.xyz is the live website, published by VERCEL'S OWN
 # GIT INTEGRATION - Vercel watches this repository directly and builds `web/`
 # on every push, with no workflow, no token and no step in this file involved.
 # Production tracks `main`; every other branch and pull request gets its own

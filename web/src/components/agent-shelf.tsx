@@ -27,6 +27,11 @@ function priceLabel(agent: Agent): string | null {
   if (pricing.display) return pricing.display;
   try {
     const amount = Number(formatUnits(BigInt(pricing.amountRaw), pricing.tokenDecimals));
+    /*
+     * Never round a real price to zero. Token 342525 quotes 1 wei - 10^-18 U -
+     * and four-decimal rounding printed "0 U", a number the agent never quoted.
+     */
+    if (amount < 0.0001) return `< 0.0001 ${pricing.tokenSymbol}`;
     const formatted = amount.toLocaleString("en", { maximumFractionDigits: amount < 1 ? 4 : 2 });
     return `${formatted} ${pricing.tokenSymbol}`;
   } catch {

@@ -7,7 +7,7 @@
 
 .shelf {
   display: grid;
-  gap: 0.9rem;
+  gap: 1rem;
 }
 
 .header {
@@ -89,14 +89,14 @@
 .row {
   display: grid;
   /* Fixed, not a range: a short row must not stretch wider than a full one. */
-  grid-auto-columns: 10rem;
+  grid-auto-columns: 11.75rem;
   grid-auto-flow: column;
-  gap: 0.75rem;
+  gap: 1rem;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
   scroll-padding-inline: 0.1rem;
-  padding: 0.15rem 0.1rem 0.6rem;
+  padding: 0.1rem 0.1rem 0.65rem;
   margin: 0;
   list-style: none;
   scrollbar-width: none;
@@ -115,23 +115,26 @@
   display: flex;
   height: 100%;
   flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: var(--paper-strong);
-  background-image: var(--sheen);
-  padding: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--paper) 86%, var(--canvas));
+  padding: 0.95rem;
   color: inherit;
   text-decoration: none;
-  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact);
+  box-shadow: none;
   transition:
+    background-color 180ms ease,
     border-color 180ms ease,
+    box-shadow 180ms ease,
     transform 180ms ease;
 }
 
 a.tile:hover,
 a.tile:focus-visible {
-  border-color: var(--accent-hover);
-  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--paper-strong) 92%, var(--accent-soft));
+  box-shadow: 0 8px 24px -18px var(--lift-ambient);
+  transform: translateY(-1px);
 }
 
 a.tile:active {
@@ -141,21 +144,22 @@ a.tile:active {
 .name {
   display: -webkit-box;
   overflow: hidden;
-  margin-top: 0.75rem;
+  margin-top: 0.85rem;
   color: var(--ink);
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 650;
   letter-spacing: -0.015em;
-  line-height: 1.25;
+  line-height: 1.28;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .category {
-  margin-top: 0.3rem;
+  margin-top: 0.35rem;
   overflow: hidden;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 0.75rem;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -163,7 +167,8 @@ a.tile:active {
 .meta {
   display: flex;
   margin-top: auto;
-  padding-top: 0.6rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
@@ -174,7 +179,7 @@ a.tile:active {
 
 .price {
   color: var(--accent-ink);
-  font-weight: 650;
+  font-weight: 700;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -207,6 +207,45 @@ export function slugify(value: string): string {
     .slice(0, 40);
 }
 
+/**
+ * Unpacks one registry `categories` entry into the plain strings it carries.
+ *
+ * FOUND ON THE LIVE CATALOG 2026-09-25: two browse chips read
+ * `0x5b22636f6d70616e696f6e222c226368617422` and
+ * `0x5b22636f6e74656e74222c22736f6369616c22`. Those are hex-encoded UTF-8 for
+ * `["companion","chat"` and `["content","social"` - a publisher wrote a JSON
+ * array into on-chain metadata as bytes, and 8004scan handed the bytes back as
+ * the category. `slugify` keeps [a-z0-9], and a hex string is nothing else, so
+ * the whole blob survived as a slug.
+ *
+ * So: hex is decoded, a JSON array is split into its elements, and anything
+ * that still is not readable text is dropped - which falls through to the
+ * keyword sources rather than inventing a drawer nobody can read.
+ */
+export function registryCategoryValues(raw: string): string[] {
+  let text = raw.trim();
+  if (/^0x(?:[0-9a-fA-F]{2})+$/.test(text)) {
+    const bytes = text.slice(2).match(/../g) ?? [];
+    try {
+      text = new TextDecoder("utf-8", { fatal: true })
+        .decode(Uint8Array.from(bytes, (byte) => parseInt(byte, 16)))
+        .trim();
+    } catch {
+      return [];
+    }
+    // Decoded to control characters means it was never text, e.g. a hash.
+    if (!/^[\x20-\x7e]+$/.test(text)) return [];
+  }
+  if (text.startsWith("[")) {
+    // Quoted elements, read by pattern rather than JSON.parse: the arrays seen
+    // so far arrive truncated, and a partial array still names its categories.
+    return Array.from(text.matchAll(/"([^"\\]+)"/g), (match) => match[1].trim()).filter(
+      (value) => value.length > 0,
+    );
+  }
+  return text.length > 0 ? [text] : [];
+}
+
 export interface CategorizeInput {
   name: string;
   description: string;
@@ -252,8 +291,10 @@ function bestKeywordMatch(text: string): { slug: string; score: number } | null 
 export function categorize(input: CategorizeInput): CategoryAssignment {
   // 1. The publisher said so explicitly.
   for (const raw of input.registryCategories) {
-    const slug = slugify(raw);
-    if (slug.length > 0) return { slug, label: categoryLabel(slug), source: "registry" };
+    for (const value of registryCategoryValues(raw)) {
+      const slug = slugify(value);
+      if (slug.length > 0) return { slug, label: categoryLabel(slug), source: "registry" };
+    }
   }
 
   /*

@@ -42,6 +42,12 @@ import { v } from "convex/values";
 
 import { query } from "./_generated/server";
 import { toPublicAgent } from "./lib/publicAgent";
+import {
+  orderSearchResults,
+  parseSearchCursor,
+  SEARCH_WINDOW,
+  searchCursor,
+} from "./lib/searchRank";
 import { coerceAgentKey } from "./model/agent";
 
 
@@ -115,7 +121,9 @@ export const list = query({
  *
  * Convex's search index tokenizes on whitespace and punctuation, lowercases,
  * and prefix-matches the final term, so "reba" finds "rebalancing". Relevance
- * ordering is the index's own and cannot be combined with `rank` - which is
+ * decides WHAT matches; the ORDER blends it with `rank` and with whether the
+ * query names the agent - see lib/searchRank.ts (2026-09-25). This used to say
+ * relevance cannot be combined with `rank`, on the reasoning that it is
  * correct for a search box, where what the user typed should outrank shelf
  * position.
  */
@@ -160,7 +168,9 @@ export const search = query({
       return { ...page, page: page.page.map(toPublicAgent) };
     }
 
-    const page = await ctx.db
+    // Relevance decides what matches; lib/searchRank.ts blends in `rank` to
+    // decide the order. Bounded window, offset cursor - see that file.
+    const matches = await ctx.db
       .query("agents")
       .withSearchIndex("search_text", (q) => {
         let base = q.search("searchText", trimmed).eq("status", "live");
@@ -168,9 +178,18 @@ export const search = query({
         if (protocol) base = base.eq("protocol", protocol);
         return base;
       })
-      .paginate(paginationOpts);
+      .take(SEARCH_WINDOW);
 
-    return { ...page, page: page.page.map(toPublicAgent) };
+    const ordered = orderSearchResults(matches, trimmed);
+    const offset = parseSearchCursor(paginationOpts.cursor);
+    const end = offset + paginationOpts.numItems;
+    const isDone = end >= ordered.length;
+
+    return {
+      page: ordered.slice(offset, end).map(toPublicAgent),
+      isDone,
+      continueCursor: searchCursor(isDone ? ordered.length : end),
+    };
   },
 });
 

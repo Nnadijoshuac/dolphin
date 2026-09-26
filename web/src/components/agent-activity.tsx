@@ -8,7 +8,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { agentRouteId } from "@/constants/agents";
 import { formatUnits } from "viem";
 
-import { agentPaymentsApi, walletActionsApi, type WalletMovement } from "@/convex/api";
+import { agentPaymentsApi, builtAgentsApi, walletActionsApi, type WalletMovement } from "@/convex/api";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { convexClient } from "@/providers/convex-provider";
@@ -185,6 +185,11 @@ function AgentActivityContent({
     walletActionsApi.walletActions.forWallet,
     dolphinAddress ? { altanaWalletAddress: dolphinAddress } : "skip",
   );
+  /* Agents this wallet put on-chain (convex/builtAgents.ts): a registration is an action too. */
+  const published = useQuery(
+    builtAgentsApi.builtAgents.forOwner,
+    identityAddress ? { ownerAddress: identityAddress } : "skip",
+  );
 
   const agents = useAgentsByKeys([
     ...(hires ?? []).map((hire) => hire.agentKey),
@@ -352,6 +357,23 @@ function AgentActivityContent({
       href: `https://bscscan.com/tx/${action.transactionHash}`,
       external: true,
       sortAt: Date.parse(action.executedAt) || 0,
+    });
+  }
+
+  for (const agent of published ?? []) {
+    if (agent.status !== "registered" || !agent.registeredAt) continue;
+    items.push({
+      key: `published:${agent.hash}`,
+      title: `Put ${agent.name} on-chain`,
+      agentKey: agent.agentKey ?? "",
+      category: agent.category,
+      iconUrl: agent.iconUrl,
+      iconSeed: agent.hash,
+      detail: [`${agent.networkLabel} - #${agent.tokenId}`, formatDate(agent.registeredAt)].filter(Boolean).join(" - "),
+      amount: null,
+      href: `/agent/${agent.hash}`,
+      external: false,
+      sortAt: Date.parse(agent.registeredAt) || 0,
     });
   }
 

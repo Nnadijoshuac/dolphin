@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/app/dolphin/dolphin-chat.module.css";
@@ -10,7 +11,9 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
 import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
+import { PublishAgentDialog } from "@/components/publish-agent-dialog";
 import { TradeTicket } from "@/components/trade-ticket";
+import { builtAgentsApi } from "@/convex/api";
 import {
     useDolphinChat,
     useDolphinConversation,
@@ -533,6 +536,12 @@ export function DolphinClient({
   const draftName = agentDraft.name?.trim() || "your agent";
 
   const buildConversationKey = builder?.buildConversationKey ?? null;
+  /* Where this draft already lives on-chain (convex/builtAgents.ts forDraft). */
+  const publishedListings = useQuery(
+    builtAgentsApi.builtAgents.forDraft,
+    withDraft && buildConversationKey && BUILD_BACKEND_CONNECTED ? { buildConversationKey } : "skip",
+  );
+  const [publishOpen, setPublishOpen] = useState(false);
   const draftPanelActions = {
     trying,
     isStartingTry,
@@ -550,6 +559,19 @@ export function DolphinClient({
             openConversation(buildConversationKey);
           }
         : undefined,
+    onPublish:
+      building && buildConversationKey && BUILD_BACKEND_CONNECTED
+        ? () => {
+            setDraftOpen(false);
+            setPublishOpen(true);
+          }
+        : undefined,
+    published: (publishedListings ?? []).map((entry) => ({
+      hash: entry.hash,
+      networkLabel: entry.networkLabel,
+      status: entry.status,
+      tokenId: entry.tokenId,
+    })),
   };
 
   const suggestions = trying
@@ -914,6 +936,15 @@ export function DolphinClient({
             />
           </div>
         </div>
+      ) : null}
+
+      {publishOpen && buildConversationKey && agentDraft.name && agentDraft.description ? (
+        <PublishAgentDialog
+          agentDescription={agentDraft.description}
+          agentName={agentDraft.name}
+          buildConversationKey={buildConversationKey}
+          onClose={() => setPublishOpen(false)}
+        />
       ) : null}
 
       {historyOpen ? (

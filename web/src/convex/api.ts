@@ -1063,3 +1063,77 @@ export const agentTrialsApi = anyApi as unknown as {
     >;
   };
 };
+
+/** A built agent as the public sees it. See convex/builtAgents.ts publicView. */
+export type BuiltAgentPublic = {
+  hash: string;
+  name: string;
+  description: string;
+  category: string;
+  tools: AgentDraftTool[];
+  links: { website: string | null; x: string | null; email: string | null };
+  ownerAddress: string;
+  network: "bsc" | "bsc-testnet";
+  networkLabel: string;
+  chainId: number;
+  registry: string;
+  status: "awaiting-signature" | "registered" | "unpublished";
+  tokenId: string | null;
+  agentKey: string | null;
+  registeredAt: string | null;
+  iconUrl: string | null;
+  registrationUrl: string;
+  mcpUrl: string;
+  pageUrl: string;
+  registerTxUrl: string | null;
+};
+
+/**
+ * convex/builtAgents.ts and convex/iconProcessing.ts. Putting a built agent
+ * on ERC-8004: icon, checks, the owner's own registration, then confirmation
+ * against the chain.
+ */
+export const builtAgentsApi = anyApi as unknown as {
+  builtAgents: {
+    iconUploadUrl: Mutation<{ sessionToken: string }, { uploadUrl: string }>;
+    prepareListing: Mutation<
+      {
+        sessionToken: string;
+        buildConversationKey: string;
+        network: "bsc" | "bsc-testnet";
+        iconStorageId: string;
+        category: string;
+        website?: string;
+        x?: string;
+        email?: string;
+      },
+      { hash: string; tokenURI: string; registry: string; chainId: number; pageUrl: string }
+    >;
+    confirmRegistration: Action<
+      { sessionToken: string; hash: string; transactionHash: string },
+      { tokenId: string; agentKey: string }
+    >;
+    unpublish: Mutation<{ sessionToken: string; hash: string }, null>;
+    publicByHash: Query<{ hash: string }, BuiltAgentPublic | null>;
+    forOwner: Query<{ ownerAddress: string }, BuiltAgentPublic[]>;
+    forDraft: Query<{ buildConversationKey: string }, BuiltAgentPublic[]>;
+  };
+  iconProcessing: {
+    process: Action<
+      { sessionToken: string; storageId: string },
+      { iconId: string; url: string | null; contentType: string }
+    >;
+  };
+};
+
+/** Mirrors BUILT_AGENT_CATEGORIES in convex/builtAgents.ts. */
+export const BUILT_AGENT_CATEGORIES = [
+  { value: "trading", label: "Trading" },
+  { value: "yield", label: "Yield" },
+  { value: "health-factor", label: "Lending health" },
+  { value: "rebalancing", label: "Liquidity" },
+  { value: "security", label: "Security" },
+  { value: "monitoring", label: "Monitoring" },
+  { value: "payments", label: "Payments" },
+  { value: "general", label: "General" },
+] as const;

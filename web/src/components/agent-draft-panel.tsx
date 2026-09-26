@@ -79,6 +79,8 @@ export function AgentDraftPanel({
   onTry,
   onBack,
   isStartingTry = false,
+  onPublish,
+  published = [],
 }: {
   draft: AgentDraft;
   onClose?: () => void;
@@ -89,12 +91,17 @@ export function AgentDraftPanel({
   /** Returns from a try-run to the build conversation. */
   onBack?: () => void;
   isStartingTry?: boolean;
+  /** Opens the publish screen. Absent until the draft can be published. */
+  onPublish?: () => void;
+  /** Where this draft already lives on-chain, per network. */
+  published?: readonly { hash: string; networkLabel: string; status: string; tokenId: string | null }[];
 }) {
   const gaps = draftGaps(draft);
   const ready = gaps.length === 0;
   // Step 1 is where every draft starts; the later steps light up as the
   // builder moves the draft through them.
-  const currentStep = ready ? 1 : 0;
+  const live = published.filter((entry) => entry.status === "registered");
+  const currentStep = live.length > 0 ? 3 : ready ? 1 : 0;
 
   return (
     <aside
@@ -208,9 +215,22 @@ export function AgentDraftPanel({
             <span className="text-canvas">{isStartingTry ? "Opening…" : "Try it privately"}</span>
           </button>
         )}
+        {live.map((entry) => (
+          <a
+            className="flex items-center justify-between rounded-lg bg-success/10 px-3 py-2 text-[12px] text-ink no-underline"
+            href={`/agent/${entry.hash}`}
+            key={entry.hash}
+          >
+            <span>
+              On {entry.networkLabel} · #{entry.tokenId}
+            </span>
+            <span className="font-semibold">View</span>
+          </a>
+        ))}
         <button
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line/80 px-4 text-[13px] font-semibold text-ink-soft disabled:cursor-not-allowed disabled:opacity-40"
-          disabled
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line/80 px-4 text-[13px] font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!ready || !onPublish || trying}
+          onClick={onPublish}
           type="button"
         >
           Put on-chain
@@ -219,7 +239,7 @@ export function AgentDraftPanel({
           {trying
             ? "This run is private. Only you can see it, and it uses only the tools in the draft."
             : ready
-              ? "Putting it on-chain isn't open yet. Until then it stays free and private to you."
+              ? "Putting it on-chain registers it from your own wallet. Until then it stays free and private to you."
               : `Needs ${listGaps(gaps)} before you can try it. It stays free and private.`}
         </p>
       </div>

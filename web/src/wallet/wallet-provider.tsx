@@ -14,7 +14,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import type { Abi } from "viem";
-import { bsc } from "wagmi/chains";
+import { bsc, bscTestnet } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
 
 import { BSC_RPC_URL } from "@/constants/agents";
@@ -145,13 +145,21 @@ const connectors = [
     : []),
 ];
 
+/*
+ * BSC TESTNET, for rehearsing a built agent's registration
+ * (convex/builtAgents.ts). Mainnet stays first, so it remains the default;
+ * testnet is used only when the owner picks it on the publish screen.
+ */
+export const BSC_TESTNET_RPC_URL = "https://bsc-testnet-rpc.publicnode.com";
+
 export const wagmiConfig = createConfig({
-  chains: [bsc],
+  chains: [bsc, bscTestnet],
   connectors,
   transports: {
     // Same RPC the rest of the product reads from, so a balance shown here and
     // a chain read elsewhere cannot come from two different views of the chain.
     [bsc.id]: http(BSC_RPC_URL),
+    [bscTestnet.id]: http(BSC_TESTNET_RPC_URL),
   },
   // Next prerenders every page under app/, so wagmi must not touch browser
   // storage during the server pass.

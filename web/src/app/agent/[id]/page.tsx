@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 
 import { AgentDetailClient } from "@/app/agent/[id]/agent-detail-client";
+import { BuiltAgentPage } from "@/components/built-agent-page";
 import { categoryLabel } from "@/constants/agents";
 import { SITE_NAME } from "@/constants/site";
-import { fetchAgent } from "@/server/convex";
+import { fetchAgent, fetchBuiltAgent } from "@/server/convex";
 
 /**
  * ===========================================================================
@@ -60,10 +61,28 @@ const UNRESOLVED_METADATA: Metadata = {
   robots: { index: false, follow: true },
 };
 
+/** Agents built on Dolphin live at /agent/<hash>: "d" + 15 hex, never a token id. */
+const BUILT_AGENT_HASH = /^d[0-9a-f]{15}$/;
+
 export async function generateMetadata({
   params,
 }: AgentPageProps): Promise<Metadata> {
   const { id } = await params;
+  if (BUILT_AGENT_HASH.test(id)) {
+    const built = await fetchBuiltAgent(id);
+    if (!built) return UNRESOLVED_METADATA;
+    const description = built.description.length > 155 ? `${built.description.slice(0, 152).trimEnd()}…` : built.description;
+    return {
+      title: `${built.name} — built on Dolphin`,
+      description,
+      alternates: { canonical: `/agent/${id}` },
+      /* Indexed only once it is really on mainnet. */
+      robots:
+        built.status === "registered" && built.network === "bsc"
+          ? { index: true, follow: true }
+          : { index: false, follow: true },
+    };
+  }
   const agent = await fetchAgent(id);
 
   if (!agent) return UNRESOLVED_METADATA;
@@ -130,6 +149,7 @@ export async function generateMetadata({
 
 export default async function AgentPage({ params }: AgentPageProps) {
   const { id } = await params;
+  if (BUILT_AGENT_HASH.test(id)) return <BuiltAgentPage hash={id} />;
 
   /*
    * Read on the server so the structured data below describes THIS agent, and

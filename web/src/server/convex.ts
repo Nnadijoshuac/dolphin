@@ -2,7 +2,7 @@ import "server-only";
 
 import { ConvexHttpClient } from "convex/browser";
 
-import { api } from "@/convex/api";
+import { api, builtAgentsApi, type BuiltAgentPublic } from "@/convex/api";
 import type { Agent } from "@/types/agent";
 
 /**
@@ -61,6 +61,16 @@ async function withTimeout<T>(work: Promise<T>): Promise<T | null> {
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/** An agent built on Dolphin, by its public hash, or null for any failure at all. */
+export async function fetchBuiltAgent(hash: string): Promise<BuiltAgentPublic | null> {
+  const convex = client();
+  if (!convex) return null;
+  const row = await withTimeout(
+    convex.query(builtAgentsApi.builtAgents.publicByHash, { hash }) as Promise<BuiltAgentPublic | null>,
+  );
+  return row ?? null;
 }
 
 /** One agent by `agentKey` or bare token id, or null for any failure at all. */

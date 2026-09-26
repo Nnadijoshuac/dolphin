@@ -123,7 +123,8 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
     </div>
     {open && createPortal(<div className="mobile-sheet-backdrop" onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}><div ref={dialog} role="dialog" aria-modal="true" className="mobile-action-sheet" aria-labelledby="mobile-action-title">
       <header><h2 id="mobile-action-title">{agent.protocol === "mcp" ? "Use" : "Hire"} {agent.name}</h2><button className="mobile-circle" type="button" aria-label="Close" onClick={() => setOpen(false)}><CategoryGlyph name="close" size={18} /></button></header>
-      {agent.protocol === "mcp" ? <McpUseAction agent={agent} /> : <HireAction agent={agent} />}
+      {/* Same rule as the desktop page: a delisted agent is not offered for hire. */}
+      {agent.status === "unavailable" ? null : agent.protocol === "mcp" ? <McpUseAction agent={agent} /> : <HireAction agent={agent} />}
     </div></div>, document.body)}
   </>;
 }

@@ -324,10 +324,22 @@ export interface Agent {
    * Dolphin's own verdict. "live" means we called this agent's endpoint and it
    * offered work for sale; "degraded" means it has failed recently but not
    * enough times to be delisted; "unavailable" means it is delisted and only
-   * reachable by direct link.
+   * reachable by direct link; "duplicate" means it works but is a
+   * re-registration of an agent already listed, so browse leaves it out.
    */
-  /** "duplicate": a re-registration of a listed agent, left out of browse. */
   status: "live" | "degraded" | "unavailable" | "duplicate";
+  /**
+   * The probe's own words about this agent. Present only on `agents.get` (the
+   * detail page), which is what lets that page say WHY an agent is not
+   * answering rather than only that it is not.
+   */
+  verification?: {
+    state: "unknown" | "live" | "unavailable" | "invalid";
+    detail: string;
+    lastProbeAt: string | null;
+    lastOkAt: string | null;
+    consecutiveFailures: number;
+  } | null;
   verifiedAt: string;
   publishedAt: string;
   registryVerification: RegistryVerification;

@@ -245,6 +245,63 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
 }
 
 /** Collapsible Accordion for On-chain and Technical Records */
+/**
+ * WHETHER THIS AGENT IS ANSWERING, said at the top of its page (2026-09-26).
+ *
+ * Set and Earn: "where an agent's data is stale or the agent isn't
+ * responding, say so on the page rather than hiding it". The page had no such
+ * line: an agent Dolphin had delisted after five failed probes rendered
+ * exactly like a healthy one, hire button and all.
+ */
+function AvailabilityNotice({ agent }: { agent: Agent }) {
+  const check = agent.verification;
+  const lastChecked = check?.lastProbeAt ?? agent.verifiedAt;
+  const lastAnswered = check?.lastOkAt ?? null;
+
+  if (agent.status === "live") {
+    return (
+      <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-success/30 bg-success-soft px-4 py-3 text-sm text-ink">
+        <span aria-hidden="true" className="h-2 w-2 rounded-full bg-success" />
+        <span className="font-semibold">Answering</span>
+        <span className="text-muted">· last checked {formatDate(lastChecked)} UTC</span>
+      </p>
+    );
+  }
+
+  if (agent.status === "duplicate") {
+    return (
+      <p className="mt-6 rounded-xl border border-line bg-paper-muted px-4 py-3 text-sm text-muted">
+        <span className="font-semibold text-ink">Another registration of a listed agent.</span>{" "}
+        Its publisher registered the same agent more than once, so Dolphin lists one of them.
+      </p>
+    );
+  }
+
+  const delisted = agent.status === "unavailable";
+  return (
+    <div
+      className={`mt-6 rounded-xl border px-4 py-3 text-sm ${
+        delisted ? "border-danger/30 bg-danger-soft" : "border-accent/40 bg-accent-soft"
+      }`}
+      role="status"
+    >
+      <p className="font-semibold text-ink">
+        {delisted
+          ? "Not responding. This agent is no longer listed and cannot be hired."
+          : "Not answering right now. Dolphin is retrying; a hire may fail until it recovers."}
+      </p>
+      <p className="mt-1 text-muted">
+        Last answered {lastAnswered ? `${formatDate(lastAnswered)} UTC` : "never"} · last checked{" "}
+        {formatDate(lastChecked)} UTC
+        {check && check.consecutiveFailures > 0
+          ? ` · ${check.consecutiveFailures} failed ${check.consecutiveFailures === 1 ? "check" : "checks"} in a row`
+          : ""}
+      </p>
+      {check?.detail ? <p className="mt-1 break-words text-xs text-muted">{check.detail}</p> : null}
+    </div>
+  );
+}
+
 function TechnicalDetailsAccordion({
   agent,
   isRegistryVerified,
@@ -283,7 +340,14 @@ function TechnicalDetailsAccordion({
       agent.registeredAt ? `${formatDate(agent.registeredAt)} UTC` : "Not reported",
     ],
     ["Verified Endpoint", agent.services[0]?.endpoint ?? "Not reported"],
+    ["Last checked", `${formatDate(agent.verification?.lastProbeAt ?? agent.verifiedAt)} UTC`],
+    [
+      "Last answered",
+      agent.verification?.lastOkAt ? `${formatDate(agent.verification.lastOkAt)} UTC` : "Not recorded",
+    ],
   ] as const;
+  // The token's own page on BscScan lists its mint (registration) transaction.
+  const registrationRecord = `https://bscscan.com/nft/${agent.registryAddress}/${agent.tokenId}`;
 
   return (
     <section className="rounded-2xl border border-line bg-paper overflow-hidden">
@@ -330,6 +394,15 @@ function TechnicalDetailsAccordion({
               </div>
             ))}
           </dl>
+
+          <a
+            className="interactive inline-flex items-center gap-1 text-xs font-semibold text-ink underline underline-offset-4 hover:text-accent-ink"
+            href={registrationRecord}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Registration record and transactions on BscScan ↗
+          </a>
 
           {agent.sourceLabels.length > 0 ? (
             <div className="border-t border-line/60 pt-4">
@@ -379,7 +452,16 @@ export function AgentDetail({ agent }: { agent: Agent }) {
     ? shortAddress(agent.publisher)
     : agent.publisher || "Unlisted publisher";
 
-  if (isMobile) return <MobileAgentDetail agent={agent} registry={<TechnicalDetailsAccordion agent={agent} isRegistryVerified={Boolean(isRegistryVerified)} />} />;
+  if (isMobile) {
+    return (
+      <>
+        <div className="px-4">
+          <AvailabilityNotice agent={agent} />
+        </div>
+        <MobileAgentDetail agent={agent} registry={<TechnicalDetailsAccordion agent={agent} isRegistryVerified={Boolean(isRegistryVerified)} />} />
+      </>
+    );
+  }
 
   return (
     <div className="site-frame pb-16 pt-6 sm:pb-24 sm:pt-8">
@@ -449,17 +531,20 @@ export function AgentDetail({ agent }: { agent: Agent }) {
               <span aria-hidden="true">·</span>
               <span>Token #{agent.tokenId}</span>
               <span aria-hidden="true">·</span>
-              <span>BNB Smart Chain · 56</span>
+              <span>BNB Smart Chain · Mainnet · 56</span>
             </div>
           </div>
         </div>
+        <AvailabilityNotice agent={agent} />
       </header>
 
       {/* ── Main Layout: Content & Action Sidebar ── */}
       <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-12 lg:items-start">
         {/* Action Card: On mobile it is order-1 (one of the first things seen!), on desktop it is order-2 (sticky right column) */}
         <aside className="order-1 lg:order-2 lg:sticky lg:top-24 space-y-4">
-          {agent.protocol === "mcp" ? (
+          {/* A delisted agent failed its last several probes: a hire would start
+              a quote request nothing answers. The notice above says why. */}
+          {agent.status === "unavailable" ? null : agent.protocol === "mcp" ? (
             <McpUseAction agent={agent} />
           ) : (
             <HireAction agent={agent} />

@@ -12,6 +12,11 @@ import {
 } from "./_generated/server";
 import knowledge from "./knowledge.json";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
+import {
+  digestToolResult,
+  findEarlierSameQuestion,
+  stripRawPayloads,
+} from "./lib/answerHygiene";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { McpError, callMcpTool } from "./lib/mcpClient";
 import {
@@ -199,9 +204,16 @@ RESPONSE RULES:
 4b. A FABRICATED FEATURE IS A FABRICATED NUMBER. Same rule, applied to the
     product instead of the data, and it is broken far more often because a
     plausible feature is easier to imagine than a plausible number.
-    - Never say Dolphin will notify, alert, email or message the user. It has
-      no mechanism to reach anyone. A panel updates while it is open, and that
-      is all.
+    - Dolphin has exactly ONE way to reach a person: an email alert for their
+      Venus health factor, which they switch on themselves on the
+      [Wallet](/wallet) page. You may point them there when they care about
+      liquidation risk. Nothing else notifies anyone: never promise any other
+      alert, email, message or monitoring.
+    - Never credit a marketplace agent with abilities you did not see it
+      publish or use this turn ("it can monitor you and alert you") - describe
+      only what it returned or what the catalog lists.
+    - Never offer to "set up", "configure" or "show you how to" do anything
+      unless it is a screen that exists. Offer questions you can answer.
     - Never point the user at a filter, sort, setting or screen without knowing
       it exists. "Use search to check their typical response times" sends
       someone looking for a feature that was never built.
@@ -293,7 +305,21 @@ RESPONSE RULES:
    - The categories with no wired live source (grid-trading, trading,
      monitoring) return NOTHING measurable. You may explain how such a strategy
      works. You may not say which one performs better, because nothing in this
-     product has measured that.`;
+     product has measured that.
+
+15. SPEAK AS AN ADVISOR, NEVER AS A LOG.
+   - NEVER paste what a tool returned: no JSON, no code blocks, no field names,
+     no error codes, no status strings. The person sees what it MEANS.
+   - An agent's "error" is usually a finding about the person, not a failure.
+     "no-markets" means "you have no Venus position, so there is nothing that
+     can be liquidated". Say that, and say what they could do next.
+   - If an agent genuinely could not be reached, say so in one plain sentence
+     ("X did not respond just now") and carry on with what you do know.
+   - DO NOT REPEAT YOURSELF. If a follow-up asks something your previous
+     answer already covered, say so in one sentence and add something new:
+     a next step, a related check, or what would change the answer. Never
+     re-send the same explanation in different words.
+   - Be brief. A short, correct answer beats a long one.`;
 
 
 /* ---------------------------------------------------------------------------
@@ -1160,9 +1186,27 @@ export const ask = action({
        */
       const isConversational = isPurelyConversational(text);
 
-      const lastRelevantUserTurn = priorTurns
+      /*
+       * The history WITHOUT the question being answered now. appendTurn has
+       * already stored this turn's user message, so priorTurns ends with it;
+       * sending priorTurns and then `text` put the same question in front of
+       * the model twice, and "the previous question" below was the current one.
+       */
+      const lastStored = priorTurns[priorTurns.length - 1];
+      const historyForModel =
+        lastStored && lastStored.role === "user" && lastStored.content.trim() === text.trim()
+          ? priorTurns.slice(0, -1)
+          : priorTurns;
+
+      const lastRelevantUserTurn = historyForModel
         .filter((t) => t.role === "user")
         .slice(-1)[0]?.content;
+
+      /* Asked before in this conversation? See the REPEATED QUESTION note below. */
+      const repeatOf = findEarlierSameQuestion(
+        text,
+        historyForModel.filter((t) => t.role === "user").map((t) => t.content),
+      );
       const candidateSearchQuery =
         lastRelevantUserTurn && text.length < 50
           ? `${text} ${lastRelevantUserTurn}`
@@ -1204,7 +1248,7 @@ export const ask = action({
 - Verified on BNB Smart Chain via Venus Core Pool Comptroller (${new Date().toISOString()}).
 - Positions in Venus Core Pool: ${marketsCount} market(s).
 - Comptroller Finding: ${venusStats.averageHealthFactor.reason ?? "No active debt detected"}
-- Liquidation Risk: ZERO (No outstanding debt or borrow detected on Venus Core Pool. Collateral is completely safe and unencumbered).`;
+- What this means: this address has no borrow on the Venus Core Pool, so nothing on Venus can be liquidated. It says nothing about funds held anywhere else - do not call the person's funds "safe".`;
           } else {
             const hf = venusStats.averageHealthFactor.value;
             liveVenusTelemetry = `LIVE ON-CHAIN VENUS COMPTROLLER READ FOR ${targetAddress}:
@@ -1230,7 +1274,7 @@ export const ask = action({
       const messages: ChatMessage[] = [
         { role: "system", content: consultSystemPrompt },
         // Inject conversation history so the consult phase can reference context.
-        ...priorTurns,
+        ...historyForModel,
         { role: "user", content: text },
       ];
 
@@ -1437,6 +1481,17 @@ Keep it magnetic, warm, and conversational.`;
         synthesisContext += `\n\nNOTE: Tools were available but you chose not to call any, meaning the question is answerable from your knowledge base and live catalog. Answer authoritatively as Dolphin, but be clear you did not fetch live telemetry for this specific response.`;
       }
 
+      /*
+       * REPEATED QUESTION. (2026-09-26) Rule 15 asks the model not to repeat
+       * itself, and measured, it re-sent its previous answer word for word
+       * anyway. So the repeat is detected here, in code, and the model is told
+       * exactly what happened instead of being trusted to notice.
+       */
+      if (repeatOf) {
+        synthesisContext += `\n\nREPEATED QUESTION: Earlier in this conversation the person asked "${repeatOf.slice(0, 200)}", and you already answered it. Do NOT give that answer again, in any wording.
+Reply in at most two sentences: ${callsMade > 0 ? "you re-checked just now, so say whether the result is the same or what changed" : "say your earlier answer still stands"}. Then offer ONE different, genuinely useful next step that Dolphin can actually do.`;
+      }
+
       messages[0] = { role: "system", content: synthesisContext };
 
       let final: { content: string; model: string | null };
@@ -1470,6 +1525,9 @@ Keep it magnetic, warm, and conversational.`;
        * same way. It used to keep `final.model`, which attributed a template to
        * whichever model had just declined to write anything.
        */
+      /* Last line against raw payloads in the answer. See lib/answerHygiene.ts. */
+      final = { ...final, content: stripRawPayloads(final.content) };
+
       const leaked = looksLikeLeakedReasoning(final.content);
       if (leaked) {
         console.warn("[Dolphin] Synthesis returned reasoning about its prompt; replaced with the catalog fallback.");
@@ -1583,9 +1641,12 @@ async function executeToolCalls(
         // Prefixed with the source so the model has what it needs to attribute
         // the claim, and so a tool that tries to impersonate another agent in
         // its own output is contradicted by the framing around it.
+        // digestToolResult turns an agent's {"error": ...} into a sentence, so
+        // the model explains the finding instead of pasting the payload. The
+        // raw text is still stored above, as the evidence.
         content:
-          `[${binding.agentName} -> ${binding.toolName}${result.isError ? " (reported an error)" : ""}]\n` +
-          result.text.slice(0, MAX_MODEL_RESULT_CHARS),
+          `[${binding.agentName} -> ${binding.toolName}]\n` +
+          digestToolResult(result.text).slice(0, MAX_MODEL_RESULT_CHARS),
       });
     } catch (cause) {
       const latencyMs = Date.now() - startedAt;

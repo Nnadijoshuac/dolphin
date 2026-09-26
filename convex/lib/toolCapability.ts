@@ -63,6 +63,12 @@ const MUTATING_TOOL_PATTERNS = [
   "burn", "deposit", "bridge", "sign", "rebalance", "cancel", "pause",
   "resume", "close", "open_position", "set_", "set-", "act", "trade",
   "allocate", "migrate", "route",
+  /*
+   * Added 2026-09-26. The agent builder's tool list offered Venus powered by
+   * HeyAnon's `redeemUnderlying` as a read - a real Venus write the list above
+   * had no verb for.
+   */
+  "redeem",
 ];
 
 /**
@@ -75,6 +81,14 @@ const MUTATING_TOOL_PATTERNS = [
 const MUTATING_PREFIXES = [
   "set", "add", "remove", "update", "create", "delete", "enable", "disable",
   "toggle", "start", "stop", "run",
+  /*
+   * Added 2026-09-26, found by the same agent builder list: `enterMarkets` and
+   * `exitMarket` (Venus collateral switches) passed as reads. The last five are
+   * EXTRA_WRITE_PREFIXES below - verified writes in this catalog that the badge
+   * already knew about and this denylist did not, so the model could be handed
+   * them. It fails closed; over-matching here only hides a tool.
+   */
+  "enter", "exit", "collect", "increase", "decrease", "confirm", "register",
 ];
 
 /**
@@ -140,10 +154,11 @@ export type ExecutionCapability = Readonly<{
  * whether to trust it. So the badge gets its own matching, checked against the
  * real 261 names rather than inherited.
  *
- * It also misses in the other direction: `collectFees`, `increaseLiquidity` and
- * `decreaseLiquidity` are real PancakeSwap V3 writes that the denylist does not
- * catch at all, because nothing in it says "collect" or "increase". Defence in
- * depth covers that (Dolphin holds no key), but a capability read must not.
+ * It also missed in the other direction: `collectFees`, `increaseLiquidity` and
+ * `decreaseLiquidity` are real PancakeSwap V3 writes that the denylist did not
+ * catch, because nothing in it said "collect" or "increase". The denylist has
+ * carried those prefixes since 2026-09-26; the list below stays so the badge
+ * does not depend on it.
  * ------------------------------------------------------------------------ */
 
 /** A read, whatever else the name contains. Checked first, and it wins. */

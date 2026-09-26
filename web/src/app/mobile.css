@@ -381,6 +381,12 @@
   .dolphin-chat-page {
     height: calc(100dvh / 0.8) !important;
   }
+  /* The page-bottom padding every scrolling page gets (line 63) made main
+     24px taller than the full-height chat, so scrolling a new message into
+     view scrolled the whole document and pushed the header off the top. */
+  .app-frame > main:has(> .dolphin-chat-page) {
+    padding-bottom: 0;
+  }
   .dolphin-chat-page .dolphin-composer-wrapper {
     bottom: 0;
   }

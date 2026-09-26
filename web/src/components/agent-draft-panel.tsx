@@ -88,17 +88,17 @@ export function AgentDraftPanel({
   return (
     <aside
       aria-label="Agent draft"
-      className="flex h-full min-h-0 flex-col border-l border-line/80 bg-paper/78 px-3 pb-4 pt-3 backdrop-blur-xl"
+      className="flex h-full min-h-0 flex-col border-l border-line/60 bg-paper px-3 pb-4 pt-3"
     >
-      <div className="flex items-center gap-2 px-2 py-2">
-        <div className="grid size-9 place-items-center rounded-xl bg-ink text-canvas">
-          <CategoryGlyph color="#FFFFFF" name="bot" size={17} strokeWidth={1.9} />
+      <div className="flex items-center gap-2.5 px-2 py-1.5">
+        <div className="grid size-8 place-items-center rounded-lg bg-paper-muted text-ink">
+          <CategoryGlyph name="bot" size={16} strokeWidth={1.8} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-semibold text-ink">
+          <h2 className="truncate text-[13px] font-semibold text-ink">
             {draft.name?.trim() || "Agent draft"}
           </h2>
-          <p className="text-[0.68rem] text-muted">Private · only you can run it</p>
+          <p className="text-[11px] text-muted">Private · only you can run it</p>
         </div>
         {onClose ? (
           <button
@@ -159,7 +159,7 @@ export function AgentDraftPanel({
             <ul className="mt-2 space-y-1.5">
               {draft.tools.map((tool) => (
                 <li
-                  className="rounded-xl border border-line/70 bg-paper/70 px-3 py-2"
+                  className="rounded-lg bg-paper-muted/70 px-3 py-2"
                   key={`${tool.agentKey}:${tool.toolName}`}
                 >
                   <span className="block truncate font-mono text-[0.78rem] text-ink">
@@ -175,9 +175,9 @@ export function AgentDraftPanel({
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl border border-line/80 bg-paper/70 p-3">
+      <div className="mt-3 border-t border-line/60 px-2 pt-3">
         <button
-          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-sm font-semibold text-canvas transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-[13px] font-semibold text-canvas transition-opacity disabled:cursor-not-allowed disabled:opacity-30"
           disabled
           type="button"
         >

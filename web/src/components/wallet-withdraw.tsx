@@ -8,6 +8,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { DOLPHIN_CONTRACTS } from "@/constants/agents";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
+import { toast } from "@/store/use-toast-store";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { useWallet } from "@/wallet/wallet-provider";
 import {
@@ -56,8 +57,7 @@ function short(value: string) {
 type Status =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "sent"; transactionHash: string | null }
-  | { kind: "error"; message: string };
+  | { kind: "sent"; transactionHash: string | null };
 
 export function WithdrawDialog({
   initialAsset,
@@ -119,7 +119,7 @@ export function WithdrawDialog({
       const reserve = await dolphin.readWithdrawReserveWei();
       setAmountText(formatTokenAmount(maxNativeWithdrawal(dolphin.balanceWei, reserve), 18, 18));
     } catch (cause) {
-      setStatus({ kind: "error", message: toUserMessage(cause, "Could not work out the maximum. Try again.") });
+      toast.error(toUserMessage(cause, "Could not work out the maximum. Try again."));
     }
   };
 
@@ -135,8 +135,10 @@ export function WithdrawDialog({
       setStatus({ kind: "sent", transactionHash: result.transactionHash });
       setAmountText("");
       void queryClient.invalidateQueries({ queryKey: ["dolphin-token-balance", dolphinAddress] });
-    } catch (cause) {
-      setStatus({ kind: "error", message: toUserMessage(cause, "That withdrawal could not be sent. Try again.") });
+    } catch {
+      // The provider records the failure and the page shows it as a toast
+      // (useWalletErrorToasts), which appears above this dialog.
+      setStatus({ kind: "idle" });
     }
   };
 
@@ -218,7 +220,6 @@ export function WithdrawDialog({
                   inputMode="decimal"
                   onChange={(event) => {
                     setAmountText(event.target.value);
-                    if (status.kind === "error") setStatus({ kind: "idle" });
                   }}
                   placeholder="0.0"
                   ref={inputRef}
@@ -253,9 +254,7 @@ export function WithdrawDialog({
               )}
             </p>
 
-            {status.kind === "error" ? (
-              <p className="wallet-inline-error mt-3">{status.message}</p>
-            ) : refusal && amountText.trim().length > 0 && ownAddress ? (
+            {refusal && amountText.trim().length > 0 && ownAddress ? (
               <p className="mt-3 text-xs text-muted">{refusal}</p>
             ) : null}
 

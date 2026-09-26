@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { BaseError, ContractFunctionExecutionError, UserRejectedRequestError } from "viem";
 
-import { classifyConnectError, toUserMessage } from "./wallet-errors";
+import {
+  PASSKEY_CANCELLED_MESSAGE,
+  classifyConnectError,
+  isCancellationMessage,
+  toUserMessage,
+} from "./wallet-errors";
 
 /**
  * The rule this file defends, in both directions at once:
@@ -126,5 +131,36 @@ describe("classifyConnectError", () => {
     // Wrapped one level down - wagmi wraps viem, which wraps the provider.
     expect(classifyConnectError({ cause: { code: 4001 } })).toBe("cancelled");
     expect(classifyConnectError(new Error("User rejected the request"))).toBe("unknown");
+  });
+});
+
+/*
+ * A cancelled passkey, as the browser and ox actually produce it (2026-09-26):
+ * ox's Authentication.SignFailedError, "Failed to request credential.", with
+ * the browser's NotAllowedError DOMException as its cause.
+ */
+function passkeyError(causeName: string | null, wrapperName = "Authentication.SignFailedError") {
+  const cause = causeName ? Object.assign(new Error("The operation either timed out or was not allowed."), { name: causeName }) : undefined;
+  return Object.assign(new Error("Failed to request credential."), {
+    name: wrapperName,
+    cause,
+  });
+}
+
+describe("passkey failures", () => {
+  it("reads a cancelled passkey as a cancellation, not the library's sentence", () => {
+    expect(toUserMessage(passkeyError("NotAllowedError"), "fallback")).toBe(PASSKEY_CANCELLED_MESSAGE);
+    expect(isCancellationMessage(PASSKEY_CANCELLED_MESSAGE)).toBe(true);
+  });
+  it("knows Porto's older ox names, which are what the wallet SDK actually throws", () => {
+    for (const wrapper of ["WebAuthnP256.CredentialRequestFailedError", "WebAuthnP256.CredentialCreationFailedError"]) {
+      expect(toUserMessage(passkeyError("NotAllowedError", wrapper), "fallback")).toBe(PASSKEY_CANCELLED_MESSAGE);
+      expect(toUserMessage(passkeyError(null, wrapper), "fallback")).not.toMatch(/Failed to/);
+    }
+  });
+  it("reads any other passkey failure as a plain retry, never the raw text", () => {
+    const message = toUserMessage(passkeyError(null), "fallback");
+    expect(message).not.toMatch(/Failed to request credential/);
+    expect(isCancellationMessage(message)).toBe(false);
   });
 });

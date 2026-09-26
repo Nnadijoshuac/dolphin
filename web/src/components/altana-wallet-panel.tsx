@@ -19,6 +19,7 @@ import { WalletAvatar } from "@/components/wallet-avatar";
 import type { AgentSessionRow } from "@/convex/api";
 import { useBnbPrice, type BnbPriceState } from "@/hooks/use-bnb-price";
 import { useNow } from "@/hooks/use-now";
+import { useWalletErrorToasts } from "@/hooks/use-wallet-error-toasts";
 import { usePaymentRates } from "@/hooks/use-payment-rates";
 import { useAppStore, type DisplayCurrency } from "@/store/use-app-store";
 import {
@@ -33,7 +34,6 @@ import { formatUsdFromWei } from "@/wallet/bnb-price";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { formatUsd } from "@/wallet/token-usd";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
-import { toUserMessage } from "@/wallet/wallet-errors";
 import { summariseTotal } from "@/wallet/wallet-total";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -277,9 +277,7 @@ function SessionRow({
  */
 export function RecoverabilityPanel({ onDeposit }: { onDeposit: () => void }) {
   const wallet = useAltanaWallet();
-  const [state, setState] = useState<
-    { kind: "idle" } | { kind: "registering" } | { kind: "error"; message: string }
-  >({ kind: "idle" });
+  const [state, setState] = useState<{ kind: "idle" } | { kind: "registering" }>({ kind: "idle" });
 
   const copy = recoverabilityCopy(wallet.recoverability);
   const fee = wallet.registrationFeeWei;
@@ -336,14 +334,8 @@ export function RecoverabilityPanel({ onDeposit }: { onDeposit: () => void }) {
                 disabled={state.kind === "registering" || wallet.isBusy}
                 onClick={() => {
                   setState({ kind: "registering" });
-                  void wallet.registerWallet().then(
-                    () => setState({ kind: "idle" }),
-                    (cause: unknown) =>
-                      setState({
-                        kind: "error",
-                        message: toUserMessage(cause, "That could not be completed. Try again."),
-                      }),
-                  );
+                  // A failure is reported by the provider and shown as a toast.
+                  void wallet.registerWallet().finally(() => setState({ kind: "idle" }));
                 }}
                 type="button"
               >
@@ -358,7 +350,6 @@ export function RecoverabilityPanel({ onDeposit }: { onDeposit: () => void }) {
               </button>
             )}
 
-            {state.kind === "error" && <p className="wallet-error-banner">{state.message}</p>}
           </div>
         )}
       </div>
@@ -692,7 +683,6 @@ function AgentWalletCard({
             ? wallet.unsupportedReason ?? "This browser cannot hold a passkey wallet."
             : "Pays the agents you hire. Optional."}
         </p>
-        {wallet.error && <p className="wallet-inline-error">{wallet.error}</p>}
         {!blocked && (
           <div className="wcard__foot">
             {/*
@@ -956,6 +946,8 @@ export function AltanaWalletPanel() {
   const price = useBnbPrice();
   const hidden = useAppStore((s) => s.hideBalances);
   const [receiving, setReceiving] = useState<string | null>(null);
+  // Wallet failures as toasts, not red text in the page (2026-09-26).
+  useWalletErrorToasts();
 
   if (wallet.status === "loading") {
     return (
@@ -998,8 +990,6 @@ export function AltanaWalletPanel() {
       {dolphinAddress && wallet.recoverability !== "registered" && (
         <RecoverabilityPanel onDeposit={() => setReceiving(dolphinAddress)} />
       )}
-
-      {wallet.error && <p className="wallet-error-banner">{wallet.error}</p>}
 
       <AgentActivity hidden={hidden} />
 

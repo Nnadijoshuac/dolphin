@@ -6,6 +6,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import { AppFrame } from "@/components/app-frame";
 import { AppProviders } from "@/providers/app-providers";
+import { Toaster } from "@/components/toaster";
 import {
   IS_INDEXABLE,
   SITE_DESCRIPTION,
@@ -117,6 +118,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="min-h-screen bg-canvas text-ink">
         <AppProviders>
           <AppFrame>{children}</AppFrame>
+          {/* Short notices instead of inline error text. See toaster.tsx. */}
+          <Toaster />
         </AppProviders>
         {/*
          * TELEMETRY, which this site had none of. Both are cookieless, need no

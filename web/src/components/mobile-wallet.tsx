@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useBalance } from "wagmi";
 
 import { AgentActivity } from "@/components/agent-activity";
+import { useWalletErrorToasts } from "@/hooks/use-wallet-error-toasts";
 import { WithdrawDialog } from "@/components/wallet-withdraw";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
@@ -75,6 +76,8 @@ export function MobileWallet() {
   const toggleHidden = useAppStore((s) => s.toggleHideBalances);
   const [receiving, setReceiving] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
+  // The phone wallet showed wallet errors nowhere; now they are toasts.
+  useWalletErrorToasts();
 
   const identityAddress = identity.isConnected ? identity.address : null;
   const dolphinAddress = dolphin.status === "connected" ? dolphin.address : null;

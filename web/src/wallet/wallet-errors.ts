@@ -242,8 +242,66 @@ function readableLine(message: string): string | null {
  * The version guard is unchanged and still runs over whatever is returned, so
  * the original leak stays closed from both directions.
  */
+/**
+ * A dismissed PASSKEY prompt. (2026-09-26)
+ *
+ * The browser rejects navigator.credentials with a DOMException named
+ * NotAllowedError when the person cancels (or lets it time out), and ox wraps
+ * it: "Failed to request credential." / "Failed to create credential." That
+ * sentence reached the screen raw when the owner cancelled a withdrawal on
+ * purpose. Classified by name, per the rule at the top of this file.
+ *
+ * TWO GENERATIONS of names, both live in this install. The Altana SDK signs
+ * through Porto, which bundles ox 0.9 (WebAuthnP256.CredentialRequestFailedError,
+ * WebAuthnP256.CredentialCreationFailedError); the top-level ox 0.14 renamed
+ * them (Authentication.SignFailedError, Registration.CreateFailedError). The
+ * first set is what actually reaches this app today, found by triggering a
+ * real refusal in headless Chrome.
+ */
+const PASSKEY_WRAPPER_NAMES = new Set([
+  "WebAuthnP256.CredentialRequestFailedError",
+  "WebAuthnP256.CredentialCreationFailedError",
+  "Authentication.SignFailedError",
+  "Registration.CreateFailedError",
+]);
+export const PASSKEY_CANCELLED_MESSAGE = "Passkey request cancelled. Nothing was signed.";
+const WALLET_DISMISSED_MESSAGE =
+  "You dismissed the wallet prompt, so nothing was signed and nothing was spent. " +
+  "If you didn't dismiss it, your wallet may still have an earlier request open — " +
+  "clear it there, then try again.";
+
+function passkeyFailure(cause: unknown): "cancelled" | "failed" | null {
+  let wrapped = false;
+  for (const link of chain(cause)) {
+    const name = link instanceof Error || (typeof link === "object" && link !== null && "name" in link)
+      ? String((link as { name?: unknown }).name ?? "")
+      : "";
+    if (name === "NotAllowedError" || name === "AbortError") return "cancelled";
+    if (PASSKEY_WRAPPER_NAMES.has(name)) wrapped = true;
+  }
+  return wrapped ? "failed" : null;
+}
+
+/**
+ * Whether a message produced by toUserMessage means "the person changed their
+ * mind" rather than "something broke". The toaster shows these as a quiet
+ * notice, not an error.
+ */
+export function isCancellationMessage(message: string): boolean {
+  return message === PASSKEY_CANCELLED_MESSAGE || message === WALLET_DISMISSED_MESSAGE;
+}
+
 export function toUserMessage(cause: unknown, fallback: string): string {
   if (typeof cause !== "object" || cause === null) return fallback;
+
+  switch (passkeyFailure(cause)) {
+    case "cancelled":
+      return PASSKEY_CANCELLED_MESSAGE;
+    case "failed":
+      return "Your passkey couldn't complete that. Try again.";
+    default:
+      break;
+  }
 
   /*
    * A dismissed wallet prompt reaches here identically whether it was a
@@ -254,11 +312,7 @@ export function toUserMessage(cause: unknown, fallback: string): string {
    */
   switch (classifyConnectError(cause)) {
     case "cancelled":
-      return (
-        "You dismissed the wallet prompt, so nothing was signed and nothing was spent. " +
-        "If you didn't dismiss it, your wallet may still have an earlier request open — " +
-        "clear it there, then try again."
-      );
+      return WALLET_DISMISSED_MESSAGE;
     case "busy":
       return connectFailureCopy("busy").body;
     case "no-wallet":

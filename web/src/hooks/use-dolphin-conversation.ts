@@ -10,6 +10,7 @@ import {
   type DolphinMessage,
   type DolphinToolCall,
 } from "@/convex/api";
+import { useAltanaWallet } from "@/wallet/altana-provider";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
 
@@ -118,6 +119,10 @@ export function useDolphinChat(
   const wallet = useWallet();
   const session = useWalletSession();
   const userAddress = (wallet.address ?? session.address ?? undefined)?.toLowerCase();
+  /* Sent with chat turns so a balance question can read the Dolphin Wallet too. */
+  const dolphinWallet = useAltanaWallet();
+  const dolphinWalletAddress =
+    dolphinWallet.status === "connected" ? (dolphinWallet.address ?? undefined) : undefined;
 
   const send = useCallback(
     async (text: string) => {
@@ -146,6 +151,7 @@ export function useDolphinChat(
           conversationKey: key,
           text: trimmed,
           ...(userAddress ? { userAddress } : {}),
+          ...(mode === "chat" && dolphinWalletAddress ? { dolphinWalletAddress } : {}),
         });
       } catch (cause) {
         /*
@@ -160,7 +166,17 @@ export function useDolphinChat(
         setIsSending(false);
       }
     },
-    [ask, conversationKey, createConversation, isSending, mode, seedAgentKey, session.sessionToken, userAddress],
+    [
+      ask,
+      conversationKey,
+      createConversation,
+      dolphinWalletAddress,
+      isSending,
+      mode,
+      seedAgentKey,
+      session.sessionToken,
+      userAddress,
+    ],
   );
 
   const reset = useCallback(() => {

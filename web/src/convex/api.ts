@@ -759,7 +759,13 @@ export const dolphinApi = anyApi as unknown as {
      * `getConversation` and watch the message status and tool-call rows land.
      */
     ask: Action<
-      { conversationKey: string; text: string; userAddress?: string },
+      {
+        conversationKey: string;
+        text: string;
+        userAddress?: string;
+        /** The Dolphin Wallet on this device, so a balance question reads it too. */
+        dolphinWalletAddress?: string;
+      },
       { messageId: string }
     >;
   };

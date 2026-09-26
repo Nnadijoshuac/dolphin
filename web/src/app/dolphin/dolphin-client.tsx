@@ -42,62 +42,26 @@ function historyTime(timestamp: number): string {
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-/**
- * What to ask when you have no idea what this thing can do.
- *
- * ===========================================================================
- * WHY A COLD /dolphin HAD NONE (2026-09-12)
- * ===========================================================================
- * Sample prompts already existed, and were rendered ONLY when `seedAgentName`
- * was set - that is, only for someone who arrived from an agent page and
- * therefore already knew what they were asking about. Anyone landing on
- * /dolphin directly, which is the case for every shared link and every visitor
- * who clicks Dolphin in the nav, got a brand mark, one line of copy and an
- * empty box.
- *
- * A blank input is the worst possible opening for this product specifically.
- * The user does not know 43 agents exist, does not know a Venus health factor
- * is readable, and cannot guess that asking about execution capability is a
- * question with an answer. The cost of a blank box here is not typing effort,
- * it is that the product's entire capability surface is invisible.
- *
- * ===========================================================================
- * THE RULE FOR WHAT GOES IN THIS LIST
- * ===========================================================================
- * Every entry must be answerable by something that is actually wired, so that
- * a first impression is a real answer rather than an apology:
- *
- *  - Execution capability is derived from published tool lists
- *    (convex/lib/toolCapability.ts).
- *  - The Venus health factor is a live protocol read (convex/protocols/venus.ts).
- *  - Comparing yield agents is catalog work, which needs no model tools at all.
- *  - The probe story is the one question Dolphin can always answer about
- *    itself, and it is the thing most worth knowing about this marketplace.
- *
- * Do NOT add a prompt about grid-trading or trading performance. Those
- * categories return unavailableStats by construction, so the honest answer is
- * "nothing measures that" - a true sentence, and a terrible first impression
- * to have invited.
- */
-const STARTER_PROMPTS = [
-  "Which agents here can actually execute a transaction?",
-  "What is my Venus health factor?",
-  "Compare the yield agents on BNB Chain",
-  "How does Dolphin decide an agent is live?",
-];
-
-/**
- * What to try first in Build mode. Each one describes an agent whose tools
- * can come from the read-only MCP agents already listed, so none of them asks
- * for something the builder would have to refuse.
- */
-const BUILD_STARTERS = [
-  "An agent that watches my Venus health factor",
-  "An agent that compares yields on BNB Chain",
-  "An agent that explains a PancakeSwap pool before I add liquidity",
-];
-
 type ChatMode = "chat" | "build";
+
+/*
+ * THE EMPTY SCREEN IS THE MODE SWITCH AND ONE LINE. (2026-09-26)
+ *
+ * It used to carry a logo, a heading, a paragraph and four starter chips, and
+ * Build mode copied the pattern. The owner's call: too much, for both modes.
+ * A new visitor has one decision to make (ask, or build) and then one thing
+ * to do (type), so the screen shows exactly that. The line says what to type
+ * in the mode that is selected, and the composer's placeholder repeats it
+ * where the typing happens.
+ *
+ * This deliberately reverses the 2026-09-12 starter prompts, which were added
+ * because a blank box hid what Dolphin can answer. The one-line hint is what
+ * is kept of that argument.
+ */
+const MODE_HINT: Readonly<Record<ChatMode, string>> = {
+  chat: "Ask anything about the agents on BNB Chain.",
+  build: "Describe the agent you want, and Dolphin builds it.",
+};
 
 /*
  * Build mode has its UI and not yet its backend. Sending is refused in
@@ -117,14 +81,18 @@ const BUILD_BACKEND_CONNECTED: boolean = false;
 function ModeSwitch({
   mode,
   onChange,
+  size = "sm",
 }: {
   mode: ChatMode;
   onChange: (mode: ChatMode) => void;
+  size?: "sm" | "lg";
 }) {
   return (
     <div
       aria-label="Conversation mode"
-      className="inline-flex items-center rounded-full border border-line/80 bg-paper-muted/70 p-0.5"
+      className={`inline-flex items-center rounded-full border border-line/80 bg-paper-muted/70 ${
+        size === "lg" ? "p-1" : "p-0.5"
+      }`}
       role="radiogroup"
     >
       {(["chat", "build"] as const).map((option) => {
@@ -132,7 +100,9 @@ function ModeSwitch({
         return (
           <button
             aria-checked={selected}
-            className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
+            className={`rounded-full font-semibold transition-colors ${
+              size === "lg" ? "px-6 py-2 text-[15px]" : "px-3 py-1 text-[12px]"
+            } ${
               selected ? "bg-ink text-canvas shadow-sm" : "text-ink-soft hover:text-ink"
             }`}
             key={option}
@@ -624,66 +594,13 @@ export function DolphinClient({
                   This locally saved chat can no longer be opened.
                 </p>
               </div>
-            ) : isEmpty && building ? (
-              <div className="dolphin-empty-hero flex flex-col items-center pt-[14vh]">
-                <BrandMark size={48} />
-                <h1 className="mt-4 text-center text-[1.6rem] font-semibold tracking-tight text-ink">
-                  Build an agent
-                </h1>
-                <p className="mt-2 max-w-md text-center text-sm text-muted">
-                  Describe what it should do. Dolphin drafts it from the free agents
-                  listed here. It is yours to use privately, and you can put it
-                  on-chain when you are ready.
-                </p>
-                <div className="mt-6 flex flex-wrap justify-center gap-2">
-                  {BUILD_STARTERS.map((starter) => (
-                    <button
-                      className="rounded-full border border-line/80 bg-paper/75 px-3.5 py-1.5 text-xs font-medium text-ink-soft shadow-sm transition hover:border-line-strong hover:bg-paper hover:text-ink"
-                      key={starter}
-                      onClick={() => {
-                        setDraft(starter);
-                        textareaRef.current?.focus();
-                      }}
-                      type="button"
-                    >
-                      {starter}
-                    </button>
-                  ))}
-                </div>
-              </div>
             ) : isEmpty ? (
-              <div className="dolphin-empty-hero flex flex-col items-center pt-[14vh]">
-                <BrandMark size={48} />
-                <h1 className="mt-4 text-center text-[1.6rem] font-semibold tracking-tight text-ink">
-                  Ask the marketplace
+              <div className="dolphin-empty-hero flex flex-col items-center pt-[30vh]">
+                <h1 className="sr-only">
+                  {building ? "Build an agent" : "Ask the marketplace"}
                 </h1>
-                <p className="mt-2 max-w-md text-center text-sm text-muted">
-                  Autonomous agent intelligence on BNB Chain. Ask questions, compare strategies, or inspect live contract telemetry.
-                </p>
-                {/*
-                  * Agent-specific prompts when the visitor came from a record,
-                  * STARTER_PROMPTS otherwise. The second branch is the one that
-                  * was missing - see the note on STARTER_PROMPTS.
-                  */}
-                <div className="mt-6 flex flex-wrap justify-center gap-2">
-                  {(seedAgentName
-                    ? [
-                        `What strategy does ${seedAgentName} run?`,
-                        `Check live health for ${seedAgentName}`,
-                        `Is ${seedAgentName} verified and safe?`,
-                      ]
-                    : STARTER_PROMPTS
-                  ).map((samplePrompt) => (
-                    <button
-                      className="rounded-full border border-line/80 bg-paper/75 px-3.5 py-1.5 text-xs font-medium text-ink-soft shadow-sm transition hover:border-line-strong hover:bg-paper hover:text-ink"
-                      key={samplePrompt}
-                      onClick={() => submit(samplePrompt)}
-                      type="button"
-                    >
-                      {samplePrompt}
-                    </button>
-                  ))}
-                </div>
+                <ModeSwitch mode={mode} onChange={setMode} size="lg" />
+                <p className="mt-4 text-center text-sm text-muted">{MODE_HINT[mode]}</p>
               </div>
             ) : (
               <div>
@@ -740,9 +657,12 @@ export function DolphinClient({
               />
               <div className="flex items-center justify-between gap-2 pl-1">
                 <div className="flex min-w-0 items-center gap-1.5">
-                  {canSwitchMode ? (
-                    <ModeSwitch mode={mode} onChange={setMode} />
-                  ) : (
+                  {/*
+                    * The switch itself lives in the empty screen. Once a
+                    * conversation has started, this label is the only reminder
+                    * of which mode it is in.
+                    */}
+                  {canSwitchMode ? null : (
                     <span className="px-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
                       {building ? "Build" : "Chat"}
                     </span>

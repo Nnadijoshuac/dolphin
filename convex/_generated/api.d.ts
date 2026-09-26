@@ -29,6 +29,7 @@ import type * as facets from "../facets.js";
 import type * as healthAlerts from "../healthAlerts.js";
 import type * as http from "../http.js";
 import type * as lib_agentTransaction from "../lib/agentTransaction.js";
+import type * as lib_answerHygiene from "../lib/answerHygiene.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
 import type * as lib_categorize from "../lib/categorize.js";
 import type * as lib_dataSources from "../lib/dataSources.js";
@@ -36,6 +37,7 @@ import type * as lib_decisionTools from "../lib/decisionTools.js";
 import type * as lib_dedupe from "../lib/dedupe.js";
 import type * as lib_email from "../lib/email.js";
 import type * as lib_erc8183 from "../lib/erc8183.js";
+import type * as lib_leakedReasoning from "../lib/leakedReasoning.js";
 import type * as lib_liveMetric from "../lib/liveMetric.js";
 import type * as lib_manualExclusions from "../lib/manualExclusions.js";
 import type * as lib_mcpClient from "../lib/mcpClient.js";
@@ -64,6 +66,7 @@ import type * as shelves from "../shelves.js";
 import type * as sources_scan8004 from "../sources/scan8004.js";
 import type * as tracking from "../tracking.js";
 import type * as verification from "../verification.js";
+import type * as walletActivity from "../walletActivity.js";
 import type * as walletAuth from "../walletAuth.js";
 
 import type {
@@ -94,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   healthAlerts: typeof healthAlerts;
   http: typeof http;
   "lib/agentTransaction": typeof lib_agentTransaction;
+  "lib/answerHygiene": typeof lib_answerHygiene;
   "lib/bscClient": typeof lib_bscClient;
   "lib/categorize": typeof lib_categorize;
   "lib/dataSources": typeof lib_dataSources;
@@ -101,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   "lib/dedupe": typeof lib_dedupe;
   "lib/email": typeof lib_email;
   "lib/erc8183": typeof lib_erc8183;
+  "lib/leakedReasoning": typeof lib_leakedReasoning;
   "lib/liveMetric": typeof lib_liveMetric;
   "lib/manualExclusions": typeof lib_manualExclusions;
   "lib/mcpClient": typeof lib_mcpClient;
@@ -129,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   "sources/scan8004": typeof sources_scan8004;
   tracking: typeof tracking;
   verification: typeof verification;
+  walletActivity: typeof walletActivity;
   walletAuth: typeof walletAuth;
 }>;
 

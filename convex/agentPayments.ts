@@ -627,11 +627,20 @@ export const recordJobRefund = action({
       );
     }
 
+    /*
+     * The BLOCK's time, not the time this ran. Recording can happen long
+     * after the refund (job 56783's was recorded hours later, from a hash the
+     * owner looked up on BscScan), and the history must show when the money
+     * actually came back.
+     */
+    const block = await bscPublicClient.getBlock({ blockNumber: receipt.blockNumber });
+    const refundedAt = new Date(Number(block.timestamp) * 1000).toISOString();
+
     await ctx.runMutation(internal.agentPayments.markJobRefunded, {
       jobId: args.jobId,
       jobStatus: statusName,
       refundTransactionHash: args.transactionHash,
-      refundedAt: new Date().toISOString(),
+      refundedAt,
     });
     return { jobStatus: statusName };
   },

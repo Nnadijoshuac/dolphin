@@ -12,6 +12,7 @@ import {
 } from "./_generated/server";
 import knowledge from "./knowledge.json";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
+import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { McpError, callMcpTool } from "./lib/mcpClient";
 import {
   OpenRouterError,
@@ -576,6 +577,8 @@ export const reusableAnswer = internalQuery({
       if (!answer) continue;
       if (answer.status !== "complete") continue;
       if (answer.content.trim().length === 0) continue;
+      /* Stored before the leak guard existed, or slipped past it: never replay. */
+      if (looksLikeLeakedReasoning(answer.content)) continue;
       if (answer.completedAt === null || answer.completedAt < cutoff) continue;
 
       /*
@@ -1252,13 +1255,27 @@ export const ask = action({
               toolChoice: "auto",
             });
 
+            /*
+             * THE CONSULT STEP'S PROSE IS NEVER CARRIED FORWARD. (2026-09-26)
+             *
+             * CONSULT_PROMPT says "never write prose in this step", and a free
+             * model that calls no tool writes it anyway - measured, it wrote
+             * its reasoning about the prompt ("we either call tools or return
+             * empty ... we'll output nothing"). That turn used to be appended
+             * here, so synthesis ran with it as the last assistant message and
+             * the reasoning came back out as Dolphin's answer. See
+             * lib/leakedReasoning.ts.
+             *
+             * A consult turn is kept only for its tool calls, and its prose is
+             * dropped even then: it is not evidence and it is not an answer.
+             */
+            if (turn.toolCalls.length === 0) break;
+
             messages.push({
               role: "assistant",
-              content: turn.content || null,
+              content: null,
               tool_calls: turn.toolCalls,
             });
-
-            if (turn.toolCalls.length === 0) break;
 
             const batch = turn.toolCalls.slice(0, callsRemaining);
             callsRemaining -= batch.length;
@@ -1453,7 +1470,11 @@ Keep it magnetic, warm, and conversational.`;
        * same way. It used to keep `final.model`, which attributed a template to
        * whichever model had just declined to write anything.
        */
-      const answered = final.content.trim().length > 0;
+      const leaked = looksLikeLeakedReasoning(final.content);
+      if (leaked) {
+        console.warn("[Dolphin] Synthesis returned reasoning about its prompt; replaced with the catalog fallback.");
+      }
+      const answered = final.content.trim().length > 0 && !leaked;
 
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
         messageId: assistantId,

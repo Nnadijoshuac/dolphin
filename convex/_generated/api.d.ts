@@ -9,6 +9,7 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as agentBuilder from "../agentBuilder.js";
 import type * as agentHires from "../agentHires.js";
 import type * as agentPayments from "../agentPayments.js";
 import type * as agentRetention from "../agentRetention.js";
@@ -28,6 +29,7 @@ import type * as engagement from "../engagement.js";
 import type * as facets from "../facets.js";
 import type * as healthAlerts from "../healthAlerts.js";
 import type * as http from "../http.js";
+import type * as lib_agentSpec from "../lib/agentSpec.js";
 import type * as lib_agentTransaction from "../lib/agentTransaction.js";
 import type * as lib_answerHygiene from "../lib/answerHygiene.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
@@ -76,6 +78,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  agentBuilder: typeof agentBuilder;
   agentHires: typeof agentHires;
   agentPayments: typeof agentPayments;
   agentRetention: typeof agentRetention;
@@ -95,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   facets: typeof facets;
   healthAlerts: typeof healthAlerts;
   http: typeof http;
+  "lib/agentSpec": typeof lib_agentSpec;
   "lib/agentTransaction": typeof lib_agentTransaction;
   "lib/answerHygiene": typeof lib_answerHygiene;
   "lib/bscClient": typeof lib_bscClient;

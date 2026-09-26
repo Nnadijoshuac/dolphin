@@ -801,10 +801,61 @@ export default defineSchema({
      * turn already knows what the user was looking at.
      */
     seedAgentKey: v.union(v.string(), v.null()),
+    /**
+     * What the conversation is FOR, fixed when it is created (2026-09-26).
+     *
+     * - `chat`  - Q&A about the marketplace, answered by dolphin.ask.
+     * - `build` - drafting an agent, answered by agentBuilder.ask. Owns one
+     *             row in `agentDrafts`.
+     * - `try`   - running a draft privately, answered by agentBuilder.tryAsk.
+     *             `draftId` names the draft under test.
+     *
+     * Each action refuses a conversation of another mode, so a build request
+     * can never be answered as a marketplace question, or the other way round.
+     * Optional: every row written before this existed is a chat.
+     */
+    mode: v.optional(v.union(v.literal("chat"), v.literal("build"), v.literal("try"))),
+    draftId: v.optional(v.id("agentDrafts")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_key", ["conversationKey"])
+    .index("by_owner", ["ownerAddress", "updatedAt"]),
+
+  /**
+   * AN AGENT A USER IS BUILDING. One per `build` conversation. (2026-09-26)
+   *
+   * See Agent/PLAN-2026-09-26-build-your-agent.md and convex/lib/agentSpec.ts.
+   * It is private and has no on-chain existence: nothing here is registered,
+   * listed or reachable by anyone but the holder of the conversation key.
+   *
+   * Every text field is null until the person and the builder have actually
+   * settled it. A default name or description would render exactly like one
+   * the person chose.
+   *
+   * `tools` are tools of catalog MCP agents, identified by agentKey (AGENTS.md
+   * §9) and the tool's real name on that agent's server. Read-only by
+   * construction: the builder is only ever offered tools that pass
+   * lib/toolCapability.ts `isMutating`, and a try-run filters again.
+   */
+  agentDrafts: defineTable({
+    conversationId: v.id("dolphinConversations"),
+    ownerAddress: v.union(v.string(), v.null()),
+    name: v.union(v.string(), v.null()),
+    description: v.union(v.string(), v.null()),
+    instructions: v.union(v.string(), v.null()),
+    tools: v.array(
+      v.object({
+        agentKey: v.string(),
+        /** Denormalized so the draft panel renders without a catalog read. */
+        agentName: v.string(),
+        toolName: v.string(),
+      }),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
     .index("by_owner", ["ownerAddress", "updatedAt"]),
 
   /**

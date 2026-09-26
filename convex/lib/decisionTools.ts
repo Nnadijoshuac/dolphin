@@ -143,7 +143,16 @@ export type ToolMenu = {
  * statement from "three agents answered", and the second one hides a fact the
  * user is entitled to.
  */
-export async function buildToolMenu(candidates: CandidateAgent[]): Promise<ToolMenu> {
+export async function buildToolMenu(
+  candidates: CandidateAgent[],
+  /**
+   * Narrows each agent to named tools, applied before the per-agent cap. A
+   * try-run of a built agent passes the draft's own tool list here, so the
+   * menu is exactly what the owner chose and not the first three the server
+   * happens to list. The isMutating filter still runs first either way.
+   */
+  allow?: (agentKey: string, toolName: string) => boolean,
+): Promise<ToolMenu> {
   const tools: ToolDefinition[] = [];
   const bindings = new Map<string, ToolBinding>();
   const unreachable: ToolMenu["unreachable"] = [];
@@ -165,6 +174,7 @@ export async function buildToolMenu(candidates: CandidateAgent[]): Promise<ToolM
       // consume the whole menu and crowd out the other agents' answers.
       const readable = available
         .filter((tool) => !isMutating(tool.name))
+        .filter((tool) => !allow || allow(candidate.agentKey, tool.name))
         .slice(0, MAX_TOOLS_PER_AGENT);
 
       for (const tool of readable) {

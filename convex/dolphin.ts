@@ -412,8 +412,14 @@ export const createConversation = mutation({
     seedAgentKey: v.optional(v.string()),
     sessionToken: v.optional(v.string()),
     userAddress: v.optional(v.string()),
+    /**
+     * Chat or Build, chosen before the first turn and fixed after. A `try`
+     * conversation is opened by agentBuilder.startTry instead, because it has
+     * to be bound to a draft.
+     */
+    mode: v.optional(v.union(v.literal("chat"), v.literal("build"))),
   },
-  handler: async (ctx, { seedAgentKey, sessionToken, userAddress }) => {
+  handler: async (ctx, { seedAgentKey, sessionToken, userAddress, mode }) => {
     /*
      * 32 bytes. This key is a capability - holding it is what grants read
      * access to an anonymous conversation - so it is generated server-side
@@ -443,7 +449,8 @@ export const createConversation = mutation({
       conversationKey,
       ownerAddress,
       title: "New conversation",
-      seedAgentKey: seedAgentKey ?? null,
+      seedAgentKey: mode === "build" ? null : (seedAgentKey ?? null),
+      mode: mode ?? "chat",
       createdAt: now,
       updatedAt: now,
     });
@@ -458,13 +465,26 @@ export const appendTurn = internalMutation({
     userText: v.string(),
     promptHash: v.string(),
     userAddress: v.optional(v.string()),
+    /** Which action is answering. Defaults to chat, the only caller before build mode. */
+    mode: v.optional(v.union(v.literal("chat"), v.literal("build"), v.literal("try"))),
   },
-  handler: async (ctx, { conversationKey, userText, promptHash, userAddress }) => {
+  handler: async (ctx, { conversationKey, userText, promptHash, userAddress, mode }) => {
     const conversation = await ctx.db
       .query("dolphinConversations")
       .withIndex("by_key", (q) => q.eq("conversationKey", conversationKey))
       .unique();
     if (!conversation) throw new Error("That conversation no longer exists.");
+
+    /*
+     * Checked before anything is written, so a turn sent to the wrong action
+     * leaves no orphan user message behind. See `mode` in schema.ts.
+     */
+    const conversationMode = conversation.mode ?? "chat";
+    if (conversationMode !== (mode ?? "chat")) {
+      throw new Error(
+        `That conversation is a ${conversationMode} conversation and cannot take a ${mode ?? "chat"} turn.`,
+      );
+    }
 
     const now = Date.now();
 
@@ -523,6 +543,7 @@ export const appendTurn = internalMutation({
       assistantId,
       ownerAddress,
       seedAgentKey: conversation.seedAgentKey,
+      draftId: conversation.draftId ?? null,
     };
   },
 });
@@ -1576,7 +1597,7 @@ Reply in at most two sentences: ${callsMade > 0 ? "you re-checked just now, so s
  * a model told nothing about a failed call will assume it succeeded and invent
  * what it returned.
  */
-async function executeToolCalls(
+export async function executeToolCalls(
   ctx: ActionCtx,
   input: {
     conversationId: Id<"dolphinConversations">;
@@ -1691,7 +1712,7 @@ async function executeToolCalls(
  */
 export type DolphinErrorKind = "capacity" | "provider" | "input" | "fault";
 
-function humanizeError(cause: unknown): { message: string; kind: DolphinErrorKind } {
+export function humanizeError(cause: unknown): { message: string; kind: DolphinErrorKind } {
   const raw =
     cause instanceof OpenRouterError
       ? cause.message

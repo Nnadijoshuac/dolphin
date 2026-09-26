@@ -82,13 +82,13 @@ HOW TO WORK:
 
 Return ONLY the JSON object.`;
 
-const TRY_CONSULT_PROMPT = `You are the evidence-gathering step of an AI agent. Decide whether the user's message needs live data from the tools you have, and if it does, call them.
+export const TRY_CONSULT_PROMPT = `You are the evidence-gathering step of an AI agent. Decide whether the user's message needs live data from the tools you have, and if it does, call them.
 
 - Call a tool when the answer depends on live data: prices, pools, positions, balances, protocol state.
 - Do not call a tool for a greeting, or for something you can answer by explaining.
 - Never write prose in this step. Only call tools or return empty.`;
 
-function tryAnswerPrompt(draft: DraftSpec): string {
+export function tryAnswerPrompt(draft: DraftSpec): string {
   return `You are "${draft.name}", an AI agent that a person built on Dolphin, a marketplace of AI agents on BNB Chain. ${draft.description ?? ""}
 
 YOUR INSTRUCTIONS, FROM THE PERSON WHO BUILT YOU:

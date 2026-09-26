@@ -18,6 +18,7 @@ import { parseAbiItem, toEventSelector } from "viem";
 
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
+import { HASH_PATTERN, handleMcp, registrationFile } from "./builtAgentServer";
 
 const http = httpRouter();
 
@@ -192,5 +193,110 @@ for (const path of ["/api/v1/contracts", "/api/v1/hires", "/api/v1/agents", "/ap
     handler: httpAction(async () => new Response(null, { status: 204, headers: CORS })),
   });
 }
+
+/* ---------------------------------------------------------------------------
+ * BUILT AGENTS (2026-09-26) - see convex/builtAgentServer.ts
+ *
+ *   GET  /api/v1/built/<hash>/registration.json   ERC-8004 registration file
+ *   GET  /api/v1/built/<hash>/icon                the agent's icon
+ *   POST /api/v1/built/<hash>/mcp                 MCP: its tools + `ask`
+ * ------------------------------------------------------------------------ */
+
+const BUILT_PREFIX = "/api/v1/built/";
+const BUILT_CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "content-type, accept, mcp-protocol-version, mcp-session-id",
+};
+/** An MCP request is a few hundred bytes. Anything near this is not one. */
+const MAX_MCP_BODY_BYTES = 64 * 1024;
+
+function builtPath(request: Request): { hash: string; resource: string } | null {
+  const rest = new URL(request.url).pathname.slice(BUILT_PREFIX.length);
+  const [hash, resource, ...extra] = rest.split("/");
+  if (!hash || !resource || extra.length > 0 || !HASH_PATTERN.test(hash)) return null;
+  return { hash, resource };
+}
+
+function notFound(): Response {
+  return new Response(JSON.stringify({ error: "No such agent." }), {
+    status: 404,
+    headers: { ...BUILT_CORS, "content-type": "application/json; charset=utf-8" },
+  });
+}
+
+http.route({
+  pathPrefix: BUILT_PREFIX,
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const path = builtPath(request);
+    if (!path) return notFound();
+    const listing = await ctx.runQuery(internal.builtAgents.byHash, { hash: path.hash });
+    if (!listing) return notFound();
+
+    if (path.resource === "registration.json") {
+      return new Response(JSON.stringify(registrationFile(listing), null, 2), {
+        headers: {
+          ...BUILT_CORS,
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "public, max-age=60",
+        },
+      });
+    }
+    if (path.resource === "icon") {
+      const blob = await ctx.storage.get(listing.iconStorageId);
+      if (!blob) return notFound();
+      return new Response(blob, {
+        headers: {
+          ...BUILT_CORS,
+          "content-type": listing.iconContentType,
+          /* Only ever an image: never sniffed into anything else, never able to run. */
+          "x-content-type-options": "nosniff",
+          "content-security-policy": "default-src 'none'; sandbox",
+          "cache-control": "public, max-age=86400",
+        },
+      });
+    }
+    return notFound();
+  }),
+});
+
+http.route({
+  pathPrefix: BUILT_PREFIX,
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const path = builtPath(request);
+    if (!path || path.resource !== "mcp") return notFound();
+    const listing = await ctx.runQuery(internal.builtAgents.byHash, { hash: path.hash });
+    if (!listing || listing.status === "unpublished") return notFound();
+
+    const text = await request.text();
+    const rpc = (body: unknown, status = 200) =>
+      new Response(body === null ? null : JSON.stringify(body), {
+        status,
+        headers: { ...BUILT_CORS, "content-type": "application/json; charset=utf-8" },
+      });
+    if (text.length > MAX_MCP_BODY_BYTES) {
+      return rpc({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Request too large." } }, 413);
+    }
+    let message: unknown;
+    try {
+      message = JSON.parse(text);
+    } catch {
+      return rpc({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error." } }, 400);
+    }
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      return rpc({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Send one JSON-RPC request at a time." } }, 400);
+    }
+    const response = await handleMcp(ctx, listing, message as Parameters<typeof handleMcp>[2]);
+    return response === null ? rpc(null, 202) : rpc(response);
+  }),
+});
+
+http.route({
+  pathPrefix: BUILT_PREFIX,
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: BUILT_CORS })),
+});
 
 export default http;

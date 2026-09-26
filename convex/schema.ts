@@ -791,6 +791,74 @@ export default defineSchema({
     .index("by_agent_wallet", ["agentKey", "altanaWalletAddress"]),
 
   /**
+   * ICONS FOR BUILT AGENTS, after convex/iconProcessing.ts redrew them.
+   * (2026-09-26) Only a row here may be used as an agent's icon: a raw upload
+   * is never served. One wallet's rows also meter its daily upload limit.
+   */
+  agentIcons: defineTable({
+    storageId: v.id("_storage"),
+    /** Checksummed. The signed-in wallet that uploaded it. */
+    ownerAddress: v.string(),
+    contentType: v.union(v.literal("image/png"), v.literal("image/jpeg")),
+    width: v.number(),
+    height: v.number(),
+    bytes: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_storage", ["storageId"])
+    .index("by_owner", ["ownerAddress", "createdAt"]),
+
+  /**
+   * A BUILT AGENT PUT ON-CHAIN. (2026-09-26) One row per publish, per network.
+   *
+   * `hash` is its public id: https://www.dolphinamp.xyz/agent/<hash>, and the
+   * ERC-8004 registration file at /api/v1/built/<hash>/registration.json. It
+   * exists BEFORE the mint, because the token's URI has to point at it.
+   *
+   * The published fields are a SNAPSHOT of the draft at publish time. Editing
+   * the draft afterwards does not change a live agent; publishing again does.
+   * Owner and token are checked against the chain (builtAgents.confirmRegistration).
+   */
+  builtAgents: defineTable({
+    hash: v.string(),
+    draftId: v.id("agentDrafts"),
+    ownerAddress: v.string(),
+    network: v.union(v.literal("bsc"), v.literal("bsc-testnet")),
+    chainId: v.number(),
+    registry: v.string(),
+    name: v.string(),
+    description: v.string(),
+    instructions: v.string(),
+    tools: v.array(v.object({ agentKey: v.string(), agentName: v.string(), toolName: v.string() })),
+    category: v.string(),
+    links: v.object({
+      website: v.union(v.string(), v.null()),
+      x: v.union(v.string(), v.null()),
+      email: v.union(v.string(), v.null()),
+    }),
+    iconStorageId: v.id("_storage"),
+    iconContentType: v.union(v.literal("image/png"), v.literal("image/jpeg")),
+    status: v.union(v.literal("awaiting-signature"), v.literal("registered"), v.literal("unpublished")),
+    tokenId: v.union(v.string(), v.null()),
+    /** "<chainId>:<registry lowercase>:<tokenId>" - AGENTS.md §9. */
+    agentKey: v.union(v.string(), v.null()),
+    registerTxHash: v.union(v.string(), v.null()),
+    registeredAt: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_hash", ["hash"])
+    .index("by_owner", ["ownerAddress", "createdAt"])
+    .index("by_draft", ["draftId", "network"]),
+
+  /** Public `ask` calls per built agent per UTC day - every one spends model calls. */
+  builtAgentUsage: defineTable({
+    hash: v.string(),
+    day: v.string(),
+    asks: v.number(),
+  }).index("by_hash_day", ["hash", "day"]),
+
+  /**
    * EVERY ACTION THE DOLPHIN WALLET TAKES, besides escrow payments and
    * refunds (which live on agentJobs). (2026-09-26)
    *

@@ -13,13 +13,13 @@
 .digit {
   position: relative;
   z-index: 1;
-  color: #00c96f;
+  color: #f0b90b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.42rem;
   font-weight: 700;
   line-height: 1;
   opacity: 0;
-  text-shadow: 0 0 3px rgba(0, 255, 136, 0.72);
+  text-shadow: 0 0 3px rgba(240, 185, 11, 0.42);
   animation:
     matrix-fall 1.8s linear infinite,
     matrix-flicker 450ms steps(2, end) infinite;
@@ -38,7 +38,7 @@
   position: absolute;
   inset: -4px;
   border-radius: 999px;
-  background: radial-gradient(circle, rgba(0, 255, 136, 0.14) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(240, 185, 11, 0.1) 0%, transparent 70%);
   animation: matrix-pulse 1.8s ease-in-out infinite;
 }
 

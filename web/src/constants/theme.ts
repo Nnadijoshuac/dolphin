@@ -16,9 +16,9 @@ export const colors = {
   goldMuted: "#FFF8DB",
   goldBorder: "#E8D27B",
   goldDark: "#654B00",
-  mint: "#E4F2EA",
-  mintInk: "#267052",
-  mintBorder: "#BFDCCB",
+  mint: "#EEEDE6",
+  mintInk: "#5F6058",
+  mintBorder: "#C9C8BD",
   blue: "#E7EFF8",
   blueInk: "#355F8C",
   blueBorder: "#C8D8E8",
@@ -30,8 +30,8 @@ export const colors = {
   coralBorder: "#E9C7C0",
   danger: "#A84235",
   dangerSoft: "#F8E8E4",
-  success: "#267052",
-  successSoft: "#E4F2EA",
+  success: "#5F6058",
+  successSoft: "#EEEDE6",
   overlay: "rgba(23, 24, 19, 0.42)",
 } as const;
 

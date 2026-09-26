@@ -47,8 +47,8 @@
   --accent-hover: #dba807;
   --accent-soft: #fff2bd;
   --accent-ink: #654b00;
-  --success: #267052;
-  --success-soft: #e4f2ea;
+  --success: #5f6058;
+  --success-soft: #eeede6;
   --danger: #a84235;
   --danger-soft: #f8e8e4;
   --info: #355f8c;
@@ -90,7 +90,7 @@
  *   --muted    #a3a396     7.26    6.66    5.92
  *   --faint    #94948a     6.04    5.55    4.93
  *   --accent   #f0b90b    10.26    9.41    8.37
- *   --success  #4ba87c     6.33    5.81    5.16
+ *   --success  #a3a396     7.26    6.66    5.92
  *   --danger   #e0705f     5.86    5.38    4.78
  *   --info     #7fa8d6     7.46    6.85    6.09
  *
@@ -136,8 +136,8 @@
     --accent-hover: #ffca2c;
     --accent-soft: #3a2f06;
     --accent-ink: #f7d354;
-    --success: #4ba87c;
-    --success-soft: #14281d;
+    --success: #a3a396;
+    --success-soft: #26271f;
     --danger: #e0705f;
     --danger-soft: #331915;
     --info: #7fa8d6;
@@ -168,8 +168,8 @@
   --accent-hover: #ffca2c;
   --accent-soft: #3a2f06;
   --accent-ink: #f7d354;
-  --success: #4ba87c;
-  --success-soft: #14281d;
+  --success: #a3a396;
+  --success-soft: #26271f;
   --danger: #e0705f;
   --danger-soft: #331915;
   --info: #7fa8d6;
@@ -954,7 +954,6 @@ select {
   height: 0.4rem;
   border-radius: 50%;
   background: var(--success);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success) 22%, transparent);
 }
 
 /* ── The readout ──
@@ -1449,9 +1448,9 @@ select {
   padding: 0.875rem 1rem;
 }
 .wallet-note--ok {
-  border-color: color-mix(in srgb, var(--success) 22%, var(--line));
-  border-left-color: var(--success);
-  background: color-mix(in srgb, var(--success-soft) 40%, var(--paper));
+  border-color: var(--line);
+  border-left-color: var(--line-strong);
+  background: var(--paper);
 }
 .wallet-note--warn {
   border-color: color-mix(in srgb, var(--danger) 22%, var(--line));

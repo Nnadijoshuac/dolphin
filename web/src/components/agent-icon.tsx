@@ -51,7 +51,7 @@ const ICON_STORE_NEVER_CHANGES = () => () => {};
 const categoryBgColors: Record<AgentCategory, { bg: string; border: string; glyphColor: string }> = {
   rebalancing: { bg: "#FEF5D6", border: "#F3E3A6", glyphColor: "#946B00" },
   "grid-trading": { bg: "#DDE9F8", border: "#C6D8EE", glyphColor: "#295C92" },
-  "health-factor": { bg: "#DCEFE4", border: "#BFE0CC", glyphColor: "#1C6A44" },
+  "health-factor": { bg: "#EEEDE6", border: "#D7D5CA", glyphColor: "#5F6058" },
   yield: { bg: "#E9E1F4", border: "#D8CAE8", glyphColor: "#65478A" },
   monitoring: { bg: "#F5F3EB", border: "#ECE8DE", glyphColor: "#303236" },
   trading: { bg: "#F7DFD8", border: "#EFCDC2", glyphColor: "#964C3C" },

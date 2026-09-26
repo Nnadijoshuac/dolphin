@@ -20,8 +20,8 @@ const stateConfigs: Record<
   },
   live: {
     label: "Live",
-    bg: "#e4f2ea",
-    text: "#267052",
+    bg: "#eeede6",
+    text: "#5f6058",
     icon: "shield",
   },
   stale: {

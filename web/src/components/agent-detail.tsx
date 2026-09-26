@@ -260,10 +260,15 @@ function AvailabilityNotice({ agent }: { agent: Agent }) {
 
   if (agent.status === "live") {
     return (
-      <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-success/30 bg-success-soft px-4 py-3 text-sm text-ink">
-        <span aria-hidden="true" className="h-2 w-2 rounded-full bg-success" />
-        <span className="font-semibold">Answering</span>
-        <span className="text-muted">· last checked {formatDate(lastChecked)} UTC</span>
+      <p
+        aria-label={`Answering, last checked ${formatDate(lastChecked)} UTC`}
+        className="mt-4 inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium leading-none text-muted"
+      >
+        <span className="inline-flex items-center gap-1.5 font-semibold text-success">
+          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
+          <span>Answering</span>
+        </span>
+        <span className="text-faint">last checked {formatDate(lastChecked)} UTC</span>
       </p>
     );
   }

@@ -374,6 +374,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   // browser cannot get through.
   const recordPayment = useAction(agentPaymentsApi.agentPayments.recordJobPayment);
   const notifyFunded = useAction(agentPaymentsApi.agentPayments.notifyJobFunded);
+  const recordRefund = useAction(agentPaymentsApi.agentPayments.recordJobRefund);
 
   const balanceQuery = useTanstackQuery({
     queryKey: ["altana-balance", ALTANA_NETWORK.chainId, address],
@@ -754,6 +755,22 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
               "reclaimed before its deadline passes - check the refundable-after date and try again then.",
           );
         }
+        /*
+         * KEEP THE HASH. (2026-09-26) This used to be discarded, so a refund
+         * that went through left nothing to link to in the wallet's history.
+         * Convex checks the receipt and the job before it stores anything.
+         * Best effort: the refund already happened on-chain, so a failure
+         * to RECORD it must not be reported to the person as a failed refund.
+         */
+        if (result.transactionHash) {
+          void recordRefund({
+            jobId,
+            altanaWalletAddress: wallet.address,
+            transactionHash: result.transactionHash,
+          }).catch((cause: unknown) => {
+            console.warn("[claimEscrowRefund] refund succeeded but was not recorded:", cause);
+          });
+        }
         refreshBalance();
         refreshRecoverability();
       } catch (cause) {
@@ -763,7 +780,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, refreshBalance, refreshRecoverability],
+    [adminSigner, recordRefund, refreshBalance, refreshRecoverability],
   );
 
   /**

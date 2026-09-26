@@ -612,6 +612,32 @@ export const agentPaymentsApi = anyApi as unknown as {
       AgentJobRow[]
     >;
     getJobsForAltanaWallet: Query<{ altanaWalletAddress: string }, AgentJobRow[]>;
+    recordJobRefund: Action<
+      { jobId: string; altanaWalletAddress: string; transactionHash: string },
+      { jobStatus: string }
+    >;
+  };
+};
+
+/** One verified BSC transaction in a wallet's history. See convex/walletActivity.ts. */
+export type WalletActivityEntry = {
+  kind: "payment" | "refund" | "rating";
+  transactionHash: string;
+  at: string;
+  agentKey: string;
+  agentName: string;
+  jobId: string | null;
+  amountRaw: string | null;
+  tokenSymbol: string | null;
+  tokenDecimals: number | null;
+};
+
+export const walletActivityApi = anyApi as unknown as {
+  walletActivity: {
+    forWallets: Query<
+      { altanaWalletAddress?: string | null; identityWalletAddress?: string | null },
+      WalletActivityEntry[]
+    >;
   };
 };
 

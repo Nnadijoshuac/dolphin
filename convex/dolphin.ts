@@ -1533,59 +1533,43 @@ Reply in at most two sentences: ${callsMade > 0 ? "you re-checked just now, so s
 
       messages[0] = { role: "system", content: synthesisContext };
 
-      let final: { content: string; model: string | null };
-      try {
-        final = await chatCompletion({ messages });
-      } catch (synthesisError) {
-        console.warn("[Dolphin] Synthesis chatCompletion failed, using resilient catalog fallback:", synthesisError);
-        const fallbackText = buildResilientMarketplaceResponse({
-          query: text,
-          catalog: liveCatalog,
-          userAddress: activeUserAddress,
-          venusTelemetry: liveVenusTelemetry,
-          seedAgentKey,
-        });
-        /*
-         * `model: null` because NO MODEL PRODUCED THIS. The previous value here
-         * was the string "dolphin-failsafe-engine", which named a model that
-         * does not exist and made a template indistinguishable from a synthesis
-         * in the one field that recorded the difference. Null is what the schema
-         * already means by "no model has answered" - see dolphinMessages.model.
-         */
-        final = {
-          content: fallbackText,
-          model: null,
-        };
-      }
-
       /*
-       * A model that returned an EMPTY body did not answer either, so this is
-       * the same substitution as the catch above and has to be labelled the
-       * same way. It used to keep `final.model`, which attributed a template to
-       * whichever model had just declined to write anything.
+       * NO CATALOG FALLBACK. (2026-09-26, the owner: "i dont want this kind of
+       * replies")
+       *
+       * When synthesis failed, this used to write a template in the answer's
+       * place: "Dolphin's model did not answer that one, so this is the
+       * catalog speaking directly..." followed by a list of agents. It was
+       * honest, but it was a wall of text answering a question nobody asked,
+       * and on 2026-09-26 it was most of what Dolphin said: the account's 50
+       * free calls a day were spent by 21:08, and every question after that got
+       * the dump.
+       *
+       * Now a failed call throws to the catch below, which says what happened
+       * in one line - "out of model calls" is shown as capacity, not as a
+       * fault - and an empty or garbled reply is reported the same way. The
+       * person can ask again; nothing is dressed up as an answer.
        */
-      /* Last line against raw payloads in the answer. See lib/answerHygiene.ts. */
-      final = { ...final, content: stripRawPayloads(final.content) };
+      const final = await chatCompletion({ messages });
+      const content = stripRawPayloads(final.content);
+      const leaked = looksLikeLeakedReasoning(content);
+      if (leaked) console.warn("[Dolphin] Synthesis returned reasoning about its prompt; not shown.");
 
-      const leaked = looksLikeLeakedReasoning(final.content);
-      if (leaked) {
-        console.warn("[Dolphin] Synthesis returned reasoning about its prompt; replaced with the catalog fallback.");
+      if (content.trim().length === 0 || leaked) {
+        await ctx.runMutation(internal.dolphin.setMessageStatus, {
+          messageId: assistantId,
+          status: "error",
+          errorReason: "Dolphin didn't manage a proper answer that time. Nothing was made up in its place. Ask again.",
+          errorKind: "fault",
+        });
+        return { messageId: assistantId };
       }
-      const answered = final.content.trim().length > 0 && !leaked;
 
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
         messageId: assistantId,
         status: "complete",
-        content: answered
-          ? final.content
-          : buildResilientMarketplaceResponse({
-              query: text,
-              catalog: liveCatalog,
-              userAddress: activeUserAddress,
-              venusTelemetry: liveVenusTelemetry,
-              seedAgentKey,
-            }),
-        model: answered ? final.model : null,
+        content,
+        model: final.model,
       });
     } catch (cause) {
       /*
@@ -1762,8 +1746,15 @@ export function humanizeError(cause: unknown): { message: string; kind: DolphinE
     };
   }
 
-  // Rate limit — the most common free-tier failure
+  /*
+   * Rate limit — the most common free-tier failure. The flag first: the
+   * wording is ours ("has used up its free model calls") and matched none of
+   * the phrases below, so on 2026-09-26 Build mode showed an out-of-calls day
+   * as "Something unexpected happened".
+   */
   if (
+    (cause instanceof OpenRouterError && cause.isRateLimit) ||
+    lower.includes("used up") ||
     lower.includes("rate limit") ||
     lower.includes("429") ||
     lower.includes("too many requests") ||
@@ -1771,7 +1762,12 @@ export function humanizeError(cause: unknown): { message: string; kind: DolphinE
   ) {
     return {
       message:
-        "Dolphin runs on a free model tier, and it is out of calls for the moment. The catalog, the live protocol reads and every agent page are unaffected — only this conversation is. Free-tier limits reset on their own; try again shortly.",
+        /*
+         * Short, and true for a DAILY cap: the old text said "try again
+         * shortly", and a spent day does not come back in minutes. Trades are
+         * answered without the model (convex/trade.ts), so they still work.
+         */
+        'Dolphin has used up its answers for now, so it can\'t reply to this one. Trades still work: try "buy 50 U of CAKE". Ask again later.',
       kind: "capacity",
     };
   }
@@ -1823,151 +1819,4 @@ export function humanizeError(cause: unknown): { message: string; kind: DolphinE
     message: `Something unexpected happened: ${raw.slice(0, 200)}. Try again — if it persists it may be upstream of Dolphin.`,
     kind: "fault",
   };
-}
-
-/**
- * WHAT TO SAY WHEN NO MODEL ANSWERED.
- *
- * ===========================================================================
- * WHAT THIS REPLACED, AND WHY IT HAD TO GO (2026-09-12)
- * ===========================================================================
- * The previous version wrote a confident marketplace answer from hand-written
- * templates and returned it as though a model had produced it. Five separate
- * things in it were untrue, and one was dangerous:
- *
- *  1. DANGEROUS. When the Venus read returned NOTHING, it told the user:
- *     "I checked your connected wallet (0x...) on Venus Core Pool. No active
- *     borrow or liquidation risk was detected - your collateral is completely
- *     unencumbered and safe." Nothing had been checked. That is a financial
- *     safety finding about a real address, asserted from the absence of data,
- *     in the exact scenario where the data was missing BECAUSE something
- *     failed. A user with a borrow near liquidation would have been told they
- *     were safe.
- *  2. It rendered rank as an ordinal - "(Rank 2)", "(Rank 7)", "Marketplace
- *     Rank: #${rank} of ${n}". `rank` is a 0-800ish SCORE, so that last one
- *     printed things like "#640 of 43". convex/lib/rank.ts is explicit that
- *     rank is shelf position, not quality, and that nothing derived from it is
- *     ever rendered as a number to a user.
- *  3. It called one publisher's agent "the premier verified trading bot" and
- *     another "our top-ranked verified option". Nothing measures either claim;
- *     grid-trading has no live metric at all by construction.
- *  4. It named specific agents that may not be live - "[Hevo BNB Grid Agent]",
- *     "[4LPHA Pancake Grid Agent]" - and fell back to a hardcoded
- *     "PancakeSwap Grid Trader" when the catalog came back EMPTY, i.e. it
- *     named an agent precisely when it knew nothing.
- *  5. It described the 300k unlisted registrations as "spam registrations".
- *     Most are simply unreachable, which is a different claim.
- *
- * ===========================================================================
- * THE RULE THIS FILE NOW FOLLOWS
- * ===========================================================================
- * A failed synthesis is not a licence to impersonate one. This says plainly
- * that the model did not answer, then offers only what the catalog itself
- * carries - names, categories, protocols, pricing, taglines - with no ordering
- * claim, no superlative, and no finding about the user's own position.
- *
- * Call sites store `model: null` alongside it. A reader of `dolphinMessages`
- * can then tell a model answer from this one, which the old
- * "dolphin-failsafe-engine" label actively prevented.
- */
-function buildResilientMarketplaceResponse(options: {
-  query: string;
-  catalog: Array<{
-    name: string;
-    agentKey: string;
-    category: string;
-    rank: number;
-    protocol: string;
-    agentWallet: string | null;
-    pricing: string;
-    tagline: string;
-    skills: string;
-  }>;
-  userAddress?: string | null;
-  venusTelemetry?: string | null;
-  seedAgentKey?: string | null;
-}): string {
-  const { query, catalog, venusTelemetry, seedAgentKey } = options;
-  const q = query.toLowerCase();
-
-  const preamble =
-    "Dolphin's model did not answer that one, so this is the catalog speaking " +
-    "directly rather than an interpretation of it.";
-
-  /** One catalog row, rendered from its own fields only. */
-  const describe = (a: (typeof catalog)[number]) => {
-    const bareId = a.agentKey.split(":").pop() ?? a.agentKey;
-    return `- **[${a.name}](/agent/${bareId})** — ${a.category} · ${a.protocol} · ${a.pricing}\n  ${a.tagline}`;
-  };
-
-  /*
-   * Substring match over the row's own text. Deliberately dumb: this runs when
-   * the smart path is already unavailable, and a wrong-but-confident category
-   * guess is how the old version ended up naming agents it had not matched.
-   */
-  const matching = (terms: string[]) =>
-    catalog
-      .filter((a) => {
-        const haystack =
-          `${a.category} ${a.name} ${a.tagline} ${a.skills}`.toLowerCase();
-        return terms.some((t) => haystack.includes(t));
-      })
-      .slice(0, 3);
-
-  /*
-   * The agent the user was already looking at. Its own record, nothing more -
-   * no appraisal, no rank, no verification claim beyond the fact that it is
-   * listed, which is itself the claim that it answered a probe.
-   */
-  if (seedAgentKey) {
-    const target = catalog.find(
-      (a) => a.agentKey === seedAgentKey || a.agentKey.endsWith(`:${seedAgentKey}`),
-    );
-    if (target) {
-      return `${preamble}\n\nThis is the record for **${target.name}** as the catalog holds it:\n\n${describe(target)}\n\nIt is listed because Dolphin called its endpoint and it answered. That is a statement about reachability, not about how well it does the job.`;
-    }
-  }
-
-  /*
-   * A live Venus read that ALREADY SUCCEEDED is the one real fact available on
-   * this path, so it is worth repeating. The branch where it is missing says
-   * so, and says nothing else - see item 1 in the header.
-   */
-  if (
-    q.includes("venus") ||
-    q.includes("health") ||
-    q.includes("liquidat") ||
-    q.includes("collateral") ||
-    q.includes("ratio")
-  ) {
-    const candidates = matching(["health", "venus", "liquidat", "lend"]);
-    const list = candidates.length > 0 ? `\n\n${candidates.map(describe).join("\n")}` : "";
-
-    if (venusTelemetry) {
-      return `${preamble}\n\nYour position, read live from the Venus Comptroller on BNB Smart Chain:\n\n${venusTelemetry}${list}`;
-    }
-    return `${preamble}\n\nI could not read a Venus position this turn, so I have nothing to say about your collateral either way — an unread position is not a safe one. Try again in a moment, or open the agent's page to see its own live reads.${list}`;
-  }
-
-  const topic: Array<{ terms: string[]; match: string[] }> = [
-    { terms: ["yield", "apy", "farm", "interest", "earn", "lend"], match: ["yield", "lend", "apy", "farm"] },
-    { terms: ["trading", "grid", "bot", "trade", "swap", "arbitrage"], match: ["grid", "trad", "swap"] },
-    { terms: ["rebalanc", "lp", "liquidity", "range"], match: ["rebalanc", "liquidity", "range"] },
-  ];
-
-  for (const { terms, match } of topic) {
-    if (terms.some((t) => q.includes(t))) {
-      const candidates = matching(match);
-      if (candidates.length === 0) break;
-      return `${preamble}\n\nThese are the listed agents whose own records mention that work:\n\n${candidates.map(describe).join("\n")}\n\nThey are ordered as the catalog stores them, which is not a quality ranking — Dolphin does not publish one.`;
-    }
-  }
-
-  if (catalog.length === 0) {
-    return `${preamble}\n\nThe catalog is also unreachable right now, so I have nothing to show you. This is a Dolphin outage, not an empty marketplace.`;
-  }
-
-  return `${preamble}\n\nDolphin lists **${catalog.length} agents** that answered when it called them, out of a registry of more than 300,000 identities — the rest did not respond, which is a statement about reachability rather than intent.
-
-You can browse by the job you want done: [lending health](/category/health-factor), [yield](/category/yield), [rebalancing](/category/rebalancing), or [grid trading](/category/grid-trading).`;
 }

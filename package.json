@@ -41,6 +41,7 @@
     "expo-video": "~57.0.3",
     "expo-web-browser": "~57.0.2",
     "fast-text-encoding": "^1.0.6",
+    "jimp": "^1.6.1",
     "nativewind": "4.2.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",

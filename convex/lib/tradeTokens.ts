@@ -40,23 +40,23 @@ export type TradeToken = {
 export const WBNB: Address = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c";
 
 const VERIFIED: ReadonlyArray<TradeToken & { aliases: readonly string[] }> = [
-  { address: null, symbol: "BNB", decimals: 18, verified: true, aliases: ["bnb"] },
+  { address: null, symbol: "BNB", decimals: 18, verified: true, aliases: ["bnb", "binance", "bnbcoin"] },
   /* "Wrapped BNB" */
   { address: WBNB, symbol: "WBNB", decimals: 18, verified: true, aliases: ["wbnb"] },
   /* "United Stables" - NOT 0xba5e…a5ed, see the header. */
-  { address: "0xcE24439F2D9C6a2289F741120FE202248B666666", symbol: "U", decimals: 18, verified: true, aliases: ["u"] },
+  { address: "0xcE24439F2D9C6a2289F741120FE202248B666666", symbol: "U", decimals: 18, verified: true, aliases: ["u", "unitedstables"] },
   /* "Tether USD" (BSC-USD) */
-  { address: "0x55d398326f99059fF775485246999027B3197955", symbol: "USDT", decimals: 18, verified: true, aliases: ["usdt"] },
+  { address: "0x55d398326f99059fF775485246999027B3197955", symbol: "USDT", decimals: 18, verified: true, aliases: ["usdt", "tether"] },
   /* "USD Coin" */
-  { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", symbol: "USDC", decimals: 18, verified: true, aliases: ["usdc"] },
+  { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", symbol: "USDC", decimals: 18, verified: true, aliases: ["usdc", "usdcoin"] },
   /* "PancakeSwap Token" - symbol() returns "Cake" */
-  { address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", symbol: "CAKE", decimals: 18, verified: true, aliases: ["cake"] },
+  { address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", symbol: "CAKE", decimals: 18, verified: true, aliases: ["cake", "pancake", "pancakeswap"] },
   /* "BTCB Token" */
-  { address: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", symbol: "BTCB", decimals: 18, verified: true, aliases: ["btcb", "btc"] },
+  { address: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", symbol: "BTCB", decimals: 18, verified: true, aliases: ["btcb", "btc", "bitcoin"] },
   /* "Ethereum Token" */
-  { address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", symbol: "ETH", decimals: 18, verified: true, aliases: ["eth"] },
+  { address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", symbol: "ETH", decimals: 18, verified: true, aliases: ["eth", "ethereum", "ether"] },
   /* "Venus" */
-  { address: "0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63", symbol: "XVS", decimals: 18, verified: true, aliases: ["xvs"] },
+  { address: "0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63", symbol: "XVS", decimals: 18, verified: true, aliases: ["xvs", "venus"] },
   /* "First Digital USD" */
   { address: "0xc5f0f7b66764F6ec8C8Dff7BA683102295E16409", symbol: "FDUSD", decimals: 18, verified: true, aliases: ["fdusd"] },
 ];
@@ -80,7 +80,12 @@ const ERC20_META = parseAbi([
 
 export type ResolvedToken =
   | { ok: true; token: TradeToken }
-  | { ok: false; reason: string };
+  | {
+      ok: false;
+      reason: string;
+      /** A verified symbol one typo away, for the person to CONFIRM. Never traded on unconfirmed. */
+      suggestion: string | null;
+    };
 
 /**
  * What the person typed, as a token Dolphin can trade.
@@ -111,16 +116,61 @@ export async function resolveTradeToken(typed: string): Promise<ResolvedToken> {
       return {
         ok: false,
         reason: `${address} did not answer as a token on BNB Chain (no symbol or decimals), so Dolphin can't price it. Check the address.`,
+        suggestion: null,
       };
     }
   }
 
   const token = verifiedTokenBySymbol(value);
   if (token) return { ok: true, token };
+
+  const word = value.replace(/^\$/, "");
+  const close = closestVerified(word);
   return {
     ok: false,
-    reason:
-      `I don't know which token "${value.replace(/^\$/, "")}" is. Many tokens share a name, so I only trade ` +
-      `symbols I've verified (${VERIFIED_SYMBOLS.join(", ")}). For anything else, paste the token's contract address (0x…).`,
+    suggestion: close,
+    reason: close
+      ? `Did you mean ${close}?`
+      : `I don't know a token called "${word}". I trade ${VERIFIED_SYMBOLS.join(", ")} by name, ` +
+        `or any other token if you paste its contract address (0x…).`,
   };
+}
+
+/**
+ * A verified symbol one typo away ("bnn", "usdtt", "cak"), to SUGGEST. Never
+ * traded on: a near-miss is exactly how someone ends up buying the wrong
+ * token, so the person confirms it with one tap (convex/trade.ts).
+ */
+function closestVerified(typed: string): string | null {
+  const word = typed.toLowerCase();
+  if (word.length < 3) return null;
+  for (const token of VERIFIED) {
+    for (const alias of token.aliases) {
+      if (alias.length >= 3 && editDistanceAtMostOne(word, alias)) return token.symbol;
+    }
+  }
+  return null;
+}
+
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (a.length < b.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
 }

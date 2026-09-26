@@ -1012,6 +1012,13 @@ export default defineSchema({
      * live and re-quotes before signing, because a stored quote shown later
      * is a stale number presented as current (AGENTS.md §5).
      */
+    /**
+     * A corrected request for the person to CONFIRM with one tap - "buy 0.01
+     * BNB of U" when they typed "bnn". (2026-09-26, the owner: a typo should
+     * be confirmed, not retyped.) Sending it is an ordinary new turn; nothing
+     * is traded on the guess.
+     */
+    suggestedPrompt: v.optional(v.union(v.string(), v.null())),
     ticket: v.optional(
       v.union(
         v.null(),

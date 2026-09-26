@@ -145,6 +145,20 @@ async function checkSafety(
 }
 
 /**
+ * The person's own words with each typo'd token swapped for its verified
+ * symbol: "buy 0.01 bnn of u" -> "buy 0.01 BNB of u". Their phrasing is kept so
+ * the button reads as what they meant to type.
+ */
+export function correctRequest(text: string, fixes: ReadonlyArray<{ typed: string; suggestion: string }>): string {
+  let corrected = text.trim();
+  for (const fix of fixes) {
+    const escaped = fix.typed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    corrected = corrected.replace(new RegExp(`\\$?\\b${escaped}\\b`, "i"), fix.suggestion);
+  }
+  return corrected;
+}
+
+/**
  * Answers the turn if it is a trade, and returns true. Returns false when the
  * text only looked like one ("get started"), so the chat answers it instead.
  */
@@ -159,7 +173,7 @@ export async function answerTradeTurn(
   const intent = parseTradeIntent(input.text);
   if (!intent) return false;
 
-  const reply = async (content: string, ticket?: unknown) => {
+  const reply = async (content: string, ticket?: unknown, suggestedPrompt?: string) => {
     await ctx.runMutation(internal.dolphin.setMessageStatus, {
       messageId: input.messageId,
       status: "complete",
@@ -167,6 +181,7 @@ export async function answerTradeTurn(
       /* No model wrote this; null also keeps it out of answer reuse. */
       model: null,
       ...(ticket !== undefined ? { ticket } : {}),
+      ...(suggestedPrompt !== undefined ? { suggestedPrompt } : {}),
     });
   };
 
@@ -182,7 +197,25 @@ export async function answerTradeTurn(
     resolveTradeToken(intent.tokenOut),
   ]);
   if (!tokenIn.ok || !tokenOut.ok) {
-    await reply([tokenIn, tokenOut].flatMap((side) => (side.ok ? [] : [side.reason])).join("\n\n"));
+    /*
+     * A TYPO IS CONFIRMED, NOT GUESSED. (2026-09-26, the owner: typos should
+     * be confirmed.) When every unknown side is one typo from a verified
+     * symbol, the reply offers the corrected request as a one-tap button.
+     * Tapping sends it as a new turn, which resolves exactly like a typed
+     * one. Nothing is traded on the guess.
+     */
+    const failed = [
+      { typed: intent.tokenIn, resolved: tokenIn },
+      { typed: intent.tokenOut, resolved: tokenOut },
+    ].flatMap((side) => (side.resolved.ok ? [] : [{ typed: side.typed, reason: side.resolved.reason, suggestion: side.resolved.suggestion }]));
+
+    if (failed.every((side) => side.suggestion !== null)) {
+      const corrected = correctRequest(input.text, failed as Array<{ typed: string; suggestion: string }>);
+      const named = failed.map((side) => `"${side.typed}" as ${side.suggestion}`).join(" and ");
+      await reply(`Did you mean ${named}? Tap to confirm, and I'll make the ticket.`, undefined, corrected);
+      return true;
+    }
+    await reply(failed.map((side) => side.reason).join("\n\n"));
     return true;
   }
   const from = toTicketToken(tokenIn.token);

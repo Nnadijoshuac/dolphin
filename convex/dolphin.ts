@@ -370,6 +370,7 @@ export const getConversation = query({
         errorKind: message.errorKind ?? null,
         model: message.model,
         ticket: message.ticket ?? null,
+        suggestedPrompt: message.suggestedPrompt ?? null,
         createdAt: message.createdAt,
         completedAt: message.completedAt,
       })),
@@ -682,11 +683,14 @@ export const setMessageStatus = internalMutation({
     model: v.optional(v.union(v.string(), v.null())),
     /** A trade ticket. See `ticket` in schema.ts and convex/trade.ts. */
     ticket: v.optional(v.any()),
+    /** A corrected request to confirm with one tap. See `suggestedPrompt` in schema.ts. */
+    suggestedPrompt: v.optional(v.union(v.string(), v.null())),
   },
-  handler: async (ctx, { messageId, status, content, reusedFrom, errorReason, errorKind, model, ticket }) => {
+  handler: async (ctx, { messageId, status, content, reusedFrom, errorReason, errorKind, model, ticket, suggestedPrompt }) => {
     const patch: Partial<Doc<"dolphinMessages">> = { status };
     /* v.any() here; the table's own validator checks the shape on write. */
     if (ticket !== undefined) patch.ticket = ticket as Doc<"dolphinMessages">["ticket"];
+    if (suggestedPrompt !== undefined) patch.suggestedPrompt = suggestedPrompt;
     if (content !== undefined) patch.content = content;
     if (reusedFrom !== undefined) patch.reusedFrom = reusedFrom;
     if (errorReason !== undefined) patch.errorReason = errorReason;

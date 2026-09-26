@@ -383,8 +383,18 @@ async function chatCompletionOnce(options: {
    * if tool calls cannot be parsed, cleaning the prose allows the pipeline to
    * proceed seamlessly into Phase 3 (Synthesis).
    */
+  /*
+   * NOT FOR STRUCTURED OUTPUT. (2026-09-26) A `responseSchema` reply IS a JSON
+   * object by request, and the JSON dialect below reads any object with a
+   * string `name` as a tool call. The agent builder's spec has a `name` field,
+   * so every reply was "recovered" as a call to a tool named after the agent
+   * and the body was stripped to "" - measured on dev, finish_reason "stop"
+   * with empty content, twice in a row. A reply asked for as data is data.
+   */
+  const structured = Boolean(options.responseSchema);
+
   let cleanedContent = content;
-  if (toolCalls.length === 0 && content.trim().length > 0) {
+  if (!structured && toolCalls.length === 0 && content.trim().length > 0) {
     const recovered = recoverTextToolCalls(content);
     if (recovered.length > 0) {
       toolCalls.push(...recovered);
@@ -394,7 +404,7 @@ async function chatCompletionOnce(options: {
 
   // If leaked tool syntax is detected (even if no structured calls could be built),
   // strip it completely so raw markup tags never leak to the user.
-  if (LEAKED_TOOL_SYNTAX.test(cleanedContent)) {
+  if (!structured && LEAKED_TOOL_SYNTAX.test(cleanedContent)) {
     cleanedContent = stripToolCallMarkup(cleanedContent);
   }
 

@@ -693,7 +693,13 @@ export type DolphinMessage = {
 export const dolphinApi = anyApi as unknown as {
   dolphin: {
     createConversation: Mutation<
-      { seedAgentKey?: string; sessionToken?: string; userAddress?: string },
+      {
+        seedAgentKey?: string;
+        sessionToken?: string;
+        userAddress?: string;
+        /** Fixed for the conversation's life. A try-run is opened by agentBuilder.startTry. */
+        mode?: "chat" | "build";
+      },
       { conversationKey: string }
     >;
     getConversation: Query<
@@ -716,6 +722,53 @@ export const dolphinApi = anyApi as unknown as {
      * `getConversation` and watch the message status and tool-call rows land.
      */
     ask: Action<
+      { conversationKey: string; text: string; userAddress?: string },
+      { messageId: string }
+    >;
+  };
+};
+
+export type DolphinConversationMode = "chat" | "build" | "try";
+
+/** One tool of a built agent: a read-only tool of a listed MCP agent. */
+export type AgentDraftTool = { agentKey: string; agentName: string; toolName: string };
+
+/** Every text field is null until the person and the builder have settled it. */
+export type AgentDraftData = {
+  name: string | null;
+  description: string | null;
+  instructions: string | null;
+  tools: AgentDraftTool[];
+  updatedAt: number;
+};
+
+/**
+ * convex/agentBuilder.ts. Build mode of /dolphin: draft an agent in chat, then
+ * try it privately. Nothing here is on-chain. Progress arrives the same way as
+ * the chat's, through dolphin.getConversation; the draft through getDraft.
+ */
+export const agentBuilderApi = anyApi as unknown as {
+  agentBuilder: {
+    getDraft: Query<
+      { conversationKey: string },
+      {
+        mode: DolphinConversationMode;
+        /** The build conversation's own draft, or for a try-run the one under test. */
+        draft: AgentDraftData | null;
+        /** Where "back to the draft" goes. Null for a chat. */
+        buildConversationKey: string | null;
+      } | null
+    >;
+    /** Refused until the draft has a name, description, instructions and a tool. */
+    startTry: Mutation<
+      { buildConversationKey: string; sessionToken?: string; userAddress?: string },
+      { conversationKey: string }
+    >;
+    ask: Action<
+      { conversationKey: string; text: string; userAddress?: string },
+      { messageId: string }
+    >;
+    tryAsk: Action<
       { conversationKey: string; text: string; userAddress?: string },
       { messageId: string }
     >;

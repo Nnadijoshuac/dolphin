@@ -78,19 +78,25 @@ const STARTER_PROMPTS = [
  * would have to refuse.
  */
 const BUILD_STARTERS = [
-  "Watch my Venus health factor",
+  /*
+   * "Check", not "Watch": a built agent answers when asked and cannot watch
+   * anything in the background, and the builder says so if asked.
+   */
+  "Check my Venus health factor",
   "Compare yields on BNB Chain",
   "Explain a PancakeSwap pool before I add liquidity",
 ];
 
 /*
- * Build mode has its UI and not yet its backend. Sending is refused in
- * `submit` as well as disabled on the button, so no path (Enter, a starter
- * chip) can push a build request into the Q&A pipeline, where it would be
- * answered as a question about the marketplace instead of drafting an agent.
- * Flipped when convex/ gains the builder action.
+ * Build mode's backend is convex/agentBuilder.ts, deployed to dev on
+ * 2026-09-26 and NOT to prod. It is switched on per environment, so a push of
+ * this file cannot expose a Build mode whose functions the live deployment
+ * does not have yet. Set NEXT_PUBLIC_DOLPHIN_BUILD=1 where the backend exists.
+ *
+ * Sending is refused in `submit` as well as disabled on the button, so no path
+ * (Enter, a starter chip) can send a build turn while it is off.
  */
-const BUILD_BACKEND_CONNECTED: boolean = false;
+const BUILD_BACKEND_CONNECTED: boolean = process.env.NEXT_PUBLIC_DOLPHIN_BUILD === "1";
 
 /**
  * Chat or Build, chosen on a NEW conversation only, the way Claude Code picks
@@ -385,8 +391,18 @@ export function DolphinClient({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoAskedRef = useRef(false);
 
-  const { conversationKey, send, reset, openConversation, isSending, sendError } =
-    useDolphinChat(seedAgentKey);
+  const {
+    conversationKey,
+    mode: activeMode,
+    builder,
+    send,
+    reset,
+    openConversation,
+    startTry,
+    isStartingTry,
+    isSending,
+    sendError,
+  } = useDolphinChat(seedAgentKey, mode);
   const { exists, isLoading, title, turns, agentDirectory } =
     useDolphinConversation(conversationKey);
   const history = useAppStore((state) => state.chatHistory);
@@ -412,12 +428,12 @@ export function DolphinClient({
   const submit = useCallback(
     (text: string) => {
       if (text.trim().length === 0 || isSending) return;
-      if (mode === "build" && !BUILD_BACKEND_CONNECTED) return;
+      if (activeMode !== "chat" && !BUILD_BACKEND_CONNECTED) return;
       setDraft("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       void send(text);
     },
-    [isSending, mode, send],
+    [activeMode, isSending, send],
   );
 
   useEffect(() => {
@@ -459,16 +475,52 @@ export function DolphinClient({
   );
 
   const isEmpty = turns.length === 0;
-  const building = mode === "build";
+  const building = activeMode === "build";
+  /* A private try-run of a draft. Opened from the draft panel, never from the switch. */
+  const trying = activeMode === "try";
+  const withDraft = building || trying;
   const askedPrompts = useMemo(
     () => turns.filter((turn) => turn.role === "user").map((turn) => turn.content),
     [turns],
   );
   // The mode is chosen on a new conversation and fixed once it has a turn.
   const canSwitchMode = isEmpty && !conversationKey;
-  const sendBlocked = building && !BUILD_BACKEND_CONNECTED;
+  // Also blocked while an opened conversation's mode is loading (activeMode null).
+  const sendBlocked = activeMode === null || (withDraft && !BUILD_BACKEND_CONNECTED);
 
-  const suggestions = building
+  const agentDraft = builder?.draft
+    ? {
+        name: builder.draft.name,
+        description: builder.draft.description,
+        instructions: builder.draft.instructions,
+        tools: builder.draft.tools,
+      }
+    : EMPTY_AGENT_DRAFT;
+  const draftName = agentDraft.name?.trim() || "your agent";
+
+  const buildConversationKey = builder?.buildConversationKey ?? null;
+  const draftPanelActions = {
+    trying,
+    isStartingTry,
+    onTry:
+      building && conversationKey && BUILD_BACKEND_CONNECTED
+        ? () => {
+            setDraftOpen(false);
+            void startTry(conversationKey);
+          }
+        : undefined,
+    onBack:
+      trying && buildConversationKey
+        ? () => {
+            setDraftOpen(false);
+            openConversation(buildConversationKey);
+          }
+        : undefined,
+  };
+
+  const suggestions = trying
+    ? []
+    : building
     ? BUILD_STARTERS
     : seedAgentName
       ? [
@@ -492,7 +544,9 @@ export function DolphinClient({
     >
       <div className="flex w-full flex-col rounded-[1.4rem] border border-line/80 bg-paper p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-14px_rgba(15,23,42,0.18)]">
         <textarea
-          aria-label={building ? "Describe the agent to build" : "Message Dolphin"}
+          aria-label={
+            building ? "Describe the agent to build" : trying ? `Message ${draftName}` : "Message Dolphin"
+          }
           className={`max-h-[400px] w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none placeholder:text-faint focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ${
             isEmpty ? "min-h-[3.4rem]" : "min-h-0"
           }`}
@@ -511,7 +565,9 @@ export function DolphinClient({
           placeholder={
             building
               ? "Describe the agent you want to build…"
-              : "Ask about an agent, a position, or a yield…"
+              : trying
+                ? `Ask ${draftName} something…`
+                : "Ask about an agent, a position, or a yield…"
           }
           ref={textareaRef}
           rows={1}
@@ -524,9 +580,9 @@ export function DolphinClient({
               * conversation has started, this label is the only reminder of
               * which mode it is in.
               */}
-            {canSwitchMode ? null : (
+            {canSwitchMode || activeMode === null ? null : (
               <span className="px-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-                {building ? "Build" : "Chat"}
+                {building ? "Build" : trying ? "Try" : "Chat"}
               </span>
             )}
             {/*
@@ -535,7 +591,7 @@ export function DolphinClient({
               * and history, and a fourth control pushed Connect into the centred
               * title at 390px.
               */}
-            {building ? (
+            {withDraft ? (
               <button
                 className="inline-flex items-center gap-1 rounded-full border border-line/80 px-2.5 py-1 text-[12px] font-semibold text-ink-soft transition-colors hover:bg-paper-muted hover:text-ink lg:hidden"
                 onClick={() => setDraftOpen(true)}
@@ -564,7 +620,7 @@ export function DolphinClient({
           </button>
         </div>
       </div>
-      {sendBlocked ? (
+      {withDraft && !BUILD_BACKEND_CONNECTED ? (
         <p className="mt-2 px-3 text-center text-[0.72rem] text-muted">
           The builder is not connected yet, so nothing is sent. Switch to Chat to ask
           the marketplace a question.
@@ -577,7 +633,7 @@ export function DolphinClient({
   return (
     <div
       className={`dolphin-chat-page relative grid overflow-hidden ${
-        building
+        withDraft
           ? "lg:grid-cols-[17rem_minmax(0,1fr)_22rem]"
           : "lg:grid-cols-[17rem_minmax(0,1fr)]"
       } ${styles.shell}`}
@@ -718,12 +774,26 @@ export function DolphinClient({
              */
             <div className="dolphin-empty-hero flex min-h-full flex-col items-center justify-center px-4 pb-[10vh] pt-10">
               <h1 className="sr-only">
-                {building ? "Build an agent" : "Ask the marketplace"}
+                {building ? "Build an agent" : trying ? `Try ${draftName}` : "Ask the marketplace"}
               </h1>
-              <ModeSwitch mode={mode} onChange={setMode} />
-              <p className="mt-5 text-center text-[1.3rem] font-medium tracking-[-0.02em] text-ink">
-                {MODE_HINT[mode]}
-              </p>
+              {trying ? (
+                <>
+                  <p className="text-center text-[1.3rem] font-medium tracking-[-0.02em] text-ink">
+                    Try {draftName}
+                  </p>
+                  <p className="mt-2 max-w-[32rem] text-center text-[0.84rem] text-muted">
+                    Ask it what you built it for. Only you can see this, and it
+                    uses only the tools in the draft.
+                  </p>
+                </>
+              ) : (
+                <>
+                  {canSwitchMode ? <ModeSwitch mode={mode} onChange={setMode} /> : null}
+                  <p className="mt-5 text-center text-[1.3rem] font-medium tracking-[-0.02em] text-ink">
+                    {MODE_HINT[building ? "build" : "chat"]}
+                  </p>
+                </>
+              )}
               <div className="mt-5 w-full max-w-[40rem]">{composer}</div>
               <div className="mt-3 flex max-w-[40rem] flex-wrap justify-center gap-1.5">
                 {suggestions.map((suggestion) => (
@@ -758,7 +828,14 @@ export function DolphinClient({
                   dynamicAgents={agentDirectory}
                   key={turn.id}
                   onSelectPrompt={
-                    index === turns.length - 1 ? (prompt) => submit(prompt) : undefined
+                    /*
+                     * The follow-up chips are questions for Dolphin. Under a
+                     * builder reply or a built agent's answer they would send a
+                     * marketplace question to the wrong listener.
+                     */
+                    activeMode === "chat" && index === turns.length - 1
+                      ? (prompt) => submit(prompt)
+                      : undefined
                   }
                   turn={turn}
                 />
@@ -775,13 +852,13 @@ export function DolphinClient({
         )}
       </section>
 
-      {building ? (
+      {withDraft ? (
         <div className="relative z-20 hidden min-h-0 lg:block">
-          <AgentDraftPanel draft={EMPTY_AGENT_DRAFT} />
+          <AgentDraftPanel draft={agentDraft} {...draftPanelActions} />
         </div>
       ) : null}
 
-      {draftOpen && building ? (
+      {draftOpen && withDraft ? (
         <div className="fixed inset-0 z-30 flex justify-end lg:hidden">
           <button
             aria-label="Close agent draft"
@@ -790,7 +867,11 @@ export function DolphinClient({
             type="button"
           />
           <div className="relative h-full w-[min(88vw,22rem)] shadow-[-18px_0_50px_rgba(15,23,42,0.16)]">
-            <AgentDraftPanel draft={EMPTY_AGENT_DRAFT} onClose={() => setDraftOpen(false)} />
+            <AgentDraftPanel
+              draft={agentDraft}
+              onClose={() => setDraftOpen(false)}
+              {...draftPanelActions}
+            />
           </div>
         </div>
       ) : null}

@@ -4,7 +4,9 @@ import { useCallback, useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 
 import {
+  agentBuilderApi,
   dolphinApi,
+  type DolphinConversationMode,
   type DolphinMessage,
   type DolphinToolCall,
 } from "@/convex/api";
@@ -86,14 +88,33 @@ export function useDolphinConversation(conversationKey: string | null) {
  * it is what grants read access to an anonymous conversation - so it is never
  * derived in the browser. See the access-model note on `dolphinConversations`
  * in convex/schema.ts.
+ *
+ * `newConversationMode` is what the Chat | Build switch says, and applies only
+ * until a conversation exists. After that the mode is the one the conversation
+ * was created with, read back from the server, because an opened chat from the
+ * history list may be a build or a try-run. Each mode has its own action, and
+ * the backend refuses a turn sent to the wrong one.
  */
-export function useDolphinChat(seedAgentKey?: string | null) {
+export function useDolphinChat(
+  seedAgentKey?: string | null,
+  newConversationMode: "chat" | "build" = "chat",
+) {
   const [conversationKey, setConversationKey] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
+  const builder = useAgentDraft(conversationKey);
+  /* Null while an opened conversation's mode is still loading: nothing is sent until it is known. */
+  const mode: DolphinConversationMode | null = conversationKey
+    ? (builder?.mode ?? null)
+    : newConversationMode;
+
   const createConversation = useMutation(dolphinApi.dolphin.createConversation);
-  const ask = useAction(dolphinApi.dolphin.ask);
+  const startTryMutation = useMutation(agentBuilderApi.agentBuilder.startTry);
+  const chatAsk = useAction(dolphinApi.dolphin.ask);
+  const buildAsk = useAction(agentBuilderApi.agentBuilder.ask);
+  const tryAsk = useAction(agentBuilderApi.agentBuilder.tryAsk);
+  const ask = mode === "build" ? buildAsk : mode === "try" ? tryAsk : chatAsk;
   const wallet = useWallet();
   const session = useWalletSession();
   const userAddress = (wallet.address ?? session.address ?? undefined)?.toLowerCase();
@@ -101,15 +122,17 @@ export function useDolphinChat(seedAgentKey?: string | null) {
   const send = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (trimmed.length === 0 || isSending) return;
+      if (trimmed.length === 0 || isSending || mode === null) return;
 
       setIsSending(true);
       setSendError(null);
       try {
         let key = conversationKey;
-        if (!key) {
+        // A try-run always has a key already: startTry opened it.
+        if (!key && mode !== "try") {
           const created = await createConversation({
-            ...(seedAgentKey ? { seedAgentKey } : {}),
+            mode,
+            ...(seedAgentKey && mode === "chat" ? { seedAgentKey } : {}),
             // Binds the conversation to the wallet when signed in so it can be
             // listed later. Anonymous is permitted and is not an error.
             ...(session.sessionToken ? { sessionToken: session.sessionToken } : {}),
@@ -118,6 +141,7 @@ export function useDolphinChat(seedAgentKey?: string | null) {
           key = created.conversationKey;
           setConversationKey(key);
         }
+        if (!key) return;
         await ask({
           conversationKey: key,
           text: trimmed,
@@ -136,7 +160,7 @@ export function useDolphinChat(seedAgentKey?: string | null) {
         setIsSending(false);
       }
     },
-    [ask, conversationKey, createConversation, isSending, seedAgentKey, session.sessionToken, userAddress],
+    [ask, conversationKey, createConversation, isSending, mode, seedAgentKey, session.sessionToken, userAddress],
   );
 
   const reset = useCallback(() => {
@@ -151,5 +175,50 @@ export function useDolphinChat(seedAgentKey?: string | null) {
     setSendError(null);
   }, []);
 
-  return { conversationKey, send, reset, openConversation, isSending, sendError };
+  /** Opens a private try-run of a build conversation's draft, and switches to it. */
+  const [isStartingTry, setIsStartingTry] = useState(false);
+  const startTry = useCallback(
+    async (buildConversationKey: string) => {
+      setIsStartingTry(true);
+      setSendError(null);
+      try {
+        const opened = await startTryMutation({
+          buildConversationKey,
+          ...(session.sessionToken ? { sessionToken: session.sessionToken } : {}),
+          ...(userAddress ? { userAddress } : {}),
+        });
+        setConversationKey(opened.conversationKey);
+      } catch (cause) {
+        setSendError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setIsStartingTry(false);
+      }
+    },
+    [session.sessionToken, startTryMutation, userAddress],
+  );
+
+  return {
+    conversationKey,
+    mode,
+    /** The conversation's builder side. undefined while loading. */
+    builder,
+    send,
+    reset,
+    openConversation,
+    startTry,
+    isStartingTry,
+    isSending,
+    sendError,
+  };
+}
+
+/**
+ * The builder side of a conversation: its mode, and the draft it builds or
+ * tries. `undefined` while loading, null when there is no conversation.
+ */
+export function useAgentDraft(conversationKey: string | null) {
+  return useQuery(
+    agentBuilderApi.agentBuilder.getDraft,
+    conversationKey ? { conversationKey } : "skip",
+  );
 }

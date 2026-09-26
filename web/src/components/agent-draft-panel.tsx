@@ -75,9 +75,20 @@ const STEPS = ["Draft it", "Try it privately", "Put it on-chain"] as const;
 export function AgentDraftPanel({
   draft,
   onClose,
+  trying = false,
+  onTry,
+  onBack,
+  isStartingTry = false,
 }: {
   draft: AgentDraft;
   onClose?: () => void;
+  /** The conversation beside this panel is a private try-run of the draft. */
+  trying?: boolean;
+  /** Opens a try-run. Absent until the conversation exists. */
+  onTry?: () => void;
+  /** Returns from a try-run to the build conversation. */
+  onBack?: () => void;
+  isStartingTry?: boolean;
 }) {
   const gaps = draftGaps(draft);
   const ready = gaps.length === 0;
@@ -175,20 +186,41 @@ export function AgentDraftPanel({
         </div>
       </div>
 
-      <div className="mt-3 border-t border-line/60 px-2 pt-3">
+      <div className="mt-3 space-y-2 border-t border-line/60 px-2 pt-3">
+        {trying ? (
+          <button
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line/80 px-4 text-[13px] font-semibold text-ink transition-colors hover:bg-paper-muted disabled:cursor-not-allowed disabled:opacity-30"
+            disabled={!onBack}
+            onClick={onBack}
+            type="button"
+          >
+            Back to the draft
+          </button>
+        ) : (
+          <button
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-[13px] font-semibold text-canvas transition-opacity disabled:cursor-not-allowed disabled:opacity-30"
+            disabled={!ready || !onTry || isStartingTry}
+            onClick={onTry}
+            type="button"
+          >
+            {/* The span carries the colour for the same reason ChatHistory's
+                "New conversation" does: globals.css colours button text. */}
+            <span className="text-canvas">{isStartingTry ? "Opening…" : "Try it privately"}</span>
+          </button>
+        )}
         <button
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 text-[13px] font-semibold text-canvas transition-opacity disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line/80 px-4 text-[13px] font-semibold text-ink-soft disabled:cursor-not-allowed disabled:opacity-40"
           disabled
           type="button"
         >
-          {/* The span carries the colour for the same reason ChatHistory's
-              "New conversation" does: globals.css colours button text. */}
-          <span className="text-canvas">Put on-chain</span>
+          Put on-chain
         </button>
-        <p className="mt-2 text-[0.7rem] leading-relaxed text-muted">
-          {ready
-            ? "Try it privately first. Putting it on-chain registers it from your connected wallet, and the cost is shown before you sign."
-            : `Needs ${listGaps(gaps)} first. It stays free and private until you put it on-chain.`}
+        <p className="text-[0.7rem] leading-relaxed text-muted">
+          {trying
+            ? "This run is private. Only you can see it, and it uses only the tools in the draft."
+            : ready
+              ? "Putting it on-chain isn't open yet. Until then it stays free and private to you."
+              : `Needs ${listGaps(gaps)} before you can try it. It stays free and private.`}
         </p>
       </div>
     </aside>

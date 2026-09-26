@@ -763,6 +763,45 @@ export const dolphinApi = anyApi as unknown as {
   };
 };
 
+/** One asset a wallet action moved. `token` null is BNB; `amountRaw` null means unknown. */
+export type WalletMovement = { token: string | null; symbol: string; decimals: number; amountRaw: string | null };
+
+export type WalletAction = {
+  transactionHash: string;
+  kind: "trade" | "withdraw" | "agent";
+  purpose: "chat" | "hire" | "withdraw" | "agent";
+  sent: WalletMovement[];
+  received: WalletMovement[];
+  counterparty: string | null;
+  /** For an agent-built transaction: whose plan was signed. */
+  agentKey: string | null;
+  agentName: string | null;
+  /** The block's time. */
+  executedAt: string;
+};
+
+/**
+ * convex/walletActions.ts. Every trade and withdrawal the Dolphin Wallet
+ * makes, recorded from its receipt, never from what the browser says it sent.
+ */
+export const walletActionsApi = anyApi as unknown as {
+  walletActions: {
+    record: Action<
+      {
+        altanaWalletAddress: string;
+        transactionHash: string;
+        kind: "trade" | "withdraw" | "agent";
+        purpose: "chat" | "hire" | "withdraw" | "agent";
+        to?: string;
+        agentKey?: string;
+        agentName?: string;
+      },
+      { recorded: boolean }
+    >;
+    forWallet: Query<{ altanaWalletAddress: string }, WalletAction[]>;
+  };
+};
+
 export type DolphinConversationMode = "chat" | "build" | "try";
 
 /** One tool of a built agent: a read-only tool of a listed MCP agent. */

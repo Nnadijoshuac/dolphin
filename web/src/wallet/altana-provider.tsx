@@ -28,6 +28,7 @@ import type { Address, Hex } from "viem";
 
 import {
   agentPaymentsApi,
+  walletActionsApi,
   agentSessionsApi,
   type AgentQuote,
   type AgentSessionRow,
@@ -271,7 +272,8 @@ export type AltanaWalletValue = Readonly<{
   /** Reclaim a funded escrow whose deadline passed without delivery. */
   claimEscrowRefund: (jobId: string) => Promise<void>;
   /** Sign a batch an agent built. Returns the tx hash or relay calls id. */
-  executeAgentPlan: (plan: AgentTransactionPlan) => Promise<string>;
+  /** `builtBy` names the agent in Agent activity; the recorded movements come from the chain. */
+  executeAgentPlan: (plan: AgentTransactionPlan, builtBy?: { agentKey: string; agentName: string }) => Promise<string>;
 
   /** Native balance in wei. Null while unread - never shown as zero. */
   balanceWei: bigint | null;
@@ -419,6 +421,42 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   const recordPayment = useAction(agentPaymentsApi.agentPayments.recordJobPayment);
   const notifyFunded = useAction(agentPaymentsApi.agentPayments.notifyJobFunded);
   const recordRefund = useAction(agentPaymentsApi.agentPayments.recordJobRefund);
+  /*
+   * EVERY ACTION IS RECORDED (owner's rule, 2026-09-26). Each trade and
+   * withdrawal is written to Agent activity once the relay confirms it. The
+   * backend reads the receipt itself, so what is recorded is what the chain
+   * says moved. A failure to RECORD is logged, never shown as a failed trade:
+   * the money already moved.
+   */
+  const recordActionRemote = useAction(walletActionsApi.walletActions.record);
+  const recordAction = useCallback(
+    (input: {
+      wallet: string;
+      transactionHash: string | null | undefined;
+      kind: "trade" | "withdraw" | "agent";
+      purpose: "chat" | "hire" | "withdraw" | "agent";
+      to?: string;
+      agentKey?: string;
+      agentName?: string;
+    }) => {
+      if (!input.transactionHash) {
+        console.warn(`[wallet] ${input.kind} confirmed without a transaction hash, so it could not be recorded.`);
+        return;
+      }
+      void recordActionRemote({
+        altanaWalletAddress: input.wallet,
+        transactionHash: input.transactionHash,
+        kind: input.kind,
+        purpose: input.purpose,
+        ...(input.to ? { to: input.to } : {}),
+        ...(input.agentKey ? { agentKey: input.agentKey } : {}),
+        ...(input.agentName ? { agentName: input.agentName } : {}),
+      }).catch((cause: unknown) => {
+        console.warn(`[wallet] ${input.kind} succeeded but was not recorded:`, cause);
+      });
+    },
+    [recordActionRemote],
+  );
 
   const balanceQuery = useTanstackQuery({
     queryKey: ["altana-balance", ALTANA_NETWORK.chainId, address],
@@ -855,7 +893,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
    * vouch for what they do - `to` is an address a stranger chose.
    */
   const executeAgentPlan = useCallback(
-    async (plan: AgentTransactionPlan): Promise<string> => {
+    async (plan: AgentTransactionPlan, builtBy?: { agentKey: string; agentName: string }): Promise<string> => {
       const wallet = getAltanaSnapshot();
       if (!wallet) throw new Error("Create a Dolphin Wallet before signing an agent transaction.");
 
@@ -926,6 +964,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
               "may have built it against stale prices or allowances - ask it to build a fresh one.",
           );
         }
+        recordAction({
+          wallet: wallet.address,
+          transactionHash: result.transactionHash,
+          kind: "agent",
+          purpose: "agent",
+          ...(builtBy ?? {}),
+        });
         refreshBalance();
         refreshRecoverability();
         return result.transactionHash ?? result.callsId;
@@ -936,7 +981,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, refreshBalance, refreshRecoverability],
+    [adminSigner, recordAction, refreshBalance, refreshRecoverability],
   );
 
   const readTokenBalance = useCallback(async (token: string): Promise<TokenHolding> => {
@@ -1258,6 +1303,12 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           if (swapped.status !== "CONFIRMED") {
             throw new Error(`PancakeSwap conversion returned ${swapped.status}.`);
           }
+          recordAction({
+            wallet: wallet.address,
+            transactionHash: swapped.transactionHash,
+            kind: "trade",
+            purpose: "hire",
+          });
           refreshBalance();
           refreshRecoverability();
         } catch (cause) {
@@ -1274,6 +1325,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       adminSigner,
       payForAgent,
       quoteBnbPayment,
+      recordAction,
       refreshBalance,
       refreshRecoverability,
       sessionsUnavailable,
@@ -1351,6 +1403,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         if (result.status === "FAILED") {
           throw new Error("The chain did not accept that withdrawal. Nothing was sent. Try again.");
         }
+        recordAction({
+          wallet: wallet.address,
+          transactionHash: result.transactionHash,
+          kind: "withdraw",
+          purpose: "withdraw",
+          to: input.to,
+        });
         refreshBalance();
         refreshRecoverability();
         return { transactionHash: result.transactionHash ?? null };
@@ -1361,7 +1420,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, readTokenBalance, readWithdrawReserveWei, refreshBalance, refreshRecoverability],
+    [adminSigner, readTokenBalance, readWithdrawReserveWei, recordAction, refreshBalance, refreshRecoverability],
   );
 
   const trade = useCallback(
@@ -1430,6 +1489,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         if (result.status === "FAILED") {
           throw new Error("The chain did not accept that trade. Nothing was swapped. Try again.");
         }
+        recordAction({ wallet: wallet.address, transactionHash: result.transactionHash, kind: "trade", purpose: "chat" });
         refreshBalance();
         refreshRecoverability();
         return { transactionHash: result.transactionHash ?? null, route };
@@ -1440,7 +1500,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner, readTokenBalance, readWithdrawReserveWei, refreshBalance, refreshRecoverability],
+    [adminSigner, readTokenBalance, readWithdrawReserveWei, recordAction, refreshBalance, refreshRecoverability],
   );
 
   const value = useMemo<AltanaWalletValue>(() => {

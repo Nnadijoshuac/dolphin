@@ -6,7 +6,9 @@ import { useQuery } from "convex/react";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { agentRouteId } from "@/constants/agents";
-import { agentPaymentsApi } from "@/convex/api";
+import { formatUnits } from "viem";
+
+import { agentPaymentsApi, walletActionsApi, type WalletMovement } from "@/convex/api";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { convexClient } from "@/providers/convex-provider";
@@ -27,6 +29,19 @@ function formatDate(iso: string): string | null {
     month: "short",
     timeZone: "UTC",
   }).format(new Date(ms));
+}
+
+/** "0.05 U", "0.0000647 BNB": small amounts keep four significant digits, as on the trade ticket. */
+function describeMovement(movement: WalletMovement): string {
+  if (movement.amountRaw === null) return movement.symbol;
+  const raw = BigInt(movement.amountRaw);
+  const text = formatUnits(raw, movement.decimals);
+  if (raw === BigInt(0) || !text.startsWith("0.")) {
+    return `${formatTokenAmount(raw, movement.decimals)} ${movement.symbol}`;
+  }
+  const fraction = text.slice(2);
+  const zeros = fraction.length - fraction.replace(/^0+/, "").length;
+  return `0.${fraction.slice(0, zeros + 4).replace(/0+$/, "")} ${movement.symbol}`;
 }
 
 type ActivityItem = {
@@ -70,7 +85,7 @@ function ActivityEmpty({
           ? "Activity cannot be read right now."
           : loading
             ? "Reading hire and payment records."
-            : "Hires and payments to agents will appear here."}
+            : "Hires, payments, trades and withdrawals will appear here."}
       </p>
     </div>
   );
@@ -165,10 +180,16 @@ function AgentActivityContent({
     agentPaymentsApi.agentPayments.getJobsForAltanaWallet,
     dolphinAddress ? { altanaWalletAddress: dolphinAddress } : "skip",
   );
+  /* Trades, withdrawals and agent-built transactions (convex/walletActions.ts). */
+  const actions = useQuery(
+    walletActionsApi.walletActions.forWallet,
+    dolphinAddress ? { altanaWalletAddress: dolphinAddress } : "skip",
+  );
 
   const agents = useAgentsByKeys([
     ...(hires ?? []).map((hire) => hire.agentKey),
     ...(jobs ?? []).map((job) => job.agentKey),
+    ...(actions ?? []).flatMap((row) => (row.agentKey ? [row.agentKey] : [])),
   ]);
 
   /*
@@ -273,11 +294,72 @@ function AgentActivityContent({
     });
   }
 
+  /*
+   * EVERY OTHER ACTION THE WALLET TOOK (owner's rule, 2026-09-26): trades,
+   * withdrawals, and transactions an agent built. Amounts are what the
+   * receipt showed moving; an amount the chain does not show (a BNB
+   * withdrawal) is left off rather than filled in.
+   */
+  for (const action of actions ?? []) {
+    const agent = action.agentKey ? agents.get(action.agentKey) : undefined;
+    const sent = action.sent.map(describeMovement);
+    const received = action.received.map(describeMovement);
+    const symbols = (list: WalletMovement[]) => list.map((movement) => movement.symbol).join(" + ");
+    const date = formatDate(action.executedAt);
+
+    let title: string;
+    let detail: string;
+    let amount: string | null;
+    if (action.kind === "trade") {
+      title =
+        action.purpose === "hire"
+          ? `Bought ${symbols(action.received)} to pay an agent`
+          : `Swapped ${symbols(action.sent)} for ${symbols(action.received)}`;
+      detail = [`Sold ${sent.join(" + ")}`, "PancakeSwap", date].filter(Boolean).join(" - ");
+      amount = received.length ? `+${received.join(" + ")}` : null;
+    } else if (action.kind === "withdraw") {
+      title = `Withdrew ${symbols(action.sent)}`;
+      detail = [
+        action.counterparty ? `To ${action.counterparty.slice(0, 6)}…${action.counterparty.slice(-4)}` : null,
+        date,
+      ]
+        .filter(Boolean)
+        .join(" - ");
+      amount = action.sent.every((movement) => movement.amountRaw !== null) ? `−${sent.join(" + ")}` : null;
+    } else {
+      title = action.agentName ?? agent?.name ?? "Agent transaction";
+      detail = [
+        sent.length || received.length ? "Signed its transaction" : "Signed its transaction - nothing moved",
+        date,
+      ]
+        .filter(Boolean)
+        .join(" - ");
+      amount =
+        [sent.length ? `−${sent.join(" + ")}` : null, received.length ? `+${received.join(" + ")}` : null]
+          .filter(Boolean)
+          .join(" ") || null;
+    }
+
+    items.push({
+      key: `action:${action.transactionHash}`,
+      title,
+      agentKey: action.agentKey ?? "",
+      category: agent?.category ?? (action.kind === "trade" ? "trading" : "payments"),
+      iconUrl: agent?.iconUrl ?? null,
+      iconSeed: agent?.iconSeed ?? action.kind,
+      detail,
+      amount,
+      href: `https://bscscan.com/tx/${action.transactionHash}`,
+      external: true,
+      sortAt: Date.parse(action.executedAt) || 0,
+    });
+  }
+
   items.sort((a, b) => b.sortAt - a.sortAt);
   const visible = items.slice(0, maxRows);
   const loading =
     (identityAddress !== null && hires === undefined) ||
-    (dolphinAddress !== null && jobs === undefined);
+    (dolphinAddress !== null && (jobs === undefined || actions === undefined));
 
   return (
     <section className={mobile ? "mobile-wallet-activity" : "wallet-activity"} id="activity">

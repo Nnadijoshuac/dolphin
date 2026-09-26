@@ -106,7 +106,8 @@ export function AgentTransactionPanel({ agent }: { agent: Agent }) {
   async function sign(plan: AgentTransactionPlan, agentName: string) {
     setState({ kind: "signing", plan, agentName });
     try {
-      const reference = await wallet.executeAgentPlan(plan);
+      // Named so Agent activity can say whose transaction this was.
+      const reference = await wallet.executeAgentPlan(plan, { agentKey: agent.agentKey, agentName });
       setState({ kind: "signed", reference });
     } catch (cause) {
       setState({

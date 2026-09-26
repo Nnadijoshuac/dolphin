@@ -26,6 +26,7 @@ import type * as dolphin from "../dolphin.js";
 import type * as engagement from "../engagement.js";
 import type * as facets from "../facets.js";
 import type * as healthAlerts from "../healthAlerts.js";
+import type * as http from "../http.js";
 import type * as lib_agentTransaction from "../lib/agentTransaction.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
 import type * as lib_categorize from "../lib/categorize.js";
@@ -59,6 +60,7 @@ import type * as protocols_venus from "../protocols/venus.js";
 import type * as ranking from "../ranking.js";
 import type * as shelves from "../shelves.js";
 import type * as sources_scan8004 from "../sources/scan8004.js";
+import type * as tracking from "../tracking.js";
 import type * as verification from "../verification.js";
 import type * as walletAuth from "../walletAuth.js";
 
@@ -87,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   engagement: typeof engagement;
   facets: typeof facets;
   healthAlerts: typeof healthAlerts;
+  http: typeof http;
   "lib/agentTransaction": typeof lib_agentTransaction;
   "lib/bscClient": typeof lib_bscClient;
   "lib/categorize": typeof lib_categorize;
@@ -120,6 +123,7 @@ declare const fullApi: ApiFromModules<{
   ranking: typeof ranking;
   shelves: typeof shelves;
   "sources/scan8004": typeof sources_scan8004;
+  tracking: typeof tracking;
   verification: typeof verification;
   walletAuth: typeof walletAuth;
 }>;

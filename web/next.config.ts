@@ -15,6 +15,18 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
+  /*
+   * The Set and Earn tracking API lives on Convex's HTTP host
+   * (convex/http.ts). Proxied here so the URL handed to BNB Chain is on our own
+   * domain and survives a backend move. The .site host is the .cloud URL with
+   * one word changed - that is Convex's own convention for a deployment.
+   */
+  async rewrites() {
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL?.trim().replace(/\/+$/, "");
+    if (!convexUrl) return [];
+    const siteUrl = convexUrl.replace(/\.convex\.cloud$/, ".convex.site");
+    return [{ source: "/api/v1/:path*", destination: `${siteUrl}/api/v1/:path*` }];
+  },
 };
 
 export default nextConfig;

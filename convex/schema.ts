@@ -254,6 +254,8 @@ export default defineSchema({
   })
     // Detail page, and every internal point lookup.
     .index("by_key", ["agentKey"])
+    // "Agents per owner" for the Set and Earn tracking API (convex/tracking.ts).
+    .index("by_owner", ["ownerAddress"])
     // Browse everything, paginated, stable.
     .index("by_status_rank", ["status", "rank"])
     // Browse one category, paginated; the [status, categorySlug] prefix also

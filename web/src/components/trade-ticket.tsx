@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { parseUnits, type PublicClient } from "viem";
+import { formatUnits, parseUnits, type PublicClient } from "viem";
 
 import type { TradeTicket as TradeTicketData } from "@/convex/api";
 import { bscPublicClient } from "@/services/chain";
@@ -42,9 +42,18 @@ function shortAddress(value: string): string {
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
-/** Up to 6 significant decimals, so 18.172882236573356408 reads as 18.172882. */
+/**
+ * 18.172882236573356408 reads as 18.172882. Below 1, four significant digits:
+ * the first real trade (0.05 U -> BNB, 2026-09-26) showed "about 0.000064" and
+ * "at least 0.000064", identical at six decimals when they were 0.0000647 and
+ * 0.0000640, so the slippage line said nothing.
+ */
 function amount(raw: bigint, decimals: number): string {
-  return formatTokenAmount(raw, decimals);
+  const text = formatUnits(raw, decimals);
+  if (raw === BigInt(0) || !text.startsWith("0.")) return formatTokenAmount(raw, decimals);
+  const fraction = text.slice(2);
+  const leadingZeros = fraction.length - fraction.replace(/^0+/, "").length;
+  return `0.${fraction.slice(0, leadingZeros + 4).replace(/0+$/, "")}`;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

@@ -161,6 +161,22 @@ export function parseBuilderReply(content: string): BuilderReply | null {
   return null;
 }
 
+/**
+ * The builder's list ids (`t3`) replaced by what they name.
+ *
+ * Ids exist only for one builder turn. Measured on dev: instructions came back
+ * as "invoke the analyse tool (t1)", which means nothing to the agent at run
+ * time, where its tools are named differently. A parenthetical id is dropped,
+ * because the sentence already names the tool; a bare one becomes the tool's
+ * name.
+ */
+export function resolveToolIdReferences(text: string, offered: readonly OfferedTool[]): string {
+  const byId = new Map(offered.map((tool) => [tool.id, tool]));
+  return text
+    .replace(/\s*\((?:\s*t\d{1,2}\s*,?)+\)/g, "")
+    .replace(/\bt\d{1,2}\b/g, (id) => byId.get(id)?.toolName ?? id);
+}
+
 /** Trimmed, whitespace-collapsed and capped; null when nothing is left. */
 function cleanLine(value: string, max: number): string | null {
   const cleaned = value.replace(/\s+/g, " ").trim().slice(0, max).trim();
@@ -210,14 +226,18 @@ export function applyBuilderReply(
   }
 
   const description =
-    reply.description === null ? null : cleanLine(reply.description, DESCRIPTION_MAX_CHARS);
+    reply.description === null
+      ? null
+      : cleanLine(resolveToolIdReferences(reply.description, offered), DESCRIPTION_MAX_CHARS);
   if (description !== null && description !== current.description) {
     next.description = description;
     changed.push("description");
   }
 
   const instructions =
-    reply.instructions === null ? null : cleanBlock(reply.instructions, INSTRUCTIONS_MAX_CHARS);
+    reply.instructions === null
+      ? null
+      : cleanBlock(resolveToolIdReferences(reply.instructions, offered), INSTRUCTIONS_MAX_CHARS);
   if (instructions !== null && instructions !== current.instructions) {
     next.instructions = instructions;
     changed.push("instructions");

@@ -10,6 +10,7 @@ import {
   applyBuilderReply,
   draftGaps,
   parseBuilderReply,
+  resolveToolIdReferences,
   type BuilderReply,
   type DraftSpec,
   type OfferedTool,
@@ -599,7 +600,7 @@ export const ask = action({
         });
       }
 
-      let reply = stripRawPayloads(compiled.reply.reply).trim();
+      let reply = resolveToolIdReferences(stripRawPayloads(compiled.reply.reply), offered).trim();
       if (looksLikeLeakedReasoning(reply)) reply = "";
       if (applied.overLimit.length > 0) {
         reply += `${reply ? "\n\n" : ""}I kept the tools to what one agent can run at once, so I left out ${applied.overLimit

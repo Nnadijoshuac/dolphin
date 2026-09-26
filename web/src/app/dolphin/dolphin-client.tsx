@@ -410,10 +410,13 @@ export function DolphinClient({
   seedAgentKey,
   seedAgentName,
   autoAsk,
+  initialConversationKey = null,
 }: {
   seedAgentKey: string | null;
   seedAgentName?: string | null;
   autoAsk?: boolean;
+  /** From `?c=`: a conversation to open straight away. */
+  initialConversationKey?: string | null;
 }) {
   const [draft, setDraft] = useState(() =>
     !autoAsk && seedAgentName
@@ -440,6 +443,14 @@ export function DolphinClient({
     isSending,
     sendError,
   } = useDolphinChat(seedAgentKey, mode);
+
+  /* `?c=` opens that conversation once; the history list picks it up from there. */
+  const openedFromLinkRef = useRef(false);
+  useEffect(() => {
+    if (!initialConversationKey || openedFromLinkRef.current) return;
+    openedFromLinkRef.current = true;
+    openConversation(initialConversationKey);
+  }, [initialConversationKey, openConversation]);
   const { exists, isLoading, title, turns, agentDirectory } =
     useDolphinConversation(conversationKey);
   const history = useAppStore((state) => state.chatHistory);

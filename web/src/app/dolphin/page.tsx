@@ -69,9 +69,18 @@ export default async function DolphinPage({
 
   const autoAsk = ask === "1" || ask === "true" || (seedAgentKey !== null && ask !== "0");
 
+  /*
+   * `?c=<conversationKey>` opens that conversation (2026-09-27). The key is the
+   * conversation's capability, so a link carrying it is a way back into a draft
+   * that works whatever this browser's local history holds. Only the key's own
+   * shape is accepted.
+   */
+  const openKey = typeof sp.c === "string" && /^[0-9a-f]{64}$/.test(sp.c) ? sp.c : null;
+
   return (
     <DolphinClient
       autoAsk={autoAsk}
+      initialConversationKey={openKey}
       seedAgentKey={seedAgentKey}
       seedAgentName={name}
     />

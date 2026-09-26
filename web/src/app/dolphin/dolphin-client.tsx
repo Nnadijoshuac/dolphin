@@ -45,23 +45,43 @@ function historyTime(timestamp: number): string {
 type ChatMode = "chat" | "build";
 
 /*
- * THE EMPTY SCREEN IS THE MODE SWITCH AND ONE LINE. (2026-09-26)
- *
- * It used to carry a logo, a heading, a paragraph and four starter chips, and
- * Build mode copied the pattern. The owner's call: too much, for both modes.
- * A new visitor has one decision to make (ask, or build) and then one thing
- * to do (type), so the screen shows exactly that. The line says what to type
- * in the mode that is selected, and the composer's placeholder repeats it
- * where the typing happens.
- *
- * This deliberately reverses the 2026-09-12 starter prompts, which were added
- * because a blank box hid what Dolphin can answer. The one-line hint is what
- * is kept of that argument.
+ * THE EMPTY SCREEN (owner's direction, 2026-09-26): the mode switch, one line,
+ * the composer, and small suggestions under it, the way Claude lays out its
+ * own. The logo, paragraph and large chips that were here were too much for
+ * both modes. The suggestions stay, because a blank box hides what Dolphin
+ * can answer, but they are quiet pills rather than a menu.
  */
 const MODE_HINT: Readonly<Record<ChatMode, string>> = {
-  chat: "Ask anything about the agents on BNB Chain.",
-  build: "Describe the agent you want, and Dolphin builds it.",
+  chat: "What do you want to know?",
+  build: "What should your agent do?",
 };
+
+/**
+ * Chat suggestions. Every entry must be answerable by something actually
+ * wired, so a first impression is a real answer rather than an apology:
+ * execution capability comes from published tool lists
+ * (convex/lib/toolCapability.ts), the health factor is a live Venus read,
+ * comparing yield agents is catalog work, and the probe is the one question
+ * Dolphin can always answer about itself. Nothing about grid or trading
+ * performance: those categories return unavailableStats by construction.
+ */
+const STARTER_PROMPTS = [
+  "Which agents can execute a transaction?",
+  "What is my Venus health factor?",
+  "Compare the yield agents",
+  "How does Dolphin decide an agent is live?",
+];
+
+/**
+ * Build suggestions. Each describes an agent whose tools can come from the
+ * read-only MCP agents already listed, so none asks for something the builder
+ * would have to refuse.
+ */
+const BUILD_STARTERS = [
+  "Watch my Venus health factor",
+  "Compare yields on BNB Chain",
+  "Explain a PancakeSwap pool before I add liquidity",
+];
 
 /*
  * Build mode has its UI and not yet its backend. Sending is refused in
@@ -81,18 +101,14 @@ const BUILD_BACKEND_CONNECTED: boolean = false;
 function ModeSwitch({
   mode,
   onChange,
-  size = "sm",
 }: {
   mode: ChatMode;
   onChange: (mode: ChatMode) => void;
-  size?: "sm" | "lg";
 }) {
   return (
     <div
       aria-label="Conversation mode"
-      className={`inline-flex items-center rounded-full border border-line/80 bg-paper-muted/70 ${
-        size === "lg" ? "p-1" : "p-0.5"
-      }`}
+      className="inline-flex items-center rounded-full border border-line/70 bg-paper-muted/60 p-[3px]"
       role="radiogroup"
     >
       {(["chat", "build"] as const).map((option) => {
@@ -100,9 +116,7 @@ function ModeSwitch({
         return (
           <button
             aria-checked={selected}
-            className={`rounded-full font-semibold transition-colors ${
-              size === "lg" ? "px-6 py-2 text-[15px]" : "px-3 py-1 text-[12px]"
-            } ${
+            className={`rounded-full px-3 py-[3px] text-[12px] font-medium transition-colors ${
               selected ? "bg-ink text-canvas shadow-sm" : "text-ink-soft hover:text-ink"
             }`}
             key={option}
@@ -481,9 +495,115 @@ export function DolphinClient({
   const canSwitchMode = isEmpty && !conversationKey;
   const sendBlocked = building && !BUILD_BACKEND_CONNECTED;
 
+  const suggestions = building
+    ? BUILD_STARTERS
+    : seedAgentName
+      ? [
+          `What strategy does ${seedAgentName} run?`,
+          `Check live health for ${seedAgentName}`,
+          `Is ${seedAgentName} verified and safe?`,
+        ]
+      : STARTER_PROMPTS;
+
+  /*
+   * One composer, rendered in the middle of the empty screen or docked at the
+   * bottom of a conversation. Only one of the two places renders it at a time,
+   * so the textarea ref always points at the box on screen.
+   */
+  const composer = (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit(draft);
+      }}
+    >
+      <div className="flex w-full flex-col rounded-[1.4rem] border border-line/80 bg-paper p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-14px_rgba(15,23,42,0.18)]">
+        <textarea
+          aria-label={building ? "Describe the agent to build" : "Message Dolphin"}
+          className={`max-h-[400px] w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none placeholder:text-faint focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ${
+            isEmpty ? "min-h-[3.4rem]" : "min-h-0"
+          }`}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            event.target.style.height = "auto";
+            event.target.style.height = `${Math.min(event.target.scrollHeight, 400)}px`;
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              if (draft.trim().length === 0) return;
+              event.preventDefault();
+              submit(draft);
+            }
+          }}
+          placeholder={
+            building
+              ? "Describe the agent you want to build…"
+              : "Ask about an agent, a position, or a yield…"
+          }
+          ref={textareaRef}
+          rows={1}
+          value={draft}
+        />
+        <div className="flex items-center justify-between gap-2 pl-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {/*
+              * The switch lives above the empty screen's composer. Once a
+              * conversation has started, this label is the only reminder of
+              * which mode it is in.
+              */}
+            {canSwitchMode ? null : (
+              <span className="px-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                {building ? "Build" : "Chat"}
+              </span>
+            )}
+            {/*
+              * The draft's door on narrow screens. It lives here rather than in
+              * the header because the header already holds back, title, Connect
+              * and history, and a fourth control pushed Connect into the centred
+              * title at 390px.
+              */}
+            {building ? (
+              <button
+                className="inline-flex items-center gap-1 rounded-full border border-line/80 px-2.5 py-1 text-[12px] font-semibold text-ink-soft transition-colors hover:bg-paper-muted hover:text-ink lg:hidden"
+                onClick={() => setDraftOpen(true)}
+                type="button"
+              >
+                <CategoryGlyph name="bot" size={14} strokeWidth={1.9} />
+                Draft
+              </button>
+            ) : null}
+          </div>
+          <button
+            aria-label="Send"
+            className="grid size-8 shrink-0 place-items-center rounded-full bg-ink text-canvas transition-opacity disabled:opacity-25"
+            disabled={draft.trim().length === 0 || isSending || sendBlocked}
+            type="submit"
+          >
+            <svg aria-hidden className="text-canvas" fill="none" height="14" viewBox="0 0 24 24" width="14">
+              <path
+                d="M12 19V5M12 5l-6 6M12 5l6 6"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.5"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+      {sendBlocked ? (
+        <p className="mt-2 px-3 text-center text-[0.72rem] text-muted">
+          The builder is not connected yet, so nothing is sent. Switch to Chat to ask
+          the marketplace a question.
+        </p>
+      ) : null}
+      {sendError ? <p className="mt-2 px-3 text-[0.8rem] text-ink">{sendError}</p> : null}
+    </form>
+  );
+
   return (
     <div
-      className={`dolphin-chat-page relative grid h-[100dvh] overflow-hidden ${
+      className={`dolphin-chat-page relative grid overflow-hidden ${
         building ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : "lg:grid-cols-[minmax(0,1fr)_19rem]"
       } ${styles.shell}`}
     >
@@ -580,143 +700,83 @@ export function DolphinClient({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[46rem] px-5 pb-8 pt-8">
-            {conversationKey && isLoading ? (
-              <div className="flex justify-center pt-[18vh]">
-                <DolphinLoader label="Loading conversation…" />
-              </div>
-            ) : conversationKey && !exists ? (
-              <div className="flex flex-col items-center gap-2 pt-[18vh] text-center">
-                <h1 className="text-base font-semibold text-ink">
-                  Conversation unavailable
-                </h1>
-                <p className="max-w-sm text-sm text-muted">
-                  This locally saved chat can no longer be opened.
-                </p>
-              </div>
-            ) : isEmpty ? (
-              <div className="dolphin-empty-hero flex flex-col items-center pt-[30vh]">
-                <h1 className="sr-only">
-                  {building ? "Build an agent" : "Ask the marketplace"}
-                </h1>
-                <ModeSwitch mode={mode} onChange={setMode} size="lg" />
-                <p className="mt-4 text-center text-sm text-muted">{MODE_HINT[mode]}</p>
-              </div>
-            ) : (
-              <div>
-                {turns.map((turn) => (
-                  <Turn
-                    dynamicAgents={agentDirectory}
-                    key={turn.id}
-                    onSelectPrompt={(prompt) => submit(prompt)}
-                    turn={turn}
-                  />
+          {conversationKey && isLoading ? (
+            <div className="flex justify-center pt-[18vh]">
+              <DolphinLoader label="Loading conversation…" />
+            </div>
+          ) : conversationKey && !exists ? (
+            <div className="flex flex-col items-center gap-2 px-5 pt-[18vh] text-center">
+              <h1 className="text-base font-semibold text-ink">
+                Conversation unavailable
+              </h1>
+              <p className="max-w-sm text-sm text-muted">
+                This locally saved chat can no longer be opened.
+              </p>
+            </div>
+          ) : isEmpty ? (
+            /*
+             * THE EMPTY SCREEN, CLAUDE-STYLE. (2026-09-26)
+             *
+             * Mode, one quiet line, the composer in the middle of the page, and
+             * small suggestions under it. The composer sits HERE rather than at
+             * the bottom until the first turn, the way Claude's does: an empty
+             * page with its input pinned to the floor makes the visitor look
+             * for what to do; an input in the centre is the thing to do.
+             */
+            <div className="dolphin-empty-hero flex min-h-full flex-col items-center justify-center px-4 pb-[10vh] pt-10">
+              <h1 className="sr-only">
+                {building ? "Build an agent" : "Ask the marketplace"}
+              </h1>
+              <ModeSwitch mode={mode} onChange={setMode} />
+              <p className="mt-5 text-center text-[1.3rem] font-medium tracking-[-0.02em] text-ink">
+                {MODE_HINT[mode]}
+              </p>
+              <div className="mt-5 w-full max-w-[40rem]">{composer}</div>
+              <div className="mt-3 flex max-w-[40rem] flex-wrap justify-center gap-1.5">
+                {suggestions.map((suggestion) => (
+                  <button
+                    className="rounded-full border border-line/70 bg-paper/60 px-3 py-1 text-[12.5px] text-ink-soft transition-colors hover:border-line-strong hover:bg-paper hover:text-ink"
+                    key={suggestion}
+                    onClick={() => {
+                      /*
+                       * Chat answers a suggestion straight away. Build puts it
+                       * in the box instead, so the person can shape it before
+                       * anything is drafted.
+                       */
+                      if (building) {
+                        setDraft(suggestion);
+                        textareaRef.current?.focus();
+                      } else {
+                        submit(suggestion);
+                      }
+                    }}
+                    type="button"
+                  >
+                    {suggestion}
+                  </button>
                 ))}
               </div>
-            )}
-
-            {sendError ? (
-              <p className="mt-4 text-[0.85rem] text-ink">{sendError}</p>
-            ) : null}
-            <div ref={bottomRef} />
-          </div>
-        </div>
-
-        <div className="dolphin-composer-wrapper relative z-10 bg-gradient-to-t from-[var(--canvas)] via-[var(--canvas)]/95 to-transparent">
-          <form
-            className="mx-auto w-full max-w-[46rem] px-4 pb-5 pt-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submit(draft);
-            }}
-          >
-            <div className="flex w-full flex-col rounded-[1.65rem] border border-line/90 bg-paper/88 p-2 shadow-[0_12px_38px_rgba(15,23,42,0.11)] backdrop-blur-xl">
-              <textarea
-                aria-label={building ? "Describe the agent to build" : "Message Dolphin"}
-                className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-faint"
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  event.target.style.height = "auto";
-                  event.target.style.height = `${Math.min(event.target.scrollHeight, 400)}px`;
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    if (draft.trim().length === 0) return;
-                    event.preventDefault();
-                    submit(draft);
-                  }
-                }}
-                placeholder={
-                  building
-                    ? "Describe the agent you want to build…"
-                    : "Ask about an agent, a position, or a yield…"
-                }
-                ref={textareaRef}
-                rows={1}
-                value={draft}
-              />
-              <div className="flex items-center justify-between gap-2 pl-1">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  {/*
-                    * The switch itself lives in the empty screen. Once a
-                    * conversation has started, this label is the only reminder
-                    * of which mode it is in.
-                    */}
-                  {canSwitchMode ? null : (
-                    <span className="px-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-                      {building ? "Build" : "Chat"}
-                    </span>
-                  )}
-                  {/*
-                    * The draft's door on narrow screens. It lives here rather
-                    * than in the header because the header already holds back,
-                    * title, Connect and history, and a fourth control pushed
-                    * Connect into the centred title at 390px.
-                    */}
-                  {building ? (
-                    <button
-                      className="inline-flex items-center gap-1 rounded-full border border-line/80 px-2.5 py-1 text-[12px] font-semibold text-ink-soft transition-colors hover:bg-paper-muted hover:text-ink lg:hidden"
-                      onClick={() => setDraftOpen(true)}
-                      type="button"
-                    >
-                      <CategoryGlyph name="bot" size={14} strokeWidth={1.9} />
-                      Draft
-                    </button>
-                  ) : null}
-                </div>
-              <button
-                aria-label="Send"
-                className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-canvas transition-[opacity,transform] hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-30"
-                disabled={draft.trim().length === 0 || isSending || sendBlocked}
-                type="submit"
-              >
-                <svg
-                  aria-hidden
-                  className="text-canvas"
-                  fill="none"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  width="15"
-                >
-                  <path
-                    d="M12 19V5M12 5l-6 6M12 5l6 6"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2.5"
-                  />
-                </svg>
-              </button>
-              </div>
             </div>
-            {sendBlocked ? (
-              <p className="mt-2 px-3 text-center text-[0.72rem] text-muted">
-                The builder is not connected yet, so nothing is sent. Switch to Chat to
-                ask the marketplace a question.
-              </p>
-            ) : null}
-          </form>
+          ) : (
+            <div className="mx-auto w-full max-w-[44rem] px-5 pb-8 pt-8">
+              {turns.map((turn) => (
+                <Turn
+                  dynamicAgents={agentDirectory}
+                  key={turn.id}
+                  onSelectPrompt={(prompt) => submit(prompt)}
+                  turn={turn}
+                />
+              ))}
+              <div ref={bottomRef} />
+            </div>
+          )}
         </div>
+
+        {isEmpty ? null : (
+          <div className="dolphin-composer-wrapper relative z-10 bg-gradient-to-t from-[var(--canvas)] via-[var(--canvas)]/95 to-transparent">
+            <div className="mx-auto w-full max-w-[44rem] px-4 pb-5 pt-3">{composer}</div>
+          </div>
+        )}
       </section>
 
       <div className="relative z-20 hidden min-h-0 lg:block">

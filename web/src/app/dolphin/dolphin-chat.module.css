@@ -1,6 +1,21 @@
+/*
+ * THE WHOLE SCREEN AT 80%. (owner's direction, 2026-09-26)
+ *
+ * "Make it what the browser shows at Ctrl-minus, 80%." That is exactly what
+ * `zoom` does: every length inside, type, spacing, radii, icons, drawers,
+ * shrinks by the same factor, so proportions hold and nothing has to be
+ * re-tuned class by class. Hand-scaling each utility would drift the first
+ * time someone added one.
+ *
+ * The height compensates: lengths inside a zoomed element are multiplied by
+ * the zoom, so 100dvh would render as 80% of the screen. Dividing by the same
+ * factor puts it back to the full viewport. Change both numbers together.
+ */
 .shell {
   isolation: isolate;
   background: var(--canvas);
+  zoom: 0.8;
+  height: calc(100dvh / 0.8);
 }
 
 .grid {

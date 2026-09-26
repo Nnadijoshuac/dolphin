@@ -967,14 +967,10 @@ select {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
+  /* No box of its own (owner, 2026-09-26): it sat inside the balance card,
+     a container in a container. The figure is the content; it needs space,
+     not a frame. */
   margin-top: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.875rem;
-  background: var(--canvas);
-  padding: 1.125rem 1.25rem;
-  box-shadow:
-    inset 0 2px 5px var(--sink-top),
-    inset 0 -1px 0 var(--sink-bottom);
 }
 
 /* LETTER-SPACING: the figures were at -0.055em and the digits genuinely
@@ -1610,10 +1606,10 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  background: var(--paper);
-  padding: 1rem 1.125rem;
+  /* A row, not a box (owner, 2026-09-26). The hairline separates it from the
+     cards above without framing a single sentence and a link. */
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
 }
 .wallet-danger__title { font-size: 0.85rem; font-weight: 650; color: var(--ink); }
 .wallet-danger__sub { margin-top: 0.2rem; max-width: 46ch; font-size: 0.76rem; line-height: 1.5; color: var(--muted); }

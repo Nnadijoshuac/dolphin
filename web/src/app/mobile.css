@@ -206,16 +206,12 @@
      ───────────────────────────────────────────────────────────────── */
   .mobile-wallet-total { padding-top: 12px; text-align: center; }
 
-  /* The readout: cut into the page, like a display window set into a case.
-     It shows a number and you cannot press it — which is exactly what a
-     sunk surface should mean. */
+  /* The readout: no box (owner, 2026-09-26). It was a sunk "display window";
+     the number is the content and reads fine on the page, the same call as
+     the desktop readout in globals.css. */
   .mobile-readout {
     margin-bottom: 14px;
-    padding: 18px 16px 14px;
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    background: var(--canvas);
-    box-shadow: inset 0 2px 6px var(--sink-top), inset 0 -1px 0 var(--sink-bottom);
+    padding: 8px 0 4px;
   }
 
   /* LETTER-SPACING is +0.3px, not -1.5px. The old value packed the digits

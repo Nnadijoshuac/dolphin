@@ -145,7 +145,9 @@ export function LiquidationAlertPanel() {
   }
 
   return (
-    <section className="surface-raised mt-6 p-6" aria-labelledby="alerts-heading">
+    // Open section, headed like Agent activity, not a raised card: it is a
+    // form on the page, not an object you pick up (owner, 2026-09-26).
+    <section className="mt-12" aria-labelledby="alerts-heading">
       {/*
        * CUT 2026-09-12, from four paragraphs to two lines.
        *
@@ -161,11 +163,15 @@ export function LiquidationAlertPanel() {
        * one of the listed agents taking the position over — but that needs six
        * words, not three sentences.
        */}
-      <p className="eyebrow">Liquidation alerts</p>
-      <h2 className="section-title mt-3" id="alerts-heading">
-        Get told before it matters
-      </h2>
-      <p className="body-copy mt-3 max-w-2xl">
+      <div className="wallet-section__header">
+        <div>
+          <p className="eyebrow">Liquidation alerts</p>
+          <h2 className="wallet-section__title mt-1" id="alerts-heading">
+            Get told before it matters
+          </h2>
+        </div>
+      </div>
+      <p className="mt-4 max-w-2xl text-sm leading-relaxed text-ink-soft">
         Dolphin emails you when your Venus health factor drops below your number.
         Venus liquidates at 1.0, so leave room.
       </p>

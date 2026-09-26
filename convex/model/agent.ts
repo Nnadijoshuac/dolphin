@@ -251,7 +251,7 @@ export interface MarketplaceAgent {
   curated: boolean;
 
   // State
-  status: "live" | "degraded" | "unavailable";
+  status: "live" | "degraded" | "unavailable" | "duplicate";
   rank: number;
   searchText: string;
   publishedAt: string;

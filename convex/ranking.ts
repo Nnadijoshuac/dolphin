@@ -128,8 +128,10 @@ export const recomputeUsage = internalMutation({
       changed++;
     }
 
-    // Shelves order by rank, so they follow every ranking run. The rebuild
-    // compares before writing, so an unchanged hour writes nothing.
+    // Which registration of a duplicated product is listed follows rank, so the
+    // dedupe pass runs after every ranking run. Shelves order by rank too. Both
+    // compare before writing, so an unchanged hour writes nothing.
+    await ctx.scheduler.runAfter(0, internal.catalogQuality.dedupe, {});
     await ctx.scheduler.runAfter(0, internal.shelves.rebuild, {});
 
     return { agents: agents.length, changed };

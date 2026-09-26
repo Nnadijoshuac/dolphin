@@ -326,7 +326,8 @@ export interface Agent {
    * enough times to be delisted; "unavailable" means it is delisted and only
    * reachable by direct link.
    */
-  status: "live" | "degraded" | "unavailable";
+  /** "duplicate": a re-registration of a listed agent, left out of browse. */
+  status: "live" | "degraded" | "unavailable" | "duplicate";
   verifiedAt: string;
   publishedAt: string;
   registryVerification: RegistryVerification;

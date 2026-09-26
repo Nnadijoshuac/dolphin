@@ -529,7 +529,8 @@ export const applyVerification = internalMutation({
       feedbackCount: c.feedbackCount,
       reputationScore: c.reputationScore,
       curated,
-      status: "live" as const,
+      // A duplicate stays one across re-probes; catalogQuality.dedupe decides it.
+      status: existing?.status === "duplicate" ? ("duplicate" as const) : ("live" as const),
       rank,
       baseRank: c.rank,
       searchText: buildSearchText(c),
@@ -540,6 +541,8 @@ export const applyVerification = internalMutation({
     if (!existing) {
       await ctx.db.insert("agents", next);
       await ctx.scheduler.runAfter(0, internal.facets.recompute, {});
+      // A new listing may be a re-registration of one already listed.
+      await ctx.scheduler.runAfter(0, internal.catalogQuality.dedupe, {});
       return;
     }
 

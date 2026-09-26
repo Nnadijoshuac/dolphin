@@ -218,6 +218,9 @@ export default defineSchema({
       v.literal("live"),
       v.literal("degraded"),
       v.literal("unavailable"),
+      // A working re-registration of an agent that is already listed. Left out
+      // of every browse read; its page still resolves. convex/catalogQuality.ts.
+      v.literal("duplicate"),
     ),
     /**
      * The stable sort key. One precomputed number rather than a sort over a

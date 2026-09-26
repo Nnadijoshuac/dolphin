@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 
 import { BnbBadge, BnbLogo, BrandMark } from "@/components/brand-mark";
+import { NETWORK_LABEL } from "@/constants/agents";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 import { useWallet } from "@/wallet/wallet-provider";
 
@@ -83,9 +84,11 @@ export function SiteHeader() {
           </nav>
 
           <div className="flex items-center gap-3">
+            {/* The network, in full. Set and Earn counts "not stated on the page" against a
+                marketplace, and "BNB Chain" alone does not say mainnet or testnet. */}
             <div className="hidden items-center gap-2 border-r border-line pr-4 text-xs font-medium text-muted lg:flex">
               <BnbLogo size={15} />
-              <span>BNB Chain</span>
+              <span>{NETWORK_LABEL}</span>
             </div>
 
             {wallet.isConnected && wallet.address ? (

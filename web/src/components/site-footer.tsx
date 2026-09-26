@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { BnbLogo, BrandMark } from "@/components/brand-mark";
+import { DOLPHIN_CONTRACTS, NETWORK_LABEL } from "@/constants/agents";
 import { useCategoryFacets } from "@/hooks/use-agents";
 
 function XLogo({ size = 20 }: { size?: number }) {
@@ -40,7 +41,8 @@ function InstagramLogo({ size = 20 }: { size?: number }) {
  * convex/facets.ts row the Discover rail and the Search tabs read, so all three
  * agree by construction rather than by remembering to update three files.
  *
- * Capped at eight, ordered by population (the backend sorts them), because a
+ * Capped at eight, in the backend's order - the four Set and Earn categories
+ * first, then by population (convex/facets.ts) - because a
  * footer column is not a category index - it is the top of one. "Browse all"
  * carries the rest.
  */
@@ -81,7 +83,7 @@ export function SiteFooter() {
             </p>
             <div className="mt-5 flex items-center gap-4 text-xs font-medium text-ink-soft">
               <BnbLogo size={16} />
-              <span>Built on BNB Smart Chain</span>
+              <span>{NETWORK_LABEL} (chain 56)</span>
               <span className="text-line">|</span>
               <a
                 aria-label="Dolphin on X (Twitter)"
@@ -144,6 +146,32 @@ export function SiteFooter() {
             </ul>
           </nav>
         </div>
+
+        {/* Every contract the catalog reads and every hire pays through, each one checkable. */}
+        <section aria-labelledby="footer-contracts" className="border-b border-line py-8">
+          <h2
+            className="text-xs font-semibold uppercase tracking-[0.12em] text-faint"
+            id="footer-contracts"
+          >
+            Contracts · {NETWORK_LABEL}
+          </h2>
+          <ul className="mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            {DOLPHIN_CONTRACTS.map((contract) => (
+              <li className="min-w-0" key={contract.address}>
+                <p className="text-muted">{contract.label}</p>
+                <a
+                  className="interactive block truncate font-mono text-xs text-ink-soft hover:text-ink"
+                  href={`https://bscscan.com/address/${contract.address}`}
+                  rel="noreferrer"
+                  target="_blank"
+                  title={contract.address}
+                >
+                  {contract.address}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         <div className="flex flex-col gap-4 pt-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 Dolphin. Built for the BNB Chain Smart Money Era Hackathon.</p>

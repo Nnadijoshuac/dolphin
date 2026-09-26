@@ -14,6 +14,28 @@ export const ERC8004_REGISTRY_ADDRESSES = {
 } as const;
 
 /**
+ * Every contract Dolphin reads from or pays through, as the footer lists them.
+ * Set and Earn requires the addresses to be shown on the site (2026-09-25).
+ *
+ * The ERC-8183 four are @altananetwork/sdk's ERC8183_ADDRESSES[56] - the same
+ * addresses the hire path uses - copied rather than imported so the footer does
+ * not pull the SDK into every page's bundle. The kernel, router and token were
+ * confirmed as emitters in the receipts of Dolphin's own mainnet hires
+ * (jobs 56790, 56783).
+ */
+export const DOLPHIN_CONTRACTS = [
+  { label: "ERC-8004 Identity Registry", address: ERC8004_REGISTRY_ADDRESSES.identity },
+  { label: "ERC-8004 Reputation Registry", address: ERC8004_REGISTRY_ADDRESSES.reputation },
+  { label: "ERC-8183 escrow kernel", address: "0xEa4DAa3100A767e86FDed867729ae7446476EBA6" as Address },
+  { label: "ERC-8183 router", address: "0x51895229E12F9876011789B04f8698af06cCD6DA" as Address },
+  { label: "ERC-8183 policy", address: "0x9C01845705b3078Aa2e8cfF7520a6376FD766dE5" as Address },
+  { label: "Payment token (U)", address: "0xcE24439F2D9C6a2289F741120FE202248B666666" as Address },
+] as const;
+
+/** Said in full wherever the site names its network. */
+export const NETWORK_LABEL = "BNB Smart Chain · Mainnet";
+
+/**
  * ===========================================================================
  * CATEGORIES ARE DATA. THIS FILE ONLY HOLDS COPY. (2026-09-08)
  * ===========================================================================

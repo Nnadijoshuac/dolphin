@@ -84,7 +84,7 @@ export function BnbLogo({ size = 18 }: { size?: number }) {
   );
 }
 
-export function BnbBadge({ label = "on BNB Smart Chain" }: { label?: string }) {
+export function BnbBadge({ label = "on BNB Smart Chain Mainnet" }: { label?: string }) {
   return (
     <div className="flex items-center gap-1.5">
       <BnbLogo size={16} />

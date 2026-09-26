@@ -278,6 +278,14 @@ function passkeyFailure(cause: unknown): "cancelled" | "failed" | null {
       : "";
     if (name === "NotAllowedError" || name === "AbortError") return "cancelled";
     if (PASSKEY_WRAPPER_NAMES.has(name)) wrapped = true;
+    /*
+     * Any other DOMException is the browser's own prose ("...See:
+     * https://www.w3.org/TR/webauthn-2/..."), written for developers, and never
+     * goes on screen. The Altana SDK's recoverFromPasskey calls
+     * navigator.credentials.get directly, so its failures arrive bare, with
+     * none of the wrappers above.
+     */
+    if (typeof DOMException !== "undefined" && link instanceof DOMException) wrapped = true;
   }
   return wrapped ? "failed" : null;
 }

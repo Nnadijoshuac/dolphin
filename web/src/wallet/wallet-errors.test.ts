@@ -158,6 +158,19 @@ describe("passkey failures", () => {
       expect(toUserMessage(passkeyError(null, wrapper), "fallback")).not.toMatch(/Failed to/);
     }
   });
+  /* recoverFromPasskey calls navigator.credentials.get itself: no ox wrapper. */
+  const BROWSER_TEXT =
+    "The operation either timed out or was not allowed. See: https://www.w3.org/TR/webauthn-2/#sctn-privacy-considerations-client.";
+  it("reads the browser's bare NotAllowedError as a cancellation", () => {
+    expect(toUserMessage(new DOMException(BROWSER_TEXT, "NotAllowedError"), "fallback")).toBe(PASSKEY_CANCELLED_MESSAGE);
+  });
+  it("never shows the browser's own text for any other bare DOMException", () => {
+    for (const name of ["InvalidStateError", "SecurityError", "NotSupportedError", "UnknownError"]) {
+      const message = toUserMessage(new DOMException(BROWSER_TEXT, name), "fallback");
+      expect(message).not.toMatch(/w3\.org|timed out/);
+      expect(isCancellationMessage(message)).toBe(false);
+    }
+  });
   it("reads any other passkey failure as a plain retry, never the raw text", () => {
     const message = toUserMessage(passkeyError(null), "fallback");
     expect(message).not.toMatch(/Failed to request credential/);

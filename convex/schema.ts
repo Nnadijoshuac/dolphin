@@ -3,6 +3,16 @@ import { v } from "convex/values";
 
 import { agentLiveStatsValidator, statsCategoryValidator } from "./categoryStatsValidators";
 
+/** One side of a trade ticket. Mirrors TradeToken in convex/lib/tradeTokens.ts. */
+export const tradeTokenValidator = v.object({
+  /** Null for native BNB. */
+  address: v.union(v.string(), v.null()),
+  symbol: v.string(),
+  decimals: v.number(),
+  /** On Dolphin's hand-verified token list. False for a pasted address. */
+  verified: v.boolean(),
+});
+
 /**
  * THE MARKETPLACE SCHEMA (rebuilt 2026-09-07).
  *
@@ -942,6 +952,42 @@ export default defineSchema({
      * which is exactly what happens when a broker recommends one.
      */
     mentions: v.optional(v.array(v.object({ label: v.string(), agentKey: v.string() }))),
+    /**
+     * A TRADE TICKET, when the question was a trade ("buy 50 U of CAKE").
+     * (2026-09-26) See convex/trade.ts.
+     *
+     * What is stored is what does not move: the tokens and the amount the
+     * person asked for, and what the safety agent said, with when. The PRICE
+     * is deliberately not here. The ticket in the browser quotes PancakeSwap
+     * live and re-quotes before signing, because a stored quote shown later
+     * is a stale number presented as current (AGENTS.md §5).
+     */
+    ticket: v.optional(
+      v.union(
+        v.null(),
+        v.object({
+          kind: v.literal("swap"),
+          amountIn: v.string(),
+          tokenIn: tradeTokenValidator,
+          tokenOut: tradeTokenValidator,
+          safety: v.union(
+            v.null(),
+            v.object({
+              agentKey: v.string(),
+              agentName: v.string(),
+              token: v.string(),
+              symbol: v.string(),
+              verdict: v.union(v.string(), v.null()),
+              headline: v.union(v.string(), v.null()),
+              reason: v.union(v.string(), v.null()),
+              /** Why there is no verdict, when there is none. */
+              unavailable: v.union(v.string(), v.null()),
+              checkedAt: v.number(),
+            }),
+          ),
+        }),
+      ),
+    ),
     createdAt: v.number(),
     completedAt: v.union(v.number(), v.null()),
   })

@@ -55,6 +55,8 @@ import type * as lib_shelves from "../lib/shelves.js";
 import type * as lib_statsCategory from "../lib/statsCategory.js";
 import type * as lib_statsHistory from "../lib/statsHistory.js";
 import type * as lib_toolCapability from "../lib/toolCapability.js";
+import type * as lib_tradeIntent from "../lib/tradeIntent.js";
+import type * as lib_tradeTokens from "../lib/tradeTokens.js";
 import type * as lib_usageRank from "../lib/usageRank.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as model_agent from "../model/agent.js";
@@ -67,6 +69,7 @@ import type * as ranking from "../ranking.js";
 import type * as shelves from "../shelves.js";
 import type * as sources_scan8004 from "../sources/scan8004.js";
 import type * as tracking from "../tracking.js";
+import type * as trade from "../trade.js";
 import type * as verification from "../verification.js";
 import type * as walletAuth from "../walletAuth.js";
 
@@ -124,6 +127,8 @@ declare const fullApi: ApiFromModules<{
   "lib/statsCategory": typeof lib_statsCategory;
   "lib/statsHistory": typeof lib_statsHistory;
   "lib/toolCapability": typeof lib_toolCapability;
+  "lib/tradeIntent": typeof lib_tradeIntent;
+  "lib/tradeTokens": typeof lib_tradeTokens;
   "lib/usageRank": typeof lib_usageRank;
   "lib/walletAuth": typeof lib_walletAuth;
   "model/agent": typeof model_agent;
@@ -136,6 +141,7 @@ declare const fullApi: ApiFromModules<{
   shelves: typeof shelves;
   "sources/scan8004": typeof sources_scan8004;
   tracking: typeof tracking;
+  trade: typeof trade;
   verification: typeof verification;
   walletAuth: typeof walletAuth;
 }>;

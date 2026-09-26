@@ -28,6 +28,7 @@ import {
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 import { coerceAgentKey } from "./model/agent";
 import { readHealthFactorStats } from "./protocols/venus";
+import { answerTradeTurn } from "./trade";
 
 /**
  * DOLPHIN - the in-app agent that consults marketplace agents to answer.
@@ -368,6 +369,7 @@ export const getConversation = query({
         errorReason: message.errorReason,
         errorKind: message.errorKind ?? null,
         model: message.model,
+        ticket: message.ticket ?? null,
         createdAt: message.createdAt,
         completedAt: message.completedAt,
       })),
@@ -678,9 +680,13 @@ export const setMessageStatus = internalMutation({
       ),
     ),
     model: v.optional(v.union(v.string(), v.null())),
+    /** A trade ticket. See `ticket` in schema.ts and convex/trade.ts. */
+    ticket: v.optional(v.any()),
   },
-  handler: async (ctx, { messageId, status, content, reusedFrom, errorReason, errorKind, model }) => {
+  handler: async (ctx, { messageId, status, content, reusedFrom, errorReason, errorKind, model, ticket }) => {
     const patch: Partial<Doc<"dolphinMessages">> = { status };
+    /* v.any() here; the table's own validator checks the shape on write. */
+    if (ticket !== undefined) patch.ticket = ticket as Doc<"dolphinMessages">["ticket"];
     if (content !== undefined) patch.content = content;
     if (reusedFrom !== undefined) patch.reusedFrom = reusedFrom;
     if (errorReason !== undefined) patch.errorReason = errorReason;
@@ -1144,6 +1150,18 @@ export const ask = action({
     );
 
     try {
+      /*
+       * PHASE -2: IS THIS A TRADE? (2026-09-26)
+       *
+       * "buy 50 U of CAKE" used to reach the model, which did not answer, and
+       * the person got the catalog fallback. A trade is recognised in code and
+       * answered with a ticket - before answer reuse, because a ticket is
+       * never a reusable answer, and before any model call. See convex/trade.ts.
+       */
+      if (await answerTradeTurn(ctx, { text, conversationId, messageId: assistantId })) {
+        return { messageId: assistantId };
+      }
+
       /*
        * PHASE -1: HAVE WE ALREADY PAID FOR THIS ANSWER?
        *

@@ -10,6 +10,12 @@ interface DolphinMessageContentProps {
   toolCalls?: Array<{ agentName: string; agentKey: string }>;
   dynamicAgents?: Array<{ name: string; agentKey: string }>;
   onSelectPrompt?: (prompt: string) => void;
+  /**
+   * Questions already asked in this conversation. A suggestion the person has
+   * already sent is never offered again: re-asking it only produced the same
+   * answer twice (seen 2026-09-26 with "Check Venus liquidation health").
+   */
+  excludePrompts?: readonly string[];
   showCopyButton?: boolean;
 }
 
@@ -254,6 +260,7 @@ export function DolphinMessageContent({
   toolCalls,
   dynamicAgents,
   onSelectPrompt,
+  excludePrompts,
   showCopyButton = true,
 }: DolphinMessageContentProps) {
   const [copied, setCopied] = useState(false);
@@ -263,7 +270,12 @@ export function DolphinMessageContent({
   }, [dynamicAgents, toolCalls]);
 
   const blocks = useMemo(() => parseBlocks(content), [content]);
-  const suggestions = useMemo(() => extractSuggestedActions(content), [content]);
+  const suggestions = useMemo(() => {
+    const asked = new Set((excludePrompts ?? []).map((prompt) => prompt.trim().toLowerCase()));
+    return extractSuggestedActions(content).filter(
+      (prompt) => !asked.has(prompt.trim().toLowerCase()),
+    );
+  }, [content, excludePrompts]);
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(content);

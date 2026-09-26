@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/app/dolphin/dolphin-chat.module.css";
 import { AgentDraftPanel, EMPTY_AGENT_DRAFT } from "@/components/agent-draft-panel";
@@ -152,10 +152,13 @@ function Turn({
   turn,
   dynamicAgents,
   onSelectPrompt,
+  askedPrompts,
 }: {
   turn: DolphinTurn;
   dynamicAgents?: Array<{ name: string; agentKey: string }>;
+  /** Only the latest answer gets follow-up suggestions; older ones stay quiet. */
   onSelectPrompt?: (prompt: string) => void;
+  askedPrompts?: readonly string[];
 }) {
   if (turn.role === "user") {
     return (
@@ -223,6 +226,7 @@ function Turn({
             <DolphinMessageContent
               content={turn.content}
               dynamicAgents={dynamicAgents}
+              excludePrompts={askedPrompts}
               onSelectPrompt={onSelectPrompt}
               toolCalls={turn.toolCalls}
             />
@@ -456,6 +460,10 @@ export function DolphinClient({
 
   const isEmpty = turns.length === 0;
   const building = mode === "build";
+  const askedPrompts = useMemo(
+    () => turns.filter((turn) => turn.role === "user").map((turn) => turn.content),
+    [turns],
+  );
   // The mode is chosen on a new conversation and fixed once it has a turn.
   const canSwitchMode = isEmpty && !conversationKey;
   const sendBlocked = building && !BUILD_BACKEND_CONNECTED;
@@ -744,11 +752,14 @@ export function DolphinClient({
             </div>
           ) : (
             <div className="mx-auto w-full max-w-[44rem] px-5 pb-8 pt-8">
-              {turns.map((turn) => (
+              {turns.map((turn, index) => (
                 <Turn
+                  askedPrompts={askedPrompts}
                   dynamicAgents={agentDirectory}
                   key={turn.id}
-                  onSelectPrompt={(prompt) => submit(prompt)}
+                  onSelectPrompt={
+                    index === turns.length - 1 ? (prompt) => submit(prompt) : undefined
+                  }
                   turn={turn}
                 />
               ))}

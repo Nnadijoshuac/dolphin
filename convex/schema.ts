@@ -654,7 +654,9 @@ export default defineSchema({
     onChainTxHash: v.union(v.string(), v.null()),
   })
     .index("by_agent", ["agentKey"])
-    .index("by_agent_reviewer", ["agentKey", "walletAddress"]),
+    .index("by_agent_reviewer", ["agentKey", "walletAddress"])
+    // For the wallet's transaction history: ratings published on-chain.
+    .index("by_reviewer", ["walletAddress"]),
 
   /**
    * Altana session grants, recorded next to the agentHires row they belong to.
@@ -748,6 +750,18 @@ export default defineSchema({
     /** The job description as the chain holds it - what was actually bought. */
     taskDescription: v.string(),
     transactionHash: v.union(v.string(), v.null()),
+    /**
+     * The refund transaction, once the buyer reclaimed the escrow.
+     *
+     * Written only by agentPayments.recordJobRefund, after it read the
+     * receipt (succeeded, and touched this job on this kernel) and the job
+     * itself (now EXPIRED, same client). Optional because rows written before
+     * 2026-09-26 predate it, and because the refund of job 56783, made that
+     * day, was sent before anything kept its hash: it is on BscScan and not
+     * here.
+     */
+    refundTransactionHash: v.optional(v.union(v.string(), v.null())),
+    refundedAt: v.optional(v.union(v.string(), v.null())),
     /** When Dolphin last read this job back off the chain. */
     verifiedAt: v.string(),
     chainId: v.number(),

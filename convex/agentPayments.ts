@@ -2,7 +2,7 @@ import { getAddress, isAddress } from "viem";
 import { v } from "convex/values";
 
 import { api, internal } from "./_generated/api";
-import { action, internalMutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { BSC_CHAIN_ID, bscPublicClient } from "./lib/bscClient";
 import {
   QuoteRejected,
@@ -520,6 +520,160 @@ export const insertJobRecord = internalMutation({
       return existing._id;
     }
     return ctx.db.insert("agentJobs", args);
+  },
+});
+
+/**
+ * Records the refund of a paid job, so the wallet's history can link to it.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY (2026-09-26)
+ * ---------------------------------------------------------------------------
+ * claimEscrowRefund sent the refund and threw the transaction hash away. The
+ * refund of job 56783 that day went through (the job reads EXPIRED and the
+ * 0.1 U is back in the wallet), but nothing in Dolphin could say which
+ * transaction did it, and a free BSC RPC cannot find it afterwards: public
+ * nodes cap eth_getLogs to recent blocks and refuse historical state. A
+ * history has to be recorded when it happens.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT IS CHECKED, all of it on the chain, none of it taken from the caller
+ * ---------------------------------------------------------------------------
+ *   1. The job is one Dolphin already recorded as paid by this wallet.
+ *   2. The receipt exists and succeeded.
+ *   3. The transaction emitted an event FROM this job's kernel whose first
+ *      indexed topic is this job id. Deliberately not a hardcoded Refunded
+ *      topic0: the deployed kernel's JobFunded already differs from the
+ *      ERC-8183 text (Agent/TRACKING-SUBMISSION.md), so the refund event's
+ *      real signature is logged here for the record rather than assumed.
+ *   4. The payment token moved FROM the kernel TO this wallet in the same
+ *      transaction. Without this, the job's own FUNDING transaction passes
+ *      checks 2, 3 and 5 once the job is refunded, and could be recorded as
+ *      "the refund". Money coming back out of escrow is what only a refund does.
+ *   5. The job itself now reads EXPIRED, with the same client.
+ */
+export const recordJobRefund = action({
+  args: {
+    jobId: v.string(),
+    altanaWalletAddress: v.string(),
+    transactionHash: v.string(),
+  },
+  returns: v.object({ jobStatus: v.string() }),
+  handler: async (ctx, args): Promise<{ jobStatus: string }> => {
+    if (!isAddress(args.altanaWalletAddress)) {
+      throw new Error(`recordJobRefund: "${args.altanaWalletAddress}" is not a valid EVM address.`);
+    }
+    if (!/^0x[0-9a-fA-F]{64}$/.test(args.transactionHash)) {
+      throw new Error(`recordJobRefund: "${args.transactionHash}" is not a transaction hash.`);
+    }
+    let jobId: bigint;
+    try {
+      jobId = BigInt(args.jobId);
+    } catch {
+      throw new Error(`recordJobRefund: "${args.jobId}" is not a job id.`);
+    }
+
+    const record: { escrowContract: string; altanaWalletAddress: string; paymentToken: string } | null =
+      await ctx.runQuery(internal.agentPayments.jobRecordForRefund, { jobId: args.jobId });
+    if (!record || getAddress(record.altanaWalletAddress) !== getAddress(args.altanaWalletAddress)) {
+      throw new Error(`recordJobRefund: job ${args.jobId} is not a payment this wallet made through Dolphin.`);
+    }
+    const kernel = getAddress(record.escrowContract);
+
+    const receipt = await bscPublicClient.getTransactionReceipt({
+      hash: args.transactionHash as `0x${string}`,
+    });
+    if (receipt.status !== "success") {
+      throw new Error(`recordJobRefund: transaction ${args.transactionHash} did not succeed.`);
+    }
+    const jobTopic = `0x${jobId.toString(16).padStart(64, "0")}`.toLowerCase();
+    const jobLog = receipt.logs.find(
+      (log) =>
+        getAddress(log.address) === kernel && log.topics[1]?.toLowerCase() === jobTopic,
+    );
+    if (!jobLog) {
+      throw new Error(
+        `recordJobRefund: transaction ${args.transactionHash} emitted nothing from the escrow for job ${args.jobId}.`,
+      );
+    }
+    const pad = (address: string) => `0x${address.slice(2).toLowerCase().padStart(64, "0")}`;
+    const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const paidBack = receipt.logs.some(
+      (log) =>
+        getAddress(log.address) === getAddress(record.paymentToken) &&
+        log.topics[0]?.toLowerCase() === TRANSFER_TOPIC &&
+        log.topics[1]?.toLowerCase() === pad(kernel) &&
+        log.topics[2]?.toLowerCase() === pad(getAddress(args.altanaWalletAddress)),
+    );
+    if (!paidBack) {
+      throw new Error(
+        `recordJobRefund: transaction ${args.transactionHash} did not move the payment token from the escrow back to this wallet, so it is not the refund.`,
+      );
+    }
+
+    // The observed signature, so the tracking document can say "observed".
+    console.log(`[recordJobRefund] job ${args.jobId} refund event topic0 ${jobLog.topics[0]}`);
+
+    const job = await bscPublicClient.readContract({
+      address: kernel as `0x${string}`,
+      abi: COMMERCE_GET_JOB_ABI,
+      functionName: "getJob",
+      args: [jobId],
+    });
+    const statusName = JOB_STATUS[job.status] ?? `UNKNOWN(${job.status})`;
+    if (statusName !== "EXPIRED" || getAddress(job.client) !== getAddress(args.altanaWalletAddress)) {
+      throw new Error(
+        `recordJobRefund: job ${args.jobId} reads ${statusName} for ${getAddress(job.client)}, not a refund to this wallet.`,
+      );
+    }
+
+    await ctx.runMutation(internal.agentPayments.markJobRefunded, {
+      jobId: args.jobId,
+      jobStatus: statusName,
+      refundTransactionHash: args.transactionHash,
+      refundedAt: new Date().toISOString(),
+    });
+    return { jobStatus: statusName };
+  },
+});
+
+export const jobRecordForRefund = internalQuery({
+  args: { jobId: v.string() },
+  handler: async (ctx, { jobId }) => {
+    const row = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_job", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("jobId", jobId))
+      .unique();
+    return row
+      ? {
+          escrowContract: row.escrowContract,
+          altanaWalletAddress: row.altanaWalletAddress,
+          paymentToken: row.paymentToken,
+        }
+      : null;
+  },
+});
+
+/** Internal: only recordJobRefund, which checked the chain, may call it. */
+export const markJobRefunded = internalMutation({
+  args: {
+    jobId: v.string(),
+    jobStatus: v.string(),
+    refundTransactionHash: v.string(),
+    refundedAt: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_job", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("jobId", args.jobId))
+      .unique();
+    if (!row) return;
+    await ctx.db.patch(row._id, {
+      jobStatus: args.jobStatus,
+      refundTransactionHash: args.refundTransactionHash,
+      refundedAt: args.refundedAt,
+      verifiedAt: args.refundedAt,
+    });
   },
 });
 

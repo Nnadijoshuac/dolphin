@@ -28,6 +28,7 @@ import {
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 import { coerceAgentKey } from "./model/agent";
 import { readHealthFactorStats } from "./protocols/venus";
+import { answerBalanceTurn } from "./balance";
 import { answerTradeTurn } from "./trade";
 
 /**
@@ -1136,10 +1137,12 @@ export const ask = action({
     conversationKey: v.string(),
     text: v.string(),
     userAddress: v.optional(v.string()),
+    /** The Dolphin Wallet on this device, so "how much BNB do I have" can read it too. */
+    dolphinWalletAddress: v.optional(v.string()),
   },
   handler: async (
     ctx,
-    { conversationKey, text, userAddress },
+    { conversationKey, text, userAddress, dolphinWalletAddress },
   ): Promise<{ messageId: Id<"dolphinMessages"> }> => {
     const promptHash = await sha256Hex(text);
 
@@ -1163,6 +1166,17 @@ export const ask = action({
        * never a reusable answer, and before any model call. See convex/trade.ts.
        */
       if (await answerTradeTurn(ctx, { text, conversationId, messageId: assistantId })) {
+        return { messageId: assistantId };
+      }
+      /* A balance is read from the chain, not asked of the model. See convex/balance.ts. */
+      if (
+        await answerBalanceTurn(ctx, {
+          text,
+          messageId: assistantId,
+          connectedAddress: userAddress ?? ownerAddress ?? null,
+          dolphinWalletAddress: dolphinWalletAddress ?? null,
+        })
+      ) {
         return { messageId: assistantId };
       }
 

@@ -64,6 +64,11 @@ const VERIFIED: ReadonlyArray<TradeToken & { aliases: readonly string[] }> = [
 /** The verified symbols, for telling a person what they can type. */
 export const VERIFIED_SYMBOLS = VERIFIED.map((token) => token.symbol);
 
+/** Every verified token, for reading a wallet's holdings. */
+export function verifiedTokens(): TradeToken[] {
+  return VERIFIED.map(({ aliases: _aliases, ...token }) => token);
+}
+
 /** A symbol on the verified list, or null. Never guesses. */
 export function verifiedTokenBySymbol(symbol: string): TradeToken | null {
   const key = symbol.trim().replace(/^\$/, "").toLowerCase();

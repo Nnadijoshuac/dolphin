@@ -12,6 +12,8 @@
  * falls through to the chat.
  */
 
+import { verifiedTokenBySymbol } from "./tradeTokens";
+
 export type BalanceIntent = {
   /** The token asked about, as typed; null means "everything I hold". */
   token: string | null;
@@ -20,7 +22,7 @@ export type BalanceIntent = {
 /** Words that sit where a token would, but mean "everything". */
 const EVERYTHING = new Set([
   "do", "did", "does", "money", "crypto", "tokens", "token", "coins", "coin",
-  "funds", "assets", "i", "is", "in", "of", "on", "stuff",
+  "funds", "assets", "i", "is", "in", "of", "on", "stuff", "wallet", "total", "account",
 ]);
 
 /** Positions, costs and plans: questions about something other than the wallet's balance. */
@@ -51,8 +53,36 @@ export function parseBalanceIntent(text: string): BalanceIntent | null {
   );
   if (balance) return { token: token(balance[1] === "my" ? undefined : balance[1]) };
 
-  // what's in my wallet / what do i have / what do i hold
-  if (/^(?:what(?:'?s| is) in my wallet|what do i (?:have|hold|own))$/.test(cleaned)) return { token: null };
+  /*
+   * THE GENERAL CASE. (2026-09-26) The owner's next question was "how much is
+   * in the wallet", which none of the shapes above matched. Chasing phrasings
+   * one at a time loses, so this reads the idea instead: a QUANTITY question
+   * ("how much", "balance", "what's in", "what do I have") about the WALLET or
+   * what the person holds. The token, if any, is any verified name in the
+   * sentence. "what can I do with my wallet" asks no quantity and falls
+   * through; "what agents do I have" is about agents and falls through.
+   */
+  const asksQuantity =
+    /\b(?:how much|how many|balance|balances|holdings|what(?:'?s| is) in|what do i (?:have|hold|own)|show my wallet|check my wallet)\b/.test(cleaned);
+  const aboutHoldings = /\b(?:wallet|wallets|balance|balances|holdings|i have|i hold|i own|i got|have i got|do i have|left)\b/.test(cleaned);
+  if (asksQuantity && aboutHoldings && !/\b(?:agents?|hired?|hires)\b/.test(cleaned)) {
+    return { token: tokenNamedIn(text) };
+  }
 
+  return null;
+}
+
+/**
+ * The first verified token named anywhere in the text, or null for "all".
+ * "u" only counts written as a capital U or $U: as a lowercase word it is far
+ * more often "you" ("can u show my balance").
+ */
+function tokenNamedIn(text: string): string | null {
+  for (const raw of text.split(/[^A-Za-z0-9$]+/)) {
+    if (!raw) continue;
+    const word = raw.replace(/^\$/, "");
+    if (word.toLowerCase() === "u" && !(raw === "U" || raw.toLowerCase() === "$u")) continue;
+    if (verifiedTokenBySymbol(word)) return word.toLowerCase();
+  }
   return null;
 }

@@ -280,7 +280,7 @@ function ChatHistory({
   return (
     <aside
       aria-label="Chat history"
-      className="flex h-full min-h-0 flex-col border-l border-line/60 bg-paper px-3 pb-4 pt-3"
+      className="flex h-full min-h-0 flex-col border-r border-line/60 bg-paper px-3 pb-4 pt-3"
     >
       <div className="flex h-9 items-center gap-2 px-2">
         <h2 className="min-w-0 flex-1 text-[13px] font-semibold text-ink">Chats</h2>
@@ -569,9 +569,27 @@ export function DolphinClient({
   return (
     <div
       className={`dolphin-chat-page relative grid overflow-hidden ${
-        building ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : "lg:grid-cols-[minmax(0,1fr)_19rem]"
+        building
+          ? "lg:grid-cols-[17rem_minmax(0,1fr)_22rem]"
+          : "lg:grid-cols-[17rem_minmax(0,1fr)]"
       } ${styles.shell}`}
     >
+      {/*
+        * History on the LEFT, where Claude, ChatGPT and Gemini keep it: you
+        * look left to find a past chat and work in the middle. The draft is on
+        * the right, like Claude's artifacts: the thing being made sits beside
+        * the conversation making it. In Build mode both show on desktop.
+        */}
+      <div className="relative z-20 hidden min-h-0 lg:block">
+          <ChatHistory
+            activeKey={conversationKey}
+            entries={history}
+            onClear={clearHistory}
+            onNew={startNew}
+            onOpen={openSavedConversation}
+            onRemove={removeSavedConversation}
+          />
+      </div>
 
       <section className="relative z-10 flex min-h-0 min-w-0 flex-col">
         <header className="relative flex h-14 shrink-0 items-center justify-between gap-2.5 px-4">
@@ -646,15 +664,9 @@ export function DolphinClient({
                 {wallet.isConnecting ? "Connecting…" : "Connect"}
               </button>
             )}
-            {/*
-              * In Build mode the draft takes the desktop side column, so
-              * history moves behind this button on every width.
-              */}
             <button
               aria-label="Open chat history"
-              className={`grid size-10 place-items-center rounded-full text-ink-soft transition-colors hover:bg-paper/80 ${
-                building ? "" : "lg:hidden"
-              }`}
+              className="grid size-10 place-items-center rounded-full text-ink-soft transition-colors hover:bg-paper/80 lg:hidden"
               onClick={() => setHistoryOpen(true)}
               type="button"
             >
@@ -752,20 +764,11 @@ export function DolphinClient({
         )}
       </section>
 
-      <div className="relative z-20 hidden min-h-0 lg:block">
-        {building ? (
+      {building ? (
+        <div className="relative z-20 hidden min-h-0 lg:block">
           <AgentDraftPanel draft={EMPTY_AGENT_DRAFT} />
-        ) : (
-          <ChatHistory
-            activeKey={conversationKey}
-            entries={history}
-            onClear={clearHistory}
-            onNew={startNew}
-            onOpen={openSavedConversation}
-            onRemove={removeSavedConversation}
-          />
-        )}
-      </div>
+        </div>
+      ) : null}
 
       {draftOpen && building ? (
         <div className="fixed inset-0 z-30 flex justify-end lg:hidden">
@@ -782,14 +785,14 @@ export function DolphinClient({
       ) : null}
 
       {historyOpen ? (
-        <div className={`fixed inset-0 z-30 flex justify-end ${building ? "" : "lg:hidden"}`}>
+        <div className="fixed inset-0 z-30 flex justify-start lg:hidden">
           <button
             aria-label="Close chat history"
             className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]"
             onClick={() => setHistoryOpen(false)}
             type="button"
           />
-          <div className="relative h-full w-[min(88vw,20rem)] shadow-[-18px_0_50px_rgba(15,23,42,0.16)]">
+          <div className="relative h-full w-[min(88vw,20rem)] shadow-[18px_0_50px_rgba(15,23,42,0.16)]">
             <ChatHistory
               activeKey={conversationKey}
               entries={history}

@@ -27,6 +27,8 @@ import { internalAction, internalMutation, internalQuery, query } from "./_gener
 import { categoryLabel } from "./lib/categorize";
 
 const FACETS_KEY = "bsc";
+/** Yield, grid, rebalancing, health factor - the Set and Earn order. */
+const LEAD_CATEGORIES = ["yield", "grid-trading", "rebalancing", "health-factor"];
 const PAGE_SIZE = 500;
 
 export const countPage = internalQuery({
@@ -77,9 +79,19 @@ export const recompute = internalAction({
 
     const categories = Object.entries(totals)
       .map(([slug, count]) => ({ slug, label: categoryLabel(slug), count }))
-      // Biggest first: the chip row should lead with where the agents actually
-      // are, not with an alphabetical accident.
-      .sort((a, b) => b.count - a.count || a.slug.localeCompare(b.slug));
+      /*
+       * The four graded categories first, in the order Set and Earn lists them
+       * (2026-09-25): they are the jobs a user arrives to hire for. Everything
+       * else follows biggest first, so the rest of the row leads with where the
+       * agents actually are rather than an alphabetical accident.
+       */
+      .sort((a, b) => {
+        const lead = (slug: string) => {
+          const index = LEAD_CATEGORIES.indexOf(slug);
+          return index === -1 ? LEAD_CATEGORIES.length : index;
+        };
+        return lead(a.slug) - lead(b.slug) || b.count - a.count || a.slug.localeCompare(b.slug);
+      });
 
     await ctx.runMutation(internal.facets.write, { categories, totalLive });
     return { totalLive, categories: categories.length };

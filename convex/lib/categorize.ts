@@ -91,6 +91,9 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
     terms: [
       "grid trading", "grid trader", "grid strategy", "price ladder", "grid bot",
       "grid level", "buy and sell ladder", "geometric grid",
+      // Added 2026-09-25 from the live catalog: the 4LPHA grid agents say "grid
+      // market making", Brain on BNB's planner "sizes a grid".
+      "grid market making", "grid agent", "grid planner", "grid planning", "sizes a grid",
     ],
   },
   {
@@ -288,12 +291,34 @@ function bestKeywordMatch(text: string): { slug: string; score: number } | null 
   return best;
 }
 
+/**
+ * The four categories Set and Earn grades, and the ones a user hires by job.
+ * A precise match on one of these outranks a vague publisher label.
+ */
+export const SPECIFIC_CATEGORIES: ReadonlySet<string> = new Set([
+  "yield",
+  "grid-trading",
+  "rebalancing",
+  "health-factor",
+]);
+
 export function categorize(input: CategorizeInput): CategoryAssignment {
-  // 1. The publisher said so explicitly.
+  const text = `${input.name} ${input.description} ${input.tags.join(" ")}`.toLowerCase();
+  const own = bestKeywordMatch(text);
+
+  // 1. The publisher said so explicitly - unless what it said is vaguer than
+  //    what the agent's own words say. Measured 2026-09-25: six 4LPHA agents
+  //    describe "automated grid market making" and register their category as
+  //    "trading", which filed every one of them outside Grid. A registry label
+  //    that is one of the specific four still wins outright.
   for (const raw of input.registryCategories) {
     for (const value of registryCategoryValues(raw)) {
       const slug = slugify(value);
-      if (slug.length > 0) return { slug, label: categoryLabel(slug), source: "registry" };
+      if (slug.length === 0) continue;
+      if (!SPECIFIC_CATEGORIES.has(slug) && own && SPECIFIC_CATEGORIES.has(own.slug)) {
+        return { slug: own.slug, label: categoryLabel(own.slug), source: "keyword" };
+      }
+      return { slug, label: categoryLabel(slug), source: "registry" };
     }
   }
 
@@ -312,8 +337,6 @@ export function categorize(input: CategorizeInput): CategoryAssignment {
    * per-ENDPOINT, so they are still used, but only when the agent's own words
    * decide nothing.
    */
-  const text = `${input.name} ${input.description} ${input.tags.join(" ")}`.toLowerCase();
-  const own = bestKeywordMatch(text);
   if (own) return { slug: own.slug, label: categoryLabel(own.slug), source: "keyword" };
 
   // 3. The card. Real capability data, and the right answer whenever the agent

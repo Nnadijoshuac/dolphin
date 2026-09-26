@@ -58,6 +58,7 @@ import type * as lib_toolCapability from "../lib/toolCapability.js";
 import type * as lib_tradeIntent from "../lib/tradeIntent.js";
 import type * as lib_tradeTokens from "../lib/tradeTokens.js";
 import type * as lib_usageRank from "../lib/usageRank.js";
+import type * as lib_walletActionLogs from "../lib/walletActionLogs.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as model_agent from "../model/agent.js";
 import type * as protocols_aave from "../protocols/aave.js";
@@ -71,6 +72,7 @@ import type * as sources_scan8004 from "../sources/scan8004.js";
 import type * as tracking from "../tracking.js";
 import type * as trade from "../trade.js";
 import type * as verification from "../verification.js";
+import type * as walletActions from "../walletActions.js";
 import type * as walletAuth from "../walletAuth.js";
 
 import type {
@@ -130,6 +132,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tradeIntent": typeof lib_tradeIntent;
   "lib/tradeTokens": typeof lib_tradeTokens;
   "lib/usageRank": typeof lib_usageRank;
+  "lib/walletActionLogs": typeof lib_walletActionLogs;
   "lib/walletAuth": typeof lib_walletAuth;
   "model/agent": typeof model_agent;
   "protocols/aave": typeof protocols_aave;
@@ -143,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   tracking: typeof tracking;
   trade: typeof trade;
   verification: typeof verification;
+  walletActions: typeof walletActions;
   walletAuth: typeof walletAuth;
 }>;
 

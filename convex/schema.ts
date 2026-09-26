@@ -3,6 +3,16 @@ import { v } from "convex/values";
 
 import { agentLiveStatsValidator, statsCategoryValidator } from "./categoryStatsValidators";
 
+/** One asset a wallet action moved. See convex/lib/walletActionLogs.ts. */
+export const walletMovementValidator = v.object({
+  /** Null for native BNB. */
+  token: v.union(v.string(), v.null()),
+  symbol: v.string(),
+  decimals: v.number(),
+  /** Null only for a native BNB withdrawal, which leaves no log to read. */
+  amountRaw: v.union(v.string(), v.null()),
+});
+
 /** One side of a trade ticket. Mirrors TradeToken in convex/lib/tradeTokens.ts. */
 export const tradeTokenValidator = v.object({
   /** Null for native BNB. */
@@ -779,6 +789,46 @@ export default defineSchema({
     .index("by_job", ["chainId", "jobId"])
     .index("by_altana_wallet", ["chainId", "altanaWalletAddress"])
     .index("by_agent_wallet", ["agentKey", "altanaWalletAddress"]),
+
+  /**
+   * EVERY ACTION THE DOLPHIN WALLET TAKES, besides escrow payments and
+   * refunds (which live on agentJobs). (2026-09-26)
+   *
+   * The owner's rule: every action is recorded in Agent activity. Written
+   * only by walletActions.record, which reads the transaction receipt and
+   * derives what moved (lib/walletActionLogs.ts). Nothing here is the
+   * browser's account of what it sent.
+   *
+   * - `trade`    - a swap: from a chat ticket, or the BNB -> U swap a hire runs
+   *                before paying.
+   * - `withdraw` - out to the person's own wallet. A BNB withdrawal leaves no
+   *                log, so its amount is null: unknown, never guessed.
+   * - `agent`    - a transaction an agent BUILT and the person signed
+   *                (agent-transaction-panel.tsx), with whatever it moved.
+   */
+  walletActions: defineTable({
+    chainId: v.number(),
+    /** Checksummed. */
+    altanaWalletAddress: v.string(),
+    /** Lowercase. One row per transaction. */
+    transactionHash: v.string(),
+    kind: v.union(v.literal("trade"), v.literal("withdraw"), v.literal("agent")),
+    /** Why the trade happened, when it was part of something else. */
+    purpose: v.union(v.literal("chat"), v.literal("hire"), v.literal("withdraw"), v.literal("agent")),
+    /** For `agent`: which agent built what was signed. */
+    agentKey: v.optional(v.union(v.string(), v.null())),
+    agentName: v.optional(v.union(v.string(), v.null())),
+    sent: v.array(walletMovementValidator),
+    received: v.array(walletMovementValidator),
+    /** A withdrawal's destination. */
+    counterparty: v.union(v.string(), v.null()),
+    blockNumber: v.number(),
+    /** The block's time, not the time it was recorded. */
+    executedAt: v.string(),
+    recordedAt: v.number(),
+  })
+    .index("by_wallet", ["chainId", "altanaWalletAddress", "executedAt"])
+    .index("by_tx", ["chainId", "transactionHash"]),
 
   /* -------------------------------------------------------------------------
    * DOLPHIN - the in-app agent that consults other agents

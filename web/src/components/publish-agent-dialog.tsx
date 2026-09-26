@@ -26,6 +26,26 @@ import { useWalletSession } from "@/wallet/wallet-session";
  * convex/iconProcessing.ts). The ones here only save a round trip.
  */
 
+/**
+ * How long to wait on the wallet before saying so. Measured 2026-09-27: the
+ * owner's Binance Wallet extension sat with no answer on this screen. A
+ * request a wallet cannot serve (a network it does not support) often never
+ * resolves at all, and a spinner with no end is worse than a clear stop.
+ */
+const WALLET_WAIT_MS = 60_000;
+
+class WalletTimeout extends Error {}
+
+function withWalletTimeout<T>(work: Promise<T>, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new WalletTimeout(message)), WALLET_WAIT_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 const REGISTER_ABI = parseAbi(["function register(string agentURI) returns (uint256 agentId)"]);
 const MAX_ICON_BYTES = 2 * 1024 * 1024;
 const ACCEPTED = ["image/png", "image/jpeg"];
@@ -89,14 +109,14 @@ export function PublishAgentDialog({
   const [email, setEmail] = useState("");
   const [network, setNetwork] = useState<Network>("bsc-testnet");
   const [review, setReview] = useState<Review | null>(null);
-  const [stage, setStage] = useState<"form" | "reviewing" | "signing" | "confirming" | "done">("form");
+  const [stage, setStage] = useState<"form" | "reviewing" | "switching" | "signing" | "confirming" | "done">("form");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Done | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && stage !== "signing" && stage !== "confirming") onClose();
+      if (event.key === "Escape" && stage !== "switching" && stage !== "signing" && stage !== "confirming") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -180,14 +200,21 @@ export function PublishAgentDialog({
     setStage("signing");
     try {
       const chainId = CHAINS[network].id;
-      await switchChain(wagmiConfig, { chainId });
-      const txHash = await writeContract(wagmiConfig, {
+      setStage("switching");
+      await withWalletTimeout(
+        switchChain(wagmiConfig, { chainId }),
+        network === "bsc-testnet"
+          ? "Your wallet didn't switch to BSC Testnet. Some wallets (Binance Wallet among them, it seems) don't support the test network: try MetaMask or Trust Wallet for testnet, or pick BNB Chain."
+          : "Your wallet didn't switch to BNB Chain. Open the wallet, check for a waiting request, and try again.",
+      );
+      setStage("signing");
+      const txHash = await withWalletTimeout(writeContract(wagmiConfig, {
         chainId,
         address: review.prepared.registry as Address,
         abi: REGISTER_ABI,
         functionName: "register",
         args: [review.prepared.tokenURI],
-      });
+      }), "Your wallet didn't answer the signature request. Open the wallet extension and look for a waiting request, or try again.");
       setStage("confirming");
       await waitForTransactionReceipt(wagmiConfig, { chainId, hash: txHash });
       const confirmed = await confirmRegistration({
@@ -206,7 +233,7 @@ export function PublishAgentDialog({
     }
   }
 
-  const busy = stage === "reviewing" || stage === "signing" || stage === "confirming" || iconBusy;
+  const busy = stage === "reviewing" || stage === "switching" || stage === "signing" || stage === "confirming" || iconBusy;
   const short = review ? review.balanceWei < review.feeWei : false;
 
   return (
@@ -214,7 +241,7 @@ export function PublishAgentDialog({
       <button
         aria-label="Close"
         className="absolute inset-0 bg-ink/30 backdrop-blur-[2px]"
-        disabled={stage === "signing" || stage === "confirming"}
+        disabled={stage === "switching" || stage === "signing" || stage === "confirming"}
         onClick={onClose}
         type="button"
       />
@@ -233,7 +260,7 @@ export function PublishAgentDialog({
           <button
             aria-label="Close"
             className="grid size-9 place-items-center rounded-full text-muted hover:bg-paper-muted disabled:opacity-30"
-            disabled={stage === "signing" || stage === "confirming"}
+            disabled={stage === "switching" || stage === "signing" || stage === "confirming"}
             onClick={onClose}
             type="button"
           >
@@ -429,7 +456,13 @@ export function PublishAgentDialog({
                   type="button"
                 >
                   <span className="text-canvas">
-                    {stage === "signing" ? "Check your wallet…" : stage === "confirming" ? "Confirming on-chain…" : "Sign and register"}
+                    {stage === "switching"
+                      ? `Approve the switch to ${network === "bsc" ? "BNB Chain" : "BSC Testnet"} in your wallet…`
+                      : stage === "signing"
+                        ? "Confirm the transaction in your wallet…"
+                        : stage === "confirming"
+                          ? "Confirming on-chain…"
+                          : "Sign and register"}
                   </span>
                 </button>
               ) : (

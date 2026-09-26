@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useBalance } from "wagmi";
 
 import { AgentActivity } from "@/components/agent-activity";
-import { WalletWithdraw } from "@/components/wallet-withdraw";
+import { WithdrawDialog } from "@/components/wallet-withdraw";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
 import { MobileMenuButton } from "@/components/mobile-nav";
@@ -74,6 +74,7 @@ export function MobileWallet() {
   const hidden = useAppStore((s) => s.hideBalances);
   const toggleHidden = useAppStore((s) => s.toggleHideBalances);
   const [receiving, setReceiving] = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const identityAddress = identity.isConnected ? identity.address : null;
   const dolphinAddress = dolphin.status === "connected" ? dolphin.address : null;
@@ -229,16 +230,15 @@ export function MobileWallet() {
               <span><CategoryGlyph name="external" size={23} /></span>
               BscScan
             </a>
-            <button
-              onClick={() => {
-                void balance.refetch();
-                dolphin.refreshBalance();
-              }}
-              type="button"
-            >
-              <span><CategoryGlyph name="refresh" size={23} /></span>
-              Refresh
-            </button>
+            {/* Withdraw where Refresh was (2026-09-26). Balances re-read on
+                their own; getting money back out had no control at all.
+                Only when there is a Dolphin Wallet to withdraw from. */}
+            {dolphin.status === "connected" ? (
+              <button onClick={() => setWithdrawing(true)} type="button">
+                <span><CategoryGlyph name="arrow-right" size={23} /></span>
+                Withdraw
+              </button>
+            ) : null}
           </div>
         ) : (
           <div className="mobile-wallet-connect">
@@ -315,12 +315,6 @@ export function MobileWallet() {
         </Link>
       </div>
 
-      {/* $U balance and withdraw, below the account cards (each card is a
-          link to /account, so the control cannot live inside one). */}
-      <div className="px-1">
-        <WalletWithdraw />
-      </div>
-
       <AgentActivity hidden={hidden} maxRows={4} mobile />
 
       {/*
@@ -339,6 +333,10 @@ export function MobileWallet() {
       <OptionalFeature label="Liquidation alerts (mobile)">
         <LiquidationAlertPanel />
       </OptionalFeature>
+
+      {withdrawing ? (
+        <WithdrawDialog initialAsset="U" onClose={() => setWithdrawing(false)} />
+      ) : null}
 
       {receiving && (
         <ReceiveSheet

@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useBalance } from "wagmi";
 
 import { AgentActivity } from "@/components/agent-activity";
-import { WalletWithdraw } from "@/components/wallet-withdraw";
+import {
+  AssetLogo,
+  U_TOKEN,
+  WithdrawDialog,
+  useDolphinUBalance,
+  type WalletAsset,
+} from "@/components/wallet-withdraw";
 import { BnbLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ReceiveSheet } from "@/components/receive-sheet";
@@ -13,6 +19,7 @@ import { WalletAvatar } from "@/components/wallet-avatar";
 import type { AgentSessionRow } from "@/convex/api";
 import { useBnbPrice, type BnbPriceState } from "@/hooks/use-bnb-price";
 import { useNow } from "@/hooks/use-now";
+import { usePaymentRates } from "@/hooks/use-payment-rates";
 import { useAppStore, type DisplayCurrency } from "@/store/use-app-store";
 import {
   ALTANA_CHAIN_ID,
@@ -23,6 +30,8 @@ import {
 } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { formatUsdFromWei } from "@/wallet/bnb-price";
+import { formatTokenAmount } from "@/wallet/erc8183-policy";
+import { formatUsd } from "@/wallet/token-usd";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { summariseTotal } from "@/wallet/wallet-total";
@@ -457,7 +466,7 @@ function WalletHero({
    */
   const caption =
     total.kind === "ready"
-      ? `${total.accounts} ${total.accounts === 1 ? "account" : "accounts"} · ${ALTANA_NETWORK_LABEL}`
+      ? `${total.accounts} ${total.accounts === 1 ? "account" : "accounts"}`
       : total.kind === "reading"
         ? "Checking accounts…"
         : total.kind === "partial"
@@ -539,15 +548,9 @@ function WalletHero({
         ) : (
           <QuickAction disabled glyph="external" label="BscScan" />
         )}
-        <QuickAction
-          disabled={total.kind === "reading"}
-          glyph="refresh"
-          label="Refresh"
-          onClick={() => {
-            void identityBalance.refetch();
-            void dolphin.refreshBalance();
-          }}
-        />
+        {/* No Refresh (removed 2026-09-26): the Dolphin balance re-reads every
+            60 seconds and the identity balance on focus, so the button
+            repeated what already happens. */}
       </div>
     </section>
   );
@@ -671,6 +674,10 @@ function AgentWalletCard({
   const wallet = useAltanaWallet();
   const currency = useAppStore((s) => s.displayCurrency);
   const hidden = useAppStore((s) => s.hideBalances);
+  const [asset, setAsset] = useState<WalletAsset>("BNB");
+  const [withdrawing, setWithdrawing] = useState(false);
+  const uBalance = useDolphinUBalance();
+  const uRates = usePaymentRates([{ token: U_TOKEN, decimals: uBalance.data?.decimals ?? 18 }]);
 
   // No wallet on this device: an invitation, not an empty box. Creation stays
   // an explicit user action — nothing here creates one as a side effect.
@@ -720,6 +727,22 @@ function AgentWalletCard({
   const address = wallet.address;
   const readable = !wallet.balanceError && wallet.balanceWei !== null;
 
+  /*
+   * The card shows ONE asset at a time, chosen with the token's own logo in
+   * the badge (owner, 2026-09-26). BNB follows the BNB/USD setting as before;
+   * U shows in U, or in dollars when USD is chosen and a U rate is readable.
+   * An unreadable U balance reads "Unavailable", never 0 (AGENTS.md §5).
+   */
+  const u = uBalance.data ?? null;
+  const uRate = uRates.get(U_TOKEN.toLowerCase()) ?? null;
+  const uAmount: { figure: string; unit: string | null } | null = u
+    ? hidden
+      ? { figure: HIDDEN, unit: null }
+      : currency === "USD" && uRate
+        ? { figure: formatUsd(u.raw, u.decimals, uRate), unit: null }
+        : { figure: formatTokenAmount(u.raw, u.decimals), unit: u.symbol }
+    : null;
+
   return (
     <div aria-label="Agent payments wallet" className="wcard wcard--agent">
       <div className="wcard__head">
@@ -736,19 +759,41 @@ function AgentWalletCard({
           <p className="wcard__eyebrow">Agent payments</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
-        <span className="wcard__badge" title="Secured by a passkey on this device">
-          <CategoryGlyph color="currentColor" name="shield" size={11} strokeWidth={2} />
-        </span>
+        <button
+          aria-label={`Showing ${asset}. Switch to ${asset === "BNB" ? "U" : "BNB"}`}
+          className="wcard__badge wcard__badge--asset interactive"
+          onClick={() => setAsset(asset === "BNB" ? "U" : "BNB")}
+          title={`Showing ${asset} · tap for ${asset === "BNB" ? "U" : "BNB"}`}
+          type="button"
+        >
+          <AssetLogo asset={asset} size={18} />
+        </button>
       </div>
 
-      <CardAmount
-        amount={readable ? renderAmount(wallet.balanceWei!, currency, price, hidden) : null}
-        loading={wallet.isReadingBalance}
-      />
+      {asset === "BNB" ? (
+        <CardAmount
+          amount={readable ? renderAmount(wallet.balanceWei!, currency, price, hidden) : null}
+          loading={wallet.isReadingBalance}
+        />
+      ) : (
+        <CardAmount amount={uAmount} loading={uBalance.isLoading} />
+      )}
       <p className="wcard__sub">Pays your hires</p>
 
-      {/* The $U balance and the way back out to the person's own wallet. */}
-      <WalletWithdraw />
+      {/* Styled as Disconnect on the card beside it: an account action. */}
+      <div className="wcard__foot">
+        <button
+          className="wallet-btn wallet-btn--ghost"
+          disabled={wallet.isBusy}
+          onClick={() => setWithdrawing(true)}
+          type="button"
+        >
+          Withdraw
+        </button>
+      </div>
+      {withdrawing ? (
+        <WithdrawDialog initialAsset={asset} onClose={() => setWithdrawing(false)} />
+      ) : null}
 
       {/*
        * No "Deposit" button here. It opened the same sheet as the hero's
@@ -948,7 +993,9 @@ export function AltanaWalletPanel() {
         <IdentityWalletCard onReceive={setReceiving} price={price} />
       </section>
 
-      {dolphinAddress && (
+      {/* Only when there is something to act on (2026-09-26): a green
+          "recoverable" note on every visit is reassurance nobody asked for. */}
+      {dolphinAddress && wallet.recoverability !== "registered" && (
         <RecoverabilityPanel onDeposit={() => setReceiving(dolphinAddress)} />
       )}
 

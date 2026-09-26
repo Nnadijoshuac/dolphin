@@ -1241,6 +1241,23 @@ select {
   box-shadow: inset 0 1px 2px var(--sink-top);
 }
 
+/* The Agent payments badge is a CONTROL (2026-09-26): the token logo it shows
+   is the asset the card displays, and tapping it switches BNB <-> U. A logo
+   carries its own disc, so the sunk grey circle goes; a ring on hover and
+   focus says it can be pressed. */
+.wcard__badge--asset {
+  width: 1.75rem;
+  height: 1.75rem;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: box-shadow 150ms ease;
+}
+.wcard__badge--asset:hover,
+.wcard__badge--asset:focus-visible {
+  box-shadow: 0 0 0 2px var(--line-strong);
+}
+
 /* Card balances: smaller than the hero's, same open tracking, same tabular
    figures. The hero answers "how much"; these are the breakdown. */
 /* margin-top is FIXED, not auto, and that is a bug fix rather than a taste

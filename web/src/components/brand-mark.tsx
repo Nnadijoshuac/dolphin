@@ -71,6 +71,24 @@ export function BrandMark({
   );
 }
 
+/**
+ * United Stables ($U), the token agents are paid in. The file is Trust
+ * Wallet's registry logo for 0xcE24439F2D9C6a2289F741120FE202248B666666
+ * (info.json: "United Stables", symbol U, 18 decimals), resized to 96px.
+ */
+export function ULogo({ size = 18 }: { size?: number }) {
+  return (
+    <Image
+      alt="U"
+      src="/u-logo.png"
+      width={size}
+      height={size}
+      className="rounded-full object-contain"
+      style={{ height: size, width: size }}
+    />
+  );
+}
+
 export function BnbLogo({ size = 18 }: { size?: number }) {
   return (
     <Image

@@ -20,7 +20,7 @@ import { track } from "@/lib/analytics";
 // altana-policy.ts already warns about.
 import { formatBnb } from "@/wallet/altana-policy";
 import { toUserMessage } from "@/wallet/wallet-errors";
-import { defaultTaskDescription } from "@/wallet/erc8183-policy";
+import { defaultTaskDescription, ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
 import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
@@ -465,7 +465,7 @@ export function HireAction({ agent }: { agent: Agent }) {
       if (altana.status !== "connected") {
         return `This agent charges ${priceText}. Hire uses your Dolphin Wallet for escrow, so set it up and fund it with BNB before paying.`;
       }
-      return `This agent charges ${priceText}. Press Hire and Dolphin will quote the agent, convert BNB if needed, fund escrow, then record the hire.`;
+      return `This agent charges ${priceText}. Press Hire and Dolphin will quote the agent, convert BNB if needed, fund escrow, then record the hire. The escrow pays the agent when it delivers; if it doesn't, claim a refund from My Agents after ${ESCROW_REFUND_DAYS} days.`;
     }
     if (priceRequiresPayment && settledPaymentJobId !== null) {
       return "Escrow is already funded for this agent. Press Hire to attach it to your hire record.";
@@ -497,7 +497,19 @@ export function HireAction({ agent }: { agent: Agent }) {
         </span>
       </div>
 
-      <p className="mt-4 text-sm leading-6 text-muted">{access.reason}</p>
+      {/*
+       * WHAT THIS HIRE AUTHORISES, stated for the hire actually on offer
+       * (2026-09-26). This printed the read-only sentence - "grants no signing
+       * or spending authority" - on every card, including paid ones directly
+       * above their price. A paid hire does grant one thing: an approval of
+       * exactly the price to the ERC-8183 escrow for this job (buildHireCalls:
+       * approve(kernel, budget)), and nothing else.
+       */}
+      <p className="mt-4 text-sm leading-6 text-muted">
+        {priceRequiresPayment
+          ? `Paying approves exactly ${priceText} to the ERC-8183 escrow for this one job, and nothing more. The agent gets no access to your wallet.`
+          : access.reason}
+      </p>
 
       {/* The facts that bear on the decision, and on a first purchase there
           are two of them. */}
@@ -508,6 +520,21 @@ export function HireAction({ agent }: { agent: Agent }) {
             {priceText}
           </span>
         </div>
+        {/*
+         * WHAT HAPPENS TO THE MONEY IF THE AGENT FAILS, said before the button
+         * (2026-09-26). A paid hire's U sits in an ERC-8183 escrow for the
+         * policy's 7-day dispute window; if nothing is delivered it comes back,
+         * but only then. Both of Dolphin's own paid hires ended that way, and
+         * nothing on this card said so before the money moved.
+         */}
+        {priceRequiresPayment && !showMyAgents ? (
+          <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
+            <span className="text-xs text-muted">If it doesn&rsquo;t deliver</span>
+            <span className="text-right text-sm font-semibold text-ink">
+              Full refund after {ESCROW_REFUND_DAYS} days
+            </span>
+          </div>
+        ) : null}
         {walletSetupText ? (
           <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
             <span className="text-xs text-muted">One-time wallet setup</span>

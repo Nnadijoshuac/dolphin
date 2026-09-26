@@ -63,6 +63,26 @@ export const ERC8183_CHAIN_ID = 56;
 export const JOB_DEADLINE_SECONDS = 1800;
 
 /**
+ * The escrow policy's dispute window: how long a funded job holds the user's
+ * money before an undelivered job becomes refundable.
+ *
+ * READ OFF THE CHAIN 2026-09-26: `disputeWindow()` on the OptimisticPolicy
+ * (0x9C01845705b3078Aa2e8cfF7520a6376FD766dE5) returned 604800 s = 7 days.
+ * Cross-checked against a real job: #56790 was created 2026-09-17T14:07:54Z
+ * and its expiredAt is 2026-09-24T14:37:47Z, i.e. this window plus
+ * JOB_DEADLINE_SECONDS. It belongs to Altana's policy contract, not to
+ * Dolphin, so if it changes this constant goes stale - re-read it there.
+ */
+export const ESCROW_DISPUTE_WINDOW_SECONDS = 604_800;
+
+/**
+ * Days until an undelivered paid hire is refundable, for UI copy ("after 7
+ * days"). The true deadline is the window plus JOB_DEADLINE_SECONDS (30 min),
+ * which is still "after 7 days"; the Manage page shows the exact time.
+ */
+export const ESCROW_REFUND_DAYS = Math.round(ESCROW_DISPUTE_WINDOW_SECONDS / 86_400);
+
+/**
  * What Dolphin proposes the user is buying, per category.
  *
  * These are REQUEST texts, not claims about what an agent can do - they say

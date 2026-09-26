@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import styles from "@/app/dolphin/dolphin-chat.module.css";
+import { AgentDraftPanel, EMPTY_AGENT_DRAFT } from "@/components/agent-draft-panel";
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
@@ -84,6 +85,70 @@ const STARTER_PROMPTS = [
   "Compare the yield agents on BNB Chain",
   "How does Dolphin decide an agent is live?",
 ];
+
+/**
+ * What to try first in Build mode. Each one describes an agent whose tools
+ * can come from the read-only MCP agents already listed, so none of them asks
+ * for something the builder would have to refuse.
+ */
+const BUILD_STARTERS = [
+  "An agent that watches my Venus health factor",
+  "An agent that compares yields on BNB Chain",
+  "An agent that explains a PancakeSwap pool before I add liquidity",
+];
+
+type ChatMode = "chat" | "build";
+
+/*
+ * Build mode has its UI and not yet its backend. Sending is refused in
+ * `submit` as well as disabled on the button, so no path (Enter, a starter
+ * chip) can push a build request into the Q&A pipeline, where it would be
+ * answered as a question about the marketplace instead of drafting an agent.
+ * Flipped when convex/ gains the builder action.
+ */
+const BUILD_BACKEND_CONNECTED: boolean = false;
+
+/**
+ * Chat or Build, chosen on a NEW conversation only, the way Claude Code picks
+ * a mode before the first prompt. Once a conversation has a turn in it, its mode
+ * is fixed: a builder transcript and a Q&A transcript are different documents,
+ * and switching halfway would leave one reading as the other.
+ */
+function ModeSwitch({
+  mode,
+  onChange,
+}: {
+  mode: ChatMode;
+  onChange: (mode: ChatMode) => void;
+}) {
+  return (
+    <div
+      aria-label="Conversation mode"
+      className="inline-flex items-center rounded-full border border-line/80 bg-paper-muted/70 p-0.5"
+      role="radiogroup"
+    >
+      {(["chat", "build"] as const).map((option) => {
+        const selected = option === mode;
+        return (
+          <button
+            aria-checked={selected}
+            className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
+              selected ? "bg-ink text-canvas shadow-sm" : "text-ink-soft hover:text-ink"
+            }`}
+            key={option}
+            onClick={() => onChange(option)}
+            role="radio"
+            type="button"
+          >
+            <span className={selected ? "text-canvas" : undefined}>
+              {option === "chat" ? "Chat" : "Build"}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function UserAvatar() {
   return (
@@ -360,6 +425,8 @@ export function DolphinClient({
       : "",
   );
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [mode, setMode] = useState<ChatMode>("chat");
   const wallet = useWallet();
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -392,11 +459,12 @@ export function DolphinClient({
   const submit = useCallback(
     (text: string) => {
       if (text.trim().length === 0 || isSending) return;
+      if (mode === "build" && !BUILD_BACKEND_CONNECTED) return;
       setDraft("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       void send(text);
     },
-    [isSending, send],
+    [isSending, mode, send],
   );
 
   useEffect(() => {
@@ -438,10 +506,16 @@ export function DolphinClient({
   );
 
   const isEmpty = turns.length === 0;
+  const building = mode === "build";
+  // The mode is chosen on a new conversation and fixed once it has a turn.
+  const canSwitchMode = isEmpty && !conversationKey;
+  const sendBlocked = building && !BUILD_BACKEND_CONNECTED;
 
   return (
     <div
-      className={`dolphin-chat-page relative grid h-[100dvh] overflow-hidden lg:grid-cols-[minmax(0,1fr)_19rem] ${styles.shell}`}
+      className={`dolphin-chat-page relative grid h-[100dvh] overflow-hidden ${
+        building ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : "lg:grid-cols-[minmax(0,1fr)_19rem]"
+      } ${styles.shell}`}
     >
       <div aria-hidden className={styles.grid} />
 
@@ -509,9 +583,15 @@ export function DolphinClient({
                 {wallet.isConnecting ? "Connecting…" : "Connect"}
               </button>
             )}
+            {/*
+              * In Build mode the draft takes the desktop side column, so
+              * history moves behind this button on every width.
+              */}
             <button
               aria-label="Open chat history"
-              className="grid size-10 place-items-center rounded-full text-ink-soft transition-colors hover:bg-paper/80 lg:hidden"
+              className={`grid size-10 place-items-center rounded-full text-ink-soft transition-colors hover:bg-paper/80 ${
+                building ? "" : "lg:hidden"
+              }`}
               onClick={() => setHistoryOpen(true)}
               type="button"
             >
@@ -543,6 +623,33 @@ export function DolphinClient({
                 <p className="max-w-sm text-sm text-muted">
                   This locally saved chat can no longer be opened.
                 </p>
+              </div>
+            ) : isEmpty && building ? (
+              <div className="dolphin-empty-hero flex flex-col items-center pt-[14vh]">
+                <BrandMark size={48} />
+                <h1 className="mt-4 text-center text-[1.6rem] font-semibold tracking-tight text-ink">
+                  Build an agent
+                </h1>
+                <p className="mt-2 max-w-md text-center text-sm text-muted">
+                  Describe what it should do. Dolphin drafts it from the free agents
+                  listed here. It is yours to use privately, and you can put it
+                  on-chain when you are ready.
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  {BUILD_STARTERS.map((starter) => (
+                    <button
+                      className="rounded-full border border-line/80 bg-paper/75 px-3.5 py-1.5 text-xs font-medium text-ink-soft shadow-sm transition hover:border-line-strong hover:bg-paper hover:text-ink"
+                      key={starter}
+                      onClick={() => {
+                        setDraft(starter);
+                        textareaRef.current?.focus();
+                      }}
+                      type="button"
+                    >
+                      {starter}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : isEmpty ? (
               <div className="dolphin-empty-hero flex flex-col items-center pt-[14vh]">
@@ -606,9 +713,9 @@ export function DolphinClient({
               submit(draft);
             }}
           >
-            <div className="flex w-full flex-col items-end rounded-[1.65rem] border border-line/90 bg-paper/88 p-2 shadow-[0_12px_38px_rgba(15,23,42,0.11)] backdrop-blur-xl">
+            <div className="flex w-full flex-col rounded-[1.65rem] border border-line/90 bg-paper/88 p-2 shadow-[0_12px_38px_rgba(15,23,42,0.11)] backdrop-blur-xl">
               <textarea
-                aria-label="Message Dolphin"
+                aria-label={building ? "Describe the agent to build" : "Message Dolphin"}
                 className="max-h-[400px] min-h-0 w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 placeholder:text-faint"
                 onChange={(event) => {
                   setDraft(event.target.value);
@@ -622,15 +729,45 @@ export function DolphinClient({
                     submit(draft);
                   }
                 }}
-                placeholder="Ask about an agent, a position, or a yield…"
+                placeholder={
+                  building
+                    ? "Describe the agent you want to build…"
+                    : "Ask about an agent, a position, or a yield…"
+                }
                 ref={textareaRef}
                 rows={1}
                 value={draft}
               />
+              <div className="flex items-center justify-between gap-2 pl-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {canSwitchMode ? (
+                    <ModeSwitch mode={mode} onChange={setMode} />
+                  ) : (
+                    <span className="px-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+                      {building ? "Build" : "Chat"}
+                    </span>
+                  )}
+                  {/*
+                    * The draft's door on narrow screens. It lives here rather
+                    * than in the header because the header already holds back,
+                    * title, Connect and history, and a fourth control pushed
+                    * Connect into the centred title at 390px.
+                    */}
+                  {building ? (
+                    <button
+                      className="inline-flex items-center gap-1 rounded-full border border-line/80 px-2.5 py-1 text-[12px] font-semibold text-ink-soft transition-colors hover:bg-paper-muted hover:text-ink lg:hidden"
+                      onClick={() => setDraftOpen(true)}
+                      type="button"
+                    >
+                      <CategoryGlyph name="bot" size={14} strokeWidth={1.9} />
+                      Draft
+                    </button>
+                  ) : null}
+                </div>
               <button
                 aria-label="Send"
                 className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-canvas transition-[opacity,transform] hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-30"
-                disabled={draft.trim().length === 0 || isSending}
+                disabled={draft.trim().length === 0 || isSending || sendBlocked}
                 type="submit"
               >
                 <svg
@@ -650,24 +787,49 @@ export function DolphinClient({
                   />
                 </svg>
               </button>
+              </div>
             </div>
+            {sendBlocked ? (
+              <p className="mt-2 px-3 text-center text-[0.72rem] text-muted">
+                The builder is not connected yet, so nothing is sent. Switch to Chat to
+                ask the marketplace a question.
+              </p>
+            ) : null}
           </form>
         </div>
       </section>
 
       <div className="relative z-20 hidden min-h-0 lg:block">
-        <ChatHistory
-          activeKey={conversationKey}
-          entries={history}
-          onClear={clearHistory}
-          onNew={startNew}
-          onOpen={openSavedConversation}
-          onRemove={removeSavedConversation}
-        />
+        {building ? (
+          <AgentDraftPanel draft={EMPTY_AGENT_DRAFT} />
+        ) : (
+          <ChatHistory
+            activeKey={conversationKey}
+            entries={history}
+            onClear={clearHistory}
+            onNew={startNew}
+            onOpen={openSavedConversation}
+            onRemove={removeSavedConversation}
+          />
+        )}
       </div>
 
-      {historyOpen ? (
+      {draftOpen && building ? (
         <div className="fixed inset-0 z-30 flex justify-end lg:hidden">
+          <button
+            aria-label="Close agent draft"
+            className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]"
+            onClick={() => setDraftOpen(false)}
+            type="button"
+          />
+          <div className="relative h-full w-[min(88vw,22rem)] shadow-[-18px_0_50px_rgba(15,23,42,0.16)]">
+            <AgentDraftPanel draft={EMPTY_AGENT_DRAFT} onClose={() => setDraftOpen(false)} />
+          </div>
+        </div>
+      ) : null}
+
+      {historyOpen ? (
+        <div className={`fixed inset-0 z-30 flex justify-end ${building ? "" : "lg:hidden"}`}>
           <button
             aria-label="Close chat history"
             className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]"

@@ -1,0 +1,196 @@
+"use client";
+
+import { CategoryGlyph } from "@/components/category-glyph";
+
+/**
+ * The agent a user is building, as the Build mode of /dolphin shows it.
+ *
+ * Every field is nullable because a draft fills in over a conversation. An
+ * unfilled field renders as "not drafted yet", never as a plausible default:
+ * a name or tool list Dolphin made up would look exactly like one the user
+ * chose (AGENTS.md §5, applied to a form rather than a metric).
+ *
+ * `tools` are always tools of agents already LISTED on Dolphin, named with the
+ * agent that publishes them, because that is where a built agent's abilities
+ * come from - it composes the free MCP agents in the catalog, it does not get
+ * new powers of its own. See Agent/PLAN-2026-09-26-build-your-agent.md.
+ */
+export type AgentDraft = {
+  name: string | null;
+  description: string | null;
+  instructions: string | null;
+  tools: readonly { agentKey: string; agentName: string; toolName: string }[];
+};
+
+export const EMPTY_AGENT_DRAFT: AgentDraft = {
+  name: null,
+  description: null,
+  instructions: null,
+  tools: [],
+};
+
+/** What still stands between this draft and going on-chain, in the user's words. */
+export function draftGaps(draft: AgentDraft): string[] {
+  const gaps: string[] = [];
+  if (!draft.name?.trim()) gaps.push("a name");
+  if (!draft.description?.trim()) gaps.push("a description of what it does");
+  if (!draft.instructions?.trim()) gaps.push("instructions");
+  if (draft.tools.length === 0) gaps.push("at least one tool");
+  return gaps;
+}
+
+function listGaps(gaps: string[]): string {
+  if (gaps.length <= 1) return gaps.join("");
+  return `${gaps.slice(0, -1).join(", ")} and ${gaps[gaps.length - 1]}`;
+}
+
+function Field({
+  label,
+  value,
+  multiline = false,
+}: {
+  label: string;
+  value: string | null;
+  multiline?: boolean;
+}) {
+  const filled = value !== null && value.trim().length > 0;
+  return (
+    <div className="border-b border-line/60 py-3 last:border-b-0">
+      <dt className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </dt>
+      <dd
+        className={`mt-1 text-[0.84rem] leading-relaxed ${
+          filled ? "text-ink" : "text-faint"
+        } ${multiline && filled ? "whitespace-pre-wrap" : ""}`}
+      >
+        {filled ? value : "Not drafted yet"}
+      </dd>
+    </div>
+  );
+}
+
+const STEPS = ["Draft it", "Try it privately", "Put it on-chain"] as const;
+
+export function AgentDraftPanel({
+  draft,
+  onClose,
+}: {
+  draft: AgentDraft;
+  onClose?: () => void;
+}) {
+  const gaps = draftGaps(draft);
+  const ready = gaps.length === 0;
+  // Step 1 is where every draft starts; the later steps light up as the
+  // builder moves the draft through them.
+  const currentStep = ready ? 1 : 0;
+
+  return (
+    <aside
+      aria-label="Agent draft"
+      className="flex h-full min-h-0 flex-col border-l border-line/80 bg-paper/78 px-3 pb-4 pt-3 backdrop-blur-xl"
+    >
+      <div className="flex items-center gap-2 px-2 py-2">
+        <div className="grid size-9 place-items-center rounded-xl bg-ink text-canvas">
+          <CategoryGlyph color="#FFFFFF" name="bot" size={17} strokeWidth={1.9} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-sm font-semibold text-ink">
+            {draft.name?.trim() || "Agent draft"}
+          </h2>
+          <p className="text-[0.68rem] text-muted">Private · only you can run it</p>
+        </div>
+        {onClose ? (
+          <button
+            aria-label="Close agent draft"
+            className="grid size-9 place-items-center rounded-full text-muted transition-colors hover:bg-paper-muted"
+            onClick={onClose}
+            type="button"
+          >
+            <span aria-hidden className="text-lg leading-none">×</span>
+          </button>
+        ) : null}
+      </div>
+
+      <ol className="mt-2 flex items-center gap-1.5 px-2" aria-label="Build steps">
+        {STEPS.map((step, index) => {
+          const done = index < currentStep;
+          const active = index === currentStep;
+          return (
+            <li
+              aria-current={active ? "step" : undefined}
+              className="flex min-w-0 flex-1 flex-col gap-1.5"
+              key={step}
+            >
+              <span
+                className={`h-1 rounded-full ${
+                  done ? "bg-success" : active ? "bg-ink" : "bg-line"
+                }`}
+              />
+              <span
+                className={`truncate text-[0.64rem] font-medium ${
+                  active ? "text-ink" : "text-muted"
+                }`}
+              >
+                {step}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-2">
+        <dl>
+          <Field label="Name" value={draft.name} />
+          <Field label="What it does" value={draft.description} />
+          <Field label="Instructions" multiline value={draft.instructions} />
+        </dl>
+
+        <div className="py-3">
+          <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">
+            Tools
+          </p>
+          {draft.tools.length === 0 ? (
+            <p className="mt-1 text-[0.8rem] leading-relaxed text-faint">
+              None yet. Your agent uses tools from the free MCP agents listed on
+              Dolphin, and each one is shown here with the agent that publishes it.
+            </p>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {draft.tools.map((tool) => (
+                <li
+                  className="rounded-xl border border-line/70 bg-paper/70 px-3 py-2"
+                  key={`${tool.agentKey}:${tool.toolName}`}
+                >
+                  <span className="block truncate font-mono text-[0.78rem] text-ink">
+                    {tool.toolName}
+                  </span>
+                  <span className="block truncate text-[0.68rem] text-muted">
+                    via {tool.agentName}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-line/80 bg-paper/70 p-3">
+        <button
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-sm font-semibold text-canvas transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+          disabled
+          type="button"
+        >
+          {/* The span carries the colour for the same reason ChatHistory's
+              "New conversation" does: globals.css colours button text. */}
+          <span className="text-canvas">Put on-chain</span>
+        </button>
+        <p className="mt-2 text-[0.7rem] leading-relaxed text-muted">
+          {ready
+            ? "Try it privately first. Putting it on-chain registers it from your connected wallet, and the cost is shown before you sign."
+            : `Needs ${listGaps(gaps)} first. It stays free and private until you put it on-chain.`}
+        </p>
+      </div>
+    </aside>
+  );
+}

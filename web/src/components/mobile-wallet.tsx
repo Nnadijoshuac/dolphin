@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useBalance } from "wagmi";
 
 import { AgentActivity } from "@/components/agent-activity";
+import { WalletWithdraw } from "@/components/wallet-withdraw";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
 import { MobileMenuButton } from "@/components/mobile-nav";
@@ -312,6 +313,12 @@ export function MobileWallet() {
                   : "Set up in Account"}
           </p>
         </Link>
+      </div>
+
+      {/* $U balance and withdraw, below the account cards (each card is a
+          link to /account, so the control cannot live inside one). */}
+      <div className="px-1">
+        <WalletWithdraw />
       </div>
 
       <AgentActivity hidden={hidden} maxRows={4} mobile />

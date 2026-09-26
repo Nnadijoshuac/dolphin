@@ -43,6 +43,7 @@ import {
   assertIntentAffordable,
   buildSessionPermissions,
   expiryFromNow,
+  RELAYED_INTENT_GAS_ALLOWANCE,
   readFirstActionSurcharge,
   sessionPolicyFor,
   type RecoverabilityState,
@@ -50,6 +51,7 @@ import {
 import {
   ERC8183_CHAIN_ID,
   JOB_DEADLINE_SECONDS,
+  formatTokenAmount,
   buildJobDescription,
 } from "./erc8183-policy";
 import {
@@ -66,6 +68,11 @@ import {
   type BnbConversionQuote,
 } from "./pancakeswap-bnb-swap";
 import { toUserMessage } from "./wallet-errors";
+import {
+  buildWithdrawCall,
+  withdrawRefusal,
+  type WithdrawAsset,
+} from "./withdraw-policy";
 import { requireSessionToken, useWalletSession } from "./wallet-session";
 
 /**
@@ -314,6 +321,24 @@ export type AltanaWalletValue = Readonly<{
    * PancakeSwap, then runs the normal ERC-8183 escrow payment.
    */
   payForAgentWithBnb: (input: PayForAgentWithBnbInput) => Promise<PaidJob>;
+
+  /**
+   * How much BNB must stay behind for a withdrawal's own gas, plus the
+   * one-time KeyStore charge on a wallet's first action. Read live.
+   */
+  readWithdrawReserveWei: () => Promise<bigint>;
+
+  /**
+   * Sends BNB or a token from the Dolphin Wallet to the person's own
+   * connected wallet (see withdraw-policy.ts for the one-destination rule).
+   * Signed here by the passkey. Returns the transaction hash when the relay
+   * reports one.
+   */
+  withdraw: (input: {
+    asset: WithdrawAsset;
+    amountRaw: bigint;
+    to: Address;
+  }) => Promise<{ transactionHash: string | null }>;
 }>;
 
 const AltanaContext = createContext<AltanaWalletValue | null>(null);
@@ -1236,6 +1261,90 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     ],
   );
 
+  const readWithdrawReserveWei = useCallback(async (): Promise<bigint> => {
+    const wallet = getAltanaSnapshot();
+    if (!wallet) throw new Error("No Dolphin Wallet on this device.");
+    const [gasPriceWei, surchargeWei] = await Promise.all([
+      keystoreReader.getGasPrice(),
+      readFirstActionSurcharge({
+        publicClient: keystoreReader,
+        keyStore: ALTANA_NETWORK.keyStore as Address,
+        keyStoreController: ALTANA_NETWORK.keyStoreController as Address,
+        walletAddress: wallet.address as Address,
+      }),
+    ]);
+    return RELAYED_INTENT_GAS_ALLOWANCE * gasPriceWei + surchargeWei;
+  }, []);
+
+  const withdraw = useCallback(
+    async (input: {
+      asset: WithdrawAsset;
+      amountRaw: bigint;
+      to: Address;
+    }): Promise<{ transactionHash: string | null }> => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("No Dolphin Wallet on this device.");
+
+      const [balances, reserveWei] = await Promise.all([
+        altanaClient().balances({
+          wallet: { address: wallet.address },
+          chainId: ALTANA_NETWORK.chainId,
+        }),
+        readWithdrawReserveWei(),
+      ]);
+
+      // Re-checked at signing time against a fresh read: the balance on
+      // screen may be minutes old.
+      const available =
+        input.asset.kind === "native"
+          ? balances.native > reserveWei
+            ? balances.native - reserveWei
+            : BigInt(0)
+          : (await readTokenBalance(input.asset.token)).raw;
+      const refusal = withdrawRefusal({
+        amountRaw: input.amountRaw,
+        available,
+        from: wallet.address,
+        to: input.to,
+        symbol: input.asset.symbol,
+      });
+      if (refusal) throw new Error(refusal);
+
+      // A token withdrawal still pays its gas (and any first-action setup) in
+      // BNB from this wallet: say so before signing, not after a revert.
+      if (input.asset.kind === "token" && balances.native < reserveWei) {
+        throw new Error(
+          `Sending ${input.asset.symbol} needs a little BNB in the Dolphin Wallet for network gas: ` +
+            `about ${formatTokenAmount(reserveWei, 18)} BNB. It holds ${formatTokenAmount(balances.native, 18)} BNB. ` +
+            "Add a little BNB and try again.",
+        );
+      }
+
+      setIsBusy(true);
+      setError(null);
+      try {
+        const result = await altanaClient().execute({
+          wallet: { address: wallet.address },
+          signer: adminSigner(),
+          calls: [buildWithdrawCall(input.asset, input.to, input.amountRaw)],
+          chainId: ALTANA_NETWORK.chainId,
+        });
+        if (result.status === "FAILED") {
+          throw new Error("The chain did not accept that withdrawal. Nothing was sent. Try again.");
+        }
+        refreshBalance();
+        refreshRecoverability();
+        return { transactionHash: result.transactionHash ?? null };
+      } catch (cause) {
+        setError(toUserMessage(cause, "That withdrawal could not be sent. Try again."));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner, readTokenBalance, readWithdrawReserveWei, refreshBalance, refreshRecoverability],
+  );
+
   const value = useMemo<AltanaWalletValue>(() => {
     const status: AltanaWalletStatus = !isClient
       ? "loading"
@@ -1299,6 +1408,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       quoteBnbPayment,
       payForAgent,
       payForAgentWithBnb,
+      readWithdrawReserveWei,
+      withdraw,
     };
   }, [
     balanceQuery.data,
@@ -1316,6 +1427,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     payForAgentWithBnb,
     quoteBnbPayment,
     readTokenBalance,
+    readWithdrawReserveWei,
     recoverWallet,
     recoverabilityQuery.data,
     recoverabilityQuery.error,
@@ -1331,6 +1443,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     sessionsUnavailable,
     stored,
     supported,
+    withdraw,
   ]);
 
   return <AltanaContext.Provider value={value}>{children}</AltanaContext.Provider>;

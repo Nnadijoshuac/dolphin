@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useBalance } from "wagmi";
 
 import { AgentActivity } from "@/components/agent-activity";
+import { WalletWithdraw } from "@/components/wallet-withdraw";
 import { BnbLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ReceiveSheet } from "@/components/receive-sheet";
@@ -745,6 +746,9 @@ function AgentWalletCard({
         loading={wallet.isReadingBalance}
       />
       <p className="wcard__sub">Pays your hires</p>
+
+      {/* The $U balance and the way back out to the person's own wallet. */}
+      <WalletWithdraw />
 
       {/*
        * No "Deposit" button here. It opened the same sheet as the hero's

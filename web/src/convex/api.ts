@@ -641,10 +641,45 @@ export type DolphinToolCall = {
   calledAt: number;
 };
 
+/** One side of a trade ticket. Mirrors tradeTokenValidator in convex/schema.ts. */
+export type TradeTicketToken = {
+  /** Null for native BNB. */
+  address: string | null;
+  symbol: string;
+  decimals: number;
+  /** On Dolphin's hand-verified token list (convex/lib/tradeTokens.ts). */
+  verified: boolean;
+};
+
+/**
+ * A trade the chat recognised ("buy 50 U of CAKE"). See convex/trade.ts.
+ * There is no price in it on purpose: the ticket quotes PancakeSwap live.
+ */
+export type TradeTicket = {
+  kind: "swap";
+  amountIn: string;
+  tokenIn: TradeTicketToken;
+  tokenOut: TradeTicketToken;
+  /** What BNB Chain Token Safety said, attributed and dated. Null when nothing needed checking. */
+  safety: {
+    agentKey: string;
+    agentName: string;
+    token: string;
+    symbol: string;
+    verdict: string | null;
+    headline: string | null;
+    reason: string | null;
+    unavailable: string | null;
+    checkedAt: number;
+  } | null;
+};
+
 export type DolphinMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Set when the question was a trade. */
+  ticket: TradeTicket | null;
   status: "thinking" | "consulting" | "complete" | "error";
   /**
    * When this answer was FIRST produced, if it is a replay of an earlier one.

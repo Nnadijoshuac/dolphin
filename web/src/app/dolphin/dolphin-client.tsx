@@ -10,6 +10,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
 import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
+import { TradeTicket } from "@/components/trade-ticket";
 import {
     useDolphinChat,
     useDolphinConversation,
@@ -233,11 +234,13 @@ function Turn({
               content={turn.content}
               dynamicAgents={dynamicAgents}
               excludePrompts={askedPrompts}
-              onSelectPrompt={onSelectPrompt}
+              onSelectPrompt={turn.ticket ? undefined : onSelectPrompt}
               toolCalls={turn.toolCalls}
             />
           </div>
         ) : null}
+
+        {turn.ticket ? <TradeTicket ticket={turn.ticket} /> : null}
 
         {working && turn.content.length === 0 && turn.toolCalls.length > 0 ? (
           <DolphinLoader label="Writing…" />

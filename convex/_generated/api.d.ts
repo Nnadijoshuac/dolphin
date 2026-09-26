@@ -66,7 +66,6 @@ import type * as shelves from "../shelves.js";
 import type * as sources_scan8004 from "../sources/scan8004.js";
 import type * as tracking from "../tracking.js";
 import type * as verification from "../verification.js";
-import type * as walletActivity from "../walletActivity.js";
 import type * as walletAuth from "../walletAuth.js";
 
 import type {
@@ -134,7 +133,6 @@ declare const fullApi: ApiFromModules<{
   "sources/scan8004": typeof sources_scan8004;
   tracking: typeof tracking;
   verification: typeof verification;
-  walletActivity: typeof walletActivity;
   walletAuth: typeof walletAuth;
 }>;
 

@@ -580,7 +580,12 @@ export type AgentJobRow = {
   paymentTokenDecimals: number;
   taskDescription: string;
   transactionHash: string | null;
+  /** Set once a refund was verified on-chain (agentPayments.recordJobRefund). */
+  refundTransactionHash?: string | null;
+  refundedAt?: string | null;
   verifiedAt: string;
+  /** When the verified payment was recorded. verifiedAt moves on every re-read. */
+  _creationTime: number;
 };
 
 export const agentPaymentsApi = anyApi as unknown as {
@@ -619,27 +624,6 @@ export const agentPaymentsApi = anyApi as unknown as {
   };
 };
 
-/** One verified BSC transaction in a wallet's history. See convex/walletActivity.ts. */
-export type WalletActivityEntry = {
-  kind: "payment" | "refund" | "rating";
-  transactionHash: string;
-  at: string;
-  agentKey: string;
-  agentName: string;
-  jobId: string | null;
-  amountRaw: string | null;
-  tokenSymbol: string | null;
-  tokenDecimals: number | null;
-};
-
-export const walletActivityApi = anyApi as unknown as {
-  walletActivity: {
-    forWallets: Query<
-      { altanaWalletAddress?: string | null; identityWalletAddress?: string | null },
-      WalletActivityEntry[]
-    >;
-  };
-};
 
 /** One call the Dolphin agent made to one marketplace agent. */
 export type DolphinToolCall = {

@@ -7,7 +7,6 @@ import { useBalance } from "wagmi";
 import { AgentActivity } from "@/components/agent-activity";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
-import { WalletTransactions } from "@/components/wallet-transactions";
 import { MobileMenuButton } from "@/components/mobile-nav";
 import { OptionalFeature } from "@/components/optional-feature";
 import { ReceiveSheet } from "@/components/receive-sheet";
@@ -330,13 +329,6 @@ export function MobileWallet() {
         * functions a deployment may not have yet must not be able to take the
         * route down. See components/optional-feature.tsx.
         */}
-{/* Verified transactions with BscScan links. Wrapped for the same
-          reason as the alerts: it queries a function a deployment may not
-          have yet, and must not be able to take the wallet page down. */}
-      <OptionalFeature label="Transactions (mobile)">
-        <WalletTransactions />
-      </OptionalFeature>
-
       <OptionalFeature label="Liquidation alerts (mobile)">
         <LiquidationAlertPanel />
       </OptionalFeature>

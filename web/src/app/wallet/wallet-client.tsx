@@ -4,7 +4,6 @@ import { AltanaWalletPanel } from "@/components/altana-wallet-panel";
 import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
 import { MobileWallet } from "@/components/mobile-wallet";
 import { OptionalFeature } from "@/components/optional-feature";
-import { WalletTransactions } from "@/components/wallet-transactions";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 
 /**
@@ -29,13 +28,6 @@ export function WalletClient() {
   return (
     <div className="site-frame" style={{ paddingBlock: "clamp(2rem, 5vw, 4rem)" }}>
       <AltanaWalletPanel />
-
-      {/* Verified transactions with BscScan links. Wrapped for the same
-          reason as the alerts: it queries a function a deployment may not
-          have yet, and must not be able to take the wallet page down. */}
-      <OptionalFeature label="Transactions">
-        <WalletTransactions />
-      </OptionalFeature>
 
       {/*
         * Liquidation alerts. On the wallet screen rather than an agent page

@@ -204,6 +204,13 @@ function AgentActivityContent({
     } catch {
       amount = null;
     }
+    /*
+     * Dated by when the payment was RECORDED. verifiedAt moves every time the
+     * job is re-read, so after a refund it showed the refund's day on the
+     * payment row (seen 2026-09-26 on job 56783).
+     */
+    const paidAt = new Date(job._creationTime).toISOString();
+    const refunded = Boolean(job.refundTransactionHash);
     items.push({
       key: `job:${job.jobId}`,
       title: job.agentName,
@@ -211,16 +218,37 @@ function AgentActivityContent({
       category: agent?.category ?? null,
       iconUrl: agent?.iconUrl ?? null,
       iconSeed: agent?.iconSeed ?? null,
-      detail: [`Paid - ${job.jobStatus.toLowerCase()}`, formatDate(job.verifiedAt)]
+      detail: [
+        refunded ? "Paid - refunded" : `Paid - ${job.jobStatus.toLowerCase()}`,
+        formatDate(paidAt),
+      ]
         .filter(Boolean)
         .join(" - "),
-      amount,
+      amount: amount ? `−${amount}` : null,
       href: job.transactionHash
         ? `https://bscscan.com/tx/${job.transactionHash}`
         : `/manage/${agentRouteId(job.agentKey)}`,
       external: Boolean(job.transactionHash),
-      sortAt: Date.parse(job.verifiedAt) || 0,
+      sortAt: job._creationTime,
     });
+
+    // The refund is its own row: a second transaction, money coming back.
+    if (job.refundTransactionHash) {
+      const refundedAt = job.refundedAt ?? job.verifiedAt;
+      items.push({
+        key: `refund:${job.jobId}`,
+        title: `Refund from ${job.agentName}`,
+        agentKey: job.agentKey,
+        category: agent?.category ?? null,
+        iconUrl: agent?.iconUrl ?? null,
+        iconSeed: agent?.iconSeed ?? null,
+        detail: [`Job #${job.jobId} - refunded`, formatDate(refundedAt)].filter(Boolean).join(" - "),
+        amount: amount ? `+${amount}` : null,
+        href: `https://bscscan.com/tx/${job.refundTransactionHash}`,
+        external: true,
+        sortAt: Date.parse(refundedAt) || 0,
+      });
+    }
   }
 
   for (const hire of hires ?? []) {
@@ -258,7 +286,18 @@ function AgentActivityContent({
           {!mobile ? <p className="eyebrow">History</p> : null}
           <h2>Agent activity</h2>
         </div>
-        {items.length > maxRows ? <Link href="/my-agents">See all</Link> : null}
+        {items.length > maxRows ? (
+          <Link href="/my-agents">See all</Link>
+        ) : dolphinAddress ? (
+          /* Everything, including swaps and activity outside Dolphin. */
+          <a
+            href={`https://bscscan.com/address/${dolphinAddress}#tokentxns`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            BscScan ↗
+          </a>
+        ) : null}
       </header>
 
       {visible.length > 0 ? (

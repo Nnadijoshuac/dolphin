@@ -160,9 +160,12 @@ function Turn({
   dynamicAgents,
   onSelectPrompt,
   askedPrompts,
+  onRetry,
 }: {
   turn: DolphinTurn;
   dynamicAgents?: Array<{ name: string; agentKey: string }>;
+  /** Only on the latest turn, and only when it failed: re-asks the question before it. */
+  onRetry?: () => void;
   /** Only the latest answer gets follow-up suggestions; older ones stay quiet. */
   onSelectPrompt?: (prompt: string) => void;
   askedPrompts?: readonly string[];
@@ -206,7 +209,7 @@ function Turn({
           turn.errorKind === "capacity" ? (
             <div className="rounded-2xl border border-info/25 bg-info-soft px-4 py-3">
               <p className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-info">
-                Out of model calls
+                Out of answers for now
               </p>
               <p className="mt-1.5 text-[0.9rem] leading-relaxed text-ink-soft">
                 {turn.errorReason}
@@ -226,6 +229,16 @@ function Turn({
               </p>
             </div>
           )
+        ) : null}
+
+        {turn.status === "error" && onRetry ? (
+          <button
+            className="rounded-full border border-line/80 px-3 py-1 text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-paper-muted hover:text-ink"
+            onClick={onRetry}
+            type="button"
+          >
+            Try again
+          </button>
         ) : null}
 
         {turn.content.length > 0 ? (
@@ -838,6 +851,11 @@ export function DolphinClient({
                      */
                     activeMode === "chat" && index === turns.length - 1
                       ? (prompt) => submit(prompt)
+                      : undefined
+                  }
+                  onRetry={
+                    index === turns.length - 1 && turn.status === "error" && index > 0
+                      ? () => submit(turns[index - 1].content)
                       : undefined
                   }
                   turn={turn}

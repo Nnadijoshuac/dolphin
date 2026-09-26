@@ -67,6 +67,13 @@ import {
   quoteBnbForExactTokenOutput,
   type BnbConversionQuote,
 } from "./pancakeswap-bnb-swap";
+import {
+  assertTradeCallsAllowed,
+  buildTradeCalls,
+  quoteTrade,
+  type TradeRoute,
+  type TradeSide,
+} from "./pancakeswap-trade";
 import { toUserMessage } from "./wallet-errors";
 import {
   buildWithdrawCall,
@@ -339,6 +346,18 @@ export type AltanaWalletValue = Readonly<{
     amountRaw: bigint;
     to: Address;
   }) => Promise<{ transactionHash: string | null }>;
+
+  /**
+   * A chat trade ticket, signed (see pancakeswap-trade.ts). Re-quotes at
+   * signing time and refuses if the fresh quote would pay less than the
+   * `minimumOutRaw` the ticket showed. Returns the route that was signed.
+   */
+  trade: (input: {
+    tokenIn: TradeSide;
+    tokenOut: TradeSide;
+    amountInRaw: bigint;
+    minimumOutRaw: bigint;
+  }) => Promise<{ transactionHash: string | null; route: TradeRoute }>;
 }>;
 
 const AltanaContext = createContext<AltanaWalletValue | null>(null);
@@ -1345,6 +1364,85 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     [adminSigner, readTokenBalance, readWithdrawReserveWei, refreshBalance, refreshRecoverability],
   );
 
+  const trade = useCallback(
+    async (input: {
+      tokenIn: TradeSide;
+      tokenOut: TradeSide;
+      amountInRaw: bigint;
+      minimumOutRaw: bigint;
+    }): Promise<{ transactionHash: string | null; route: TradeRoute }> => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("No Dolphin Wallet on this device. Create one on the Wallet page first.");
+
+      /*
+       * Fresh quote at signing time. The ticket's quote may be seconds or
+       * minutes old; what is signed is priced now, and it must still pay at
+       * least what the ticket promised as its minimum.
+       */
+      const [routes, balances, reserveWei] = await Promise.all([
+        quoteTrade({
+          publicClient: keystoreReader as unknown as Parameters<typeof quoteTrade>[0]["publicClient"],
+          tokenIn: input.tokenIn,
+          tokenOut: input.tokenOut,
+          amountInRaw: input.amountInRaw,
+        }),
+        altanaClient().balances({ wallet: { address: wallet.address }, chainId: ALTANA_NETWORK.chainId }),
+        readWithdrawReserveWei(),
+      ]);
+      const route = routes[0];
+      if (!route) throw new Error("PancakeSwap has no pool that can take this trade right now. Nothing was signed.");
+      if (route.amountOutRaw < input.minimumOutRaw) {
+        throw new Error(
+          `The price moved: this trade would now pay less than the minimum the ticket showed. Nothing was signed. Refresh the quote and try again.`,
+        );
+      }
+
+      const holds =
+        input.tokenIn.address === null ? balances.native : (await readTokenBalance(input.tokenIn.address)).raw;
+      if (holds < input.amountInRaw) {
+        throw new Error(`The Dolphin Wallet doesn't hold enough ${input.tokenIn.symbol} for this trade. Add some on the Wallet page.`);
+      }
+      const bnbNeeded = reserveWei + (input.tokenIn.address === null ? input.amountInRaw : BigInt(0));
+      if (balances.native < bnbNeeded) {
+        throw new Error(
+          `This trade needs a little BNB in the Dolphin Wallet for network gas: about ${formatTokenAmount(reserveWei, 18)} BNB` +
+            `${input.tokenIn.address === null ? " on top of the BNB you are spending" : ""}. Add a little BNB and try again.`,
+        );
+      }
+
+      const calls = buildTradeCalls({
+        route,
+        tokenIn: input.tokenIn,
+        tokenOut: input.tokenOut,
+        recipient: wallet.address as Address,
+      });
+      assertTradeCallsAllowed(calls, input.tokenIn);
+
+      setIsBusy(true);
+      setError(null);
+      try {
+        const result = await altanaClient().execute({
+          wallet: { address: wallet.address },
+          signer: adminSigner(),
+          calls,
+          chainId: ALTANA_NETWORK.chainId,
+        });
+        if (result.status === "FAILED") {
+          throw new Error("The chain did not accept that trade. Nothing was swapped. Try again.");
+        }
+        refreshBalance();
+        refreshRecoverability();
+        return { transactionHash: result.transactionHash ?? null, route };
+      } catch (cause) {
+        setError(toUserMessage(cause, "That trade could not be sent. Try again."));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner, readTokenBalance, readWithdrawReserveWei, refreshBalance, refreshRecoverability],
+  );
+
   const value = useMemo<AltanaWalletValue>(() => {
     const status: AltanaWalletStatus = !isClient
       ? "loading"
@@ -1410,6 +1508,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       payForAgentWithBnb,
       readWithdrawReserveWei,
       withdraw,
+      trade,
     };
   }, [
     balanceQuery.data,
@@ -1444,6 +1543,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     stored,
     supported,
     withdraw,
+    trade,
   ]);
 
   return <AltanaContext.Provider value={value}>{children}</AltanaContext.Provider>;

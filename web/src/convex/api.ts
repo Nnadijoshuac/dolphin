@@ -680,6 +680,8 @@ export type DolphinMessage = {
   content: string;
   /** Set when the question was a trade. */
   ticket: TradeTicket | null;
+  /** A corrected request (a token typo) to confirm with one tap. Sent as a new turn. */
+  suggestedPrompt: string | null;
   status: "thinking" | "consulting" | "complete" | "error";
   /**
    * When this answer was FIRST produced, if it is a replay of an earlier one.

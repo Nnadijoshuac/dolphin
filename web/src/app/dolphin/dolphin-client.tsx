@@ -161,11 +161,14 @@ function Turn({
   onSelectPrompt,
   askedPrompts,
   onRetry,
+  onConfirm,
 }: {
   turn: DolphinTurn;
   dynamicAgents?: Array<{ name: string; agentKey: string }>;
   /** Only on the latest turn, and only when it failed: re-asks the question before it. */
   onRetry?: () => void;
+  /** Only on the latest turn: sends the corrected request a typo reply offers. */
+  onConfirm?: (prompt: string) => void;
   /** Only the latest answer gets follow-up suggestions; older ones stay quiet. */
   onSelectPrompt?: (prompt: string) => void;
   askedPrompts?: readonly string[];
@@ -247,13 +250,28 @@ function Turn({
               content={turn.content}
               dynamicAgents={dynamicAgents}
               excludePrompts={askedPrompts}
-              onSelectPrompt={turn.ticket ? undefined : onSelectPrompt}
+              onSelectPrompt={turn.ticket || turn.suggestedPrompt ? undefined : onSelectPrompt}
               toolCalls={turn.toolCalls}
             />
           </div>
         ) : null}
 
         {turn.ticket ? <TradeTicket ticket={turn.ticket} /> : null}
+
+        {/*
+          * A TYPO IS CONFIRMED WITH ONE TAP (owner, 2026-09-26). The button
+          * sends the corrected request as a new turn, which resolves like a
+          * typed one; nothing is traded on the guess.
+          */}
+        {turn.suggestedPrompt && onConfirm ? (
+          <button
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-3.5 py-1.5 text-[13px] font-semibold"
+            onClick={() => onConfirm(turn.suggestedPrompt as string)}
+            type="button"
+          >
+            <span className="text-canvas">Yes, {turn.suggestedPrompt}</span>
+          </button>
+        ) : null}
 
         {working && turn.content.length === 0 && turn.toolCalls.length > 0 ? (
           <DolphinLoader label="Writing…" />
@@ -853,6 +871,7 @@ export function DolphinClient({
                       ? (prompt) => submit(prompt)
                       : undefined
                   }
+                  onConfirm={index === turns.length - 1 ? (prompt) => submit(prompt) : undefined}
                   onRetry={
                     index === turns.length - 1 && turn.status === "error" && index > 0
                       ? () => submit(turns[index - 1].content)

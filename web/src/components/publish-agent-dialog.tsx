@@ -80,7 +80,7 @@ function bnb(wei: bigint): string {
 }
 
 type Prepared = { hash: string; tokenURI: string; registry: string; chainId: number; pageUrl: string };
-type Review = { prepared: Prepared; feeWei: bigint; balanceWei: bigint };
+type Review = { prepared: Prepared; feeWei: bigint; balanceWei: bigint; gas: bigint; gasPrice: bigint };
 type Done = { hash: string; tokenId: string; txHash: string; network: Network };
 
 export function PublishAgentDialog({
@@ -186,7 +186,7 @@ export function PublishAgentDialog({
         client.getGasPrice(),
         client.getBalance({ address: account }),
       ]);
-      setReview({ prepared, feeWei: gas * gasPrice, balanceWei });
+      setReview({ prepared, feeWei: gas * gasPrice, balanceWei, gas, gasPrice });
       setStage("form");
     } catch (cause) {
       setError(reasonOf(cause));
@@ -214,6 +214,15 @@ export function PublishAgentDialog({
         abi: REGISTER_ABI,
         functionName: "register",
         args: [review.prepared.tokenURI],
+        /*
+         * The fee figures the Review step already read, handed to the wallet
+         * (2026-09-27). The owner's Binance Wallet stuck on a loading screen
+         * at this exact request on BSC Testnet; one likely reason is the wallet
+         * failing to work these out itself for a test network. 20% headroom on
+         * the gas limit; BSC uses a single legacy gas price.
+         */
+        gas: (review.gas * BigInt(12)) / BigInt(10),
+        gasPrice: review.gasPrice,
       }), "Your wallet didn't answer the signature request. Open the wallet extension and look for a waiting request, or try again.");
       setStage("confirming");
       await waitForTransactionReceipt(wagmiConfig, { chainId, hash: txHash });

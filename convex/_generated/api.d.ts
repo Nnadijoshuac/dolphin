@@ -19,6 +19,7 @@ import type * as agentTools from "../agentTools.js";
 import type * as agentTrials from "../agentTrials.js";
 import type * as agents from "../agents.js";
 import type * as balance from "../balance.js";
+import type * as builtAgentMoves from "../builtAgentMoves.js";
 import type * as builtAgentServer from "../builtAgentServer.js";
 import type * as builtAgents from "../builtAgents.js";
 import type * as catalogQuality from "../catalogQuality.js";
@@ -99,6 +100,7 @@ declare const fullApi: ApiFromModules<{
   agentTrials: typeof agentTrials;
   agents: typeof agents;
   balance: typeof balance;
+  builtAgentMoves: typeof builtAgentMoves;
   builtAgentServer: typeof builtAgentServer;
   builtAgents: typeof builtAgents;
   catalogQuality: typeof catalogQuality;

@@ -429,6 +429,8 @@ async function publicView(ctx: { storage: { getUrl: (id: Doc<"builtAgents">["ico
     mcpUrl: `${apiBase()}/api/v1/built/${row.hash}/mcp`,
     pageUrl: `${siteBase()}/agent/${row.hash}`,
     registerTxUrl: row.registerTxHash ? `${explorer}/tx/${row.registerTxHash}` : null,
+    uriUpdatedAt: row.uriUpdatedAt ?? null,
+    uriTxUrl: row.uriTxHash ? `${explorer}/tx/${row.uriTxHash}` : null,
   };
 }
 

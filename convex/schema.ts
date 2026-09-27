@@ -844,6 +844,9 @@ export default defineSchema({
     agentKey: v.union(v.string(), v.null()),
     registerTxHash: v.union(v.string(), v.null()),
     registeredAt: v.union(v.string(), v.null()),
+    /** The owner's latest setAgentURI, once the chain confirmed it (builtAgentMoves.ts). */
+    uriTxHash: v.optional(v.string()),
+    uriUpdatedAt: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

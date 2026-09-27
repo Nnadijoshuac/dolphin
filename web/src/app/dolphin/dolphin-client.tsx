@@ -93,14 +93,14 @@ const BUILD_STARTERS = [
 
 /*
  * Build mode's backend is convex/agentBuilder.ts, deployed to dev on
- * 2026-09-26 and NOT to prod. It is switched on per environment, so a push of
- * this file cannot expose a Build mode whose functions the live deployment
- * does not have yet. Set NEXT_PUBLIC_DOLPHIN_BUILD=1 where the backend exists.
+ * 2026-09-26 and to PROD on 2026-09-27 (owner: "deploy to prod, fully"). It is
+ * on unless NEXT_PUBLIC_DOLPHIN_BUILD=0: this site cannot set Vercel variables
+ * from here, and the backend is now on every deployment it talks to.
  *
  * Sending is refused in `submit` as well as disabled on the button, so no path
  * (Enter, a starter chip) can send a build turn while it is off.
  */
-const BUILD_BACKEND_CONNECTED: boolean = process.env.NEXT_PUBLIC_DOLPHIN_BUILD === "1";
+const BUILD_BACKEND_CONNECTED: boolean = process.env.NEXT_PUBLIC_DOLPHIN_BUILD !== "0";
 
 /**
  * Chat or Build, chosen on a NEW conversation only, the way Claude Code picks

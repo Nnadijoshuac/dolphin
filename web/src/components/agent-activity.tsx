@@ -362,6 +362,21 @@ function AgentActivityContent({
 
   for (const agent of published ?? []) {
     if (agent.status !== "registered" || !agent.registeredAt) continue;
+    if (agent.uriUpdatedAt) {
+      items.push({
+        key: `repointed:${agent.hash}:${agent.uriUpdatedAt}`,
+        title: `Updated ${agent.name}'s on-chain link`,
+        agentKey: agent.agentKey ?? "",
+        category: agent.category,
+        iconUrl: agent.iconUrl,
+        iconSeed: agent.hash,
+        detail: [`${agent.networkLabel} - #${agent.tokenId}`, formatDate(agent.uriUpdatedAt)].filter(Boolean).join(" - "),
+        amount: null,
+        href: agent.uriTxUrl ?? `/agent/${agent.hash}`,
+        external: Boolean(agent.uriTxUrl),
+        sortAt: Date.parse(agent.uriUpdatedAt) || 0,
+      });
+    }
     items.push({
       key: `published:${agent.hash}`,
       title: `Put ${agent.name} on-chain`,

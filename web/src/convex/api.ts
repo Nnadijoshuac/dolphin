@@ -1086,6 +1086,9 @@ export type BuiltAgentPublic = {
   mcpUrl: string;
   pageUrl: string;
   registerTxUrl: string | null;
+  /** The owner's latest confirmed setAgentURI, if any. */
+  uriUpdatedAt: string | null;
+  uriTxUrl: string | null;
 };
 
 /**
@@ -1117,6 +1120,13 @@ export const builtAgentsApi = anyApi as unknown as {
     publicByHash: Query<{ hash: string }, BuiltAgentPublic | null>;
     forOwner: Query<{ ownerAddress: string }, BuiltAgentPublic[]>;
     forDraft: Query<{ buildConversationKey: string }, BuiltAgentPublic[]>;
+  };
+  builtAgentMoves: {
+    /** The owner repointed their token; the server checks the chain before recording it. */
+    confirmUriUpdate: Action<
+      { sessionToken: string; hash: string; transactionHash: string },
+      { tokenURI: string }
+    >;
   };
   iconProcessing: {
     process: Action<

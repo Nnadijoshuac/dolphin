@@ -107,7 +107,7 @@ export function PublishAgentDialog({
   const [website, setWebsite] = useState("");
   const [xHandle, setXHandle] = useState("");
   const [email, setEmail] = useState("");
-  const [network, setNetwork] = useState<Network>("bsc-testnet");
+  const [network, setNetwork] = useState<Network>("bsc");
   const [review, setReview] = useState<Review | null>(null);
   const [stage, setStage] = useState<"form" | "reviewing" | "switching" | "signing" | "confirming" | "done">("form");
   const [error, setError] = useState<string | null>(null);
@@ -409,7 +409,7 @@ export function PublishAgentDialog({
             <section>
               <h3 className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-muted">Network</h3>
               <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup">
-                {(["bsc-testnet", "bsc"] as const).map((option) => (
+                {(["bsc", "bsc-testnet"] as const).map((option) => (
                   <button
                     aria-checked={network === option}
                     className={`rounded-xl border px-3 py-2.5 text-left text-[0.8rem] ${network === option ? "border-ink bg-paper-muted" : "border-line/80"}`}

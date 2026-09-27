@@ -51,6 +51,9 @@ export const BUILT_AGENT_CATEGORIES = [
 
 const MIN_DESCRIPTION_CHARS = 40;
 
+/** The only base a MAINNET registration may point at. See prepareListing. */
+const OFFICIAL_API_BASE = "https://www.dolphinamp.xyz";
+
 /** Where the registration file, icon and MCP endpoint are served from. */
 export function apiBase(): string {
   return (process.env.PUBLIC_API_BASE_URL ?? process.env.CONVEX_SITE_URL ?? "https://www.dolphinamp.xyz").replace(/\/+$/, "");
@@ -217,6 +220,21 @@ export const prepareListing = mutation({
     if (xHandle && !/^[A-Za-z0-9_]{1,15}$/.test(xHandle)) throw new ConvexError("That is not an X handle.");
     const email = cleanOptional(args.email, 120);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConvexError("That is not an email address.");
+
+    /*
+     * MAINNET ONLY FROM DOLPHIN'S OWN DOMAIN. (2026-09-27) The first mainnet
+     * publish was made from localhost against the DEV deployment, and its
+     * token now points at greedy-aardvark-200.eu-west-1.convex.site - a
+     * permanent on-chain record naming the dev backend. The tokenURI is written
+     * on-chain, so a mainnet listing is refused unless this deployment serves
+     * agents at the official domain (PUBLIC_API_BASE_URL, set on prod only).
+     * Testnet is a rehearsal and stays open anywhere.
+     */
+    if (args.network === "bsc" && !apiBase().startsWith(OFFICIAL_API_BASE)) {
+      throw new ConvexError(
+        "Putting agents on BNB Chain is only available on dolphinamp.xyz. Use Testnet to try it here.",
+      );
+    }
 
     const network = NETWORKS[args.network];
     const snapshot = {

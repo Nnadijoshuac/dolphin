@@ -1089,6 +1089,14 @@ export default defineSchema({
         runs: v.number(),
       }),
     ),
+    /**
+     * Connections the builder CUT on the canvas (2026-09-28). Everything is
+     * plugged in by default; a member listed here is not: `tool:<agentKey>:<tool>`,
+     * `block:<id>`, or `limits` (Risk -> Swap). The runtime honours it: a cut
+     * tool is not offered, a cut trigger is not armed, a Swap cut from its
+     * limits refuses to propose. See lib/agentBlocks.ts activeBlocks.
+     */
+    detached: v.optional(v.array(v.string())),
     /** Swaps proposed today (UTC day), checked against the Risk block in every run. */
     proposals: v.optional(v.object({ day: v.string(), count: v.number() })),
     createdAt: v.number(),

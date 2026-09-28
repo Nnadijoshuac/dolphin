@@ -28,6 +28,8 @@ export type AgentDraft = {
   brain?: { provider: "openai" | "openrouter"; model: string; keyName: string } | null;
   /** Toolbox blocks: market, safety, risk, swap and triggers. */
   blocks?: readonly AgentBlockData[];
+  /** Connections cut on the canvas: `tool:<agentKey>:<tool>`, `block:<id>`, `limits`. */
+  detached?: readonly string[];
   autopilot?: { on: boolean; conversationKey: string } | null;
 };
 

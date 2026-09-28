@@ -729,6 +729,7 @@ export function DolphinClient({
         tools: builder.draft.tools,
         brain: builder.draft.brain ?? null,
         blocks: builder.draft.blocks ?? [],
+        detached: builder.draft.detached ?? [],
         autopilot: builder.draft.autopilot ?? null,
       }
     : EMPTY_AGENT_DRAFT;

@@ -11,6 +11,7 @@ import {
   Handle,
   Position,
   ReactFlow,
+  type Connection,
   type Edge,
   type EdgeProps,
   type Node,
@@ -19,13 +20,15 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
+import { useMutation } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AgentCanvasInspector } from "@/components/agent-canvas-inspector";
 import type { AgentDraft } from "@/components/agent-draft-panel";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { TradingChart } from "@/components/trading-chart";
-import type { AgentBlockData } from "@/convex/api";
+import { agentBuilderApi, type AgentBlockData } from "@/convex/api";
+import { toast } from "@/store/use-toast-store";
 
 /**
  * THE AGENT AS A GRAPH (owner, 2026-09-28: "like n8n").
@@ -68,10 +71,14 @@ type BlockData = {
   /** A toolbox block's own label and icon, over its kind's. */
   label?: string;
   glyph?: GlyphName;
+  /** Its connection's id, for cutting and reconnecting (`detached` on the draft). */
+  member?: string;
+  /** Cut on the canvas: the agent will not use it until it is connected again. */
+  detached?: boolean;
 };
 
 type BlockNode = Node<BlockData, "block">;
-type FlowEdge = Edge<{ active?: boolean; reverse?: boolean; used?: boolean }, "flow">;
+type FlowEdge = Edge<{ active?: boolean; reverse?: boolean; used?: boolean; member?: string; cutAt?: number }, "flow">;
 
 /** What a try-run is doing right now. Null when nothing is running or has run. */
 export type CanvasRun = {
@@ -117,6 +124,7 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
   return (
     <div
       className={`agent-block agent-block--${kind} ${data.empty || kind === "add" ? "agent-block--empty" : ""}`}
+      data-detached={data.detached || undefined}
       data-selected={selected || undefined}
       data-state={state}
       style={{ width: NODE_WIDTH }}
@@ -144,6 +152,7 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
             <span className="text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted">{data.label ?? KIND_LABEL[kind]}</span>
             {state === "done" ? <span className="agent-block__tick" aria-label="Done">✓</span> : null}
             {state === "active" ? <span className="agent-block__live" aria-label="Running" /> : null}
+            {data.detached ? <span className="agent-block__unplugged">Not connected</span> : null}
           </div>
           <p className={`mt-0.5 truncate text-[0.86rem] font-semibold ${data.empty ? "text-faint" : "text-ink"}`}>
             {data.title}
@@ -173,6 +182,7 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
  */
 function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<FlowEdge>) {
   const [path] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, curvature: 0.35 });
+  if (data?.cutAt !== undefined) return <CutEdge at={data.cutAt} path={path} />;
   const active = Boolean(data?.active);
   const reverse = Boolean(data?.reverse);
   const motion = reverse ? { keyPoints: "1;0", keyTimes: "0;1" } : { keyPoints: "0;1", keyTimes: "0;1" };
@@ -199,6 +209,37 @@ function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosi
         </>
       ) : null}
     </>
+  );
+}
+
+/**
+ * A line being cut (owner: "it cuts from where the mouse clicked; one end goes
+ * to its node, the other to the other node"). One path drawn as two dashes
+ * split at the click, animated so the gap grows from that point while each
+ * half retracts into its own block. d1 + gap + d2 stays the path's length.
+ */
+function CutEdge({ path, at }: { path: string; at: number }) {
+  return (
+    <path
+      className="agent-edge agent-edge--cut"
+      d={path}
+      fill="none"
+      ref={(element) => {
+        if (!element || element.dataset.cut) return;
+        element.dataset.cut = "1";
+        const length = element.getTotalLength();
+        const split = at * length;
+        // Web Animations, not SMIL: an <animate> added late is timed from page
+        // load, so it had already "finished" and the line simply vanished.
+        element.animate(
+          [
+            { strokeDasharray: `${Math.max(0, split - 2)} 4 ${Math.max(0, length - split - 2)} ${length}` },
+            { strokeDasharray: `0 ${length} 0 ${length}` },
+          ],
+          { duration: 420, easing: "cubic-bezier(0.4, 0, 0.2, 1)", fill: "forwards" },
+        );
+      }}
+    />
   );
 }
 
@@ -248,6 +289,7 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
 /** The default layout for a draft. Pure, so it is the same on every render. */
 export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: FlowEdge[] } {
   const blocks = draft.blocks ?? [];
+  const cut = new Set(draft.detached ?? []);
   const middle = NODE_WIDTH + COLUMN_GAP;
   const right = middle * 2;
   const nodes: BlockNode[] = [];
@@ -267,7 +309,12 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Flow
     const block = blocks.find((candidate) => candidate.type === type);
     if (!block) continue;
     const look = BLOCK_LOOK[type];
-    pushLeft({ id: `block-${block.id}`, type: "block", data: { kind: look.kind, label: look.label, glyph: look.glyph, ...blockSummary(block) } });
+    const member = `block:${block.id}`;
+    pushLeft({
+      id: `block-${block.id}`,
+      type: "block",
+      data: { kind: look.kind, label: look.label, glyph: look.glyph, member, detached: cut.has(member), ...blockSummary(block) },
+    });
   }
   if (draft.tools.length === 0) {
     pushLeft({
@@ -277,7 +324,12 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Flow
     });
   } else {
     draft.tools.forEach((tool, index) => {
-      pushLeft({ id: `tool-${index}`, type: "block", data: { kind: "tool", title: tool.toolName, detail: `via ${tool.agentName}` } });
+      const member = `tool:${tool.agentKey}:${tool.toolName}`;
+      pushLeft({
+        id: `tool-${index}`,
+        type: "block",
+        data: { kind: "tool", title: tool.toolName, detail: `via ${tool.agentName}`, member, detached: cut.has(member) },
+      });
     });
     if (draft.tools.length < MAX_TOOLS) {
       pushLeft({ id: "add-tool", type: "block", data: { kind: "add", title: "Add a tool", detail: "From the free MCP agents on Dolphin" } });
@@ -318,35 +370,41 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Flow
   const swap = blocks.find((block) => block.type === "swap");
   const risk = blocks.find((block) => block.type === "risk");
   if (swap) {
-    nodes.push({ id: `block-${swap.id}`, type: "block", position: { x: right, y: brainY - 150 }, data: { kind: "hands", label: "Swap", glyph: "wallet", ...blockSummary(swap) } });
+    const member = `block:${swap.id}`;
+    nodes.push({
+      id: `block-${swap.id}`,
+      type: "block",
+      position: { x: right, y: brainY - 150 },
+      data: { kind: "hands", label: "Swap", glyph: "wallet", member, detached: cut.has(member), ...blockSummary(swap) },
+    });
   }
   if (risk) {
     nodes.push({
       id: `block-${risk.id}`,
       type: "block",
       position: { x: right, y: brainY - (swap ? 300 : 150) },
-      data: { kind: "risk", label: "Risk limits", glyph: "filter", ...blockSummary(risk) },
+      data: { kind: "risk", label: "Risk limits", glyph: "filter", member: "limits", detached: cut.has("limits"), ...blockSummary(risk) },
     });
   }
 
-  const edge = (source: string, target: string, targetHandle = "in"): FlowEdge => ({
+  const edge = (source: string, target: string, targetHandle = "in", member?: string): FlowEdge => ({
     id: `${source}->${target}`,
     source,
     sourceHandle: "out",
     target,
     targetHandle,
     type: "flow",
-    data: {},
+    data: member ? { member } : {},
   });
   const edges: FlowEdge[] = [
     ...nodes
-      .filter((node) => ["trigger", "tool", "sense"].includes(node.data.kind) && node.id !== "tool-empty")
-      .map((node) => edge(node.id, "brain")),
+      .filter((node) => ["trigger", "tool", "sense"].includes(node.data.kind) && node.id !== "tool-empty" && !node.data.detached)
+      .map((node) => edge(node.id, "brain", "in", node.data.member)),
     edge("melon", "brain", "strategy"),
     edge("brain", "output"),
   ];
-  if (swap) edges.push(edge("brain", `block-${swap.id}`));
-  if (swap && risk) edges.push(edge(`block-${risk.id}`, `block-${swap.id}`, "limits"));
+  if (swap && !cut.has(`block:${swap.id}`)) edges.push(edge("brain", `block-${swap.id}`, "in", `block:${swap.id}`));
+  if (swap && risk && !cut.has("limits")) edges.push(edge(`block-${risk.id}`, `block-${swap.id}`, "limits", "limits"));
 
   return { nodes, edges };
 }
@@ -637,6 +695,103 @@ export function AgentCanvas({
     [nodes],
   );
 
+  /*
+   * CONNECT AND CUT (owner, 2026-09-28). A line means "plugged in"; the draft
+   * keeps the few that were cut (`detached`) and the runtime honours them.
+   * Dragging from a block's dot to where it belongs plugs it back in; a
+   * double-click on a line snaps it at the click, both halves retracting.
+   */
+  const updateDraft = useMutation(agentBuilderApi.agentBuilder.updateDraft);
+  const detached = useMemo(() => draft.detached ?? [], [draft.detached]);
+  const [cutting, setCutting] = useState<{ edgeId: string; at: number } | null>(null);
+  const [pendingCut, setPendingCut] = useState<string | null>(null);
+  // Once the server has the cut, the graph drops the line itself.
+  if (pendingCut && detached.includes(pendingCut)) setPendingCut(null);
+
+  const saveDetached = useCallback(
+    async (next: string[]) => {
+      if (!editKey) return;
+      try {
+        await updateDraft({ conversationKey: editKey, detached: next });
+      } catch (cause) {
+        const data = (cause as { data?: unknown } | null)?.data;
+        toast.error(typeof data === "string" ? data : "Could not change that connection.");
+        setPendingCut(null);
+      }
+    },
+    [editKey, updateDraft],
+  );
+
+  const memberFor = useCallback(
+    (connection: { source: string | null; target: string | null; targetHandle?: string | null }): string | null => {
+      const source = base.nodes.find((node) => node.id === connection.source);
+      const target = base.nodes.find((node) => node.id === connection.target);
+      if (!source || !target) return null;
+      if (target.id === "brain" && connection.targetHandle !== "strategy" && ["trigger", "tool", "sense"].includes(source.data.kind)) {
+        return source.data.member ?? null;
+      }
+      if (target.data.kind === "hands" && source.id === "brain" && connection.targetHandle !== "limits") return target.data.member ?? null;
+      if (target.data.kind === "hands" && source.data.kind === "risk" && connection.targetHandle === "limits") return "limits";
+      return null;
+    },
+    [base.nodes],
+  );
+
+  const isValidConnection = useCallback(
+    (connection: Connection | FlowEdge) => memberFor(connection) !== null,
+    [memberFor],
+  );
+
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      const member = memberFor(connection);
+      if (!member || !detached.includes(member)) return;
+      void saveDetached(detached.filter((id) => id !== member));
+    },
+    [detached, memberFor, saveDetached],
+  );
+
+  const onEdgeDoubleClick = useCallback(
+    (event: React.MouseEvent, edge: FlowEdge) => {
+      const member = edge.data?.member;
+      if (!editKey || !member || cutting) return;
+      // Where on the curve the click landed, as a fraction of its length.
+      const element = document.querySelector<SVGPathElement>(
+        `.react-flow__edge[data-id="${CSS.escape(edge.id)}"] .react-flow__edge-path`,
+      );
+      let at = 0.5;
+      if (element) {
+        const matrix = element.getScreenCTM();
+        const total = element.getTotalLength();
+        let best = Infinity;
+        for (let i = 0; i <= 80 && matrix; i++) {
+          const point = element.getPointAtLength((total * i) / 80);
+          const screen = new DOMPoint(point.x, point.y).matrixTransform(matrix);
+          const distance = Math.hypot(screen.x - event.clientX, screen.y - event.clientY);
+          if (distance < best) {
+            best = distance;
+            at = i / 80;
+          }
+        }
+      }
+      setCutting({ edgeId: edge.id, at: Math.min(0.92, Math.max(0.08, at)) });
+      window.setTimeout(() => {
+        setCutting(null);
+        setPendingCut(member);
+        void saveDetached([...detached, member]);
+      }, 440);
+    },
+    [cutting, detached, editKey, saveDetached],
+  );
+
+  const edges = useMemo(
+    () =>
+      base.edges
+        .filter((edge) => !(pendingCut && edge.data?.member === pendingCut))
+        .map((edge) => (cutting && edge.id === cutting.edgeId ? { ...edge, data: { ...edge.data, cutAt: cutting.at } } : edge)),
+    [base.edges, cutting, pendingCut],
+  );
+
   const resetLayout = useCallback(() => {
     if (layoutKey) writePositions(layoutKey, {});
     setPositions({ key: layoutKey, value: {} });
@@ -646,8 +801,14 @@ export function AgentCanvas({
   return (
     <div aria-label="Agent canvas" className="agent-canvas relative h-full min-h-0 w-full" role="region">
       <ReactFlow
+        connectionLineStyle={{ stroke: "var(--flow)", strokeWidth: 2, strokeDasharray: "5 5" }}
+        connectionRadius={34}
         edgeTypes={edgeTypes}
-        edges={base.edges}
+        edges={edges}
+        isValidConnection={isValidConnection}
+        onConnect={editKey ? onConnect : undefined}
+        onEdgeDoubleClick={editKey ? onEdgeDoubleClick : undefined}
+        zoomOnDoubleClick={false}
         edgesFocusable={false}
         fitView
         fitViewOptions={{ padding: 0.22, maxZoom: 1 }}
@@ -655,7 +816,7 @@ export function AgentCanvas({
         minZoom={0.35}
         nodeTypes={nodeTypes}
         nodes={nodes}
-        nodesConnectable={false}
+        nodesConnectable={Boolean(editKey)}
         onNodeClick={editKey ? (_, node) => setSelectedId(node.id) : undefined}
         onNodeDragStop={() => {
           if (layoutKey) writePositions(layoutKey, positions.value);

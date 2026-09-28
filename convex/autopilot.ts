@@ -30,7 +30,7 @@ import { bsc } from "viem/chains";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
-import { bscPairFor, TRIGGER_TYPES, type AgentBlock, type MarketConfig } from "./lib/agentBlocks";
+import { activeBlocks, bscPairFor, TRIGGER_TYPES, type AgentBlock, type MarketConfig } from "./lib/agentBlocks";
 import { verifiedTokens } from "./lib/tradeTokens";
 import { bscPublicClient } from "./lib/bscClient";
 import { syncTriggers } from "./lib/triggerSync";
@@ -84,7 +84,8 @@ export const setAutopilot = mutation({
       .unique();
     if (!draft) throw new ConvexError("That draft is empty.");
 
-    const blocks = (draft.blocks ?? []) as AgentBlock[];
+    // Only triggers still plugged in on the canvas are armed.
+    const blocks = activeBlocks((draft.blocks ?? []) as AgentBlock[], draft.detached);
     if (!on) {
       await syncTriggers(ctx, draft._id, blocks, false);
       if (draft.autopilot) await ctx.db.patch(draft._id, { autopilot: { ...draft.autopilot, on: false } });

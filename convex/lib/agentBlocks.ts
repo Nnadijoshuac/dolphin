@@ -140,6 +140,25 @@ export function validateBlocks(input: unknown): AgentBlock[] {
   return out;
 }
 
+/** The canvas member id of a draft tool. Mirrors the web canvas. */
+export function toolMemberId(tool: { agentKey: string; toolName: string }): string {
+  return `tool:${tool.agentKey}:${tool.toolName}`;
+}
+
+export const MAX_DETACHED = 40;
+
+/**
+ * The blocks a run may use: those still plugged in. A cut `limits` link
+ * removes the Risk block, and with it any Swap proposal (runBlockTool refuses
+ * without Risk) - the canvas shows what the runtime does.
+ */
+export function activeBlocks(blocks: readonly AgentBlock[], detached: readonly string[] | undefined): AgentBlock[] {
+  const cut = new Set(detached ?? []);
+  return blocks.filter(
+    (block) => !cut.has(`block:${block.id}`) && !(block.type === "risk" && cut.has("limits")),
+  );
+}
+
 /* ── data sources (keyless, live-checked 2026-09-28) ──────────────────────── */
 
 async function getJson(url: string): Promise<unknown> {

@@ -836,6 +836,8 @@ export type AgentDraftData = {
   tools: AgentDraftTool[];
   brain: AgentBrain | null;
   blocks: AgentBlockData[];
+  /** Canvas connections the builder cut. */
+  detached: string[];
   autopilot: { on: boolean; conversationKey: string } | null;
   updatedAt: number;
 };
@@ -900,6 +902,7 @@ export const agentBuilderApi = anyApi as unknown as {
         brain?: AgentBrain | null;
         sessionToken?: string;
         blocks?: AgentBlockData[];
+        detached?: string[];
       },
       { gaps: string[] }
     >;

@@ -31,7 +31,15 @@ import {
   type DraftSpec,
   type OfferedTool,
 } from "./lib/agentSpec";
-import { blockToolDefinitions, runBlockTool, validateBlocks, type AgentBlock } from "./lib/agentBlocks";
+import {
+  activeBlocks,
+  blockToolDefinitions,
+  MAX_DETACHED,
+  runBlockTool,
+  toolMemberId,
+  validateBlocks,
+  type AgentBlock,
+} from "./lib/agentBlocks";
 import { stripRawPayloads } from "./lib/answerHygiene";
 import { syncTriggers } from "./lib/triggerSync";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
@@ -202,6 +210,7 @@ export const getDraft = query({
               ? { provider: draft.brain.provider, model: draft.brain.model, keyName: draft.brain.keyName }
               : null,
             blocks: (draft.blocks ?? []) as AgentBlock[],
+            detached: draft.detached ?? [],
             autopilot: draft.autopilot
               ? { on: draft.autopilot.on, conversationKey: draft.autopilot.conversationKey }
               : null,
@@ -352,7 +361,9 @@ export const runtimeForDraft = internalQuery({
     const today = new Date().toISOString().slice(0, 10);
     return {
       brain: draft?.brain ?? null,
-      blocks: (draft?.blocks ?? []) as AgentBlock[],
+      // Only what is still plugged in on the canvas.
+      blocks: activeBlocks((draft?.blocks ?? []) as AgentBlock[], draft?.detached),
+      detached: draft?.detached ?? [],
       proposalsToday: draft?.proposals?.day === today ? draft.proposals.count : 0,
     };
   },
@@ -519,6 +530,8 @@ export const updateDraft = mutation({
     sessionToken: v.optional(v.string()),
     /** The whole toolbox block list; validated by lib/agentBlocks.ts. */
     blocks: v.optional(v.any()),
+    /** Canvas connections cut by the builder (see `detached` in schema.ts). */
+    detached: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const conversation = await ctx.db
@@ -606,12 +619,19 @@ export const updateDraft = mutation({
     }
 
     const blocks = args.blocks !== undefined ? validateBlocks(args.blocks) : ((existing?.blocks ?? []) as AgentBlock[]);
+    let detached = existing?.detached ?? [];
+    if (args.detached !== undefined) {
+      if (args.detached.length > MAX_DETACHED) throw new ConvexError("Too many cut connections.");
+      detached = [...new Set(args.detached.filter((id) => typeof id === "string" && id.length <= 200))];
+    }
 
     const now = Date.now();
     if (existing) {
-      await ctx.db.patch(existing._id, { ...next, brain, blocks, updatedAt: now });
-      // An armed agent's triggers follow its blocks at once.
-      if (args.blocks !== undefined && existing.autopilot?.on) await syncTriggers(ctx, existing._id, blocks, true);
+      await ctx.db.patch(existing._id, { ...next, brain, blocks, detached, updatedAt: now });
+      // An armed agent's triggers follow its blocks - and its connections - at once.
+      if ((args.blocks !== undefined || args.detached !== undefined) && existing.autopilot?.on) {
+        await syncTriggers(ctx, existing._id, activeBlocks(blocks, detached), true);
+      }
     } else {
       await ctx.db.insert("agentDrafts", {
         conversationId: conversation._id,
@@ -620,6 +640,7 @@ export const updateDraft = mutation({
         // The first save of a new draft must keep its brain too (it was dropped, found by test 2026-09-28).
         brain,
         blocks,
+        detached,
         createdAt: now,
         updatedAt: now,
       });
@@ -988,6 +1009,9 @@ export async function runTryTurn(
        * the catalog, or a tool its server no longer lists, is named to the
        * model as unreachable rather than silently dropped.
        */
+      // Tools cut on the canvas are not offered.
+      const cutTools = new Set(runtime?.detached ?? []);
+      draft.tools = draft.tools.filter((tool) => !cutTools.has(toolMemberId(tool)));
       const agentKeys = [...new Set(draft.tools.map((tool) => tool.agentKey))];
       const rows = await ctx.runQuery(internal.agentBuilder.toolAgents, { agentKeys });
       const candidates: CandidateAgent[] = rows

@@ -2042,3 +2042,21 @@ select {
 .agent-canvas .react-flow {
   zoom: 1.25;
 }
+
+/* A block cut from the flow, and the line being cut. */
+.agent-block[data-detached] { opacity: 0.62; border-style: dashed; box-shadow: none; }
+.agent-block__unplugged {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--paper-muted);
+}
+.agent-canvas .agent-edge--cut { stroke: var(--danger); stroke-width: 2; }
+.agent-canvas .react-flow__handle { cursor: crosshair; transition: transform 160ms ease, background 160ms ease; }
+.agent-canvas .react-flow__handle:hover { transform: scale(1.5); background: var(--flow); box-shadow: 0 0 0 1px var(--flow); }
+.agent-canvas .react-flow__handle.connectingto,
+.agent-canvas .react-flow__handle.valid { background: var(--flow); transform: scale(1.6); }
+.agent-canvas .react-flow__edge { cursor: pointer; }

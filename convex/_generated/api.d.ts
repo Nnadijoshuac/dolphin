@@ -30,6 +30,7 @@ import type * as crons from "../crons.js";
 import type * as discovery from "../discovery.js";
 import type * as dolphin from "../dolphin.js";
 import type * as engagement from "../engagement.js";
+import type * as envVars from "../envVars.js";
 import type * as facets from "../facets.js";
 import type * as favorites from "../favorites.js";
 import type * as healthAlerts from "../healthAlerts.js";
@@ -112,6 +113,7 @@ declare const fullApi: ApiFromModules<{
   discovery: typeof discovery;
   dolphin: typeof dolphin;
   engagement: typeof engagement;
+  envVars: typeof envVars;
   facets: typeof facets;
   favorites: typeof favorites;
   healthAlerts: typeof healthAlerts;

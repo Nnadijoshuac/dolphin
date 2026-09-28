@@ -698,6 +698,29 @@ export default defineSchema({
    * and a wallet costs nothing to make - the same reason engagement counts are
    * kept out of ranking.
    */
+  /**
+   * A signed-in wallet's environment variables (2026-09-28): the API keys and
+   * secrets its agents run with - a model provider key for the Brain, a news
+   * API key for a tool. Owner: "we are not giving anybody free agents".
+   *
+   * NEVER STORED OR RETURNED IN THE CLEAR. `ciphertext` is AES-256-GCM under
+   * DOLPHIN_ENV_KEY, a deployment secret that is not in this repo; encryption
+   * and decryption happen only in actions (convex/envVars.ts). A client can
+   * learn a variable's name, when it was set and its last four characters -
+   * enough to tell two keys apart, never enough to use one.
+   */
+  userEnvVars: defineTable({
+    /** Checksummed, from the session - never an argument. */
+    walletAddress: v.string(),
+    /** SCREAMING_SNAKE_CASE, unique per wallet. */
+    name: v.string(),
+    ciphertext: v.string(),
+    iv: v.string(),
+    last4: v.string(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index("by_wallet_name", ["walletAddress", "name"]),
+
   agentFavorites: defineTable({
     /** Checksummed, and always from the authenticated session - never an argument. */
     walletAddress: v.string(),

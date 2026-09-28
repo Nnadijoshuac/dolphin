@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 
 import type { AgentDraft } from "@/components/agent-draft-panel";
@@ -8,6 +8,7 @@ import { agentBuilderApi, BRAIN_PROVIDER_OPTIONS, envVarsApi, type AgentBlockDat
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "@/store/use-toast-store";
 import { toUserMessage } from "@/wallet/wallet-errors";
+import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
 
 /**
@@ -99,24 +100,51 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
   const [baseUrl, setBaseUrl] = useState(draft.brain?.baseUrl ?? "");
   const [model, setModel] = useState(draft.brain?.model ?? "");
   const [keyName, setKeyName] = useState(draft.brain?.keyName ?? "");
+  const [pastedKey, setPastedKey] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
   const session = useWalletSession();
+  const wallet = useWallet();
   // The builder's own keys, by name only (convex/envVars.ts never returns a value).
   const keys = useQuery(
     envVarsApi.envVars.list,
     session.sessionToken ? { sessionToken: session.sessionToken } : "skip",
   );
+  const setVariable = useAction(envVarsApi.envVars.set);
   const { save, saving } = useSaveDraft(conversationKey);
 
+  const option = BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === provider)!;
   const textChanged = name !== (draft.name ?? "") || description !== (draft.description ?? "");
   const brainChanged =
     provider !== (draft.brain?.provider ?? "openai") ||
     model.trim() !== (draft.brain?.model ?? "") ||
     keyName !== (draft.brain?.keyName ?? "") ||
     baseUrl.trim() !== (draft.brain?.baseUrl ?? "");
-  const brainComplete =
-    model.trim().length >= 2 && keyName.length > 0 && (provider !== "custom" || baseUrl.trim().startsWith("https://"));
-  const option = BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === provider)!;
-  const example = option.example;
+  // What still stands between this brain and being saved, in words - never a silently dead button.
+  const brainMissing = !session.sessionToken
+    ? "Sign in with your wallet first - the key must belong to you."
+    : provider === "custom" && !baseUrl.trim().startsWith("https://")
+      ? "Enter the custom endpoint's https:// address."
+      : model.trim().length < 2
+        ? `Enter a model id, e.g. ${option.example}.`
+        : !keyName
+          ? `Choose your ${option.label} key, or paste one below.`
+          : null;
+
+  /** Saves a pasted key under the provider's usual name and selects it. */
+  const saveKey = async () => {
+    if (!session.sessionToken || !pastedKey.trim()) return;
+    setSavingKey(true);
+    try {
+      const saved = await setVariable({ sessionToken: session.sessionToken, name: option.keyName, value: pastedKey });
+      setKeyName(saved.name);
+      setPastedKey("");
+      toast.success(`${saved.name} saved, encrypted. It will not be shown again.`);
+    } catch (cause) {
+      toast.error(errorText(cause, "Could not save that key."));
+    } finally {
+      setSavingKey(false);
+    }
+  };
 
   return (
     <Shell onClose={onClose} title="Brain">
@@ -169,51 +197,93 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
           aria-label="Model"
           className={`${fieldClass} mt-2 font-mono`}
           onChange={(e) => setModel(e.target.value)}
-          placeholder={example}
+          placeholder={option.example}
           spellCheck={false}
           value={model}
         />
-        {!session.sessionToken ? (
-          <p className="mt-2 text-[0.72rem] leading-relaxed text-muted">
-            Sign in from the Keys tab to choose which of your keys it runs on.
-          </p>
-        ) : keys && keys.length === 0 ? (
-          <p className="mt-2 text-[0.72rem] leading-relaxed text-muted">
-            You have no keys yet. Add your {option.label} key in the Keys tab (e.g. {option.keyName}).
-          </p>
+
+        {session.status === "unavailable" ? null : !session.sessionToken ? (
+          <div className="mt-2 rounded-lg bg-paper-muted/70 px-3 py-2.5">
+            <p className="text-[0.72rem] leading-relaxed text-muted">
+              The brain runs on a key that belongs to your wallet. {session.status === "wallet-disconnected" ? "Connect it" : "Sign in"} to choose one.
+            </p>
+            <button
+              className="mt-2 rounded-full bg-ink px-3 py-1 !text-[12px] font-semibold disabled:opacity-40"
+              disabled={session.isSigningIn || wallet.isConnecting}
+              onClick={() => void (session.status === "wallet-disconnected" ? wallet.connect() : session.signIn())}
+              type="button"
+            >
+              <span className="text-canvas">
+                {session.status === "wallet-disconnected" ? "Connect wallet" : session.isSigningIn ? "Check your wallet…" : "Sign in"}
+              </span>
+            </button>
+          </div>
         ) : (
-          <select
-            aria-label="Key"
-            className={`${fieldClass} mt-2 font-mono`}
-            onChange={(e) => setKeyName(e.target.value)}
-            value={keyName}
-          >
-            <option value="">Choose a key…</option>
-            {(keys ?? []).map((key) => (
-              <option key={key.name} value={key.name}>
-                {key.name}
-                {key.last4 ? ` (••••${key.last4})` : ""}
-              </option>
-            ))}
-          </select>
+          <>
+            {keys && keys.length > 0 ? (
+              <select
+                aria-label="Key"
+                className={`${fieldClass} mt-2 font-mono`}
+                onChange={(e) => setKeyName(e.target.value)}
+                value={keyName}
+              >
+                <option value="">Choose a key…</option>
+                {keys.map((key) => (
+                  <option key={key.name} value={key.name}>
+                    {key.name}
+                    {key.last4 ? ` (••••${key.last4})` : ""}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {keys && !keys.some((key) => key.name === option.keyName) ? (
+              <div className="mt-2 flex gap-1.5">
+                <input
+                  aria-label={`Paste your ${option.label} key`}
+                  autoComplete="off"
+                  className={`${fieldClass} font-mono`}
+                  onChange={(e) => setPastedKey(e.target.value)}
+                  placeholder={`Paste your ${option.label} key`}
+                  spellCheck={false}
+                  type="password"
+                  value={pastedKey}
+                />
+                <button
+                  className="shrink-0 rounded-lg border border-line px-2.5 !text-[12px] font-semibold text-ink hover:bg-paper-muted disabled:opacity-40"
+                  disabled={savingKey || pastedKey.trim().length === 0}
+                  onClick={() => void saveKey()}
+                  type="button"
+                >
+                  {savingKey ? "Saving…" : "Add"}
+                </button>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
 
       <SaveButton
-        disabled={!textChanged && !(brainChanged && brainComplete)}
-        onClick={() =>
+        disabled={!textChanged && !brainChanged}
+        onClick={() => {
+          if (brainChanged && brainMissing) {
+            toast.notice(brainMissing);
+            if (!textChanged) return;
+          }
           void save({
             ...(textChanged ? { name, description } : {}),
-            ...(brainChanged && brainComplete && session.sessionToken
+            ...(brainChanged && !brainMissing && session.sessionToken
               ? {
                   brain: { provider, model: model.trim(), keyName, baseUrl: provider === "custom" ? baseUrl.trim() : null },
                   sessionToken: session.sessionToken,
                 }
               : {}),
-          })
-        }
+          }).then((ok) => {
+            if (ok) toast.success(brainChanged && !brainMissing ? "Brain saved." : "Saved.");
+          });
+        }}
         saving={saving}
       />
+      {brainChanged && brainMissing ? <p className="mt-1.5 text-[0.7rem] leading-snug text-muted">{brainMissing}</p> : null}
     </Shell>
   );
 }

@@ -699,6 +699,25 @@ export default defineSchema({
    * kept out of ranking.
    */
   /**
+   * Armed autopilot triggers (2026-09-28). One row per trigger block of a
+   * draft whose autopilot is on; turning it off deletes them. The scheduler
+   * reads only rows that are due (`by_next_run`), so an idle deployment
+   * costs one empty index range a minute.
+   */
+  agentTriggers: defineTable({
+    draftId: v.id("agentDrafts"),
+    blockId: v.string(),
+    type: v.union(v.literal("schedule"), v.literal("price"), v.literal("walletWatch")),
+    config: v.any(),
+    /** Unix ms. */
+    nextRunAt: v.number(),
+    /** Trigger memory: the last price side, the last block read. */
+    state: v.any(),
+  })
+    .index("by_next_run", ["nextRunAt"])
+    .index("by_draft", ["draftId"]),
+
+  /**
    * A signed-in wallet's environment variables (2026-09-28): the API keys and
    * secrets its agents run with - a model provider key for the Brain, a news
    * API key for a tool. Owner: "we are not giving anybody free agents".
@@ -1049,6 +1068,29 @@ export default defineSchema({
         walletAddress: v.string(),
       }),
     ),
+    /**
+     * Toolbox blocks (Market, Safety, Swap, Risk and the triggers), validated
+     * by convex/lib/agentBlocks.ts. `config` is typed there, per block type.
+     */
+    blocks: v.optional(
+      v.array(v.object({ id: v.string(), type: v.string(), config: v.any() })),
+    ),
+    /**
+     * Autopilot: the triggers are armed and each firing runs the agent on its
+     * builder's key, into `conversationKey` (a try conversation the builder
+     * can watch). `runsDay`/`runs` enforce the daily run cap.
+     */
+    autopilot: v.optional(
+      v.object({
+        on: v.boolean(),
+        conversationKey: v.string(),
+        walletAddress: v.string(),
+        runsDay: v.string(),
+        runs: v.number(),
+      }),
+    ),
+    /** Swaps proposed today (UTC day), checked against the Risk block in every run. */
+    proposals: v.optional(v.object({ day: v.string(), count: v.number() })),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

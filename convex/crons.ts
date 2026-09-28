@@ -62,6 +62,12 @@ crons.interval(
   {},
 );
 
+/*
+ * AUTOPILOT (2026-09-28): checks only the triggers that are due. Idle, that is
+ * one empty index range a minute; see convex/autopilot.ts.
+ */
+crons.interval("autopilot (armed agent triggers)", { minutes: 1 }, internal.autopilot.tick, {});
+
 crons.interval(
   "verification (fan out one probe per due agent)",
   { minutes: 10 },

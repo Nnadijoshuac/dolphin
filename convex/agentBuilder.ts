@@ -2,7 +2,15 @@ import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type ActionCtx,
+} from "./_generated/server";
 import { executeToolCalls, humanizeError } from "./dolphin";
 import {
   BUILDER_REPLY_SCHEMA,
@@ -23,7 +31,9 @@ import {
   type DraftSpec,
   type OfferedTool,
 } from "./lib/agentSpec";
+import { blockToolDefinitions, runBlockTool, validateBlocks, type AgentBlock } from "./lib/agentBlocks";
 import { stripRawPayloads } from "./lib/answerHygiene";
+import { syncTriggers } from "./lib/triggerSync";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { chatCompletion, type ChatMessage } from "./lib/openrouter";
@@ -96,7 +106,10 @@ export const TRY_CONSULT_PROMPT = `You are the evidence-gathering step of an AI 
 - Do not call a tool for a greeting, or for something you can answer by explaining.
 - Never write prose in this step. Only call tools or return empty.`;
 
-export function tryAnswerPrompt(draft: DraftSpec): string {
+export function tryAnswerPrompt(
+  draft: DraftSpec,
+  abilities: { canPropose?: boolean; triggered?: boolean } = {},
+): string {
   return `You are "${draft.name}", an AI agent that a person built on Dolphin, a marketplace of AI agents on BNB Chain. ${draft.description ?? ""}
 
 YOUR INSTRUCTIONS, FROM THE PERSON WHO BUILT YOU:
@@ -104,8 +117,16 @@ ${draft.instructions}
 
 RULES THAT OVERRIDE THE INSTRUCTIONS ABOVE:
 - Only quote a number that a tool returned in this conversation. With no live reading, say you do not have one. Never guess a price, APY, balance or health factor.
-- You can only read. You cannot sign, send, trade or move funds, and you cannot set anything up. If a tool returned an unsigned transaction, say the person would sign it from their own wallet. Never say you did it.
-- You answer when asked. You do not run on a schedule, watch anything, or notify anyone.
+${
+    abilities.canPropose
+      ? "- You cannot sign, send or move funds. You MAY propose a trade with block_propose_swap; the owner reviews it and signs it from their Dolphin Wallet. Say you proposed it - never that you traded. Propose only when your instructions and the data call for it."
+      : "- You can only read. You cannot sign, send, trade or move funds, and you cannot set anything up. If a tool returned an unsigned transaction, say the person would sign it from their own wallet. Never say you did it."
+  }
+${
+    abilities.triggered
+      ? "- This run was started by one of your triggers, and the message says what happened. Check the data, decide whether it calls for action under your instructions, and report what you found and did in two or three sentences."
+      : "- You answer when asked. You do not run on a schedule, watch anything, or notify anyone."
+  }
 - Say which agent a fact came from, in a sentence ("according to X").
 - No JSON, no code blocks, no field names, no error codes. Say what a result means.
 - If a tool could not be reached, say so in one sentence and carry on with what you know.
@@ -173,6 +194,10 @@ export const getDraft = query({
             // Which model and which of the builder's keys - never the key.
             brain: draft.brain
               ? { provider: draft.brain.provider, model: draft.brain.model, keyName: draft.brain.keyName }
+              : null,
+            blocks: (draft.blocks ?? []) as AgentBlock[],
+            autopilot: draft.autopilot
+              ? { on: draft.autopilot.on, conversationKey: draft.autopilot.conversationKey }
               : null,
             updatedAt: draft.updatedAt,
           }
@@ -313,10 +338,30 @@ export const toolCatalog = internalQuery({
   },
 });
 
-/** A draft's brain, with the wallet whose key it runs on. Internal: the runtime's only. */
-export const brainForDraft = internalQuery({
+/** What a run needs beyond the spec: its brain (with the key's wallet), blocks and today's proposals. Internal. */
+export const runtimeForDraft = internalQuery({
   args: { draftId: v.id("agentDrafts") },
-  handler: async (ctx, { draftId }) => (await ctx.db.get(draftId))?.brain ?? null,
+  handler: async (ctx, { draftId }) => {
+    const draft = await ctx.db.get(draftId);
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      brain: draft?.brain ?? null,
+      blocks: (draft?.blocks ?? []) as AgentBlock[],
+      proposalsToday: draft?.proposals?.day === today ? draft.proposals.count : 0,
+    };
+  },
+});
+
+/** Counts one proposed swap against today's Risk limit. */
+export const recordProposal = internalMutation({
+  args: { draftId: v.id("agentDrafts") },
+  handler: async (ctx, { draftId }) => {
+    const draft = await ctx.db.get(draftId);
+    if (!draft) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const count = draft.proposals?.day === today ? draft.proposals.count + 1 : 1;
+    await ctx.db.patch(draftId, { proposals: { day: today, count } });
+  },
 });
 
 /** The catalog rows behind a draft's tools, for the try-run's menu. */
@@ -466,6 +511,8 @@ export const updateDraft = mutation({
       ),
     ),
     sessionToken: v.optional(v.string()),
+    /** The whole toolbox block list; validated by lib/agentBlocks.ts. */
+    blocks: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     const conversation = await ctx.db
@@ -552,14 +599,21 @@ export const updateDraft = mutation({
       brain = { provider: args.brain.provider, model, keyName: args.brain.keyName, walletAddress };
     }
 
+    const blocks = args.blocks !== undefined ? validateBlocks(args.blocks) : ((existing?.blocks ?? []) as AgentBlock[]);
+
     const now = Date.now();
     if (existing) {
-      await ctx.db.patch(existing._id, { ...next, brain, updatedAt: now });
+      await ctx.db.patch(existing._id, { ...next, brain, blocks, updatedAt: now });
+      // An armed agent's triggers follow its blocks at once.
+      if (args.blocks !== undefined && existing.autopilot?.on) await syncTriggers(ctx, existing._id, blocks, true);
     } else {
       await ctx.db.insert("agentDrafts", {
         conversationId: conversation._id,
         ownerAddress: conversation.ownerAddress ?? null,
         ...next,
+        // The first save of a new draft must keep its brain too (it was dropped, found by test 2026-09-28).
+        brain,
+        blocks,
         createdAt: now,
         updatedAt: now,
       });
@@ -854,14 +908,17 @@ export const ask = action({
  * tools. The calls are recorded in dolphinToolCalls exactly as the chat's are,
  * so the transcript shows what ran.
  */
-export const tryAsk = action({
-  args: {
-    conversationKey: v.string(),
-    text: v.string(),
-    userAddress: v.optional(v.string()),
-  },
-  handler: async (ctx, { conversationKey, text, userAddress }): Promise<{ messageId: Id<"dolphinMessages"> }> => {
-    const turns = await ctx.runQuery(internal.agentBuilder.userTurnCount, { conversationKey });
+export async function runTryTurn(
+  ctx: ActionCtx,
+  {
+    conversationKey,
+    text,
+    userAddress,
+    triggered = false,
+  }: { conversationKey: string; text: string; userAddress?: string; triggered?: boolean },
+): Promise<{ messageId: Id<"dolphinMessages"> }> {
+    // Autopilot runs have their own daily cap (convex/autopilot.ts).
+    const turns = triggered ? 0 : await ctx.runQuery(internal.agentBuilder.userTurnCount, { conversationKey });
     if (turns >= MAX_USER_TURNS_PER_CONVERSATION) {
       throw new Error(
         `This try-run has reached its limit of ${MAX_USER_TURNS_PER_CONVERSATION} messages. Start a new one from the draft.`,
@@ -898,7 +955,12 @@ export const tryAsk = action({
        * Dolphin's model. The key is decrypted here, used for this turn's calls,
        * and never written anywhere or returned.
        */
-      const brain = draftId ? await ctx.runQuery(internal.agentBuilder.brainForDraft, { draftId }) : null;
+      const runtime = draftId ? await ctx.runQuery(internal.agentBuilder.runtimeForDraft, { draftId }) : null;
+      const brain = runtime?.brain ?? null;
+      const blocks = runtime?.blocks ?? [];
+      let proposalsToday = runtime?.proposalsToday ?? 0;
+      const blockTools = blockToolDefinitions(blocks);
+      let ticket: unknown = undefined;
       const apiKey = brain
         ? await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: brain.keyName })
         : null;
@@ -957,27 +1019,64 @@ export const tryAsk = action({
         { role: "user", content: text },
       ];
 
+      const allTools = [...menu.tools, ...blockTools];
       let callsRemaining = MAX_TOOL_CALLS_PER_TURN;
-      if (menu.tools.length > 0) {
+      if (allTools.length > 0) {
         await ctx.runMutation(internal.dolphin.setMessageStatus, {
           messageId: assistantId,
           status: "consulting",
         });
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
-            const turn = await chatCompletion({ messages, tools: menu.tools, toolChoice: "auto", endpoint });
+            const turn = await chatCompletion({ messages, tools: allTools, toolChoice: "auto", endpoint });
             /* Consult prose is never carried forward. See the same note in dolphin.ask. */
             if (turn.toolCalls.length === 0) break;
-            messages.push({ role: "assistant", content: null, tool_calls: turn.toolCalls });
             const batch = turn.toolCalls.slice(0, callsRemaining);
             callsRemaining -= batch.length;
-            await executeToolCalls(ctx, {
-              conversationId,
-              messageId: assistantId,
-              toolCalls: batch,
-              menu,
-              messages,
-            });
+            messages.push({ role: "assistant", content: null, tool_calls: batch });
+
+            /*
+             * Built-in block tools run here, recorded exactly like an MCP call
+             * (before, then completed) so the transcript and the live canvas
+             * show them. The block's id is the "agent", so the canvas can light
+             * its block.
+             */
+            for (const call of batch.filter((c) => c.function.name.startsWith("block_"))) {
+              const block = blocks.find((candidate) => call.function.name === blockToolNameFor(candidate.type));
+              const started = Date.now();
+              const toolCallId = await ctx.runMutation(internal.dolphin.recordToolCall, {
+                conversationId,
+                messageId: assistantId,
+                agentKey: `block:${block?.id ?? "unknown"}`,
+                agentName: block ? BLOCK_LABELS[block.type] : "Dolphin",
+                toolName: call.function.name,
+                argumentsJson: call.function.arguments || "{}",
+              });
+              const result = await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
+              if (result.ticket && draftId) {
+                ticket = result.ticket;
+                proposalsToday += 1;
+                await ctx.runMutation(internal.agentBuilder.recordProposal, { draftId });
+              }
+              await ctx.runMutation(internal.dolphin.completeToolCall, {
+                toolCallId,
+                resultText: result.text,
+                isError: result.isError,
+                transportError: null,
+                latencyMs: Date.now() - started,
+              });
+              messages.push({ role: "tool", tool_call_id: call.id, content: result.text });
+            }
+            const mcpCalls = batch.filter((c) => !c.function.name.startsWith("block_"));
+            if (mcpCalls.length > 0) {
+              await executeToolCalls(ctx, {
+                conversationId,
+                messageId: assistantId,
+                toolCalls: mcpCalls,
+                menu,
+                messages,
+              });
+            }
           }
         } catch (consultError) {
           console.warn("[agentBuilder] try-run consult step failed; answering without it:", consultError);
@@ -993,7 +1092,7 @@ export const tryAsk = action({
         status: "thinking",
       });
 
-      let system = `${tryAnswerPrompt(draft)}${addressNote}`;
+      let system = `${tryAnswerPrompt(draft, { canPropose: blocks.some((block) => block.type === "swap"), triggered })}${addressNote}`;
       const unreachable = [
         ...menu.unreachable.map((u) => `- ${u.agentName} did not answer: ${u.reason}`),
         ...rows
@@ -1035,6 +1134,8 @@ export const tryAsk = action({
         status: "complete",
         content,
         model: final.model,
+        // A proposed swap rides on the answer as a ticket the owner signs.
+        ...(ticket ? { ticket } : {}),
       });
     } catch (cause) {
       const reason = humanizeError(cause);
@@ -1047,5 +1148,39 @@ export const tryAsk = action({
     }
 
     return { messageId: assistantId };
+}
+
+const BLOCK_LABELS: Record<AgentBlock["type"], string> = {
+  market: "Market",
+  safety: "Safety check",
+  swap: "Swap",
+  risk: "Risk",
+  schedule: "Schedule",
+  price: "Price trigger",
+  walletWatch: "Wallet watch",
+};
+
+function blockToolNameFor(type: AgentBlock["type"]): string | null {
+  return type === "market"
+    ? "block_market_snapshot"
+    : type === "safety"
+      ? "block_token_safety"
+      : type === "swap"
+        ? "block_propose_swap"
+        : null;
+}
+
+export const tryAsk = action({
+  args: {
+    conversationKey: v.string(),
+    text: v.string(),
+    userAddress: v.optional(v.string()),
   },
+  handler: (ctx, args): Promise<{ messageId: Id<"dolphinMessages"> }> => runTryTurn(ctx, args),
+});
+
+/** A run started by an armed trigger (convex/autopilot.ts). Internal: no client can start one. */
+export const runTriggeredTurn = internalAction({
+  args: { conversationKey: v.string(), text: v.string() },
+  handler: (ctx, args): Promise<{ messageId: Id<"dolphinMessages"> }> => runTryTurn(ctx, { ...args, triggered: true }),
 });

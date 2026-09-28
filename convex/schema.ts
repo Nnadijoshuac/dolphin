@@ -1062,10 +1062,13 @@ export default defineSchema({
      */
     brain: v.optional(
       v.object({
-        provider: v.union(v.literal("openai"), v.literal("openrouter")),
+        /** A key of BRAIN_PROVIDERS in convex/lib/openrouter.ts; validated there. */
+        provider: v.string(),
         model: v.string(),
         keyName: v.string(),
         walletAddress: v.string(),
+        /** For `custom` only: an OpenAI-compatible base URL. */
+        baseUrl: v.optional(v.union(v.string(), v.null())),
       }),
     ),
     /**

@@ -1758,7 +1758,7 @@ export function humanizeError(cause: unknown): { message: string; kind: DolphinE
    * as "something unexpected, maybe upstream of Dolphin" would send them
    * looking in the wrong place.
    */
-  if (/^your (openai|openrouter) key /i.test(raw)) {
+  if (/^your .{2,40} key (was refused|hit its rate limit)/i.test(raw) || /^[A-Za-z .]{2,40} (answered HTTP \d{3}|refused the request):/.test(raw)) {
     return { message: raw, kind: "input" };
   }
 

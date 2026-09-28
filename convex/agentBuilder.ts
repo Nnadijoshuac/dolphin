@@ -44,7 +44,8 @@ import { stripRawPayloads } from "./lib/answerHygiene";
 import { syncTriggers } from "./lib/triggerSync";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
-import { chatCompletion, type ChatMessage } from "./lib/openrouter";
+import { chatCompletion, customChatUrl, isBrainProvider, type ChatMessage } from "./lib/openrouter";
+import { assertSafeUrl } from "./lib/safeFetch";
 import { isMutating } from "./lib/toolCapability";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 
@@ -207,7 +208,12 @@ export const getDraft = query({
             tools: draft.tools,
             // Which model and which of the builder's keys - never the key.
             brain: draft.brain
-              ? { provider: draft.brain.provider, model: draft.brain.model, keyName: draft.brain.keyName }
+              ? {
+                  provider: draft.brain.provider,
+                  model: draft.brain.model,
+                  keyName: draft.brain.keyName,
+                  baseUrl: draft.brain.baseUrl ?? null,
+                }
               : null,
             blocks: (draft.blocks ?? []) as AgentBlock[],
             detached: draft.detached ?? [],
@@ -521,9 +527,10 @@ export const updateDraft = mutation({
       v.union(
         v.null(),
         v.object({
-          provider: v.union(v.literal("openai"), v.literal("openrouter")),
+          provider: v.string(),
           model: v.string(),
           keyName: v.string(),
+          baseUrl: v.optional(v.union(v.string(), v.null())),
         }),
       ),
     ),
@@ -615,7 +622,18 @@ export const updateDraft = mutation({
         .withIndex("by_wallet_name", (q) => q.eq("walletAddress", walletAddress).eq("name", args.brain!.keyName))
         .unique();
       if (!key) throw new ConvexError(`You have no key called ${args.brain.keyName}. Add it in the Keys tab first.`);
-      brain = { provider: args.brain.provider, model, keyName: args.brain.keyName, walletAddress };
+      if (!isBrainProvider(args.brain.provider)) throw new ConvexError("Choose a provider from the list.");
+      let baseUrl: string | null = null;
+      if (args.brain.provider === "custom") {
+        try {
+          const url = assertSafeUrl(customChatUrl(args.brain.baseUrl ?? ""));
+          if (url.protocol !== "https:") throw new Error("https only");
+          baseUrl = (args.brain.baseUrl ?? "").trim();
+        } catch {
+          throw new ConvexError("The custom endpoint must be a public https:// URL, e.g. https://api.example.com/v1.");
+        }
+      }
+      brain = { provider: args.brain.provider, model, keyName: args.brain.keyName, walletAddress, baseUrl };
     }
 
     const blocks = args.blocks !== undefined ? validateBlocks(args.blocks) : ((existing?.blocks ?? []) as AgentBlock[]);
@@ -1002,7 +1020,16 @@ export async function runTryTurn(
         });
         return { messageId: assistantId };
       }
-      const endpoint = { provider: brain.provider, apiKey, model: brain.model };
+      if (!isBrainProvider(brain.provider)) {
+        await ctx.runMutation(internal.dolphin.setMessageStatus, {
+          messageId: assistantId,
+          status: "error",
+          errorReason: "This agent's brain names a provider Dolphin does not know. Choose one on the Brain block.",
+          errorKind: "input",
+        });
+        return { messageId: assistantId };
+      }
+      const endpoint = { provider: brain.provider, apiKey, model: brain.model, baseUrl: brain.baseUrl ?? null };
 
       /*
        * The menu is the draft's tools and nothing else. An agent that has left
@@ -1063,7 +1090,8 @@ export async function runTryTurn(
             if (turn.toolCalls.length === 0) break;
             const batch = turn.toolCalls.slice(0, callsRemaining);
             callsRemaining -= batch.length;
-            messages.push({ role: "assistant", content: null, tool_calls: batch });
+            // The provider's own blocks ride along (Anthropic thinking between tool calls).
+            messages.push({ role: "assistant", content: null, tool_calls: batch, providerContent: turn.providerContent });
 
             /*
              * Built-in block tools run here, recorded exactly like an MCP call
@@ -1141,7 +1169,12 @@ export async function runTryTurn(
       }
       messages[0] = { role: "system", content: system };
 
-      const final = await chatCompletion({ messages, endpoint });
+      // Tools stay declared (but unusable) so a history of tool calls stays valid for every provider.
+      const final = await chatCompletion({
+        messages,
+        endpoint,
+        ...(allTools.length > 0 ? { tools: allTools, toolChoice: "none" as const } : {}),
+      });
       const content = stripRawPayloads(final.content).trim();
 
       if (content.length === 0 || looksLikeLeakedReasoning(content)) {

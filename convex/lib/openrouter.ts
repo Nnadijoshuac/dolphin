@@ -1,3 +1,7 @@
+import Anthropic from "@anthropic-ai/sdk";
+
+import { safeFetch } from "./safeFetch";
+
 /**
  * OpenRouter - the model behind the Dolphin agent.
  *
@@ -50,19 +54,43 @@
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /**
- * Where a builder's own key is sent (2026-09-28). Both speak the OpenAI chat
- * completions dialect, tools included, so one request builder serves both.
- * Anthropic's native API does not; Claude models are reachable through
- * OpenRouter with an OpenRouter key.
+ * WHERE A BUILDER'S OWN KEY IS SENT (2026-09-28, owner: "API keys can come from
+ * anywhere"). Every URL here was called on 2026-09-28 and answered as that
+ * provider's chat endpoint (a key error, or Fireworks' "model not found").
+ *
+ * All but Anthropic speak the OpenAI chat-completions dialect with tools, so
+ * one request builder serves them. Anthropic goes through its official SDK
+ * (anthropicCompletion below). `custom` is any other OpenAI-compatible base
+ * URL the builder enters - a stranger's URL, so it is sent through safeFetch
+ * (AGENTS.md §9), never bare fetch.
  */
-export const BRAIN_PROVIDER_URLS = {
-  openai: "https://api.openai.com/v1/chat/completions",
-  openrouter: OPENROUTER_URL,
+export const BRAIN_PROVIDERS = {
+  openai: { label: "OpenAI", url: "https://api.openai.com/v1/chat/completions" },
+  anthropic: { label: "Anthropic", url: null },
+  openrouter: { label: "OpenRouter", url: OPENROUTER_URL },
+  google: { label: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions" },
+  groq: { label: "Groq", url: "https://api.groq.com/openai/v1/chat/completions" },
+  deepseek: { label: "DeepSeek", url: "https://api.deepseek.com/chat/completions" },
+  mistral: { label: "Mistral", url: "https://api.mistral.ai/v1/chat/completions" },
+  xai: { label: "xAI", url: "https://api.x.ai/v1/chat/completions" },
+  together: { label: "Together", url: "https://api.together.xyz/v1/chat/completions" },
+  fireworks: { label: "Fireworks", url: "https://api.fireworks.ai/inference/v1/chat/completions" },
+  custom: { label: "custom endpoint", url: null },
 } as const;
-export type BrainProvider = keyof typeof BRAIN_PROVIDER_URLS;
+export type BrainProvider = keyof typeof BRAIN_PROVIDERS;
 
-/** A person's own model endpoint, in place of Dolphin's. */
-export type BrainEndpoint = { provider: BrainProvider; apiKey: string; model: string };
+export function isBrainProvider(value: string): value is BrainProvider {
+  return Object.prototype.hasOwnProperty.call(BRAIN_PROVIDERS, value);
+}
+
+/** A person's own model endpoint, in place of Dolphin's. `baseUrl` is for `custom` only. */
+export type BrainEndpoint = { provider: BrainProvider; apiKey: string; model: string; baseUrl?: string | null };
+
+/** The chat-completions URL for a custom base: taken as-is if it already ends in the path. */
+export function customChatUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  return trimmed.endsWith("/chat/completions") ? trimmed : `${trimmed}/chat/completions`;
+}
 
 /** Verified present in OpenRouter's live model list on 2026-09-08. */
 export const DOLPHIN_PRIMARY_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
@@ -93,7 +121,16 @@ const REQUEST_TIMEOUT_MS = 90_000;
 export type ChatMessage =
   | { role: "system"; content: string }
   | { role: "user"; content: string }
-  | { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
+  | {
+      role: "assistant";
+      content: string | null;
+      tool_calls?: ToolCall[];
+      /**
+       * The provider's own content for this turn, when it has one that must be
+       * sent back as-is (Anthropic: thinking blocks between tool calls).
+       */
+      providerContent?: unknown;
+    }
   | { role: "tool"; tool_call_id: string; content: string };
 
 export type ToolDefinition = {
@@ -118,6 +155,8 @@ export type ChatResult = {
   /** Which model actually answered - the fallback chain makes this vary. */
   model: string;
   finishReason: string | null;
+  /** The provider's own content blocks, to echo back on the next round (Anthropic). */
+  providerContent?: unknown;
 };
 
 /**
@@ -221,6 +260,7 @@ async function chatCompletionOnce(options: {
   endpoint?: BrainEndpoint;
 }): Promise<ChatResult> {
   const endpoint = options.endpoint;
+  if (endpoint?.provider === "anthropic") return anthropicCompletion(options, endpoint);
   const apiKey = endpoint ? endpoint.apiKey : readApiKey();
   const model = endpoint ? endpoint.model : (options.model ?? DOLPHIN_PRIMARY_MODEL);
   const hasTools = Boolean(options.tools && options.tools.length > 0);
@@ -292,37 +332,71 @@ async function chatCompletionOnce(options: {
     };
   }
 
-  let response: Response;
+  const label = endpoint ? BRAIN_PROVIDERS[endpoint.provider].label : "OpenRouter";
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${apiKey}`,
+    "content-type": "application/json",
+    // OpenRouter attributes usage to an app by these. Neither carries
+    // anything about the user.
+    "http-referer": "https://dolphinamp.vercel.app",
+    "x-title": "Dolphin",
+  };
+  let response: { status: number; ok: boolean };
+  let text: string;
   try {
-    response = await fetch(endpoint ? BRAIN_PROVIDER_URLS[endpoint.provider] : OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-        // OpenRouter attributes usage to an app by these. Neither carries
-        // anything about the user.
-        "http-referer": "https://dolphinamp.vercel.app",
-        "x-title": "Dolphin",
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    if (endpoint?.provider === "custom") {
+      // A URL the builder typed: safeFetch refuses private hosts and re-checks every redirect.
+      if (!endpoint.baseUrl) throw new Error("no base URL was set for the custom endpoint");
+      const safe = await safeFetch(customChatUrl(endpoint.baseUrl), {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        timeoutMs: REQUEST_TIMEOUT_MS,
+        maxBytes: 2 * 1024 * 1024,
+      });
+      response = { status: safe.status, ok: safe.ok };
+      text = safe.text;
+    } else {
+      const url = endpoint ? (BRAIN_PROVIDERS[endpoint.provider].url as string) : OPENROUTER_URL;
+      const raw = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      response = { status: raw.status, ok: raw.ok };
+      text = await raw.text();
+    }
   } catch (cause) {
     throw new OpenRouterError(
-      `Could not reach OpenRouter: ${cause instanceof Error ? cause.message : String(cause)}`,
+      `Could not reach ${label}: ${cause instanceof Error ? cause.message : String(cause)}`,
     );
   }
 
-  const text = await response.text();
-
   if (endpoint && (response.status === 401 || response.status === 403)) {
-    throw new OpenRouterError(`Your ${endpoint.provider === "openai" ? "OpenAI" : "OpenRouter"} key was refused (HTTP ${response.status}). Check it in the Keys tab.`);
+    throw new OpenRouterError(`Your ${label} key was refused (HTTP ${response.status}). Check it in the Keys tab.`);
   }
   if (endpoint && response.status === 429) {
     throw new OpenRouterError(
-      `Your ${endpoint.provider === "openai" ? "OpenAI" : "OpenRouter"} key hit its rate limit or quota. Try again shortly, or check its billing.`,
+      `Your ${label} key hit its rate limit or quota. Try again shortly, or check its billing.`,
       true,
     );
+  }
+  if (endpoint && !response.ok) {
+    // Providers disagree on the error envelope; pull out the sentence when there is one.
+    let reason = text.slice(0, 300);
+    try {
+      const body = JSON.parse(text) as unknown;
+      const first = Array.isArray(body) ? body[0] : body;
+      const error = (first as { error?: { message?: unknown } | string; detail?: unknown; message?: unknown })?.error;
+      const found =
+        typeof error === "string" ? error : typeof error?.message === "string" ? error.message : undefined;
+      const detail = (first as { detail?: unknown; message?: unknown })?.detail ?? (first as { message?: unknown })?.message;
+      reason = found ?? (typeof detail === "string" ? detail : reason);
+    } catch {
+      /* not JSON: keep the raw text */
+    }
+    throw new OpenRouterError(`${label} refused the request: ${reason}`);
   }
   if (response.status === 429) {
     throw new OpenRouterError(
@@ -640,4 +714,116 @@ export function recoverTextToolCalls(content: string): ToolCall[] {
   }
 
   return recovered;
+}
+
+/* ---------------------------------------------------------------------------
+ * ANTHROPIC, THROUGH ITS OFFICIAL SDK (2026-09-28)
+ * ------------------------------------------------------------------------ */
+
+function parseArguments(raw: string): Record<string, unknown> {
+  try {
+    const value = JSON.parse(raw || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * One Messages API call, translated from and back to this file's chat shape.
+ *
+ * - System messages become the top-level `system`.
+ * - An assistant turn is sent back with its OWN content blocks when we have
+ *   them (`providerContent`): Claude may think between tool calls, and those
+ *   thinking blocks must be echoed unchanged. Tool calls that were not run this
+ *   round are dropped from it, so every tool_use has its tool_result.
+ * - Consecutive tool results go back in ONE user message, as the API expects.
+ * - No `temperature`: current Claude models reject sampling parameters.
+ * - `required` tool choice is sent as `auto`: forced tool choice returns a 400
+ *   on the newest models.
+ */
+async function anthropicCompletion(
+  options: { messages: ChatMessage[]; tools?: ToolDefinition[]; toolChoice?: "auto" | "required" | "none"; maxTokens?: number },
+  endpoint: BrainEndpoint,
+): Promise<ChatResult> {
+  const client = new Anthropic({ apiKey: endpoint.apiKey, maxRetries: 1, timeout: REQUEST_TIMEOUT_MS });
+  const system = options.messages
+    .filter((message): message is { role: "system"; content: string } => message.role === "system")
+    .map((message) => message.content)
+    .join("\n\n");
+
+  const messages: Anthropic.MessageParam[] = [];
+  for (const message of options.messages) {
+    if (message.role === "system") continue;
+    if (message.role === "user") {
+      messages.push({ role: "user", content: message.content });
+    } else if (message.role === "assistant") {
+      const ran = new Set((message.tool_calls ?? []).map((call) => call.id));
+      let blocks: Anthropic.ContentBlockParam[];
+      if (Array.isArray(message.providerContent)) {
+        blocks = (message.providerContent as Anthropic.ContentBlockParam[]).filter(
+          (block) => block.type !== "tool_use" || ran.has(block.id),
+        );
+      } else {
+        blocks = [];
+        if (message.content) blocks.push({ type: "text", text: message.content });
+        for (const call of message.tool_calls ?? []) {
+          blocks.push({ type: "tool_use", id: call.id, name: call.function.name, input: parseArguments(call.function.arguments) });
+        }
+      }
+      if (blocks.length > 0) messages.push({ role: "assistant", content: blocks });
+    } else {
+      const result: Anthropic.ToolResultBlockParam = { type: "tool_result", tool_use_id: message.tool_call_id, content: message.content };
+      const last = messages[messages.length - 1];
+      if (last && last.role === "user" && Array.isArray(last.content) && last.content.every((block) => block.type === "tool_result")) {
+        last.content.push(result);
+      } else {
+        messages.push({ role: "user", content: [result] });
+      }
+    }
+  }
+
+  const tools: Anthropic.Tool[] | undefined = options.tools?.map((tool) => ({
+    name: tool.function.name,
+    description: tool.function.description,
+    input_schema: tool.function.parameters as Anthropic.Tool.InputSchema,
+  }));
+
+  let response: Anthropic.Message;
+  try {
+    response = await client.messages.create({
+      model: endpoint.model,
+      max_tokens: options.maxTokens ?? 8_000,
+      ...(system ? { system } : {}),
+      messages,
+      ...(tools && tools.length > 0
+        ? { tools, tool_choice: options.toolChoice === "none" ? { type: "none" as const } : { type: "auto" as const } }
+        : {}),
+    });
+  } catch (error) {
+    if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+      throw new OpenRouterError(`Your Anthropic key was refused (HTTP ${error.status}). Check it in the Keys tab.`);
+    }
+    if (error instanceof Anthropic.RateLimitError) {
+      throw new OpenRouterError("Your Anthropic key hit its rate limit or quota. Try again shortly, or check its billing.", true);
+    }
+    if (error instanceof Anthropic.APIError) {
+      throw new OpenRouterError(`Anthropic answered HTTP ${error.status}: ${String(error.message).slice(0, 300)}`);
+    }
+    throw new OpenRouterError(`Could not reach Anthropic: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (response.stop_reason === "refusal") {
+    throw new OpenRouterError("Claude declined this request. Try rephrasing it, or choose another model on the Brain block.");
+  }
+
+  const content = response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("");
+  const toolCalls: ToolCall[] = response.content
+    .filter((block): block is Anthropic.ToolUseBlock => block.type === "tool_use")
+    .map((block) => ({ id: block.id, type: "function", function: { name: block.name, arguments: JSON.stringify(block.input ?? {}) } }));
+
+  return { content, toolCalls, model: response.model, finishReason: response.stop_reason, providerContent: response.content };
 }

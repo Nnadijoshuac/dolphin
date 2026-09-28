@@ -866,6 +866,39 @@ export type AgentDraftData = {
   updatedAt: number;
 };
 
+/** One agent trade key as the panel sees it. Never key material. */
+export type TradeKeySummary = {
+  keyId: string;
+  expiry: number;
+  durationDays: number;
+  sessionPublicKey: string;
+  altanaWalletAddress: string;
+  grantedAt: string | null;
+  revokedAt: string | null;
+};
+
+/** convex/autotrade.ts - no-tap trading with a scoped session key. */
+export const autotradeApi = anyApi as unknown as {
+  autotrade: {
+    prepare: Action<
+      { sessionToken: string; conversationKey: string; altanaWalletAddress: string; durationDays: number },
+      { keyId: string; sessionPublicKey: string; sessionAddress: string; permissionsJson: string; expiry: number; dailyUsd: number }
+    >;
+    confirmGrant: Mutation<{ sessionToken: string; keyId: string; transactionHash: string | null }, null>;
+    stop: Mutation<
+      { sessionToken: string; conversationKey: string },
+      { keyId: string; sessionPublicKey: string; altanaWalletAddress: string }[]
+    >;
+    markRevoked: Mutation<{ sessionToken: string; keyId: string }, null>;
+    forDraft: Query<
+      { conversationKey: string },
+      | null
+      | { status: "none"; unrevoked: TradeKeySummary[] }
+      | (TradeKeySummary & { status: "active" | "stopped" | "expired" | "pending"; unrevoked: TradeKeySummary[] })
+    >;
+  };
+};
+
 /** convex/autopilot.ts - arm or disarm a draft's triggers. */
 export const autopilotApi = anyApi as unknown as {
   autopilot: {

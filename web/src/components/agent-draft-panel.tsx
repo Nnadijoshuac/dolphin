@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
+import { AutoTradeCard } from "@/components/auto-trade-card";
 import { EnvVarsPanel } from "@/components/env-vars-panel";
 import type { AgentBlockData } from "@/convex/api";
 
@@ -97,6 +98,7 @@ export function AgentDraftPanel({
   onToggleAutopilot,
   onWatchRuns,
   autopilotBusy = false,
+  tradeKeyConversation = null,
 }: {
   draft: AgentDraft;
   onClose?: () => void;
@@ -116,6 +118,8 @@ export function AgentDraftPanel({
   /** Opens the autopilot's run feed. */
   onWatchRuns?: () => void;
   autopilotBusy?: boolean;
+  /** The build conversation, when this agent may be given a trade key (Build mode). */
+  tradeKeyConversation?: string | null;
 }) {
   // Draft, or the builder's own keys (owner, 2026-09-28: "a new tab ... to manage their envs").
   const [tab, setTab] = useState<"draft" | "keys">("draft");
@@ -248,6 +252,17 @@ export function AgentDraftPanel({
           draft={draft}
           onToggle={onToggleAutopilot}
           onWatchRuns={onWatchRuns}
+        />
+      ) : null}
+
+      {tradeKeyConversation ? (
+        <AutoTradeCard
+          conversationKey={tradeKeyConversation}
+          hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))}
+          riskDailyUsd={(() => {
+            const risk = draft.blocks?.find((block) => block.type === "risk");
+            return risk && risk.type === "risk" ? risk.config.maxTradeUsd * risk.config.maxTradesPerDay : null;
+          })()}
         />
       ) : null}
 

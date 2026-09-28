@@ -801,6 +801,7 @@ export function DolphinClient({
         }
       : undefined,
     autopilotBusy,
+    tradeKeyConversation: building ? buildConversationKey : null,
     published: (publishedListings ?? []).map((entry) => ({
       hash: entry.hash,
       networkLabel: entry.networkLabel,

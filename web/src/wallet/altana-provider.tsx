@@ -304,6 +304,20 @@ export type AltanaWalletValue = Readonly<{
   revokeSession: (publicKey: string) => Promise<void>;
 
   /**
+   * NO-TAP TRADING (convex/autotrade.ts). Grants an agent's trade key - whose
+   * private half the backend holds, sealed - with this wallet's passkey. Only
+   * the public key is handled here. Returns the grant's transaction hash.
+   */
+  grantAgentTradeKey: (input: {
+    sessionPublicKey: string;
+    sessionAddress: string;
+    permissionsJson: string;
+    expiry: number;
+  }) => Promise<string | null>;
+  /** Revokes an agent's trade key on-chain, with the passkey. Kills it everywhere. */
+  revokeAgentTradeKey: (sessionPublicKey: string) => Promise<void>;
+
+  /**
    * Reads one ERC-20 balance from this wallet. Takes the token address rather
    * than consulting a list, because the only token that matters is the one the
    * agent being hired actually quoted - there is deliberately no hardcoded
@@ -682,6 +696,85 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       refreshRecoverability,
       sessionsUnavailable,
     ],
+  );
+
+  const grantAgentTradeKey = useCallback(
+    async (input: { sessionPublicKey: string; sessionAddress: string; permissionsJson: string; expiry: number }) => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("Create a Dolphin Wallet before letting an agent trade from it.");
+      const stored = JSON.parse(input.permissionsJson) as {
+        calls: { to: string; signature?: string }[];
+        spend: { limit: string; period: "day"; token?: string }[];
+      };
+      // Same rule as buildSessionPermissions: never grant without a call list.
+      if (!Array.isArray(stored.calls) || stored.calls.length === 0) {
+        throw new Error("Refusing to grant a trade key with no call list - it would allow any contract.");
+      }
+      const permissions = {
+        calls: stored.calls.map((call) =>
+          call.signature ? { to: call.to as Address, signature: call.signature } : { to: call.to as Address },
+        ),
+        spend: stored.spend.map((cap) => ({
+          limit: BigInt(cap.limit),
+          period: cap.period,
+          ...(cap.token ? { token: cap.token as Address } : {}),
+        })),
+      };
+      // The grant needs only the key's PUBLIC half. This stand-in cannot sign:
+      // the private key stays sealed in Dolphin's backend.
+      const publicOnly = {
+        type: "privateKey" as const,
+        address: input.sessionAddress as Address,
+        publicKey: input.sessionPublicKey as Hex,
+        signDigest: async (): Promise<Hex> => {
+          throw new Error("This trade key signs only on Dolphin's backend.");
+        },
+      };
+      setIsBusy(true);
+      setError(null);
+      try {
+        const granted = await altanaClient().grantSession({
+          wallet: { address: wallet.address },
+          signer: adminSigner(),
+          chainId: ALTANA_NETWORK.chainId,
+          permissions,
+          expiry: input.expiry,
+          sessionSigner: publicOnly,
+          // Account-only: enforced by the wallet contract identically, without the KeyStore fee.
+          register: false,
+        });
+        return granted.transactionHash ?? null;
+      } catch (cause) {
+        setError(toUserMessage(cause, "Your wallet could not grant the trade key. Try again."));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner],
+  );
+
+  const revokeAgentTradeKey = useCallback(
+    async (sessionPublicKey: string) => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("No Dolphin Wallet on this device.");
+      setIsBusy(true);
+      setError(null);
+      try {
+        await altanaClient().revokeSession({
+          wallet: { address: wallet.address },
+          signer: adminSigner(),
+          session: sessionPublicKey as Hex,
+          chainId: ALTANA_NETWORK.chainId,
+        });
+      } catch (cause) {
+        setError(toUserMessage(cause, "Your wallet could not revoke that key. Try again."));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner],
   );
 
   const revokeSession = useCallback(
@@ -1562,6 +1655,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       forgetWallet,
       grantSession,
       revokeSession,
+      grantAgentTradeKey,
+      revokeAgentTradeKey,
       readTokenBalance,
       quoteBnbPayment,
       payForAgent,
@@ -1578,6 +1673,8 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     error,
     forgetWallet,
     grantSession,
+    grantAgentTradeKey,
+    revokeAgentTradeKey,
     isBusy,
     isClient,
     liveSessions,

@@ -467,6 +467,15 @@ export default defineSchema({
      */
     lastCreatedAt: v.union(v.string(), v.null()),
 
+    /**
+     * UNUSED. Written once on dev (2026-09-28) by an "updates walk" that was
+     * tried and withdrawn: 8004scan accepts `sort_by=updated_at` but the order
+     * is not monotonic (304 inversions in 1,000 records) and it ignores
+     * `updated_after`, so "walk newest-edited down to a mark" cannot be made
+     * safe. Kept only so the dev cursor row still validates.
+     */
+    lastUpdatedAt: v.optional(v.union(v.string(), v.null())),
+
     /** The one-time catch-up over the existing endpoint-publishing population. */
     backfillOffset: v.number(),
     /**

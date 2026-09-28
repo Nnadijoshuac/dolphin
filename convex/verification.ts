@@ -71,10 +71,17 @@ const UNAVAILABLE_BACKOFF_MS = [
   60 * 60 * 1000, // 1h
   4 * 60 * 60 * 1000, // 4h
   12 * 60 * 60 * 1000, // 12h
-  24 * 60 * 60 * 1000, // 1d
-  3 * 24 * 60 * 60 * 1000, // 3d
-  7 * 24 * 60 * 60 * 1000, // 7d - the cap
+  24 * 60 * 60 * 1000, // 1d - the cap
 ];
+/*
+ * THE CAP WAS 7 DAYS UNTIL 2026-09-28. Marque's five reference agents (tokens
+ * 341553-341557) failed six probes on dev with "no task text found in the
+ * message parts", Marque fixed their server, and prod - probing on a different
+ * clock - listed them on 09-27 while dev was parked until 09-30. A server fix
+ * changes nothing in the registration, so no discovery signal can shorten that
+ * wait; only the next probe notices it. Prod had 213 agents at the cap, so a
+ * daily recheck costs ~200 probes/day against 28,800/day of capacity.
+ */
 
 function backoffFor(state: string, consecutiveFailures: number): number {
   if (state === "live") return LIVE_RECHECK_MS;

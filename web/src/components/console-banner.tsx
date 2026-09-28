@@ -43,7 +43,7 @@ export function ConsoleBanner() {
     setTimeout(
       console.log.bind(
         console,
-        `%c${LETTERS}\n\n%cThe agent marketplace on BNB Chain.\n%chttps://www.dolphinamp.xyz`,
+        `%c${LETTERS}\n\n%cThe agent marketplace on BNB Chain.\n%chttps://www.x.com/dolphin_agents`,
         "color:#f0b90b;font-family:monospace;font-size:11px;line-height:1.15",
         "color:#f0b90b;font-family:monospace;font-size:13px;font-weight:700",
         "color:#8a8a80;font-family:monospace;font-size:12px",

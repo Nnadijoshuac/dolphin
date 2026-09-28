@@ -679,6 +679,27 @@ export default defineSchema({
     .index("by_reviewer", ["walletAddress"]),
 
   /**
+   * Agents a signed-in wallet starred (2026-09-28).
+   *
+   * One row per (wallet, agent); un-starring deletes it. Two uses: the owner's
+   * own "Your favorites" shelf, and set against agentEngagement it answers
+   * "what do people SAY they like vs what they actually open and hire".
+   *
+   * A favorite never raises an agent's public rank. It is one click per wallet,
+   * and a wallet costs nothing to make - the same reason engagement counts are
+   * kept out of ranking.
+   */
+  agentFavorites: defineTable({
+    /** Checksummed, and always from the authenticated session - never an argument. */
+    walletAddress: v.string(),
+    agentKey: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_wallet", ["walletAddress", "createdAt"])
+    .index("by_wallet_agent", ["walletAddress", "agentKey"])
+    .index("by_agent", ["agentKey"]),
+
+  /**
    * Altana session grants, recorded next to the agentHires row they belong to.
    * A session is the one thing in Dolphin that hands real authority to someone
    * else, so "what have I authorized" needs exactly one answer rather than two

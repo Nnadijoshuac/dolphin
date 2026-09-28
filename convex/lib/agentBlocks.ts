@@ -10,6 +10,12 @@
  *             block's limits, which the OWNER signs from the Dolphin Wallet.
  *             Nothing here signs anything.
  *   risk      limits a proposal: USD per trade, trades per day.
+ *   wallet    the agent's OWN wallet (convex/agentWallet.ts). With it
+ *             plugged in, a swap within the Risk limits executes at once from
+ *             that wallet - no ticket, no tap - and what it buys lands there.
+ *   hire      a paid A2A agent from the catalog. Gives the Brain
+ *             `hire_agent`: Dolphin asks the agent for a price for the task,
+ *             and the OWNER confirms paying it from their Dolphin Wallet.
  *   schedule / price / walletWatch   triggers, run by convex/autopilot.ts.
  *
  * THE MODEL PROPOSES, THIS FILE DECIDES - the same rule as agentSpec.ts.
@@ -28,7 +34,7 @@ import { getAddress, isAddress } from "viem";
 import type { ToolDefinition } from "./openrouter";
 import { verifiedTokenBySymbol, verifiedTokens, type TradeToken } from "./tradeTokens";
 
-export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch"] as const;
+export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "wallet", "hire"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export type MarketConfig = { tokenAddress: string; symbol: string; name: string; poolAddress: string | null };
@@ -36,6 +42,7 @@ export type RiskConfig = { maxTradeUsd: number; maxTradesPerDay: number };
 export type ScheduleConfig = { everyMinutes: number };
 export type PriceConfig = { direction: "above" | "below"; priceUsd: number };
 export type WalletWatchConfig = { addresses: string[]; label: string | null };
+export type HireConfig = { agentKey: string; agentName: string };
 
 export type AgentBlock =
   | { id: string; type: "market"; config: MarketConfig }
@@ -44,7 +51,9 @@ export type AgentBlock =
   | { id: string; type: "risk"; config: RiskConfig }
   | { id: string; type: "schedule"; config: ScheduleConfig }
   | { id: string; type: "price"; config: PriceConfig }
-  | { id: string; type: "walletWatch"; config: WalletWatchConfig };
+  | { id: string; type: "walletWatch"; config: WalletWatchConfig }
+  | { id: string; type: "wallet"; config: Record<string, never> }
+  | { id: string; type: "hire"; config: HireConfig };
 
 export const MAX_BLOCKS = 12;
 /** Fastest schedule. Every run spends the builder's own model key. */
@@ -128,8 +137,16 @@ export function validateBlocks(input: unknown): AgentBlock[] {
         out.push({ id, type, config: { addresses, label } });
         break;
       }
+      case "hire": {
+        const agentKey = typeof config.agentKey === "string" ? config.agentKey.trim().toLowerCase() : "";
+        if (!/^\d+:0x[0-9a-f]{40}:\d+$/.test(agentKey)) fail("Choose an agent from Dolphin's catalog to hire.");
+        const agentName = typeof config.agentName === "string" && config.agentName.trim() ? config.agentName.trim().slice(0, 60) : "Agent";
+        out.push({ id, type, config: { agentKey, agentName } });
+        break;
+      }
       case "safety":
       case "swap":
+      case "wallet":
         out.push({ id, type, config: {} } as AgentBlock);
         break;
     }
@@ -223,7 +240,7 @@ async function hourlyCandles(poolAddress: string, limit: number): Promise<Array<
 export type BlockToolResult = { text: string; isError: boolean; ticket?: unknown };
 
 /** The built-in tools a draft's blocks give its Brain. Names are `block_*` so they cannot collide with MCP tools. */
-export function blockToolDefinitions(blocks: readonly AgentBlock[]): ToolDefinition[] {
+export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "propose" | "execute" = "propose"): ToolDefinition[] {
   const tools: ToolDefinition[] = [];
   const market = blocks.find((block) => block.type === "market");
   if (market) {
@@ -257,8 +274,10 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[]): ToolDefinit
       function: {
         name: "block_propose_swap",
         description:
-          `Propose a PancakeSwap trade for the owner to approve and sign from their Dolphin Wallet. ` +
-          `You cannot sign or send it. Tokens must be one of: ${verifiedTokens().map((token) => token.symbol).join(", ")}.`,
+          (trades === "execute"
+            ? "Make a PancakeSwap trade. Within your Risk limits it executes at once, and the tool reports whether it traded. "
+            : "Propose a PancakeSwap trade for the owner to approve and sign from their Dolphin Wallet. You cannot sign or send it. ") +
+          `Tokens must be one of: ${verifiedTokens().map((token) => token.symbol).join(", ")}.`,
         parameters: {
           type: "object",
           properties: {
@@ -268,6 +287,24 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[]): ToolDefinit
             reason: { type: "string", description: "One sentence: why, citing the data." },
           },
           required: ["sellSymbol", "buySymbol", "sellAmount", "reason"],
+          additionalProperties: false,
+        },
+      },
+    });
+  }
+  const hire = blocks.find((block) => block.type === "hire");
+  if (hire) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "block_hire_agent",
+        description:
+          `Ask ${hire.config.agentName}, a paid agent on Dolphin, to do a task. Dolphin gets its price; the owner then decides ` +
+          "whether to pay it from their Dolphin Wallet. The work is delivered later, not in this conversation. Use it only when your instructions call for it.",
+        parameters: {
+          type: "object",
+          properties: { task: { type: "string", description: "Exactly what the agent should do, in one or two sentences." } },
+          required: ["task"],
           additionalProperties: false,
         },
       },

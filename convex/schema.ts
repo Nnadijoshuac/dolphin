@@ -699,6 +699,31 @@ export default defineSchema({
    * kept out of ranking.
    */
   /**
+   * AGENT WALLETS: an agent's OWN wallet (owner, 2026-09-29: "that agent is
+   * going to have its own wallet that you can send money to... the agent can
+   * freely spend from it without needing you to confirm"). One per draft.
+   *
+   * A plain BNB Chain account. Its private key is generated in an action and
+   * sealed with lib/secretBox.ts; it is opened only to sign a trade that passed
+   * the Risk block, or a withdrawal to the owner's own wallet. Dolphin holds
+   * this key - the owner is told so, and to keep in it only what they would let
+   * the agent trade. Nothing else can send from it: no function takes a
+   * destination other than the owner's signed-in wallet.
+   */
+  agentWallets: defineTable({
+    draftId: v.id("agentDrafts"),
+    /** The signed-in wallet that created it: the only place withdrawals go. */
+    ownerAddress: v.string(),
+    /** Checksummed. */
+    address: v.string(),
+    ciphertext: v.string(),
+    iv: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_draft", ["draftId"])
+    .index("by_address", ["address"]),
+
+  /**
    * TRADE KEYS: session keys that let one agent trade by itself, with no tap
    * (owner's approval, 2026-09-28). One Altana session per grant, scoped
    * ON-CHAIN by the Dolphin Wallet's account contract: only PancakeSwap's two
@@ -1252,6 +1277,15 @@ export default defineSchema({
     ticket: v.optional(
       v.union(
         v.null(),
+        /** A paid A2A hire the agent asked for; the owner confirms the payment (lib/agentBlocks.ts). */
+        v.object({
+          kind: v.literal("hire"),
+          agentKey: v.string(),
+          agentName: v.string(),
+          task: v.string(),
+          /** The price the agent quoted when asked, for display. Re-quoted before paying. */
+          priceText: v.union(v.string(), v.null()),
+        }),
         v.object({
           kind: v.literal("swap"),
           amountIn: v.string(),

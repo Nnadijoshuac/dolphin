@@ -17,6 +17,7 @@ import type * as agentReviews from "../agentReviews.js";
 import type * as agentSessions from "../agentSessions.js";
 import type * as agentTools from "../agentTools.js";
 import type * as agentTrials from "../agentTrials.js";
+import type * as agentWallet from "../agentWallet.js";
 import type * as agents from "../agents.js";
 import type * as autopilot from "../autopilot.js";
 import type * as autotrade from "../autotrade.js";
@@ -107,6 +108,7 @@ declare const fullApi: ApiFromModules<{
   agentSessions: typeof agentSessions;
   agentTools: typeof agentTools;
   agentTrials: typeof agentTrials;
+  agentWallet: typeof agentWallet;
   agents: typeof agents;
   autopilot: typeof autopilot;
   autotrade: typeof autotrade;

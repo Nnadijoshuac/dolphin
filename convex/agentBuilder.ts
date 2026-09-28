@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
+import { formatUnits } from "viem";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   action,
@@ -36,6 +37,7 @@ import {
   blockToolDefinitions,
   MAX_DETACHED,
   runBlockTool,
+  type BlockToolResult,
   toolMemberId,
   validateBlocks,
   type AgentBlock,
@@ -99,6 +101,8 @@ WHAT AN AGENT BUILT HERE IS. Never promise more than this:
   - Market (the token it trades: live price, candles and a chart), Safety (token security checks).
   - Triggers: Schedule (every 15 minutes to daily), Price (when the token crosses a level), Wallet watch (when a wallet they follow - a KOL, a whale - transacts). With Autopilot switched on, the agent runs on these by itself, up to 48 times a day.
   - Risk limits (dollars per trade, trades per day) and Swap: the agent may then PROPOSE PancakeSwap trades within those limits. By default the person approves and signs every trade. They can opt in to "Trade without asking" (Draft tab) so it trades by itself for 1-30 days within limits the wallet enforces, and stop it any time. Nothing guarantees a profit - never promise one.
+  - Wallet: the agent's OWN wallet, which the person funds. With it plugged in, trades within the Risk limits execute from that wallet at once, with no tap, and what they buy lands back in it; the person withdraws to their own wallet any time. Dolphin holds that wallet's key, so it should hold only what they would let the agent trade.
+  - Hire an agent: one paid A2A agent from Dolphin's catalog. The agent can ask it to do a task and gets its price; the person confirms each payment from their Dolphin Wallet with their passkey. The result is delivered later, on-chain - not into the conversation.
 - Write the instructions so they use what is there: e.g. "When your price trigger fires, read the market snapshot, check safety, and propose a trade only if...". Rules with exact numbers beat vague judgement.
 - It cannot send emails or messages, and cannot trade without the person signing. If asked, say so plainly and offer the closest thing it can do.
 - It is private until the person puts it on-chain.
@@ -134,7 +138,7 @@ RULES THAT OVERRIDE THE INSTRUCTIONS ABOVE:
 - Only quote a number that a tool returned in this conversation. With no live reading, say you do not have one. Never guess a price, APY, balance or health factor.
 ${
     abilities.canTrade
-      ? "- You may TRADE with block_propose_swap: the owner granted you a trade key, so a swap within your Risk limits executes at once from their Dolphin Wallet. Trade only when your instructions and the data call for it. Say exactly what the tool reports - traded, or not traded and why. Never claim a trade the tool did not report."
+      ? "- You may TRADE with block_propose_swap: a swap within your Risk limits executes at once - from your own agent wallet if you have one, otherwise from the owner's Dolphin Wallet with the trade key they granted. Trade only when your instructions and the data call for it. Say exactly what the tool reports - traded, or not traded and why. Never claim a trade the tool did not report."
       : abilities.canPropose
       ? "- You cannot sign, send or move funds. You MAY propose a trade with block_propose_swap; the owner reviews it and signs it from their Dolphin Wallet. Say you proposed it - never that you traded. Propose only when your instructions and the data call for it."
       : "- You can only read. You cannot sign, send, trade or move funds, and you cannot set anything up. If a tool returned an unsigned transaction, say the person would sign it from their own wallet. Never say you did it."
@@ -373,11 +377,20 @@ export const runtimeForDraft = internalQuery({
       .order("desc")
       .take(3);
     const autotradeActive = tradeKeys.some((key) => key.status === "active" && key.ciphertext && key.expiry > Date.now() / 1000);
+    const blocks = activeBlocks((draft?.blocks ?? []) as AgentBlock[], draft?.detached);
+    // The agent's own wallet trades only while its Wallet block is plugged in.
+    const ownWallet = blocks.some((block) => block.type === "wallet")
+      ? await ctx.db
+          .query("agentWallets")
+          .withIndex("by_draft", (q) => q.eq("draftId", draftId))
+          .first()
+      : null;
     return {
       autotradeActive,
+      agentWallet: ownWallet?.address ?? null,
       brain: draft?.brain ?? null,
       // Only what is still plugged in on the canvas.
-      blocks: activeBlocks((draft?.blocks ?? []) as AgentBlock[], draft?.detached),
+      blocks,
       detached: draft?.detached ?? [],
       proposalsToday: draft?.proposals?.day === today ? draft.proposals.count : 0,
     };
@@ -1013,7 +1026,8 @@ export async function runTryTurn(
       const brain = runtime?.brain ?? null;
       const blocks = runtime?.blocks ?? [];
       let proposalsToday = runtime?.proposalsToday ?? 0;
-      const blockTools = blockToolDefinitions(blocks);
+      const canExecute = Boolean(runtime?.agentWallet) || Boolean(runtime?.autotradeActive);
+      const blockTools = blockToolDefinitions(blocks, canExecute ? "execute" : "propose");
       let ticket: unknown = undefined;
       const apiKey = brain
         ? await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: brain.keyName })
@@ -1119,29 +1133,33 @@ export async function runTryTurn(
                 toolName: call.function.name,
                 argumentsJson: call.function.arguments || "{}",
               });
-              const result = await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
-              if (result.ticket && draftId) {
+              const result =
+                call.function.name === "block_hire_agent"
+                  ? await askToHire(ctx, blocks, call.function.arguments)
+                  : await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
+              if (result.ticket && (result.ticket as { kind?: string }).kind === "hire") {
+                // A paid hire always waits for the owner's passkey.
+                ticket = result.ticket;
+              } else if (result.ticket && draftId) {
                 proposalsToday += 1;
                 await ctx.runMutation(internal.agentBuilder.recordProposal, { draftId });
                 /*
-                 * NO-TAP TRADING (convex/autotrade.ts): with a live trade key the
-                 * swap executes now, inside the limits the wallet contract enforces.
-                 * Anything that stops it leaves the ticket for the owner to sign.
+                 * NO-TAP TRADING. With the agent's own Wallet block plugged in, the
+                 * swap executes from that wallet (convex/agentWallet.ts). Otherwise,
+                 * with a live trade key, from the owner's Dolphin Wallet inside the
+                 * limits its contract enforces (convex/autotrade.ts). Anything that
+                 * stops it leaves the ticket for the owner to sign.
                  */
-                const auto: { attempted: boolean; executed: boolean; text: string } = await ctx.runAction(
-                  internal.autotrade.executeTrade,
-                  {
-                    draftId,
-                    agentName: draft.name ?? "Agent",
-                    ticket: result.ticket as {
-                      kind: "swap";
-                      amountIn: string;
-                      tokenIn: { address: string | null; symbol: string; decimals: number; verified: boolean };
-                      tokenOut: { address: string | null; symbol: string; decimals: number; verified: boolean };
-                      safety: null;
-                    },
-                  },
-                );
+                const swapTicket = result.ticket as {
+                  kind: "swap";
+                  amountIn: string;
+                  tokenIn: { address: string | null; symbol: string; decimals: number; verified: boolean };
+                  tokenOut: { address: string | null; symbol: string; decimals: number; verified: boolean };
+                  safety: null;
+                };
+                const auto: { attempted: boolean; executed: boolean; text: string } = runtime?.agentWallet
+                  ? await ctx.runAction(internal.agentWallet.executeTrade, { draftId, agentName: draft.name ?? "Agent", ticket: swapTicket })
+                  : await ctx.runAction(internal.autotrade.executeTrade, { draftId, agentName: draft.name ?? "Agent", ticket: swapTicket });
                 if (auto.executed) {
                   result.text = auto.text;
                 } else {
@@ -1185,7 +1203,7 @@ export async function runTryTurn(
 
       let system = `${tryAnswerPrompt(draft, {
         canPropose: blocks.some((block) => block.type === "swap"),
-        canTrade: Boolean(runtime?.autotradeActive),
+        canTrade: canExecute,
         triggered,
       })}${addressNote}`;
       const unreachable = [
@@ -1258,6 +1276,8 @@ const BLOCK_LABELS: Record<AgentBlock["type"], string> = {
   schedule: "Schedule",
   price: "Price trigger",
   walletWatch: "Wallet watch",
+  wallet: "Wallet",
+  hire: "Hired agent",
 };
 
 function blockToolNameFor(type: AgentBlock["type"]): string | null {
@@ -1267,7 +1287,42 @@ function blockToolNameFor(type: AgentBlock["type"]): string | null {
       ? "block_token_safety"
       : type === "swap"
         ? "block_propose_swap"
-        : null;
+        : type === "hire"
+          ? "block_hire_agent"
+          : null;
+}
+
+/**
+ * block_hire_agent: asks the Hire block's agent for a price for the task, over
+ * the same negotiation a hire from its page uses (agentPayments.requestQuote,
+ * so the flow knocks on the same door). Nothing is paid here: the answer
+ * carries a hire ticket, and the owner confirms paying it with their passkey.
+ */
+async function askToHire(ctx: ActionCtx, blocks: readonly AgentBlock[], rawArgs: string): Promise<BlockToolResult> {
+  const hire = blocks.find((block) => block.type === "hire");
+  if (!hire || hire.type !== "hire") return { text: "This agent has no Hire block.", isError: true };
+  let task = "";
+  try {
+    task = String((JSON.parse(rawArgs || "{}") as { task?: unknown }).task ?? "").trim().slice(0, 600);
+  } catch {
+    return { text: "The arguments were not valid JSON.", isError: true };
+  }
+  if (task.length < 4) return { text: "Say what the agent should do.", isError: true };
+  try {
+    const quote: { priceRaw: string; paymentTokenSymbol: string; paymentTokenDecimals: number } = await ctx.runAction(
+      api.agentPayments.requestQuote,
+      { agentKey: hire.config.agentKey, taskDescription: task },
+    );
+    const priceText = `${formatUnits(BigInt(quote.priceRaw), quote.paymentTokenDecimals)} ${quote.paymentTokenSymbol}`;
+    return {
+      text: `${hire.config.agentName} quoted ${priceText} for this task. The owner decides whether to pay it from their Dolphin Wallet; the agent delivers after that, on-chain - not in this conversation.`,
+      isError: false,
+      ticket: { kind: "hire", agentKey: hire.config.agentKey, agentName: hire.config.agentName, task, priceText },
+    };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message.replace(/^[\s\S]*?Uncaught Error:\s*/, "").split("\n")[0] : String(cause);
+    return { text: `${hire.config.agentName} did not quote: ${message.slice(0, 300)}`, isError: true };
+  }
 }
 
 export const tryAsk = action({

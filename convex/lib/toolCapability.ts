@@ -89,6 +89,15 @@ const MUTATING_PREFIXES = [
    * them. It fails closed; over-matching here only hides a tool.
    */
   "enter", "exit", "collect", "increase", "decrease", "confirm", "register",
+  /*
+   * Added 2026-09-28, found by the canvas's tool picker: Aster powered by
+   * HeyAnon's `changeMarginType`, `changePositionMode`,
+   * `changeMultiAssetsMode` and `modifyPositionMargin` - futures-account
+   * writes - were offered as reads to the picker, the builder and the chat.
+   * `place`, `submit`, `adjust` and `edit` are the same kind of verb and cost
+   * only a hidden read if one ever over-matches.
+   */
+  "change", "modify", "place", "submit", "adjust", "edit",
 ];
 
 /**

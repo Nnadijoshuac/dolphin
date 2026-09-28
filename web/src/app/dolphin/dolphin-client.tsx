@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 /* React Flow's stylesheet, for the Build canvas. External stylesheets are imported from app/ (Next CSS docs). */
@@ -18,7 +18,7 @@ import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
 import { PublishAgentDialog } from "@/components/publish-agent-dialog";
 import { SlideOver } from "@/components/slide-over";
 import { TradeTicket } from "@/components/trade-ticket";
-import { builtAgentsApi } from "@/convex/api";
+import { autopilotApi, builtAgentsApi } from "@/convex/api";
 import {
     useDolphinChat,
     useDolphinConversation,
@@ -27,7 +27,9 @@ import {
 import { usePanelLayout, type PanelKey } from "@/hooks/use-panel-layout";
 import { useAppStore, type ChatHistoryEntry } from "@/store/use-app-store";
 import { NEW_CONVERSATION, useDolphinPlaceStore } from "@/store/use-dolphin-place-store";
+import { toast } from "@/store/use-toast-store";
 import { useWallet } from "@/wallet/wallet-provider";
+import { useWalletSession } from "@/wallet/wallet-session";
 
 /** Matches the abbreviation SiteHeader uses, so one address reads the same everywhere. */
 function shortWalletAddress(value: string) {
@@ -698,7 +700,16 @@ export function DolphinClient({
             : tools.length > 0 || last.content.length > 0
               ? "writing"
               : "thinking";
-    return { phase, tools };
+    // An autopilot run's message names the trigger that started it (convex/autopilot.ts).
+    const asked = [...turns].reverse().find((turn) => turn.role === "user")?.content ?? "";
+    const triggeredBy = asked.startsWith("Scheduled run")
+      ? "schedule"
+      : asked.startsWith("Price trigger")
+        ? "price"
+        : asked.startsWith("Wallet watch")
+          ? "walletWatch"
+          : null;
+    return { phase, tools, triggeredBy } as CanvasRun;
   }, [trying, turns]);
   const { measure: measurePanels, ...panels } = usePanelLayout(showCanvas ? "canvas" : withDraft ? "draft" : "chat");
   const askedPrompts = useMemo(
@@ -717,6 +728,8 @@ export function DolphinClient({
         instructions: builder.draft.instructions,
         tools: builder.draft.tools,
         brain: builder.draft.brain ?? null,
+        blocks: builder.draft.blocks ?? [],
+        autopilot: builder.draft.autopilot ?? null,
       }
     : EMPTY_AGENT_DRAFT;
   const draftName = agentDraft.name?.trim() || "your agent";
@@ -728,6 +741,33 @@ export function DolphinClient({
     withDraft && buildConversationKey && BUILD_BACKEND_CONNECTED ? { buildConversationKey } : "skip",
   );
   const [publishOpen, setPublishOpen] = useState(false);
+
+  /* AUTOPILOT: arming spends the builder's own key, so it needs their signed-in wallet. */
+  const session = useWalletSession();
+  const setAutopilot = useMutation(autopilotApi.autopilot.setAutopilot);
+  const [autopilotBusy, setAutopilotBusy] = useState(false);
+  const toggleAutopilot = async (on: boolean) => {
+    if (!buildConversationKey) return;
+    setAutopilotBusy(true);
+    try {
+      const token = session.sessionToken ?? (await session.signIn());
+      if (!token) {
+        toast.notice("Sign in with your wallet to switch Autopilot on.");
+        return;
+      }
+      const result = await setAutopilot({ conversationKey: buildConversationKey, sessionToken: token, on });
+      toast.success(
+        result.on
+          ? `Autopilot is on. It checks its ${result.triggers} trigger${result.triggers === 1 ? "" : "s"} from now, on your key.`
+          : "Autopilot is off.",
+      );
+    } catch (cause) {
+      const data = (cause as { data?: unknown } | null)?.data;
+      toast.error(typeof data === "string" ? data : "Could not change Autopilot.");
+    } finally {
+      setAutopilotBusy(false);
+    }
+  };
   const draftPanelActions = {
     trying,
     isStartingTry,
@@ -752,6 +792,14 @@ export function DolphinClient({
             setPublishOpen(true);
           }
         : undefined,
+    onToggleAutopilot: building && buildConversationKey ? (on: boolean) => void toggleAutopilot(on) : undefined,
+    onWatchRuns: agentDraft.autopilot
+      ? () => {
+          setDraftOpen(false);
+          openConversation(agentDraft.autopilot!.conversationKey);
+        }
+      : undefined,
+    autopilotBusy,
     published: (publishedListings ?? []).map((entry) => ({
       hash: entry.hash,
       networkLabel: entry.networkLabel,

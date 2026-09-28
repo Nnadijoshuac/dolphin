@@ -23,7 +23,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AgentCanvasInspector } from "@/components/agent-canvas-inspector";
 import type { AgentDraft } from "@/components/agent-draft-panel";
-import { CategoryGlyph } from "@/components/category-glyph";
+import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
+import { TradingChart } from "@/components/trading-chart";
+import type { AgentBlockData } from "@/convex/api";
 
 /**
  * THE AGENT AS A GRAPH (owner, 2026-09-28: "like n8n").
@@ -53,7 +55,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
  * yet", never as a plausible default (§5). Desktop only.
  */
 
-type BlockKind = "trigger" | "tool" | "melon" | "brain" | "output" | "add";
+type BlockKind = "trigger" | "tool" | "melon" | "brain" | "output" | "add" | "sense" | "risk" | "hands";
 export type BlockState = "idle" | "active" | "done" | "error";
 
 type BlockData = {
@@ -63,6 +65,9 @@ type BlockData = {
   /** Nothing drafted here yet: drawn dashed, and says so. */
   empty?: boolean;
   state?: BlockState;
+  /** A toolbox block's own label and icon, over its kind's. */
+  label?: string;
+  glyph?: GlyphName;
 };
 
 type BlockNode = Node<BlockData, "block">;
@@ -72,6 +77,8 @@ type FlowEdge = Edge<{ active?: boolean; reverse?: boolean; used?: boolean }, "f
 export type CanvasRun = {
   phase: "thinking" | "consulting" | "writing" | "done" | "error";
   tools: { agentKey: string; toolName: string; state: "running" | "done" | "error" }[];
+  /** The trigger block type an autopilot run was started by, if any. */
+  triggeredBy?: AgentBlockData["type"] | null;
 };
 
 const KIND_LABEL: Record<BlockKind, string> = {
@@ -81,6 +88,9 @@ const KIND_LABEL: Record<BlockKind, string> = {
   brain: "Brain",
   output: "Output",
   add: "Tool",
+  sense: "Sense",
+  risk: "Risk",
+  hands: "Hands",
 };
 
 const KIND_GLYPH = {
@@ -90,6 +100,9 @@ const KIND_GLYPH = {
   brain: "bot",
   output: "check",
   add: "add",
+  sense: "layers",
+  risk: "filter",
+  hands: "wallet",
 } as const;
 
 const NODE_WIDTH = 248;
@@ -115,14 +128,20 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
         </>
       ) : null}
       {kind === "output" ? <Handle id="in" position={Position.Left} type="target" /> : null}
+      {kind === "hands" ? (
+        <>
+          <Handle id="in" position={Position.Left} type="target" />
+          <Handle id="limits" position={Position.Top} type="target" />
+        </>
+      ) : null}
 
       <div className="flex items-start gap-2.5">
         <span className="agent-block__icon">
-          <CategoryGlyph color="currentColor" name={KIND_GLYPH[kind]} size={15} strokeWidth={2} />
+          <CategoryGlyph color="currentColor" name={data.glyph ?? KIND_GLYPH[kind]} size={15} strokeWidth={2} />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted">{KIND_LABEL[kind]}</span>
+            <span className="text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted">{data.label ?? KIND_LABEL[kind]}</span>
             {state === "done" ? <span className="agent-block__tick" aria-label="Done">✓</span> : null}
             {state === "active" ? <span className="agent-block__live" aria-label="Running" /> : null}
           </div>
@@ -139,7 +158,8 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
         </div>
       </div>
 
-      {kind === "trigger" || kind === "tool" ? <Handle id="out" position={Position.Right} type="source" /> : null}
+      {kind === "trigger" || kind === "tool" || kind === "sense" ? <Handle id="out" position={Position.Right} type="source" /> : null}
+      {kind === "risk" ? <Handle id="out" position={Position.Bottom} type="source" /> : null}
       {kind === "melon" ? <Handle id="out" position={Position.Bottom} type="source" /> : null}
       {kind === "brain" ? <Handle id="out" position={Position.Right} type="source" /> : null}
     </div>
@@ -185,48 +205,85 @@ function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosi
 const nodeTypes = { block: BlockView };
 const edgeTypes = { flow: FlowEdgeView };
 
+/** How each toolbox block is drawn. */
+export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label: string; glyph: GlyphName }> = {
+  schedule: { kind: "trigger", label: "Schedule", glyph: "clock" },
+  price: { kind: "trigger", label: "Price trigger", glyph: "dollar" },
+  walletWatch: { kind: "trigger", label: "Wallet watch", glyph: "eye" },
+  market: { kind: "sense", label: "Market", glyph: "layers" },
+  safety: { kind: "sense", label: "Safety check", glyph: "shield" },
+  risk: { kind: "risk", label: "Risk limits", glyph: "filter" },
+  swap: { kind: "hands", label: "Swap", glyph: "wallet" },
+};
+
+function money(value: number): string {
+  return value >= 1 ? `$${value.toLocaleString("en", { maximumFractionDigits: 2 })}` : `$${value.toPrecision(3)}`;
+}
+
+/** A block's one-line summary on the canvas. */
+function blockSummary(block: AgentBlockData): { title: string; detail: string } {
+  switch (block.type) {
+    case "schedule": {
+      const minutes = block.config.everyMinutes;
+      return { title: minutes >= 60 ? `Every ${minutes / 60} hour${minutes === 60 ? "" : "s"}` : `Every ${minutes} minutes`, detail: "Runs the agent on a clock" };
+    }
+    case "price":
+      return { title: `Price ${block.config.direction} ${money(block.config.priceUsd)}`, detail: "Fires once each time it crosses" };
+    case "walletWatch":
+      return {
+        title: block.config.label || `${block.config.addresses.length} wallet${block.config.addresses.length === 1 ? "" : "s"}`,
+        detail: `Watching ${block.config.addresses.map((a) => `${a.slice(0, 6)}…${a.slice(-4)}`).join(", ")}`,
+      };
+    case "market":
+      return { title: block.config.symbol, detail: block.config.name || "Live price, liquidity and candles" };
+    case "safety":
+      return { title: "Token safety", detail: "Honeypot, taxes and owner powers" };
+    case "risk":
+      return { title: `${money(block.config.maxTradeUsd)} a trade`, detail: `At most ${block.config.maxTradesPerDay} trade${block.config.maxTradesPerDay === 1 ? "" : "s"} a day` };
+    case "swap":
+      return { title: "Propose a swap", detail: "You approve and sign every trade" };
+  }
+}
+
 /** The default layout for a draft. Pure, so it is the same on every render. */
 export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: FlowEdge[] } {
-  const toolCount = Math.max(draft.tools.length, 1);
-  const toolsTop = 140;
-  const brainY = toolsTop + ((toolCount - 1) * TOOL_ROW) / 2;
+  const blocks = draft.blocks ?? [];
   const middle = NODE_WIDTH + COLUMN_GAP;
   const right = middle * 2;
+  const nodes: BlockNode[] = [];
 
-  const nodes: BlockNode[] = [
-    {
-      id: "trigger",
-      type: "block",
-      position: { x: 0, y: 0 },
-      data: { kind: "trigger", title: "When asked", detail: "Runs when someone sends it a message" },
-    },
-  ];
-
+  // Left column: everything that feeds the brain, top to bottom.
+  let y = 0;
+  const pushLeft = (node: Omit<BlockNode, "position">) => {
+    nodes.push({ ...node, position: { x: 0, y } } as BlockNode);
+    y += TOOL_ROW;
+  };
+  pushLeft({
+    id: "trigger",
+    type: "block",
+    data: { kind: "trigger", title: "When asked", detail: "Runs when someone sends it a message" },
+  });
+  for (const type of ["schedule", "price", "walletWatch", "market", "safety"] as const) {
+    const block = blocks.find((candidate) => candidate.type === type);
+    if (!block) continue;
+    const look = BLOCK_LOOK[type];
+    pushLeft({ id: `block-${block.id}`, type: "block", data: { kind: look.kind, label: look.label, glyph: look.glyph, ...blockSummary(block) } });
+  }
   if (draft.tools.length === 0) {
-    nodes.push({
+    pushLeft({
       id: "tool-empty",
       type: "block",
-      position: { x: 0, y: toolsTop },
       data: { kind: "tool", title: "No tools yet", detail: "From the free MCP agents on Dolphin", empty: true },
     });
   } else {
     draft.tools.forEach((tool, index) => {
-      nodes.push({
-        id: `tool-${index}`,
-        type: "block",
-        position: { x: 0, y: toolsTop + index * TOOL_ROW },
-        data: { kind: "tool", title: tool.toolName, detail: `via ${tool.agentName}` },
-      });
+      pushLeft({ id: `tool-${index}`, type: "block", data: { kind: "tool", title: tool.toolName, detail: `via ${tool.agentName}` } });
     });
     if (draft.tools.length < MAX_TOOLS) {
-      nodes.push({
-        id: "add-tool",
-        type: "block",
-        position: { x: 0, y: toolsTop + draft.tools.length * TOOL_ROW },
-        data: { kind: "add", title: "Add a tool", detail: "From the free MCP agents on Dolphin" },
-      });
+      pushLeft({ id: "add-tool", type: "block", data: { kind: "add", title: "Add a tool", detail: "From the free MCP agents on Dolphin" } });
     }
   }
+  const brainY = Math.max(140, (y - TOOL_ROW) / 2);
 
   const instructions = draft.instructions?.trim() || null;
   nodes.push(
@@ -257,6 +314,21 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Flow
     },
   );
 
+  // Right column above the answer: the hands, and the limits on them.
+  const swap = blocks.find((block) => block.type === "swap");
+  const risk = blocks.find((block) => block.type === "risk");
+  if (swap) {
+    nodes.push({ id: `block-${swap.id}`, type: "block", position: { x: right, y: brainY - 150 }, data: { kind: "hands", label: "Swap", glyph: "wallet", ...blockSummary(swap) } });
+  }
+  if (risk) {
+    nodes.push({
+      id: `block-${risk.id}`,
+      type: "block",
+      position: { x: right, y: brainY - (swap ? 300 : 150) },
+      data: { kind: "risk", label: "Risk limits", glyph: "filter", ...blockSummary(risk) },
+    });
+  }
+
   const edge = (source: string, target: string, targetHandle = "in"): FlowEdge => ({
     id: `${source}->${target}`,
     source,
@@ -266,13 +338,15 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Flow
     type: "flow",
     data: {},
   });
-
   const edges: FlowEdge[] = [
-    edge("trigger", "brain"),
-    ...nodes.filter((node) => node.data.kind === "tool").map((node) => edge(node.id, "brain")),
+    ...nodes
+      .filter((node) => ["trigger", "tool", "sense"].includes(node.data.kind) && node.id !== "tool-empty")
+      .map((node) => edge(node.id, "brain")),
     edge("melon", "brain", "strategy"),
     edge("brain", "output"),
   ];
+  if (swap) edges.push(edge("brain", `block-${swap.id}`));
+  if (swap && risk) edges.push(edge(`block-${risk.id}`, `block-${swap.id}`, "limits"));
 
   return { nodes, edges };
 }
@@ -307,6 +381,27 @@ function applyRun(
       edgeState.set(`${id}->brain`, { used: true });
     }
   });
+
+  for (const block of draft.blocks ?? []) {
+    const calls = run.tools.filter((call) => call.agentKey === `block:${block.id}`);
+    if (calls.length === 0) continue;
+    const id = `block-${block.id}`;
+    const running = calls.some((call) => call.state === "running");
+    const failed = calls.some((call) => call.state === "error");
+    nodeState.set(id, running ? "active" : failed ? "error" : "done");
+    // The brain reaches out to a sense; it hands a trade to the swap.
+    const edgeId = block.type === "swap" ? `brain->${id}` : `${id}->brain`;
+    edgeState.set(edgeId, running ? { active: true, reverse: block.type !== "swap" } : { used: true });
+  }
+  // A trigger run lights the trigger that started it.
+  if (working || run.phase === "done") {
+    for (const block of draft.blocks ?? []) {
+      if (run.triggeredBy && run.triggeredBy === block.type) {
+        nodeState.set(`block-${block.id}`, "done");
+        edgeState.set(`block-${block.id}->brain`, run.phase === "thinking" ? { active: true } : { used: true });
+      }
+    }
+  }
 
   if (run.phase === "writing") {
     nodeState.set("output", "active");
@@ -369,6 +464,100 @@ function FitOnChange({ count, version }: { count: number; version: number }) {
   return null;
 }
 
+/**
+ * The toolbox tray (owner, 2026-09-28: "a small toolbox down that they can
+ * click and see other things they can add"). Grouped the way a trading desk
+ * thinks - what starts the agent, what it senses, what it may do - with each
+ * block once. A block that needs another first says which, and waits.
+ */
+const TOOLBOX: { title: string; items: { type: AgentBlockData["type"] | "tool"; label: string; glyph: GlyphName; needs?: AgentBlockData["type"] }[] }[] = [
+  {
+    title: "Triggers",
+    items: [
+      { type: "schedule", label: "Schedule", glyph: "clock" },
+      { type: "price", label: "Price", glyph: "dollar", needs: "market" },
+      { type: "walletWatch", label: "Wallet watch", glyph: "eye" },
+    ],
+  },
+  {
+    title: "Senses",
+    items: [
+      { type: "market", label: "Market", glyph: "layers" },
+      { type: "safety", label: "Safety", glyph: "shield" },
+      { type: "tool", label: "Agent tool", glyph: "spanner" },
+    ],
+  },
+  {
+    title: "Hands",
+    items: [
+      { type: "risk", label: "Risk limits", glyph: "filter" },
+      { type: "swap", label: "Swap", glyph: "wallet", needs: "risk" },
+    ],
+  },
+];
+
+const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = { market: "Add a Market first", risk: "Add Risk limits first" };
+
+function Toolbox({
+  blocks,
+  toolCount,
+  selected,
+  onPick,
+}: {
+  blocks: readonly AgentBlockData[];
+  toolCount: number;
+  selected: string | null;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div aria-label="Toolbox" className="canvas-toolbox" role="toolbar">
+      {TOOLBOX.map((group) => (
+        <div className="canvas-toolbox__group" key={group.title}>
+          <span className="canvas-toolbox__title">{group.title}</span>
+          <div className="canvas-toolbox__items">
+            {group.items.map((item) => {
+              if (item.type === "tool") {
+                return (
+                  <button
+                    className="canvas-toolbox__item"
+                    data-active={selected === "add-tool" || undefined}
+                    disabled={toolCount >= MAX_TOOLS}
+                    key={item.type}
+                    onClick={() => onPick(toolCount === 0 ? "tool-empty" : "add-tool")}
+                    title={toolCount >= MAX_TOOLS ? `An agent can have ${MAX_TOOLS} tools` : "A tool from an agent listed on Dolphin"}
+                    type="button"
+                  >
+                    <CategoryGlyph color="currentColor" name={item.glyph} size={14} strokeWidth={2} />
+                    {item.label}
+                  </button>
+                );
+              }
+              const existing = blocks.find((block) => block.type === item.type);
+              const missing = item.needs && !blocks.some((block) => block.type === item.needs) ? item.needs : null;
+              const id = existing ? `block-${existing.id}` : `new-${item.type}`;
+              return (
+                <button
+                  className="canvas-toolbox__item"
+                  data-active={selected === id || undefined}
+                  disabled={Boolean(missing)}
+                  key={item.type}
+                  onClick={() => onPick(id)}
+                  title={missing ? NEEDS_LABEL[missing] : existing ? "Already on the canvas - open it" : `Add ${item.label}`}
+                  type="button"
+                >
+                  <CategoryGlyph color="currentColor" name={item.glyph} size={14} strokeWidth={2} />
+                  {item.label}
+                  {existing ? <span aria-label="added" className="text-[10px] opacity-60">✓</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AgentCanvas({
   draft,
   editKey,
@@ -401,7 +590,10 @@ export function AgentCanvas({
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
   const [fitVersion, setFitVersion] = useState(0);
 
-  const selected = selectedId && base.nodes.some((node) => node.id === selectedId) ? selectedId : null;
+  // "new-<type>" is a block being added from the toolbox; it has no node yet.
+  const selected =
+    selectedId && (selectedId.startsWith("new-") || base.nodes.some((node) => node.id === selectedId)) ? selectedId : null;
+  const market = (draft.blocks ?? []).find((block) => block.type === "market");
   const nodes = useMemo(
     () =>
       base.nodes.map((node) => ({
@@ -480,6 +672,25 @@ export function AgentCanvas({
         <FitOnChange count={base.nodes.length} version={fitVersion} />
       </ReactFlow>
 
+      {market && market.type === "market" ? (
+        <div className="absolute left-3 top-3 z-10 w-[min(24rem,calc(100%-1.5rem))]">
+          <TradingChart poolAddress={market.config.poolAddress} symbol={market.config.symbol} tokenAddress={market.config.tokenAddress} />
+        </div>
+      ) : null}
+
+      {editKey ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-3">
+          <div className="pointer-events-auto">
+            <Toolbox
+              blocks={draft.blocks ?? []}
+              onPick={(id) => setSelectedId(id)}
+              selected={selected}
+              toolCount={draft.tools.length}
+            />
+          </div>
+        </div>
+      ) : null}
+
       {editKey && selected ? (
         <div className="absolute bottom-3 right-3 top-3 z-10 flex w-[21rem] flex-col justify-start">
           <AgentCanvasInspector
@@ -490,9 +701,9 @@ export function AgentCanvas({
             selectedId={selected}
           />
         </div>
-      ) : editKey ? (
+      ) : editKey && !market ? (
         <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted backdrop-blur">
-          Click a block to change it · drag to move it
+          Click a block to change it · drag to move it · add more from the toolbox
         </p>
       ) : run ? (
         <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted backdrop-blur">

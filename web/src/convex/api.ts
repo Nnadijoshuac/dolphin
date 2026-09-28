@@ -819,13 +819,35 @@ export type AgentDraftTool = { agentKey: string; agentName: string; toolName: st
 /** The model a draft thinks with, on its builder's own key. Never the key. */
 export type AgentBrain = { provider: "openai" | "openrouter"; model: string; keyName: string };
 
+/** A toolbox block. Mirrors AgentBlock in convex/lib/agentBlocks.ts. */
+export type AgentBlockData =
+  | { id: string; type: "market"; config: { tokenAddress: string; symbol: string; name: string; poolAddress: string | null } }
+  | { id: string; type: "safety"; config: Record<string, never> }
+  | { id: string; type: "swap"; config: Record<string, never> }
+  | { id: string; type: "risk"; config: { maxTradeUsd: number; maxTradesPerDay: number } }
+  | { id: string; type: "schedule"; config: { everyMinutes: number } }
+  | { id: string; type: "price"; config: { direction: "above" | "below"; priceUsd: number } }
+  | { id: string; type: "walletWatch"; config: { addresses: string[]; label: string | null } };
+
 export type AgentDraftData = {
   name: string | null;
   description: string | null;
   instructions: string | null;
   tools: AgentDraftTool[];
   brain: AgentBrain | null;
+  blocks: AgentBlockData[];
+  autopilot: { on: boolean; conversationKey: string } | null;
   updatedAt: number;
+};
+
+/** convex/autopilot.ts - arm or disarm a draft's triggers. */
+export const autopilotApi = anyApi as unknown as {
+  autopilot: {
+    setAutopilot: Mutation<
+      { conversationKey: string; sessionToken: string; on: boolean },
+      { on: boolean; triggers: number; conversationKey?: string }
+    >;
+  };
 };
 
 /**
@@ -877,6 +899,7 @@ export const agentBuilderApi = anyApi as unknown as {
         tools?: { agentKey: string; toolName: string }[];
         brain?: AgentBrain | null;
         sessionToken?: string;
+        blocks?: AgentBlockData[];
       },
       { gaps: string[] }
     >;

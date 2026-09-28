@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { EnvVarsPanel } from "@/components/env-vars-panel";
+import type { AgentBlockData } from "@/convex/api";
 
 /**
  * The agent a user is building, as the Build mode of /dolphin shows it.
@@ -25,6 +26,9 @@ export type AgentDraft = {
   tools: readonly { agentKey: string; agentName: string; toolName: string }[];
   /** The model it thinks with, on the builder's own key. Null until chosen. */
   brain?: { provider: "openai" | "openrouter"; model: string; keyName: string } | null;
+  /** Toolbox blocks: market, safety, risk, swap and triggers. */
+  blocks?: readonly AgentBlockData[];
+  autopilot?: { on: boolean; conversationKey: string } | null;
 };
 
 export const EMPTY_AGENT_DRAFT: AgentDraft = {
@@ -88,6 +92,9 @@ export function AgentDraftPanel({
   isStartingTry = false,
   onPublish,
   published = [],
+  onToggleAutopilot,
+  onWatchRuns,
+  autopilotBusy = false,
 }: {
   draft: AgentDraft;
   onClose?: () => void;
@@ -102,6 +109,11 @@ export function AgentDraftPanel({
   onPublish?: () => void;
   /** Where this draft already lives on-chain, per network. */
   published?: readonly { hash: string; networkLabel: string; status: string; tokenId: string | null }[];
+  /** Arms or disarms the draft's triggers. Absent outside Build mode. */
+  onToggleAutopilot?: (on: boolean) => void;
+  /** Opens the autopilot's run feed. */
+  onWatchRuns?: () => void;
+  autopilotBusy?: boolean;
 }) {
   // Draft, or the builder's own keys (owner, 2026-09-28: "a new tab ... to manage their envs").
   const [tab, setTab] = useState<"draft" | "keys">("draft");
@@ -224,6 +236,15 @@ export function AgentDraftPanel({
         </div>
       </div>
 
+      {onToggleAutopilot ? (
+        <AutopilotCard
+          busy={autopilotBusy}
+          draft={draft}
+          onToggle={onToggleAutopilot}
+          onWatchRuns={onWatchRuns}
+        />
+      ) : null}
+
       <div className="mt-3 space-y-2 border-t border-line/60 px-2 pt-3">
         {trying ? (
           <button
@@ -277,5 +298,59 @@ export function AgentDraftPanel({
       </>
       )}
     </aside>
+  );
+}
+
+const TRIGGER_TYPES = ["schedule", "price", "walletWatch"];
+
+/**
+ * AUTOPILOT (2026-09-28): the agent runs on its own triggers, on its builder's
+ * key, up to 48 times a day (convex/autopilot.ts). Shown only once there is a
+ * trigger to arm - before that it says how to get one.
+ */
+function AutopilotCard({
+  draft,
+  busy,
+  onToggle,
+  onWatchRuns,
+}: {
+  draft: AgentDraft;
+  busy: boolean;
+  onToggle: (on: boolean) => void;
+  onWatchRuns?: () => void;
+}) {
+  const triggers = (draft.blocks ?? []).filter((block) => TRIGGER_TYPES.includes(block.type));
+  const on = Boolean(draft.autopilot?.on);
+  return (
+    <div className="mx-2 mt-3 rounded-xl border border-line bg-paper-strong px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] font-semibold text-ink">Autopilot</p>
+          <p className="text-[0.68rem] leading-snug text-muted">
+            {triggers.length === 0
+              ? "Add a Schedule, Price or Wallet watch from the toolbox to let it run on its own."
+              : on
+                ? `On · runs on ${triggers.length} trigger${triggers.length === 1 ? "" : "s"}, up to 48 times a day, on your key`
+                : "Off · it runs only when you ask it"}
+          </p>
+        </div>
+        <button
+          aria-checked={on}
+          aria-label="Autopilot"
+          className="autopilot-switch"
+          disabled={busy || triggers.length === 0}
+          onClick={() => onToggle(!on)}
+          role="switch"
+          type="button"
+        >
+          <span className="autopilot-switch__knob" />
+        </button>
+      </div>
+      {draft.autopilot && onWatchRuns ? (
+        <button className="mt-1.5 !text-[0.72rem] font-semibold text-accent-ink hover:underline" onClick={onWatchRuns} type="button">
+          Watch its runs →
+        </button>
+      ) : null}
+    </div>
   );
 }

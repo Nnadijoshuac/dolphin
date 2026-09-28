@@ -1926,3 +1926,20 @@ select {
   .agent-edge__flow, .agent-block__live::after { animation: none; }
   .agent-edge__pulse { display: none; }
 }
+
+/* Two-way panel tabs (agent-draft-panel.tsx): a darker track, a white selected pill. */
+.panel-tabs {
+  background: color-mix(in srgb, var(--ink) 9%, var(--paper));
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.panel-tabs__tab { color: var(--muted); }
+.panel-tabs__tab:hover { color: var(--ink); }
+.panel-tabs__tab[aria-selected="true"] {
+  background: #ffffff;
+  color: #171813;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12), 0 2px 8px -2px rgba(15, 23, 42, 0.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .panel-tabs { background: color-mix(in srgb, #000 35%, var(--paper)); }
+}
+:root[data-theme="dark"] .panel-tabs { background: color-mix(in srgb, #000 35%, var(--paper)); }

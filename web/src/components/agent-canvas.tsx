@@ -392,6 +392,13 @@ export function AgentCanvas({
     value: typeof window === "undefined" ? {} : readPositions(layoutKey),
   }));
   if (positions.key !== layoutKey) setPositions({ key: layoutKey, value: readPositions(layoutKey) });
+  /*
+   * React Flow's own measurements of each block. With controlled nodes they
+   * must be handed back on every render: without them a block counts as
+   * unmeasured and is hidden for a frame, which is what made the whole canvas
+   * blink on every step of a drag (owner, 2026-09-28).
+   */
+  const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
   const [fitVersion, setFitVersion] = useState(0);
 
   const selected = selectedId && base.nodes.some((node) => node.id === selectedId) ? selectedId : null;
@@ -401,12 +408,27 @@ export function AgentCanvas({
         ...node,
         position: positions.value[node.id] ?? node.position,
         selected: node.id === selected,
+        ...(measured[node.id] ? { measured: measured[node.id] } : {}),
       })),
-    [base.nodes, positions.value, selected],
+    [base.nodes, measured, positions.value, selected],
   );
 
   const onNodesChange = useCallback(
     (changes: NodeChange<BlockNode>[]) => {
+      const sized = changes.filter((change) => change.type === "dimensions" && change.dimensions);
+      if (sized.length > 0) {
+        setMeasured((current) => {
+          let next = current;
+          for (const change of sized) {
+            if (change.type !== "dimensions" || !change.dimensions) continue;
+            const old = current[change.id];
+            if (old && old.width === change.dimensions.width && old.height === change.dimensions.height) continue;
+            if (next === current) next = { ...current };
+            next[change.id] = { width: change.dimensions.width, height: change.dimensions.height };
+          }
+          return next;
+        });
+      }
       const moved = changes.filter((change) => change.type === "position" && change.position);
       if (moved.length === 0) return;
       const next = applyNodeChanges(moved, nodes);

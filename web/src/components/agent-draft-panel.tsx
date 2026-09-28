@@ -139,13 +139,12 @@ export function AgentDraftPanel({
         ) : null}
       </div>
 
-      <div aria-label="Panel" className="mx-2 mt-2 grid grid-cols-2 rounded-full bg-paper-muted/70 p-[3px]" role="tablist">
+      {/* A visibly darker track and a white selected pill (owner, 2026-09-28: "you can't tell if it's on Keys or Draft"). */}
+      <div aria-label="Panel" className="panel-tabs mx-2 mt-2 grid grid-cols-2 rounded-full p-[3px]" role="tablist">
         {(["draft", "keys"] as const).map((option) => (
           <button
             aria-selected={tab === option}
-            className={`rounded-full py-1 !text-[12px] font-medium transition-colors ${
-              tab === option ? "bg-paper-strong text-ink shadow-sm" : "text-muted hover:text-ink"
-            }`}
+            className="panel-tabs__tab rounded-full py-1 !text-[12px] font-semibold transition-all"
             key={option}
             onClick={() => setTab(option)}
             role="tab"

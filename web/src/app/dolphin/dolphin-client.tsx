@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "convex/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 /* React Flow's stylesheet, for the Build canvas. External stylesheets are imported from app/ (Next CSS docs). */
 import "@xyflow/react/dist/style.css";
@@ -25,6 +25,7 @@ import {
 } from "@/hooks/use-dolphin-conversation";
 import { usePanelLayout, type PanelKey } from "@/hooks/use-panel-layout";
 import { useAppStore, type ChatHistoryEntry } from "@/store/use-app-store";
+import { NEW_CONVERSATION, useDolphinPlaceStore } from "@/store/use-dolphin-place-store";
 import { useWallet } from "@/wallet/wallet-provider";
 
 /** Matches the abbreviation SiteHeader uses, so one address reads the same everywhere. */
@@ -193,6 +194,11 @@ function ResizeHandle({
       <span className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent transition-colors group-hover:bg-line-strong group-focus-visible:bg-accent group-active:bg-accent" />
     </div>
   );
+}
+
+/** For the "am I mounted" snapshot: nothing ever changes, so nothing is notified. */
+function subscribeToNothing() {
+  return () => {};
 }
 
 function HistoryGlyph({ size = 18 }: { size?: number }) {
@@ -469,16 +475,20 @@ export function DolphinClient({
   /** From `?c=`: a conversation to open straight away. */
   initialConversationKey?: string | null;
 }) {
-  const [draft, setDraft] = useState(() =>
-    !autoAsk && seedAgentName
-      ? `Tell me about ${seedAgentName.trim()} — what strategy does it run?`
-      : "",
-  );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [draftOpen, setDraftOpen] = useState(false);
-  const [mode, setMode] = useState<ChatMode>("chat");
+  /*
+   * The new-conversation mode and the composer text live in the place store
+   * (browser-only), so they survive leaving the page. Read only once mounted:
+   * the server render, and the client render that hydrates it, use defaults.
+   */
+  const mounted = useSyncExternalStore(subscribeToNothing, () => true, () => false);
+  const storedMode = useDolphinPlaceStore((state) => state.newMode);
+  const setMode = useDolphinPlaceStore((state) => state.setNewMode);
+  const mode: ChatMode = mounted ? storedMode : "chat";
   const wallet = useWallet();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoAskedRef = useRef(false);
 
@@ -495,23 +505,93 @@ export function DolphinClient({
     sendError,
   } = useDolphinChat(seedAgentKey, mode);
 
-  /* `?c=` opens that conversation once; the history list picks it up from there. */
+  const composerKey = conversationKey ?? NEW_CONVERSATION;
+  const storedComposer = useDolphinPlaceStore((state) => state.composer[composerKey]);
+  const draft = mounted ? (storedComposer ?? "") : "";
+  /** The composer's text, remembered per conversation as it is typed. */
+  const setComposerText = useCallback(
+    (text: string) => useDolphinPlaceStore.getState().setComposer(composerKey, text),
+    [composerKey],
+  );
+
+  /*
+   * WHERE TO START, once, after mount (owner, 2026-09-28: remember where they
+   * were). A `?c=` link wins; a link about an agent starts fresh on purpose;
+   * otherwise the conversation, mode and unsent text from last time come back
+   * (store/use-dolphin-place-store.ts - this browser only, never the database).
+   * After mount, because the server render cannot know any of it.
+   */
   const openedFromLinkRef = useRef(false);
+  const restoredKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!initialConversationKey || openedFromLinkRef.current) return;
+    if (openedFromLinkRef.current) return;
     openedFromLinkRef.current = true;
-    openConversation(initialConversationKey);
-  }, [initialConversationKey, openConversation]);
+    if (initialConversationKey) {
+      openConversation(initialConversationKey);
+      return;
+    }
+    const place = useDolphinPlaceStore.getState();
+    if (seedAgentKey) {
+      // A question about one agent: a fresh Chat, with the question ready.
+      place.setNewMode("chat");
+      if (!autoAsk && seedAgentName) {
+        place.setComposer(NEW_CONVERSATION, `Tell me about ${seedAgentName.trim()} — what strategy does it run?`);
+      }
+      return;
+    }
+    if (place.conversationKey) {
+      restoredKeyRef.current = place.conversationKey;
+      openConversation(place.conversationKey);
+    }
+  }, [autoAsk, initialConversationKey, openConversation, seedAgentKey, seedAgentName]);
   const { exists, isLoading, title, turns, agentDirectory } =
     useDolphinConversation(conversationKey);
+
+  /* Keep the place current. Skips the first render, which is before the restore above. */
+  const placeMountedRef = useRef(false);
+  useEffect(() => {
+    if (!placeMountedRef.current) {
+      placeMountedRef.current = true;
+      return;
+    }
+    useDolphinPlaceStore.getState().setConversationKey(conversationKey);
+  }, [conversationKey]);
+
+  /* A remembered conversation that no longer exists quietly becomes a new one. */
+  useEffect(() => {
+    if (conversationKey && conversationKey === restoredKeyRef.current && !isLoading && !exists) {
+      restoredKeyRef.current = null;
+      reset();
+    }
+  }, [conversationKey, exists, isLoading, reset]);
+
+
   const history = useAppStore((state) => state.chatHistory);
   const upsertHistory = useAppStore((state) => state.upsertChatHistory);
   const removeHistory = useAppStore((state) => state.removeChatHistory);
   const clearHistory = useAppStore((state) => state.clearChatHistory);
 
+  /*
+   * SCROLL. Opening a conversation - including coming back to one - lands
+   * where the person left it, or at the bottom if they never scrolled. After
+   * that, new turns follow the bottom as before.
+   */
+  const scrolledKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    if (!conversationKey || turns.length === 0) return;
+    if (scrolledKeyRef.current !== conversationKey) {
+      scrolledKeyRef.current = conversationKey;
+      const saved = useDolphinPlaceStore.getState().scroll[conversationKey];
+      const scroller = scrollerRef.current;
+      requestAnimationFrame(() => {
+        if (scroller && saved !== undefined) scroller.scrollTop = saved;
+        else bottomRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
+      });
+      return;
+    }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [turns]);
+  }, [conversationKey, turns]);
+  const scrollFrameRef = useRef(0);
 
   useEffect(() => {
     if (!conversationKey || turns.length === 0) return;
@@ -528,11 +608,11 @@ export function DolphinClient({
     (text: string) => {
       if (text.trim().length === 0 || isSending) return;
       if (activeMode !== "chat" && !BUILD_BACKEND_CONNECTED) return;
-      setDraft("");
+      setComposerText("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       void send(text);
     },
-    [activeMode, isSending, send],
+    [activeMode, isSending, send, setComposerText],
   );
 
   useEffect(() => {
@@ -551,7 +631,6 @@ export function DolphinClient({
 
   const startNew = useCallback(() => {
     reset();
-    setDraft("");
     setHistoryOpen(false);
     textareaRef.current?.focus();
   }, [reset]);
@@ -559,7 +638,6 @@ export function DolphinClient({
   const openSavedConversation = useCallback(
     (conversationKeyToOpen: string) => {
       openConversation(conversationKeyToOpen);
-      setDraft("");
       setHistoryOpen(false);
     },
     [openConversation],
@@ -678,7 +756,7 @@ export function DolphinClient({
             isEmpty ? "min-h-[3.4rem]" : "min-h-0"
           }`}
           onChange={(event) => {
-            setDraft(event.target.value);
+            setComposerText(event.target.value);
             event.target.style.height = "auto";
             event.target.style.height = `${Math.min(event.target.scrollHeight, 400)}px`;
           }}
@@ -908,7 +986,18 @@ export function DolphinClient({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto"
+          onScroll={(event) => {
+            const top = event.currentTarget.scrollTop;
+            if (!conversationKey) return;
+            cancelAnimationFrame(scrollFrameRef.current);
+            scrollFrameRef.current = requestAnimationFrame(() =>
+              useDolphinPlaceStore.getState().setScroll(conversationKey, top),
+            );
+          }}
+          ref={scrollerRef}
+        >
           {conversationKey && isLoading ? (
             <div className="flex justify-center pt-[18vh]">
               <DolphinLoader label="Loading conversation…" />
@@ -967,7 +1056,7 @@ export function DolphinClient({
                        * anything is drafted.
                        */
                       if (building) {
-                        setDraft(suggestion);
+                        setComposerText(suggestion);
                         textareaRef.current?.focus();
                       } else {
                         submit(suggestion);

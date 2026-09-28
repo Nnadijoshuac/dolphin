@@ -2168,3 +2168,10 @@ select {
 /* The flow's zoom (1.25, above) would enlarge its controls; keep them the page's size. */
 .agent-canvas .react-flow__controls,
 .agent-canvas .react-flow__attribution { zoom: 0.8; }
+
+/*
+ * A secret typed into Dolphin (an API key) is masked with CSS, not
+ * type="password": Chrome treats any password field as a login form and
+ * autofilled the owner's email into the field above it (2026-09-28).
+ */
+.secret-field { -webkit-text-security: disc; }

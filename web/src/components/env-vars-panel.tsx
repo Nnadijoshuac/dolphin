@@ -112,6 +112,9 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
         <input
           aria-label="Name"
           autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          name="dolphin-variable-name"
           className={`${fieldClass} font-mono uppercase`}
           onChange={(event) => setName(event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))}
           placeholder="OPENAI_API_KEY"
@@ -133,11 +136,14 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
         <input
           aria-label="Value"
           autoComplete="off"
-          className={`${fieldClass} font-mono`}
+          className={`${fieldClass} secret-field font-mono`}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Paste the key"
           spellCheck={false}
-          type="password"
+          type="text"
+          data-1p-ignore
+          data-lpignore="true"
+          name="dolphin-secret"
           value={value}
         />
         <button

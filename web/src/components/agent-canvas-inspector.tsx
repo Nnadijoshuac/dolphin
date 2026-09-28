@@ -241,11 +241,14 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
                 <input
                   aria-label={`Paste your ${option.label} key`}
                   autoComplete="off"
-                  className={`${fieldClass} font-mono`}
+                  className={`${fieldClass} secret-field font-mono`}
                   onChange={(e) => setPastedKey(e.target.value)}
                   placeholder={`Paste your ${option.label} key`}
                   spellCheck={false}
-                  type="password"
+                  type="text"
+          data-1p-ignore
+          data-lpignore="true"
+          name="dolphin-secret"
                   value={pastedKey}
                 />
                 <button

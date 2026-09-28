@@ -1031,6 +1031,16 @@ export const envVarsApi = anyApi as unknown as {
   };
 };
 
+/** convex/brainModels.ts - which provider a saved key is for, and its models. Never returns the key. */
+export const brainModelsApi = anyApi as unknown as {
+  brainModels: {
+    detect: Action<
+      { sessionToken: string; keyName: string; provider?: string },
+      { provider: BrainProviderId | null; label: string | null; models: string[]; note: string | null }
+    >;
+  };
+};
+
 /** convex/favorites.ts - agents a signed-in wallet starred. */
 export const favoritesApi = anyApi as unknown as {
   favorites: {

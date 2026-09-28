@@ -21,6 +21,7 @@ import type * as agents from "../agents.js";
 import type * as autopilot from "../autopilot.js";
 import type * as autotrade from "../autotrade.js";
 import type * as balance from "../balance.js";
+import type * as brainModels from "../brainModels.js";
 import type * as builtAgentMoves from "../builtAgentMoves.js";
 import type * as builtAgentServer from "../builtAgentServer.js";
 import type * as builtAgents from "../builtAgents.js";
@@ -110,6 +111,7 @@ declare const fullApi: ApiFromModules<{
   autopilot: typeof autopilot;
   autotrade: typeof autotrade;
   balance: typeof balance;
+  brainModels: typeof brainModels;
   builtAgentMoves: typeof builtAgentMoves;
   builtAgentServer: typeof builtAgentServer;
   builtAgents: typeof builtAgents;

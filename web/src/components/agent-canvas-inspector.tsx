@@ -4,7 +4,15 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 
 import type { AgentDraft } from "@/components/agent-draft-panel";
-import { agentBuilderApi, BRAIN_PROVIDER_OPTIONS, envVarsApi, type AgentBlockData, type BrainProviderId } from "@/convex/api";
+import { ChoiceList, type Choice } from "@/components/choice-list";
+import {
+  agentBuilderApi,
+  brainModelsApi,
+  BRAIN_PROVIDER_OPTIONS,
+  envVarsApi,
+  type AgentBlockData,
+  type BrainProviderId,
+} from "@/convex/api";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "@/store/use-toast-store";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -93,15 +101,41 @@ function SaveButton({ disabled, saving, onClick }: { disabled: boolean; saving: 
 const fieldClass =
   "mt-1 w-full rounded-lg border border-line bg-paper-strong px-2.5 py-1.5 text-[0.84rem] text-ink outline-none focus:border-line-strong";
 
+/**
+ * Which provider a pasted key is for, by its prefix alone - only to NAME it
+ * (ANTHROPIC_API_KEY...). The real answer comes from convex/brainModels.ts,
+ * which asks the provider. Mirrors candidatesFor's first choice there.
+ */
+function providerFromPrefix(key: string): BrainProviderId | null {
+  const k = key.trim();
+  if (k.startsWith("sk-ant-")) return "anthropic";
+  if (k.startsWith("sk-or-")) return "openrouter";
+  if (k.startsWith("gsk_")) return "groq";
+  if (k.startsWith("xai-")) return "xai";
+  if (k.startsWith("AIza")) return "google";
+  if (k.startsWith("fw_")) return "fireworks";
+  if (/^sk-[0-9a-f]{32}$/i.test(k)) return "deepseek";
+  if (k.startsWith("sk-")) return "openai";
+  return null;
+}
+
+type Detection = { for: string; provider: BrainProviderId | null; models: string[]; note: string | null };
+
 function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: string; draft: AgentDraft; onClose: () => void }) {
   const [name, setName] = useState(draft.name ?? "");
   const [description, setDescription] = useState(draft.description ?? "");
-  const [provider, setProvider] = useState<BrainProviderId>((draft.brain?.provider as BrainProviderId) ?? "openai");
+  // null: the provider is whatever the key turns out to be for. Set: the builder chose it.
+  const [providerChoice, setProviderChoice] = useState<BrainProviderId | null>(
+    (draft.brain?.provider as BrainProviderId | undefined) ?? null,
+  );
+  const [changingProvider, setChangingProvider] = useState(false);
   const [baseUrl, setBaseUrl] = useState(draft.brain?.baseUrl ?? "");
   const [model, setModel] = useState(draft.brain?.model ?? "");
   const [keyName, setKeyName] = useState(draft.brain?.keyName ?? "");
+  const [pasting, setPasting] = useState(false);
   const [pastedKey, setPastedKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
+  const [detection, setDetection] = useState<Detection | null>(null);
   const session = useWalletSession();
   const wallet = useWallet();
   // The builder's own keys, by name only (convex/envVars.ts never returns a value).
@@ -110,34 +144,69 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
     session.sessionToken ? { sessionToken: session.sessionToken } : "skip",
   );
   const setVariable = useAction(envVarsApi.envVars.set);
+  const detect = useAction(brainModelsApi.brainModels.detect);
   const { save, saving } = useSaveDraft(conversationKey);
 
-  const option = BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === provider)!;
+  // Ask the backend which provider the chosen key is for, and what models it offers.
+  const detectFor = keyName && session.sessionToken && providerChoice !== "custom" ? `${keyName}|${providerChoice ?? ""}` : null;
+  useEffect(() => {
+    if (!detectFor || !session.sessionToken) return;
+    let live = true;
+    detect({ sessionToken: session.sessionToken, keyName, ...(providerChoice ? { provider: providerChoice } : {}) })
+      .then((result) => {
+        if (live) setDetection({ for: detectFor, ...result });
+      })
+      .catch((cause) => {
+        if (live) setDetection({ for: detectFor, provider: null, models: [], note: errorText(cause, "Could not read that key.") });
+      });
+    return () => {
+      live = false;
+    };
+  }, [detect, detectFor, keyName, providerChoice, session.sessionToken]);
+
+  const current = detectFor && detection?.for === detectFor ? detection : null;
+  const detecting = Boolean(detectFor) && !current;
+  const provider: BrainProviderId | null = providerChoice ?? current?.provider ?? null;
+  const option = provider ? BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === provider)! : null;
+  const models = current?.models ?? [];
+
   const textChanged = name !== (draft.name ?? "") || description !== (draft.description ?? "");
   const brainChanged =
-    provider !== (draft.brain?.provider ?? "openai") ||
+    (provider ?? "") !== (draft.brain?.provider ?? "") ||
     model.trim() !== (draft.brain?.model ?? "") ||
     keyName !== (draft.brain?.keyName ?? "") ||
     baseUrl.trim() !== (draft.brain?.baseUrl ?? "");
   // What still stands between this brain and being saved, in words - never a silently dead button.
   const brainMissing = !session.sessionToken
     ? "Sign in with your wallet first - the key must belong to you."
-    : provider === "custom" && !baseUrl.trim().startsWith("https://")
-      ? "Enter the custom endpoint's https:// address."
-      : model.trim().length < 2
-        ? `Enter a model id, e.g. ${option.example}.`
-        : !keyName
-          ? `Choose your ${option.label} key, or paste one below.`
-          : null;
+    : !keyName
+      ? "Choose one of your keys, or paste one."
+      : detecting
+        ? "Reading your key…"
+        : !provider
+          ? "Dolphin could not tell which provider this key is for - choose it."
+          : provider === "custom" && !baseUrl.trim().startsWith("https://")
+            ? "Enter the custom endpoint's https:// address."
+            : model.trim().length < 2
+              ? "Choose a model."
+              : null;
 
-  /** Saves a pasted key under the provider's usual name and selects it. */
+  /** Saves a pasted key under its provider's usual name (never over an existing key) and selects it. */
   const saveKey = async () => {
     if (!session.sessionToken || !pastedKey.trim()) return;
+    const guessed = providerFromPrefix(pastedKey);
+    const base = guessed ? BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === guessed)!.keyName : "BRAIN_API_KEY";
+    const taken = new Set((keys ?? []).map((key) => key.name));
+    let keyNameToUse = base;
+    for (let n = 2; taken.has(keyNameToUse) && n < 20; n++) keyNameToUse = `${base}_${n}`;
     setSavingKey(true);
     try {
-      const saved = await setVariable({ sessionToken: session.sessionToken, name: option.keyName, value: pastedKey });
+      const saved = await setVariable({ sessionToken: session.sessionToken, name: keyNameToUse, value: pastedKey });
       setKeyName(saved.name);
+      setProviderChoice(null);
+      setModel("");
       setPastedKey("");
+      setPasting(false);
       toast.success(`${saved.name} saved, encrypted. It will not be shown again.`);
     } catch (cause) {
       toast.error(errorText(cause, "Could not save that key."));
@@ -145,6 +214,18 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
       setSavingKey(false);
     }
   };
+
+  const keyChoices: Choice[] = (keys ?? []).map((key) => ({
+    value: key.name,
+    label: key.name,
+    hint: key.last4 ? `••••${key.last4}` : undefined,
+  }));
+  const providerChoices: Choice[] = [
+    { value: "", label: "Work it out from the key" },
+    ...BRAIN_PROVIDER_OPTIONS.map((candidate) => ({ value: candidate.id, label: candidate.label })),
+  ];
+  const modelChoices: Choice[] = models.map((id) => ({ value: id, label: id }));
+  const showPaste = pasting || (keys !== undefined && keys.length === 0);
 
   return (
     <Shell onClose={onClose} title="Brain">
@@ -165,42 +246,6 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
 
       <div className="mt-4 border-t border-line/60 pt-3">
         <Label>Model · on your own key</Label>
-        <select
-          aria-label="Provider"
-          className={`${fieldClass} mt-1.5`}
-          onChange={(event) => {
-            const next = event.target.value as BrainProviderId;
-            setProvider(next);
-            // Point at the usual key name for that provider, when this wallet has it.
-            const usual = BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === next)?.keyName;
-            if (usual && keys?.some((key) => key.name === usual)) setKeyName(usual);
-          }}
-          value={provider}
-        >
-          {BRAIN_PROVIDER_OPTIONS.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {candidate.label}
-            </option>
-          ))}
-        </select>
-        {provider === "custom" ? (
-          <input
-            aria-label="Endpoint base URL"
-            className={`${fieldClass} mt-2 font-mono`}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://api.example.com/v1 (OpenAI-compatible)"
-            spellCheck={false}
-            value={baseUrl}
-          />
-        ) : null}
-        <input
-          aria-label="Model"
-          className={`${fieldClass} mt-2 font-mono`}
-          onChange={(e) => setModel(e.target.value)}
-          placeholder={option.example}
-          spellCheck={false}
-          value={model}
-        />
 
         {session.status === "unavailable" ? null : !session.sessionToken ? (
           <div className="mt-2 rounded-lg bg-paper-muted/70 px-3 py-2.5">
@@ -220,35 +265,40 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
           </div>
         ) : (
           <>
-            {keys && keys.length > 0 ? (
-              <select
-                aria-label="Key"
-                className={`${fieldClass} mt-2 font-mono`}
-                onChange={(e) => setKeyName(e.target.value)}
-                value={keyName}
-              >
-                <option value="">Choose a key…</option>
-                {keys.map((key) => (
-                  <option key={key.name} value={key.name}>
-                    {key.name}
-                    {key.last4 ? ` (••••${key.last4})` : ""}
-                  </option>
-                ))}
-              </select>
+            {keyChoices.length > 0 ? (
+              <div className="mt-1.5">
+                <ChoiceList
+                  ariaLabel="Key"
+                  choices={keyChoices}
+                  footer={{ label: "+ Paste a new key", onSelect: () => setPasting(true) }}
+                  mono
+                  onChange={(next) => {
+                    if (next === keyName) return;
+                    setKeyName(next);
+                    setProviderChoice(null);
+                    setChangingProvider(false);
+                    setModel("");
+                  }}
+                  placeholder="Choose a key…"
+                  searchable={false}
+                  value={keyName}
+                />
+              </div>
             ) : null}
-            {keys && !keys.some((key) => key.name === option.keyName) ? (
+
+            {showPaste ? (
               <div className="mt-2 flex gap-1.5">
                 <input
-                  aria-label={`Paste your ${option.label} key`}
+                  aria-label="Paste your API key"
                   autoComplete="off"
-                  className={`${fieldClass} secret-field font-mono`}
+                  className={`${fieldClass} secret-field !mt-0 font-mono`}
+                  data-1p-ignore
+                  data-lpignore="true"
+                  name="dolphin-secret"
                   onChange={(e) => setPastedKey(e.target.value)}
-                  placeholder={`Paste your ${option.label} key`}
+                  placeholder="Paste any provider's API key"
                   spellCheck={false}
                   type="text"
-          data-1p-ignore
-          data-lpignore="true"
-          name="dolphin-secret"
                   value={pastedKey}
                 />
                 <button
@@ -259,6 +309,66 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
                 >
                   {savingKey ? "Saving…" : "Add"}
                 </button>
+              </div>
+            ) : null}
+
+            {keyName ? (
+              <div className="brain-provider mt-2">
+                <span aria-hidden className="brain-provider__dot" data-state={detecting ? "reading" : provider ? "known" : "unknown"} />
+                <p className="min-w-0 flex-1 truncate text-[0.74rem] text-ink-soft">
+                  {detecting
+                    ? "Reading your key…"
+                    : option
+                      ? `${option.label}${providerChoice ? "" : " · worked out from your key"}`
+                      : "Provider unknown"}
+                </p>
+                <button
+                  className="shrink-0 !text-[0.72rem] font-semibold text-muted hover:text-ink"
+                  onClick={() => setChangingProvider((open) => !open)}
+                  type="button"
+                >
+                  {changingProvider ? "Done" : "Change"}
+                </button>
+              </div>
+            ) : null}
+            {current?.note && !detecting ? <p className="mt-1 text-[0.7rem] leading-snug text-muted">{current.note}</p> : null}
+
+            {keyName && (changingProvider || (!detecting && !provider)) ? (
+              <ChoiceList
+                ariaLabel="Provider"
+                choices={providerChoices}
+                onChange={(next) => {
+                  setProviderChoice(next ? (next as BrainProviderId) : null);
+                  setModel("");
+                  setChangingProvider(false);
+                }}
+                searchable={false}
+                value={providerChoice ?? ""}
+              />
+            ) : null}
+
+            {provider === "custom" ? (
+              <input
+                aria-label="Endpoint base URL"
+                className={`${fieldClass} mt-2 font-mono`}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder="https://api.example.com/v1 (OpenAI-compatible)"
+                spellCheck={false}
+                value={baseUrl}
+              />
+            ) : null}
+
+            {keyName && provider ? (
+              <div className="mt-2">
+                <ChoiceList
+                  allowCustom
+                  ariaLabel="Model"
+                  choices={modelChoices}
+                  mono
+                  onChange={setModel}
+                  placeholder={models.length > 0 ? `Choose from ${models.length} models…` : `Type a model id, e.g. ${option?.example ?? ""}`}
+                  value={model}
+                />
               </div>
             ) : null}
           </>
@@ -274,7 +384,7 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
           }
           void save({
             ...(textChanged ? { name, description } : {}),
-            ...(brainChanged && !brainMissing && session.sessionToken
+            ...(brainChanged && !brainMissing && provider && session.sessionToken
               ? {
                   brain: { provider, model: model.trim(), keyName, baseUrl: provider === "custom" ? baseUrl.trim() : null },
                   sessionToken: session.sessionToken,
@@ -673,16 +783,19 @@ function BlockEditor({
       ) : null}
 
       {type === "schedule" ? (
-        <label className="mt-3 block">
+        <div className="mt-3">
           <Label>Run every</Label>
-          <select className={`${fieldClass} mt-1`} onChange={(event) => setEveryMinutes(Number(event.target.value))} value={everyMinutes}>
-            {SCHEDULES.map((minutes) => (
-              <option key={minutes} value={minutes}>
-                {minutes >= 60 ? `${minutes / 60} hour${minutes === 60 ? "" : "s"}` : `${minutes} minutes`}
-              </option>
-            ))}
-          </select>
-        </label>
+          <ChoiceList
+            ariaLabel="Run every"
+            choices={SCHEDULES.map((minutes) => ({
+              value: String(minutes),
+              label: minutes >= 60 ? `${minutes / 60} hour${minutes === 60 ? "" : "s"}` : `${minutes} minutes`,
+            }))}
+            onChange={(next) => setEveryMinutes(Number(next))}
+            searchable={false}
+            value={String(everyMinutes)}
+          />
+        </div>
       ) : null}
 
       {type === "price" ? (

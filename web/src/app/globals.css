@@ -2175,3 +2175,99 @@ select {
  * autofilled the owner's email into the field above it (2026-09-28).
  */
 .secret-field { -webkit-text-security: disc; }
+
+/* ── Dolphin's dropdown (components/choice-list.tsx), replacing native <select> ── */
+.choice-list__trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.6rem 0.4rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--paper-strong);
+  font-size: 0.84rem;
+  box-shadow: inset 0 1px 2px var(--sink-top);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.choice-list__trigger:hover { border-color: var(--line-strong); }
+.choice-list__trigger[data-open] {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 30%, transparent);
+}
+.choice-list__chevron { flex-shrink: 0; color: var(--muted); transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.choice-list__trigger[data-open] .choice-list__chevron { transform: rotate(180deg); color: var(--ink); }
+.choice-list__pop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow: 0 18px 40px -18px rgba(15, 23, 42, 0.45), 0 2px 6px -2px rgba(15, 23, 42, 0.12);
+  transform-origin: top center;
+  animation: choice-pop 170ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes choice-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.choice-list__search {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font-size: 0.8rem;
+  color: var(--ink);
+  outline: none;
+  box-shadow: none !important;
+}
+.choice-list__rows { max-height: 15rem; overflow-y: auto; padding: 0.25rem; margin: 0; list-style: none; }
+.choice-list__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 90ms ease;
+}
+.choice-list__row[data-active] { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.choice-list__row[aria-selected="true"] { font-weight: 600; }
+.choice-list__footer {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.85rem;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.choice-list__footer:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .choice-list__pop { animation: none; }
+}
+
+/* The Brain's provider line: which provider the chosen key turned out to be for. */
+.brain-provider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.brain-provider__dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 999px; background: var(--line-strong); }
+.brain-provider__dot[data-state="known"] { background: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 22%, transparent); }
+.brain-provider__dot[data-state="reading"] { background: var(--accent); animation: brain-reading 900ms ease-in-out infinite alternate; }
+@keyframes brain-reading { from { opacity: 0.35; transform: scale(0.8); } to { opacity: 1; transform: scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .brain-provider__dot[data-state="reading"] { animation: none; } }

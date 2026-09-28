@@ -433,6 +433,32 @@
   transform: translateY(2px);
 }
 
+/*
+ * The card plus its star. The star is a sibling of the link (a button inside
+ * an <a> is invalid), so it rides the card's lift here rather than inheriting it.
+ */
+.agentCardWrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.agentCardWrap > .agentCard {
+  flex: 1;
+}
+
+.cardStar {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  transition: transform 180ms ease;
+}
+
+.agentCardWrap:has(> .agentCard:hover) .cardStar {
+  transform: translateY(-2px);
+}
+
 .recordBadge {
   display: inline-flex;
   min-height: 1.75rem;

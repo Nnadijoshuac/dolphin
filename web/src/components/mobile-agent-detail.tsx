@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { FavoriteButton } from "@/components/favorite-button";
 import { AgentTrialPanel } from "@/components/agent-trial-panel";
 import { HireAction } from "@/components/hire-action";
 import { McpUseAction } from "@/components/mcp-use-action";
@@ -94,7 +95,7 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
   return <>
     <MobileStackHeader title={agent.name} share />
     <div className="mobile-agent-detail">
-      <header className="mobile-detail-identity"><AgentIcon category={agent.category} seed={agent.iconSeed} size={72} uri={agent.iconUrl} /><div><h1>{agent.name}</h1><p>{publisher || "Unlisted publisher"} <span>· #{agent.tokenId}</span></p></div></header>
+      <header className="mobile-detail-identity"><AgentIcon category={agent.category} seed={agent.iconSeed} size={72} uri={agent.iconUrl} /><div><h1>{agent.name}</h1><p>{publisher || "Unlisted publisher"} <span>· #{agent.tokenId}</span></p></div><FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="ml-auto" /></header>
       {agent.tagline && <p className="mobile-detail-tagline">{agent.tagline}</p>}
       <section className="mobile-detail-action">
         <div><p>{agent.protocol === "mcp" ? "MCP server" : "Hire price"}</p><h2>{priceText}</h2></div>

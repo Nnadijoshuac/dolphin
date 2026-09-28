@@ -913,6 +913,20 @@ export const engagementApi = anyApi as unknown as {
   };
 };
 
+/** convex/favorites.ts - agents a signed-in wallet starred. */
+export const favoritesApi = anyApi as unknown as {
+  favorites: {
+    set: Mutation<
+      { sessionToken: string; agentKey: string; favorite: boolean },
+      { favorite: boolean }
+    >;
+    mine: Query<
+      { sessionToken: string | null },
+      { agentKeys: string[]; agents: Agent[] }
+    >;
+  };
+};
+
 
 
 

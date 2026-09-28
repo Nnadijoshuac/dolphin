@@ -121,9 +121,12 @@ export function AgentShelf({
           >
             <CategoryGlyph color="currentColor" name="arrow-right" size={16} strokeWidth={2} />
           </button>
-          <Link className={styles.seeAll} href={shelf.href}>
-            See all
-          </Link>
+          {/* A shelf with no page of its own (Your favorites) has no "See all". */}
+          {shelf.href ? (
+            <Link className={styles.seeAll} href={shelf.href}>
+              See all
+            </Link>
+          ) : null}
         </div>
       </div>
       <ul className={styles.row} ref={rowRef}>

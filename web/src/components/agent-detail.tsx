@@ -7,6 +7,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AgentTransactionPanel } from "@/components/agent-transaction-panel";
 import { AgentTrialPanel } from "@/components/agent-trial-panel";
+import { FavoriteButton } from "@/components/favorite-button";
 import { HireAction } from "@/components/hire-action";
 import { McpUseAction } from "@/components/mcp-use-action";
 import { MetricCell } from "@/components/metric-cell";
@@ -517,9 +518,12 @@ export function AgentDetail({ agent }: { agent: Agent }) {
            */}
           <div className="min-w-0 flex-1">
             {/* Agent Name */}
-            <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
-              {agent.name}
-            </h1>
+            <div className="flex items-start justify-between gap-4">
+              <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+                {agent.name}
+              </h1>
+              <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="mt-1" />
+            </div>
 
             {/* Tagline */}
             {agent.tagline ? (

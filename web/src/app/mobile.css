@@ -116,6 +116,8 @@
   .mobile-agent-row p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 16px; }
   .mobile-agent-row p.mobile-agent-row__signals { margin-top: 4px; font-size: 11px; font-weight: 500; color: var(--ink-soft); }
   .mobile-agent-row:active { transform: scale(.985); }
+  /* The star, a sibling of the row's link, pinned to the icon's top-right corner. */
+  .mobile-agent-row__star { position: absolute; top: 2px; left: 44px; width: 28px; height: 28px; }
   .mobile-pearl {
     display: inline-flex; position: relative; flex-shrink: 0;
     align-items: center; justify-content: center; gap: 8px; min-height: 52px;

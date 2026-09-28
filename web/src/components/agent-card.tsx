@@ -4,9 +4,11 @@ import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { FavoriteButton } from "@/components/favorite-button";
 import { SignalStrip } from "@/components/signal-strip";
 import { categoryLabel } from "@/constants/agents";
 import type { AgentSignals } from "@/hooks/use-agents";
+import { useFavorites } from "@/hooks/use-favorites";
 import { useImpression } from "@/hooks/use-impression";
 import { track, type AnalyticsSurface } from "@/lib/analytics";
 import type { Agent, LiveMetric, LiveMetricStatus } from "@/types/agent";
@@ -153,91 +155,95 @@ export function AgentCard({
     ? `${agent.publisher.slice(0, 6)}…${agent.publisher.slice(-4)}`
     : agent.publisher || "Publisher not listed";
   const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
+  const favorites = useFavorites();
 
   return (
-    <Link
-      className={`interactive group block border-t border-line py-5 no-underline first:border-t-0 sm:py-6 ${className}`}
-      href={`/agent/${agent.tokenId}`}
-      ref={impressionRef}
-      onClick={() =>
-        track("agent_card_opened", {
-          agentKey: agent.agentKey,
-          category: agent.category,
-          surface,
-        })
-      }
-    >
-      <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_170px_auto] sm:items-center sm:gap-5">
-        <div className="flex items-start gap-4 sm:contents">
-          <AgentIcon category={agent.category} seed={agent.iconSeed} size={56} uri={agent.iconUrl} />
+    <div className="relative border-t border-line first:border-t-0">
+      <Link
+        className={`interactive group block py-5 no-underline sm:py-6 ${favorites.visible ? "pr-12" : ""} ${className}`}
+        href={`/agent/${agent.tokenId}`}
+        ref={impressionRef}
+        onClick={() =>
+          track("agent_card_opened", {
+            agentKey: agent.agentKey,
+            category: agent.category,
+            surface,
+          })
+        }
+      >
+        <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_170px_auto] sm:items-center sm:gap-5">
+          <div className="flex items-start gap-4 sm:contents">
+            <AgentIcon category={agent.category} seed={agent.iconSeed} size={56} uri={agent.iconUrl} />
 
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.69rem] font-semibold uppercase tracking-[0.09em] text-faint">
-              <span>{label}</span>
-              <span aria-hidden="true">·</span>
-              <span>ERC-8004 #{agent.tokenId}</span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.69rem] font-semibold uppercase tracking-[0.09em] text-faint">
+                <span>{label}</span>
+                <span aria-hidden="true">·</span>
+                <span>ERC-8004 #{agent.tokenId}</span>
+              </div>
+              <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-ink transition-colors group-hover:text-accent-ink sm:text-xl">
+                {agent.name}
+              </h3>
+              <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-6 text-muted">
+                {agent.tagline}
+              </p>
+              <p className="mt-2 truncate text-xs text-faint">By {displayPublisher}</p>
+              {/*
+               * The comparison signal, on the surface where comparison happens.
+               * `verifiedAt` is what keeps this from rendering nothing at all for
+               * an agent with no hires yet - see signal-strip.
+               */}
+              <SignalStrip className="mt-2" signals={signals} verifiedAt={agent.verifiedAt} />
             </div>
-            <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-ink transition-colors group-hover:text-accent-ink sm:text-xl">
-              {agent.name}
-            </h3>
-            <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-6 text-muted">
-              {agent.tagline}
-            </p>
-            <p className="mt-2 truncate text-xs text-faint">By {displayPublisher}</p>
-            {/*
-             * The comparison signal, on the surface where comparison happens.
-             * `verifiedAt` is what keeps this from rendering nothing at all for
-             * an agent with no hires yet - see signal-strip.
-             */}
-            <SignalStrip className="mt-2" signals={signals} verifiedAt={agent.verifiedAt} />
           </div>
-        </div>
 
-        <div className="border-t border-line pt-4 sm:border-l sm:border-t-0 sm:py-1 sm:pl-5">
-          {/*
-            A live metric wins when one exists, because a real number about
-            THIS agent beats a fact about its protocol. Otherwise the column
-            says what is actually known - see getHireSummary.
-          */}
-          {preview && preview.value !== null ? (
-            <>
-              <div className="flex items-center justify-between gap-3 sm:block">
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                  {preview.label}
+          <div className="border-t border-line pt-4 sm:border-l sm:border-t-0 sm:py-1 sm:pl-5">
+            {/*
+              A live metric wins when one exists, because a real number about
+              THIS agent beats a fact about its protocol. Otherwise the column
+              says what is actually known - see getHireSummary.
+            */}
+            {preview && preview.value !== null ? (
+              <>
+                <div className="flex items-center justify-between gap-3 sm:block">
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
+                    {preview.label}
+                  </p>
+                  <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
+                    {preview.value}
+                  </p>
+                </div>
+                <p className="mt-1 truncate text-[0.69rem] text-faint" title={preview.source}>
+                  {preview.source}
+                  {checkedAt ? ` · ${checkedAt}` : ""}
                 </p>
-                <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
-                  {preview.value}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-3 sm:block">
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
+                    {hire.label}
+                  </p>
+                  <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
+                    {hire.value}
+                  </p>
+                </div>
+                <p className="mt-1 truncate text-[0.69rem] text-faint" title={hire.detail}>
+                  {hire.detail}
                 </p>
-              </div>
-              <p className="mt-1 truncate text-[0.69rem] text-faint" title={preview.source}>
-                {preview.source}
-                {checkedAt ? ` · ${checkedAt}` : ""}
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center justify-between gap-3 sm:block">
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                  {hire.label}
-                </p>
-                <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
-                  {hire.value}
-                </p>
-              </div>
-              <p className="mt-1 truncate text-[0.69rem] text-faint" title={hire.detail}>
-                {hire.detail}
-              </p>
-            </>
-          )}
-        </div>
+              </>
+            )}
+          </div>
 
-        <span
-          aria-hidden="true"
-          className="hidden text-muted transition-transform group-hover:translate-x-0.5 sm:block"
-        >
-          <CategoryGlyph color="currentColor" name="arrow-right" size={18} strokeWidth={2} />
-        </span>
-      </article>
-    </Link>
+          <span
+            aria-hidden="true"
+            className="hidden text-muted transition-transform group-hover:translate-x-0.5 sm:block"
+          >
+            <CategoryGlyph color="currentColor" name="arrow-right" size={18} strokeWidth={2} />
+          </span>
+        </article>
+      </Link>
+      <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="absolute right-0 top-5 sm:top-6" />
+    </div>
   );
 }

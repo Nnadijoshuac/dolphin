@@ -12,6 +12,7 @@ import {
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentShelf, AgentShelfSkeleton } from "@/components/agent-shelf";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { FavoriteButton } from "@/components/favorite-button";
 import {
   CatalogUnavailable,
   useBackendStatus,
@@ -29,10 +30,12 @@ import {
   useAgentSignals,
   useCategoryFacets,
 } from "@/hooks/use-agents";
+import { useFavorites } from "@/hooks/use-favorites";
 import { track } from "@/lib/analytics";
 import { useImpression } from "@/hooks/use-impression";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import type { AgentSignals } from "@/hooks/use-agents";
+import type { AgentShelfData } from "@/convex/api";
 import type { Agent, AgentCategory } from "@/types/agent";
 
 import styles from "./page.module.css";
@@ -105,65 +108,70 @@ function DiscoverAgentCard({
   const recordLabel =
     agent.recordStatus === "indexed" ? "Indexed record" : "Editorial record";
   const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
+  const favorites = useFavorites();
 
   return (
-    <Link
-      className={styles.agentCard}
-      href={`/agent/${agent.tokenId}`}
-      ref={impressionRef}
-      onClick={() =>
-        track("agent_card_opened", {
-          agentKey: agent.agentKey,
-          category: agent.category,
-          surface: "discover",
-        })
-      }
-    >
-      <article className="flex h-full flex-col">
-        <div className="flex items-start justify-between gap-4">
-          <AgentIcon category={agent.category} seed={agent.iconSeed} size={58} uri={agent.iconUrl} />
-          <span className={styles.recordBadge}>
-            <span aria-hidden="true" className={styles.statusDot} />
-            {recordLabel}
-          </span>
-        </div>
-
-        <div className="mt-6">
-          <p className="text-xs font-semibold text-accent-ink">{label}</p>
-          <h3 className="mt-2 text-xl font-semibold leading-tight tracking-[-0.035em] text-ink sm:text-2xl">
-            {agent.name}
-          </h3>
-          <p className={styles.agentTagline}>{agent.tagline}</p>
-        </div>
-
-        {/* The comparison signal. `verifiedAt` is the one part of it that is
-            true for every listed agent - see signal-strip. */}
-        <SignalStrip className="mt-4" signals={signals} verifiedAt={agent.verifiedAt} />
-
-        <dl className={styles.agentEvidence}>
-          <div>
-            <dt>Record source</dt>
-            <dd>{getRecordSource(agent)}</dd>
+    <div className={styles.agentCardWrap}>
+      <Link
+        className={styles.agentCard}
+        href={`/agent/${agent.tokenId}`}
+        ref={impressionRef}
+        onClick={() =>
+          track("agent_card_opened", {
+            agentKey: agent.agentKey,
+            category: agent.category,
+            surface: "discover",
+          })
+        }
+      >
+        <article className="flex h-full flex-col">
+          {/* Room for the star, which sits over this corner outside the link. */}
+          <div className={`flex items-start justify-between gap-4 ${favorites.visible ? "pr-11" : ""}`}>
+            <AgentIcon category={agent.category} seed={agent.iconSeed} size={58} uri={agent.iconUrl} />
+            <span className={styles.recordBadge}>
+              <span aria-hidden="true" className={styles.statusDot} />
+              {recordLabel}
+            </span>
           </div>
-          <div>
-            <dt>Identity</dt>
-            <dd>ERC-8004 #{agent.tokenId}</dd>
-          </div>
-        </dl>
 
-        <div className={styles.agentCardFooter}>
-          <span>Open record</span>
-          <span aria-hidden="true" className={styles.cardArrow}>
-            <CategoryGlyph
-              color="currentColor"
-              name="arrow-right"
-              size={17}
-              strokeWidth={2}
-            />
-          </span>
-        </div>
-      </article>
-    </Link>
+          <div className="mt-6">
+            <p className="text-xs font-semibold text-accent-ink">{label}</p>
+            <h3 className="mt-2 text-xl font-semibold leading-tight tracking-[-0.035em] text-ink sm:text-2xl">
+              {agent.name}
+            </h3>
+            <p className={styles.agentTagline}>{agent.tagline}</p>
+          </div>
+
+          {/* The comparison signal. `verifiedAt` is the one part of it that is
+              true for every listed agent - see signal-strip. */}
+          <SignalStrip className="mt-4" signals={signals} verifiedAt={agent.verifiedAt} />
+
+          <dl className={styles.agentEvidence}>
+            <div>
+              <dt>Record source</dt>
+              <dd>{getRecordSource(agent)}</dd>
+            </div>
+            <div>
+              <dt>Identity</dt>
+              <dd>ERC-8004 #{agent.tokenId}</dd>
+            </div>
+          </dl>
+
+          <div className={styles.agentCardFooter}>
+            <span>Open record</span>
+            <span aria-hidden="true" className={styles.cardArrow}>
+              <CategoryGlyph
+                color="currentColor"
+                name="arrow-right"
+                size={17}
+                strokeWidth={2}
+              />
+            </span>
+          </div>
+        </article>
+      </Link>
+      <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className={styles.cardStar} />
+    </div>
   );
 }
 
@@ -287,7 +295,29 @@ export default function DiscoverPage() {
    * category and that is not the reader asking to browse one.
    */
   const showShelves = requestedCategory === null;
-  const { shelves, isLoading: shelvesLoading } = useAgentShelves();
+  const { shelves: catalogShelves, isLoading: shelvesLoading } = useAgentShelves();
+  /*
+   * "Your favorites" leads, for a connected wallet that has starred anything:
+   * the owner's "a favorite ranks higher for you" (2026-09-28). Nobody else's
+   * Discover changes - see convex/favorites.ts.
+   */
+  const favorites = useFavorites();
+  const shelves = useMemo<AgentShelfData[]>(
+    () =>
+      favorites.visible && favorites.agents.length > 0
+        ? [
+            {
+              id: "favorites",
+              title: "Your favorites",
+              subtitle: "Agents you starred",
+              href: "",
+              agents: favorites.agents,
+            },
+            ...catalogShelves,
+          ]
+        : catalogShelves,
+    [catalogShelves, favorites.agents, favorites.visible],
+  );
   const shelfAgents = useMemo(() => shelves.flatMap((shelf) => shelf.agents), [shelves]);
   const shelfSignals = useAgentSignals(shelfAgents);
 

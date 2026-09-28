@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AgentIcon } from "@/components/agent-icon";
+import { FavoriteButton } from "@/components/favorite-button";
 import { categoryLabel } from "@/constants/agents";
 import type { AgentSignals } from "@/hooks/use-agents";
 import { useImpression } from "@/hooks/use-impression";
@@ -68,22 +69,26 @@ export function MobileAgentRow({ agent, signals, surface = "search", onOpen }: {
   const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
 
   return (
-    <Link
-      className="mobile-agent-row"
-      ref={impressionRef}
-      href={`/agent/${encodeURIComponent(agent.tokenId ?? (agent.agentKey.includes(":") ? agent.agentKey.split(":").pop()! : agent.agentKey))}`}
-      onClick={() => {
-        onOpen?.();
-        track("agent_card_opened", { agentKey: agent.agentKey, category: agent.category, surface });
-      }}
-    >
-      <AgentIcon category={agent.category} seed={agent.iconSeed} size={56} uri={agent.iconUrl} />
-      <div className="mobile-agent-row__copy">
-        <h3>{agent.name}</h3>
-        <p>{categoryLabel(agent.category)} · {agent.tagline}</p>
-        <p className="mobile-agent-row__signals">{summary(signals, agent.verifiedAt, now)}</p>
-      </div>
-      <span aria-hidden="true" className="mobile-pearl mobile-pearl--small">{agent.protocol === "a2a" ? "Hire" : "View"}</span>
-    </Link>
+    <div className="relative">
+      <Link
+        className="mobile-agent-row"
+        ref={impressionRef}
+        href={`/agent/${encodeURIComponent(agent.tokenId ?? (agent.agentKey.includes(":") ? agent.agentKey.split(":").pop()! : agent.agentKey))}`}
+        onClick={() => {
+          onOpen?.();
+          track("agent_card_opened", { agentKey: agent.agentKey, category: agent.category, surface });
+        }}
+      >
+        <AgentIcon category={agent.category} seed={agent.iconSeed} size={56} uri={agent.iconUrl} />
+        <div className="mobile-agent-row__copy">
+          <h3>{agent.name}</h3>
+          <p>{categoryLabel(agent.category)} · {agent.tagline}</p>
+          <p className="mobile-agent-row__signals">{summary(signals, agent.verifiedAt, now)}</p>
+        </div>
+        <span aria-hidden="true" className="mobile-pearl mobile-pearl--small">{agent.protocol === "a2a" ? "Hire" : "View"}</span>
+      </Link>
+      {/* Over the icon's corner: the row's right edge is the Hire/View pearl. */}
+      <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="mobile-agent-row__star" size={14} />
+    </div>
   );
 }

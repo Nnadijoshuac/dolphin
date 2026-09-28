@@ -69,7 +69,7 @@ export function MobileAgentRow({ agent, signals, surface = "search", onOpen }: {
   const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
 
   return (
-    <div className="relative">
+    <div className="relative min-w-0">
       <Link
         className="mobile-agent-row"
         ref={impressionRef}

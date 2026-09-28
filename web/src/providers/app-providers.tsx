@@ -1,6 +1,7 @@
 "use client";
 
 import type { PropsWithChildren } from "react";
+import { ConsoleBanner } from "@/components/console-banner";
 import { ConvexClientProvider } from "@/providers/convex-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { AltanaWalletProvider } from "@/wallet/altana-provider";
@@ -40,6 +41,7 @@ import { WalletSessionProvider } from "@/wallet/wallet-session";
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <WalletProvider>
+      <ConsoleBanner />
       <QueryProvider>
         <ConvexClientProvider>
           <WalletSessionProvider>

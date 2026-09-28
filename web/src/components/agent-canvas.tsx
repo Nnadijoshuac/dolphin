@@ -13,8 +13,9 @@ import {
   type NodeProps,
   useReactFlow,
 } from "@xyflow/react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { AgentCanvasInspector } from "@/components/agent-canvas-inspector";
 import type { AgentDraft } from "@/components/agent-draft-panel";
 import { CategoryGlyph } from "@/components/category-glyph";
 
@@ -43,7 +44,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
  * the draft sheet phones already have.
  */
 
-type BlockKind = "trigger" | "tool" | "melon" | "brain" | "output";
+type BlockKind = "trigger" | "tool" | "melon" | "brain" | "output" | "add";
 
 type BlockData = {
   kind: BlockKind;
@@ -61,6 +62,7 @@ const KIND_LABEL: Record<BlockKind, string> = {
   melon: "Melon · strategy",
   brain: "Brain",
   output: "Output",
+  add: "Tool",
 };
 
 const KIND_GLYPH = {
@@ -69,19 +71,22 @@ const KIND_GLYPH = {
   melon: "sparkle",
   brain: "bot",
   output: "check",
+  add: "add",
 } as const;
 
 const NODE_WIDTH = 240;
+/** Mirrors MAX_DRAFT_TOOLS in convex/lib/agentSpec.ts. */
+const MAX_TOOLS = 8;
 const COLUMN_GAP = 120;
 const TOOL_ROW = 92;
 
-function BlockView({ data }: NodeProps<BlockNode>) {
+function BlockView({ data, selected }: NodeProps<BlockNode>) {
   const { kind } = data;
   return (
     <div
-      className={`rounded-xl border bg-paper px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] ${
-        data.empty ? "border-dashed border-line-strong" : "border-line"
-      } ${kind === "melon" ? "ring-1 ring-accent/40" : ""}`}
+      className={`cursor-pointer rounded-xl border bg-paper px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-colors hover:border-line-strong ${
+        data.empty || kind === "add" ? "border-dashed border-line-strong" : "border-line"
+      } ${selected ? "ring-2 ring-ink/70" : kind === "melon" ? "ring-1 ring-accent/40" : ""}`}
       style={{ width: NODE_WIDTH }}
     >
       {kind === "brain" ? (
@@ -160,6 +165,16 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Edge
     });
   }
 
+  // The door to the tool picker, under the tools, while there is room for another.
+  if (draft.tools.length > 0 && draft.tools.length < MAX_TOOLS) {
+    nodes.push({
+      id: "add-tool",
+      type: "block",
+      position: { x: 0, y: toolsTop + draft.tools.length * TOOL_ROW },
+      data: { kind: "add", title: "Add a tool", detail: "From the free MCP agents on Dolphin" },
+    });
+  }
+
   const instructions = draft.instructions?.trim() || null;
   nodes.push(
     {
@@ -226,13 +241,27 @@ function FitOnGrow({ count }: { count: number }) {
   return null;
 }
 
-export function AgentCanvas({ draft }: { draft: AgentDraft }) {
-  const { nodes, edges } = useMemo(() => draftGraph(draft), [draft]);
+export function AgentCanvas({
+  draft,
+  conversationKey,
+}: {
+  draft: AgentDraft;
+  /** The build conversation. Without it the canvas is read-only. */
+  conversationKey: string | null;
+}) {
+  const graph = useMemo(() => draftGraph(draft), [draft]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A selection whose block has gone (a removed tool) closes rather than dangling.
+  const selected = selectedId && graph.nodes.some((node) => node.id === selectedId) ? selectedId : null;
+  const nodes = useMemo(
+    () => graph.nodes.map((node) => ({ ...node, selected: node.id === selected })),
+    [graph.nodes, selected],
+  );
 
   return (
     <div aria-label="Agent canvas" className="agent-canvas relative h-full min-h-0 w-full" role="region">
       <ReactFlow
-        edges={edges}
+        edges={graph.edges}
         edgesFocusable={false}
         fitView
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
@@ -242,11 +271,29 @@ export function AgentCanvas({ draft }: { draft: AgentDraft }) {
         nodes={nodes}
         nodesConnectable={false}
         nodesDraggable={false}
+        onNodeClick={conversationKey ? (_, node) => setSelectedId(node.id) : undefined}
+        onPaneClick={() => setSelectedId(null)}
       >
         <Background gap={20} size={1.2} variant={BackgroundVariant.Dots} />
         <Controls position="bottom-left" showInteractive={false} />
-        <FitOnGrow count={nodes.length} />
+        <FitOnGrow count={graph.nodes.length} />
       </ReactFlow>
+
+      {conversationKey && selected ? (
+        <div className="absolute bottom-3 right-3 top-3 z-10 flex w-[21rem] flex-col justify-start">
+          <AgentCanvasInspector
+            conversationKey={conversationKey}
+            draft={draft}
+            key={selected}
+            onClose={() => setSelectedId(null)}
+            selectedId={selected}
+          />
+        </div>
+      ) : conversationKey ? (
+        <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted">
+          Click a block to change it
+        </p>
+      ) : null}
     </div>
   );
 }

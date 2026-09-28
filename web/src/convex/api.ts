@@ -854,6 +854,26 @@ export const agentBuilderApi = anyApi as unknown as {
       { conversationKey: string; text: string; userAddress?: string },
       { messageId: string }
     >;
+    /** Read-only tools of live MCP agents, for the canvas's tool picker. */
+    toolPalette: Query<
+      { search?: string },
+      {
+        agentKey: string;
+        agentName: string;
+        tools: { name: string; description: string | null }[];
+      }[]
+    >;
+    /** A person's own edit from the canvas. Validated by the same rules as the builder's. */
+    updateDraft: Mutation<
+      {
+        conversationKey: string;
+        name?: string;
+        description?: string;
+        instructions?: string;
+        tools?: { agentKey: string; toolName: string }[];
+      },
+      { gaps: string[] }
+    >;
   };
 };
 

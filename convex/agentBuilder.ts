@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -6,8 +6,16 @@ import { action, internalMutation, internalQuery, mutation, query } from "./_gen
 import { executeToolCalls, humanizeError } from "./dolphin";
 import {
   BUILDER_REPLY_SCHEMA,
+  DESCRIPTION_MAX_CHARS,
   EMPTY_DRAFT,
+  INSTRUCTIONS_MAX_CHARS,
+  MAX_DRAFT_AGENTS,
+  MAX_DRAFT_TOOLS,
+  MAX_DRAFT_TOOLS_PER_AGENT,
+  NAME_MAX_CHARS,
   applyBuilderReply,
+  cleanBlock,
+  cleanLine,
   draftGaps,
   parseBuilderReply,
   resolveToolIdReferences,
@@ -355,6 +363,165 @@ export const saveDraft = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/* ---------------------------------------------------------------------------
+ * Editing on the canvas (2026-09-28)
+ * ------------------------------------------------------------------------ */
+
+/** Agents the tool picker shows at once. */
+const PALETTE_AGENTS = 12;
+
+/**
+ * The tools a person can add to a draft by hand: read-only tools of live MCP
+ * agents in the catalog, grouped by the agent that publishes them.
+ *
+ * The same pool the builder model is offered (toolCatalog), minus its
+ * per-turn cap of four tools per agent. The web client subscribes to this only
+ * while the picker is open: it reads agent rows, and a probe patching one
+ * re-runs it for everyone subscribed.
+ */
+export const toolPalette = query({
+  args: { search: v.optional(v.string()) },
+  handler: async (ctx, { search }) => {
+    const text = (search ?? "").trim().slice(0, 200);
+    const rows =
+      text.length >= 2
+        ? await ctx.db
+            .query("agents")
+            .withSearchIndex("search_text", (q) =>
+              q.search("searchText", text).eq("status", "live").eq("protocol", "mcp"),
+            )
+            .take(PALETTE_AGENTS)
+        : await ctx.db
+            .query("agents")
+            .withIndex("by_status_protocol_category_rank", (q) =>
+              q.eq("status", "live").eq("protocol", "mcp"),
+            )
+            .order("desc")
+            .take(PALETTE_AGENTS);
+
+    return rows
+      .map((row) => ({
+        agentKey: row.agentKey,
+        agentName: row.name,
+        tools: row.skills
+          .filter((skill) => !isMutating(skill.name))
+          .map((skill) => ({
+            name: skill.name,
+            description: skill.description ? skill.description.slice(0, 200) : null,
+          })),
+      }))
+      .filter((agent) => agent.tools.length > 0);
+  },
+});
+
+/**
+ * A person's own edit to their draft, from the canvas.
+ *
+ * THE SAME RULES AS A MODEL'S EDIT, ENFORCED HERE: text is cleaned and capped
+ * by agentSpec's own helpers, and every tool must be a read-only tool of a
+ * live MCP agent in the catalog, within the per-draft caps. Nothing the client
+ * sends is taken as a value - the tool's publisher name comes from the catalog
+ * row, not the request.
+ *
+ * Unlike a model's edit, an empty tool list IS applied: a person removing
+ * their last tool meant it. The draft then simply cannot be tried until one is
+ * added back, which draftGaps already says.
+ *
+ * The conversation key is the capability, as for `ask`. A published agent is
+ * a snapshot (builtAgents.ts), so editing here never changes a live listing.
+ */
+export const updateDraft = mutation({
+  args: {
+    conversationKey: v.string(),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    instructions: v.optional(v.string()),
+    tools: v.optional(v.array(v.object({ agentKey: v.string(), toolName: v.string() }))),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db
+      .query("dolphinConversations")
+      .withIndex("by_key", (q) => q.eq("conversationKey", args.conversationKey))
+      .unique();
+    if (!conversation || (conversation.mode ?? "chat") !== "build") {
+      throw new ConvexError("That is not an agent draft.");
+    }
+    const existing = await ctx.db
+      .query("agentDrafts")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id))
+      .unique();
+    const current = toSpec(existing);
+    const next: DraftSpec = { ...current };
+
+    if (args.name !== undefined) next.name = cleanLine(args.name, NAME_MAX_CHARS);
+    if (args.description !== undefined) next.description = cleanLine(args.description, DESCRIPTION_MAX_CHARS);
+    if (args.instructions !== undefined) next.instructions = cleanBlock(args.instructions, INSTRUCTIONS_MAX_CHARS);
+
+    if (args.tools !== undefined) {
+      if (args.tools.length > MAX_DRAFT_TOOLS) {
+        throw new ConvexError(`An agent can have at most ${MAX_DRAFT_TOOLS} tools.`);
+      }
+      const picked: DraftSpec["tools"] = [];
+      const perAgent = new Map<string, number>();
+      const seen = new Set<string>();
+      for (const requested of args.tools) {
+        const identity = `${requested.agentKey}\u0000${requested.toolName}`;
+        if (seen.has(identity)) continue;
+        seen.add(identity);
+
+        // A tool already in the draft stays even if its agent has since gone
+        // quiet: the try-run reports a missing tool, and removing it is the
+        // person's call. A NEW tool must come from a live catalog agent.
+        const kept = current.tools.find(
+          (tool) => tool.agentKey === requested.agentKey && tool.toolName === requested.toolName,
+        );
+        let agentName: string;
+        if (kept) {
+          agentName = kept.agentName;
+        } else {
+          const row = await ctx.db
+            .query("agents")
+            .withIndex("by_key", (q) => q.eq("agentKey", requested.agentKey))
+            .unique();
+          const skill = row?.skills.find((candidate) => candidate.name === requested.toolName);
+          if (!row || row.status !== "live" || row.protocol !== "mcp" || !skill) {
+            throw new ConvexError(`${requested.toolName} is not a tool of a live agent on Dolphin.`);
+          }
+          if (isMutating(skill.name)) {
+            throw new ConvexError(`${requested.toolName} changes things on-chain, and agents built here can only read.`);
+          }
+          agentName = row.name;
+        }
+
+        const count = perAgent.get(requested.agentKey) ?? 0;
+        if (count >= MAX_DRAFT_TOOLS_PER_AGENT) {
+          throw new ConvexError(`At most ${MAX_DRAFT_TOOLS_PER_AGENT} tools can come from one agent.`);
+        }
+        if (count === 0 && perAgent.size >= MAX_DRAFT_AGENTS) {
+          throw new ConvexError(`Tools can come from at most ${MAX_DRAFT_AGENTS} different agents.`);
+        }
+        perAgent.set(requested.agentKey, count + 1);
+        picked.push({ agentKey: requested.agentKey, agentName, toolName: requested.toolName });
+      }
+      next.tools = picked;
+    }
+
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, { ...next, updatedAt: now });
+    } else {
+      await ctx.db.insert("agentDrafts", {
+        conversationId: conversation._id,
+        ownerAddress: conversation.ownerAddress ?? null,
+        ...next,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return { gaps: draftGaps(next) };
   },
 });
 

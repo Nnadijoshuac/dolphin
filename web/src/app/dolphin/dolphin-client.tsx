@@ -945,7 +945,7 @@ export function DolphinClient({
 
       {showCanvas ? (
         <div className="relative z-0 hidden min-h-0 min-w-0 lg:block">
-          <AgentCanvas draft={agentDraft} />
+          <AgentCanvas conversationKey={buildConversationKey} draft={agentDraft} />
         </div>
       ) : null}
 

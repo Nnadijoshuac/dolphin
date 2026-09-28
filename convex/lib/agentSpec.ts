@@ -178,13 +178,13 @@ export function resolveToolIdReferences(text: string, offered: readonly OfferedT
 }
 
 /** Trimmed, whitespace-collapsed and capped; null when nothing is left. */
-function cleanLine(value: string, max: number): string | null {
+export function cleanLine(value: string, max: number): string | null {
   const cleaned = value.replace(/\s+/g, " ").trim().slice(0, max).trim();
   return cleaned.length > 0 ? cleaned : null;
 }
 
 /** Instructions keep their line breaks; only runs of blank lines are collapsed. */
-function cleanBlock(value: string, max: number): string | null {
+export function cleanBlock(value: string, max: number): string | null {
   const cleaned = value
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")

@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { CategoryGlyph } from "@/components/category-glyph";
+import { EnvVarsPanel } from "@/components/env-vars-panel";
 
 /**
  * The agent a user is building, as the Build mode of /dolphin shows it.
@@ -96,6 +99,8 @@ export function AgentDraftPanel({
   /** Where this draft already lives on-chain, per network. */
   published?: readonly { hash: string; networkLabel: string; status: string; tokenId: string | null }[];
 }) {
+  // Draft, or the builder's own keys (owner, 2026-09-28: "a new tab ... to manage their envs").
+  const [tab, setTab] = useState<"draft" | "keys">("draft");
   const gaps = draftGaps(draft);
   const ready = gaps.length === 0;
   // Step 1 is where every draft starts; the later steps light up as the
@@ -130,7 +135,30 @@ export function AgentDraftPanel({
         ) : null}
       </div>
 
-      <ol className="mt-2 flex items-center gap-1.5 px-2" aria-label="Build steps">
+      <div aria-label="Panel" className="mx-2 mt-2 grid grid-cols-2 rounded-full bg-paper-muted/70 p-[3px]" role="tablist">
+        {(["draft", "keys"] as const).map((option) => (
+          <button
+            aria-selected={tab === option}
+            className={`rounded-full py-1 !text-[12px] font-medium transition-colors ${
+              tab === option ? "bg-paper-strong text-ink shadow-sm" : "text-muted hover:text-ink"
+            }`}
+            key={option}
+            onClick={() => setTab(option)}
+            role="tab"
+            type="button"
+          >
+            {option === "draft" ? "Draft" : "Keys"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "keys" ? (
+        <div className="sleek-scroll mt-4 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          <EnvVarsPanel />
+        </div>
+      ) : (
+      <>
+      <ol className="mt-3 flex items-center gap-1.5 px-2" aria-label="Build steps">
         {STEPS.map((step, index) => {
           const done = index < currentStep;
           const active = index === currentStep;
@@ -243,6 +271,8 @@ export function AgentDraftPanel({
               : `Needs ${listGaps(gaps)} before you can try it. It stays free and private.`}
         </p>
       </div>
+      </>
+      )}
     </aside>
   );
 }

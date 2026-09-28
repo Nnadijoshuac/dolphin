@@ -78,7 +78,7 @@ function Label({ children }: { children: React.ReactNode }) {
 function SaveButton({ disabled, saving, onClick }: { disabled: boolean; saving: boolean; onClick: () => void }) {
   return (
     <button
-      className="mt-3 flex h-8 w-full items-center justify-center rounded-lg bg-ink text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-30"
+      className="mt-3 flex h-8 w-full items-center justify-center rounded-lg bg-ink !text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-30"
       disabled={disabled || saving}
       onClick={onClick}
       type="button"
@@ -168,7 +168,7 @@ function ToolEditor({
       <p className="font-mono text-[0.84rem] text-ink">{tool.toolName}</p>
       <p className="mt-0.5 text-[0.74rem] text-muted">Published by {tool.agentName}. It reads; it cannot sign or move funds.</p>
       <button
-        className="mt-4 flex h-8 w-full items-center justify-center rounded-lg border border-line text-[12.5px] font-semibold text-ink transition-colors hover:bg-paper-muted disabled:opacity-40"
+        className="mt-4 flex h-8 w-full items-center justify-center rounded-lg border border-line !text-[12.5px] font-semibold text-ink transition-colors hover:bg-paper-muted disabled:opacity-40"
         disabled={saving}
         onClick={async () => {
           const ok = await save({

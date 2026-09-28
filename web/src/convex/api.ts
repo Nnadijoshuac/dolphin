@@ -933,6 +933,15 @@ export const engagementApi = anyApi as unknown as {
   };
 };
 
+/** convex/envVars.ts - a wallet's encrypted API keys. No function returns a value. */
+export const envVarsApi = anyApi as unknown as {
+  envVars: {
+    list: Query<{ sessionToken: string | null }, { name: string; last4: string; updatedAt: string }[]>;
+    set: Action<{ sessionToken: string; name: string; value: string }, { name: string; last4: string }>;
+    remove: Mutation<{ sessionToken: string; name: string }, null>;
+  };
+};
+
 /** convex/favorites.ts - agents a signed-in wallet starred. */
 export const favoritesApi = anyApi as unknown as {
   favorites: {

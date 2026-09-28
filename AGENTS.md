@@ -48,6 +48,8 @@ The full product/screen spec, tech stack decisions, and build strategy live in *
 
 `Agent/` is this repo's agent working context — the product scope, handovers, session logs, audits, and browser/diagnostic scratch. It is **git-ignored**, so it exists only on a machine that has been working on this project; a fresh clone won't have it. Source comments throughout the codebase cite these docs by their old bare filenames (`project-scope.md §3`, `HANDOVER.md`, `SESSION-LOG-2026-08-29-discovery.md`) — all of them now resolve under `Agent/`. See `Agent/AGENT_INDEX.md` for the map.
 
+**At the start of every session, read "Open items" at the top of `Agent/AGENT_INDEX.md` and ask the owner about each one that is not marked DONE.** Each item says what to do with the answer. When the owner confirms an item is done, mark it DONE there and in its brief, so later agents stop asking.
+
 ## 2. Hard Rule: Version Truth Before Code
 
 - This project runs **Expo SDK 57**. Do not assume APIs, config shapes, or package versions from any earlier SDK.

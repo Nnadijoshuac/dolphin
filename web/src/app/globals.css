@@ -1715,3 +1715,34 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .toast { animation: none; }
 }
+
+/*
+ * The Build canvas (components/agent-canvas.tsx, 2026-09-28). React Flow reads
+ * its colours from --xy-* variables; these point them at the site's tokens so
+ * the canvas follows light and dark with everything else.
+ */
+.agent-canvas .react-flow {
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: var(--line-strong);
+  /* --line-strong at 1.5 vanished against the dotted canvas once fitted below 100%. */
+  --xy-edge-stroke: var(--muted);
+  --xy-edge-stroke-width: 2;
+  --xy-handle-background-color: var(--paper-strong);
+  --xy-handle-border-color: var(--line-strong);
+  --xy-controls-button-background-color: var(--paper);
+  --xy-controls-button-background-color-hover: var(--paper-muted);
+  --xy-controls-button-color: var(--ink-soft);
+  --xy-controls-button-color-hover: var(--ink);
+  --xy-controls-button-border-color: var(--line);
+  --xy-controls-box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --xy-attribution-background-color: transparent;
+}
+
+/*
+ * React Flow draws each edge in its own <svg> inside a zero-width layer. The
+ * site-wide `svg { max-width: 100% }` above squeezed those to 0px, and a
+ * zero-width SVG is not rendered at all: every connection vanished.
+ */
+.agent-canvas .react-flow svg {
+  max-width: none;
+}

@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+/* React Flow's stylesheet, for the Build canvas. External stylesheets are imported from app/ (Next CSS docs). */
+import "@xyflow/react/dist/style.css";
+
 import styles from "@/app/dolphin/dolphin-chat.module.css";
+import { AgentCanvas } from "@/components/agent-canvas";
 import { AgentDraftPanel, EMPTY_AGENT_DRAFT } from "@/components/agent-draft-panel";
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -527,6 +531,14 @@ export function DolphinClient({
   /* A private try-run of a draft. Opened from the draft panel, never from the switch. */
   const trying = activeMode === "try";
   const withDraft = building || trying;
+  /*
+   * THE CANVAS LAYOUT (owner, 2026-09-28: "like n8n"). Once a build
+   * conversation has started, the agent is drawn in the middle and the chat
+   * narrows to a builder column on the left, the way n8n puts its assistant
+   * beside the workflow. History moves behind its button. The empty Build
+   * screen is untouched: there is nothing to draw before the first turn.
+   */
+  const showCanvas = building && conversationKey !== null && !isEmpty;
   const askedPrompts = useMemo(
     () => turns.filter((turn) => turn.role === "user").map((turn) => turn.content),
     [turns],
@@ -700,9 +712,11 @@ export function DolphinClient({
   return (
     <div
       className={`dolphin-chat-page relative grid overflow-hidden ${
-        withDraft
-          ? "lg:grid-cols-[17rem_minmax(0,1fr)_22rem]"
-          : "lg:grid-cols-[17rem_minmax(0,1fr)]"
+        showCanvas
+          ? "lg:grid-cols-[24rem_minmax(0,1fr)_22rem]"
+          : withDraft
+            ? "lg:grid-cols-[17rem_minmax(0,1fr)_22rem]"
+            : "lg:grid-cols-[17rem_minmax(0,1fr)]"
       } ${styles.shell}`}
     >
       {/*
@@ -711,7 +725,7 @@ export function DolphinClient({
         * the right, like Claude's artifacts: the thing being made sits beside
         * the conversation making it. In Build mode both show on desktop.
         */}
-      <div className="relative z-20 hidden min-h-0 lg:block">
+      <div className={`relative z-20 hidden min-h-0 ${showCanvas ? "" : "lg:block"}`}>
           <ChatHistory
             activeKey={conversationKey}
             entries={history}
@@ -722,7 +736,9 @@ export function DolphinClient({
           />
       </div>
 
-      <section className="relative z-10 flex min-h-0 min-w-0 flex-col">
+      <section
+        className={`relative z-10 flex min-h-0 min-w-0 flex-col ${showCanvas ? "lg:border-r lg:border-line/60" : ""}`}
+      >
         <header className="relative flex h-14 shrink-0 items-center justify-between gap-2.5 px-4">
           <Link
             aria-label="Back to Discover"
@@ -747,7 +763,7 @@ export function DolphinClient({
             */}
           <div
             className={`pointer-events-none absolute left-1/2 -translate-x-1/2 items-center gap-2 ${
-              isEmpty ? "flex" : "hidden sm:flex"
+              isEmpty ? "flex" : showCanvas ? "hidden" : "hidden sm:flex"
             }`}
           >
             <BrandMark size={20} />
@@ -797,7 +813,9 @@ export function DolphinClient({
             )}
             <button
               aria-label="Open chat history"
-              className="grid size-10 place-items-center rounded-full text-ink-soft transition-colors hover:bg-paper/80 lg:hidden"
+              className={`grid size-10 place-items-center rounded-full text-ink-soft transition-colors hover:bg-paper/80 ${
+                showCanvas ? "" : "lg:hidden"
+              }`}
               onClick={() => setHistoryOpen(true)}
               type="button"
             >
@@ -925,6 +943,12 @@ export function DolphinClient({
         )}
       </section>
 
+      {showCanvas ? (
+        <div className="relative z-0 hidden min-h-0 min-w-0 lg:block">
+          <AgentCanvas draft={agentDraft} />
+        </div>
+      ) : null}
+
       {withDraft ? (
         <div className="relative z-20 hidden min-h-0 lg:block">
           <AgentDraftPanel draft={agentDraft} {...draftPanelActions} />
@@ -959,7 +983,7 @@ export function DolphinClient({
       ) : null}
 
       {historyOpen ? (
-        <div className="fixed inset-0 z-30 flex justify-start lg:hidden">
+        <div className={`fixed inset-0 z-30 flex justify-start ${showCanvas ? "" : "lg:hidden"}`}>
           <button
             aria-label="Close chat history"
             className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]"

@@ -1,18 +1,28 @@
+"use client";
+
+import { createElement, type CSSProperties } from "react";
+import Script from "next/script";
+
 import styles from "@/components/dolphin-loader.module.css";
 
-const DIGITS = ["0", "1", "0", "1", "1", "0", "0", "1"] as const;
+const loaderStyle = {
+  "--dolphin-gold": "#f0b90b",
+} as CSSProperties;
 
 export function DolphinLoader({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2.5" role="status">
-      <div aria-hidden className={styles.matrix}>
-        {DIGITS.map((digit, index) => (
-          <span className={styles.digit} key={`${digit}-${index}`}>
-            {digit}
-          </span>
-        ))}
-        <span className={styles.glow} />
-      </div>
+      <Script id="dolphin-loader-element" src="/dolphin-loader.js" strategy="afterInteractive" />
+      <span aria-hidden className={styles.ocean} style={loaderStyle}>
+        {/*
+          React does not need to know this custom element's type: the pasted
+          script upgrades it in the browser after hydration.
+        */}
+        {createElement("dolphin-loader", {
+          "aria-label": label,
+          className: styles.element,
+        })}
+      </span>
       <span className="text-[0.85rem] text-muted">{label}</span>
     </div>
   );

@@ -17,6 +17,7 @@ import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
 import { PublishAgentDialog } from "@/components/publish-agent-dialog";
 import { SlideOver } from "@/components/slide-over";
+import { HireTicket } from "@/components/hire-ticket";
 import { TradeTicket } from "@/components/trade-ticket";
 import { autopilotApi, builtAgentsApi } from "@/convex/api";
 import {
@@ -319,7 +320,7 @@ function Turn({
           </div>
         ) : null}
 
-        {turn.ticket ? <TradeTicket ticket={turn.ticket} /> : null}
+        {turn.ticket ? turn.ticket.kind === "hire" ? <HireTicket ticket={turn.ticket} /> : <TradeTicket ticket={turn.ticket} /> : null}
 
         {/*
           * A TYPO IS CONFIRMED WITH ONE TAP (owner, 2026-09-26). The button

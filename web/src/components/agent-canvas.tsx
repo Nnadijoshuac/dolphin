@@ -266,6 +266,8 @@ export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label
   safety: { kind: "sense", label: "Safety check", glyph: "shield" },
   risk: { kind: "risk", label: "Risk limits", glyph: "filter" },
   swap: { kind: "hands", label: "Swap", glyph: "wallet" },
+  wallet: { kind: "hands", label: "Wallet", glyph: "wallet" },
+  hire: { kind: "tool", label: "Hired agent", glyph: "agents" },
 };
 
 function money(value: number): string {
@@ -294,6 +296,10 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
       return { title: `${money(block.config.maxTradeUsd)} a trade`, detail: `At most ${block.config.maxTradesPerDay} trade${block.config.maxTradesPerDay === 1 ? "" : "s"} a day` };
     case "swap":
       return { title: "Propose a swap", detail: "You approve and sign every trade" };
+    case "wallet":
+      return { title: "Agent wallet", detail: "Trades from its own funds, no tap" };
+    case "hire":
+      return { title: block.config.agentName, detail: "Paid A2A agent · you confirm each payment" };
   }
 }
 
@@ -328,6 +334,24 @@ export function draftGraph(
       id: `block-${block.id}`,
       type: "block",
       data: { kind: look.kind, label: look.label, glyph: look.glyph, member, detached: cut.has(member), ...blockSummary(block) },
+    });
+  }
+  const hire = blocks.find((block) => block.type === "hire");
+  if (hire && hire.type === "hire") {
+    const member = `block:${hire.id}`;
+    const hired = agents.get(hire.config.agentKey);
+    pushLeft({
+      id: `block-${hire.id}`,
+      type: "block",
+      data: {
+        kind: "tool",
+        label: "Hired agent",
+        glyph: "agents",
+        member,
+        detached: cut.has(member),
+        ...blockSummary(hire),
+        agent: hired ? { category: hired.category, seed: hired.iconSeed ?? null, uri: hired.iconUrl ?? null } : undefined,
+      },
     });
   }
   if (draft.tools.length === 0) {
@@ -396,13 +420,34 @@ export function draftGraph(
   // Right column above the answer: the hands, and the limits on them.
   const swap = blocks.find((block) => block.type === "swap");
   const risk = blocks.find((block) => block.type === "risk");
+  const wallet = blocks.find((block) => block.type === "wallet");
+  const walletLive = Boolean(wallet && !cut.has(`block:${wallet.id}`));
   if (swap) {
     const member = `block:${swap.id}`;
+    const summary = blockSummary(swap);
     nodes.push({
       id: `block-${swap.id}`,
       type: "block",
       position: { x: right, y: brainY - 150 },
-      data: { kind: "hands", label: "Swap", glyph: "wallet", member, detached: cut.has(member), ...blockSummary(swap) },
+      data: {
+        kind: "hands",
+        label: "Swap",
+        glyph: "wallet",
+        member,
+        detached: cut.has(member),
+        ...summary,
+        // What the swap does depends on where the money is.
+        ...(walletLive ? { title: "Trade", detail: "Executes from the agent's wallet" } : {}),
+      },
+    });
+  }
+  if (wallet) {
+    const member = `block:${wallet.id}`;
+    nodes.push({
+      id: `block-${wallet.id}`,
+      type: "block",
+      position: { x: right, y: brainY + 150 },
+      data: { kind: "hands", label: "Wallet", glyph: "wallet", member, detached: cut.has(member), ...blockSummary(wallet) },
     });
   }
   if (risk) {
@@ -432,6 +477,7 @@ export function draftGraph(
   ];
   if (swap && !cut.has(`block:${swap.id}`)) edges.push(edge("brain", `block-${swap.id}`, "in", `block:${swap.id}`));
   if (swap && risk && !cut.has("limits")) edges.push(edge(`block-${risk.id}`, `block-${swap.id}`, "limits", "limits"));
+  if (wallet && walletLive) edges.push(edge("brain", `block-${wallet.id}`, "in", `block:${wallet.id}`));
 
   return { nodes, edges };
 }
@@ -578,6 +624,7 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
       { type: "market", label: "Market", about: "A token's live price, candles and chart", glyph: "layers" },
       { type: "safety", label: "Safety", about: "Honeypot, taxes and owner-power checks", glyph: "shield" },
       { type: "tool", label: "Agent tool", about: "A tool from an agent listed on Dolphin", glyph: "agents" },
+      { type: "hire", label: "Hire an agent", about: "A paid A2A agent - you confirm each payment", glyph: "bot" },
     ],
   },
   {
@@ -585,11 +632,12 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
     items: [
       { type: "risk", label: "Risk limits", about: "Dollars per trade and trades per day", glyph: "filter" },
       { type: "swap", label: "Swap", about: "Propose PancakeSwap trades within the limits", glyph: "wallet", needs: "risk" },
+      { type: "wallet", label: "Wallet", about: "Its own wallet - it trades without asking you", glyph: "wallet", needs: "swap" },
     ],
   },
 ];
 
-const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = { market: "Needs a Market", risk: "Needs Risk limits" };
+const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = { market: "Needs a Market", risk: "Needs Risk limits", swap: "Needs a Swap" };
 
 function Toolbox({
   blocks,
@@ -720,8 +768,14 @@ export function AgentCanvas({
   layoutKey: string | null;
   run?: CanvasRun | null;
 }) {
-  // The tools' publishers, in one batched read, for their icons.
-  const toolAgentKeys = useMemo(() => draft.tools.map((tool) => tool.agentKey), [draft.tools]);
+  // The tools' publishers and the hired agent, in one batched read, for their icons.
+  const toolAgentKeys = useMemo(
+    () => [
+      ...draft.tools.map((tool) => tool.agentKey),
+      ...(draft.blocks ?? []).flatMap((block) => (block.type === "hire" ? [block.config.agentKey] : [])),
+    ],
+    [draft.tools, draft.blocks],
+  );
   const toolAgents = useAgentsByKeys(toolAgentKeys);
   const base = useMemo(() => applyRun(draft, draftGraph(draft, toolAgents), run), [draft, run, toolAgents]);
   const [selectedId, setSelectedId] = useState<string | null>(null);

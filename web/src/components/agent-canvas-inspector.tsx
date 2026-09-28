@@ -4,9 +4,13 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 
 import type { AgentDraft } from "@/components/agent-draft-panel";
+import { AgentIcon } from "@/components/agent-icon";
+import { AgentWalletPanel } from "@/components/agent-wallet-panel";
 import { ChoiceList, type Choice } from "@/components/choice-list";
 import {
   agentBuilderApi,
+  agentWalletApi,
+  api,
   brainModelsApi,
   BRAIN_PROVIDER_OPTIONS,
   envVarsApi,
@@ -588,6 +592,8 @@ const BLOCK_TITLES: Record<BlockType, string> = {
   schedule: "Schedule",
   price: "Price trigger",
   walletWatch: "Wallet watch",
+  wallet: "Wallet",
+  hire: "Hire an agent",
 };
 
 const BLOCK_ABOUT: Record<BlockType, string> = {
@@ -598,6 +604,8 @@ const BLOCK_ABOUT: Record<BlockType, string> = {
   schedule: "Runs the agent on a clock while Autopilot is on. Every run uses your own model key.",
   price: "Runs the agent when the Market token's price crosses your level - once per crossing, not on every check.",
   walletWatch: "Runs the agent when a watched wallet transacts - a KOL, a whale, a fund. It sees any transaction they send, and exactly which tokens moved for your Market token and Dolphin's verified list.",
+  wallet: "The agent's own wallet. Fund it, and every trade within your Risk limits executes from it at once - no ticket, no tap - with what it buys landing back in it. Withdraw to your wallet any time.",
+  hire: "A paid agent from Dolphin's catalog that yours can call on. When it asks for work, the agent quotes a price and you confirm each payment from your Dolphin Wallet with your passkey. It delivers on-chain afterwards.",
 };
 
 const SCHEDULES = [15, 30, 60, 240, 1440];
@@ -671,6 +679,17 @@ function BlockEditor({
   const [maxTradeUsd, setMaxTradeUsd] = useState(config.maxTradeUsd ? String(config.maxTradeUsd) : "25");
   const [maxTradesPerDay, setMaxTradesPerDay] = useState(config.maxTradesPerDay ? String(config.maxTradesPerDay) : "3");
   const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [hirePick, setHirePick] = useState<{ agentKey: string; agentName: string } | null>(
+    type === "hire" && existing ? { agentKey: String(config.agentKey), agentName: String(config.agentName) } : null,
+  );
+  const session = useWalletSession();
+  const createWallet = useAction(agentWalletApi.agentWallet.create);
+  const [creating, setCreating] = useState(false);
+  // Paid agents a flow can hire: live A2A agents in the catalog.
+  const hireResults = useQuery(
+    api.agents.search,
+    type === "hire" && !hirePick ? { text: debounced, protocol: "a2a", paginationOpts: { numItems: 8, cursor: null } } : "skip",
+  );
 
   useEffect(() => {
     if (type !== "market" || debounced.length < 2) return;
@@ -720,14 +739,35 @@ function BlockEditor({
         return Number(maxTradeUsd) > 0 && Number(maxTradesPerDay) > 0
           ? { id, type, config: { maxTradeUsd: Number(maxTradeUsd), maxTradesPerDay: Math.round(Number(maxTradesPerDay)) } }
           : null;
+      case "hire":
+        return hirePick ? { id, type, config: hirePick } : null;
       case "safety":
       case "swap":
+      case "wallet":
         return { id, type, config: {} } as AgentBlockData;
     }
   })();
 
   const commit = async (next: AgentBlockData[]) => {
     if (await save({ blocks: next })) onClose();
+  };
+
+  /** A new Wallet block creates the wallet first: the block is only drawn once there is one. */
+  const addWallet = async (next: AgentBlockData[]) => {
+    setCreating(true);
+    try {
+      const sessionToken = session.sessionToken ?? (await session.signIn());
+      if (!sessionToken) return;
+      const { address } = await createWallet({ sessionToken, conversationKey });
+      if (await save({ blocks: next })) {
+        toast.success(`The agent's wallet is ${address.slice(0, 6)}…${address.slice(-4)}. Open the Wallet block to fund it.`);
+        onClose();
+      }
+    } catch (cause) {
+      toast.error(errorText(cause, "Could not create the agent's wallet."));
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -852,6 +892,56 @@ function BlockEditor({
         </div>
       ) : null}
 
+      {type === "wallet" && existing ? <AgentWalletPanel conversationKey={conversationKey} /> : null}
+
+      {type === "hire" ? (
+        <div className="mt-3">
+          {hirePick ? (
+            <div className="flex items-center gap-2 rounded-lg bg-paper-muted/70 px-3 py-2">
+              <p className="min-w-0 flex-1 truncate text-[0.84rem] font-semibold text-ink">{hirePick.agentName}</p>
+              <button className="!text-[0.7rem] font-semibold text-muted hover:text-ink" onClick={() => setHirePick(null)} type="button">
+                Change
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                aria-label="Find an agent"
+                autoFocus
+                className={fieldClass}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search paid agents"
+                spellCheck={false}
+                value={query}
+              />
+              <ul className="mt-2 space-y-1">
+                {(hireResults?.page ?? []).map((agent) => (
+                  <li key={agent.agentKey}>
+                    <button
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-paper-muted"
+                      onClick={() => setHirePick({ agentKey: agent.agentKey, agentName: agent.name })}
+                      type="button"
+                    >
+                      <AgentIcon category={agent.category} seed={agent.iconSeed ?? undefined} size={26} uri={agent.iconUrl ?? undefined} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate !text-[0.8rem] font-semibold text-ink">{agent.name}</span>
+                        <span className="block truncate !text-[0.66rem] text-muted">{agent.description}</span>
+                      </span>
+                      {agent.pricing?.display ? (
+                        <span className="shrink-0 !text-[0.66rem] text-muted">{agent.pricing.display}</span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+                {hireResults && hireResults.page.length === 0 ? (
+                  <li className="px-2 py-1 text-[0.74rem] text-muted">No A2A agent matches that.</li>
+                ) : null}
+              </ul>
+            </>
+          )}
+        </div>
+      ) : null}
+
       {type === "risk" ? (
         <div className="mt-3 grid grid-cols-2 gap-2">
           <label className="block">
@@ -865,14 +955,17 @@ function BlockEditor({
         </div>
       ) : null}
 
-      <SaveButton
-        disabled={!built}
-        onClick={() => {
-          if (!built) return;
-          void commit(existing ? blocks.map((block) => (block.id === existing.id ? built : block)) : [...blocks, built]);
-        }}
-        saving={saving}
-      />
+      {type === "wallet" && existing ? null : (
+        <SaveButton
+          disabled={!built}
+          onClick={() => {
+            if (!built) return;
+            const next = existing ? blocks.map((block) => (block.id === existing.id ? built : block)) : [...blocks, built];
+            void (type === "wallet" ? addWallet(next) : commit(next));
+          }}
+          saving={saving || creating}
+        />
+      )}
       {existing ? (
         <button
           className="mt-2 flex h-8 w-full items-center justify-center rounded-lg border border-line !text-[12.5px] font-semibold text-ink transition-colors hover:bg-paper-muted disabled:opacity-40"

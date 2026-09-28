@@ -678,8 +678,8 @@ export type DolphinMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  /** Set when the question was a trade. */
-  ticket: TradeTicket | null;
+  /** Set when the question was a trade, or an agent asked to hire another. */
+  ticket: TradeTicket | HireTicket | null;
   /** A corrected request (a token typo) to confirm with one tap. Sent as a new turn. */
   suggestedPrompt: string | null;
   status: "thinking" | "consulting" | "complete" | "error";
@@ -843,6 +843,16 @@ export function brainProviderLabel(id: string): string {
   return BRAIN_PROVIDER_OPTIONS.find((option) => option.id === id)?.label ?? id;
 }
 
+/** A paid A2A hire a flow's agent asked for. The owner confirms the payment. Mirrors schema.ts. */
+export type HireTicket = {
+  kind: "hire";
+  agentKey: string;
+  agentName: string;
+  task: string;
+  /** What the agent quoted when asked. Re-quoted before paying. */
+  priceText: string | null;
+};
+
 /** A toolbox block. Mirrors AgentBlock in convex/lib/agentBlocks.ts. */
 export type AgentBlockData =
   | { id: string; type: "market"; config: { tokenAddress: string; symbol: string; name: string; poolAddress: string | null } }
@@ -851,7 +861,9 @@ export type AgentBlockData =
   | { id: string; type: "risk"; config: { maxTradeUsd: number; maxTradesPerDay: number } }
   | { id: string; type: "schedule"; config: { everyMinutes: number } }
   | { id: string; type: "price"; config: { direction: "above" | "below"; priceUsd: number } }
-  | { id: string; type: "walletWatch"; config: { addresses: string[]; label: string | null } };
+  | { id: string; type: "walletWatch"; config: { addresses: string[]; label: string | null } }
+  | { id: string; type: "wallet"; config: Record<string, never> }
+  | { id: string; type: "hire"; config: { agentKey: string; agentName: string } };
 
 export type AgentDraftData = {
   name: string | null;
@@ -878,6 +890,21 @@ export type TradeKeySummary = {
 };
 
 /** convex/autotrade.ts - no-tap trading with a scoped session key. */
+export type AgentWalletHolding = { symbol: string; address: string | null; decimals: number; amount: string; usd: number | null };
+
+/** convex/agentWallet.ts - an agent's own wallet. No function returns key material. */
+export const agentWalletApi = anyApi as unknown as {
+  agentWallet: {
+    forDraft: Query<{ conversationKey: string }, { address: string; ownerAddress: string } | null>;
+    create: Action<{ sessionToken: string; conversationKey: string }, { address: string }>;
+    balances: Action<{ conversationKey: string }, { address: string; holdings: AgentWalletHolding[]; checkedAt: number } | null>;
+    withdraw: Action<
+      { sessionToken: string; conversationKey: string; symbol: string; amount: string },
+      { transactionHash: string; text: string }
+    >;
+  };
+};
+
 export const autotradeApi = anyApi as unknown as {
   autotrade: {
     prepare: Action<

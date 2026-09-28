@@ -23,6 +23,7 @@ import {
     useDolphinConversation,
     type DolphinTurn,
 } from "@/hooks/use-dolphin-conversation";
+import { usePanelLayout, type PanelKey } from "@/hooks/use-panel-layout";
 import { useAppStore, type ChatHistoryEntry } from "@/store/use-app-store";
 import { useWallet } from "@/wallet/wallet-provider";
 
@@ -144,6 +145,52 @@ function ModeSwitch({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const RESIZE_LABEL: Record<PanelKey, string> = {
+  history: "Resize chat history",
+  builder: "Resize builder chat",
+  draft: "Resize agent draft",
+};
+
+/**
+ * A draggable column border. Invisible until hovered, like n8n's and VS Code's.
+ * Double-click resets; arrow keys nudge, so it works without a mouse too.
+ */
+function ResizeHandle({
+  x,
+  label,
+  onPointerDown,
+  onReset,
+  onKeyNudge,
+}: {
+  x: number;
+  label: string;
+  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onReset: () => void;
+  onKeyNudge: (delta: number) => void;
+}) {
+  return (
+    <div
+      aria-label={label}
+      aria-orientation="vertical"
+      className="group absolute bottom-0 top-0 z-40 hidden w-3 -translate-x-1/2 cursor-col-resize touch-none lg:block"
+      onDoubleClick={onReset}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") onKeyNudge(-24);
+        else if (event.key === "ArrowRight") onKeyNudge(24);
+        else return;
+        event.preventDefault();
+      }}
+      onPointerDown={onPointerDown}
+      role="separator"
+      style={{ left: x }}
+      tabIndex={0}
+      title="Drag to resize · double-click to reset"
+    >
+      <span className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent transition-colors group-hover:bg-line-strong group-focus-visible:bg-accent group-active:bg-accent" />
     </div>
   );
 }
@@ -539,6 +586,7 @@ export function DolphinClient({
    * screen is untouched: there is nothing to draw before the first turn.
    */
   const showCanvas = building && conversationKey !== null && !isEmpty;
+  const { measure: measurePanels, ...panels } = usePanelLayout(showCanvas ? "canvas" : withDraft ? "draft" : "chat");
   const askedPrompts = useMemo(
     () => turns.filter((turn) => turn.role === "user").map((turn) => turn.content),
     [turns],
@@ -712,20 +760,46 @@ export function DolphinClient({
   return (
     <div
       className={`dolphin-chat-page relative grid overflow-hidden ${
+        /*
+         * Always four tracks - history | chat | canvas | draft - with hidden
+         * ones at 0, so a change of layout can animate (use-panel-layout.ts).
+         * These classes are only the first paint; once the page is measured
+         * the inline px template takes over and the borders become draggable.
+         */
         showCanvas
-          ? "lg:grid-cols-[24rem_minmax(0,1fr)_22rem]"
+          ? "lg:grid-cols-[0px_24rem_minmax(0,1fr)_22rem]"
           : withDraft
-            ? "lg:grid-cols-[17rem_minmax(0,1fr)_22rem]"
-            : "lg:grid-cols-[17rem_minmax(0,1fr)]"
+            ? "lg:grid-cols-[17rem_minmax(0,1fr)_0px_22rem]"
+            : "lg:grid-cols-[17rem_minmax(0,1fr)_0px_0px]"
       } ${styles.shell}`}
+      ref={measurePanels}
+      style={panels.style}
     >
+      {panels.columns
+        ? panels.handles.map((handle) => (
+            <ResizeHandle
+              key={handle.key}
+              label={RESIZE_LABEL[handle.key]}
+              onKeyNudge={(delta) => panels.nudge(handle.key, handle.invert ? -delta : delta)}
+              onPointerDown={(event) => panels.startDrag(handle.key, handle.invert, event)}
+              onReset={() => panels.reset(handle.key)}
+              x={panels.columns!.slice(0, handle.afterColumn + 1).reduce((a, b) => a + b, 0)}
+            />
+          ))
+        : null}
       {/*
         * History on the LEFT, where Claude, ChatGPT and Gemini keep it: you
         * look left to find a past chat and work in the middle. The draft is on
         * the right, like Claude's artifacts: the thing being made sits beside
         * the conversation making it. In Build mode both show on desktop.
         */}
-      <div className={`relative z-20 hidden min-h-0 ${showCanvas ? "" : "lg:block"}`}>
+      {/* Always a grid item, so collapsing it is a 0px track rather than a reflow. */}
+      <div
+        aria-hidden={showCanvas || undefined}
+        className="relative z-20 hidden min-h-0 overflow-hidden lg:block"
+        inert={showCanvas}
+      >
+        <div className="h-full min-w-[13rem]">
           <ChatHistory
             activeKey={conversationKey}
             entries={history}
@@ -734,6 +808,7 @@ export function DolphinClient({
             onOpen={openSavedConversation}
             onRemove={removeSavedConversation}
           />
+        </div>
       </div>
 
       <section
@@ -943,17 +1018,22 @@ export function DolphinClient({
         )}
       </section>
 
-      {showCanvas ? (
-        <div className="relative z-0 hidden min-h-0 min-w-0 lg:block">
-          <AgentCanvas conversationKey={buildConversationKey} draft={agentDraft} />
-        </div>
-      ) : null}
+      <div className="relative z-0 hidden min-h-0 min-w-0 overflow-hidden lg:block">
+        {showCanvas ? <AgentCanvas conversationKey={buildConversationKey} draft={agentDraft} /> : null}
+      </div>
 
-      {withDraft ? (
-        <div className="relative z-20 hidden min-h-0 lg:block">
-          <AgentDraftPanel draft={agentDraft} {...draftPanelActions} />
-        </div>
-      ) : null}
+      {/*
+        * The draft panel keeps its full width while its track grows from 0,
+        * pinned to the right edge - so it slides in from the right rather than
+        * being squeezed open (owner, 2026-09-28).
+        */}
+      <div className="relative z-20 hidden min-h-0 overflow-hidden lg:flex lg:justify-end">
+        {withDraft ? (
+          <div className="h-full shrink-0" style={{ width: panels.columns?.[3] || panels.sizes.draft }}>
+            <AgentDraftPanel draft={agentDraft} {...draftPanelActions} />
+          </div>
+        ) : null}
+      </div>
 
       {draftOpen && withDraft ? (
         <div className="fixed inset-0 z-30 flex justify-end lg:hidden">

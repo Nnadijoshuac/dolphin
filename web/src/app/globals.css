@@ -1746,3 +1746,17 @@ select {
 .agent-canvas .react-flow svg {
   max-width: none;
 }
+
+/* Blocks ease onto the canvas as the agent takes shape. */
+@keyframes agent-canvas-block-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .agent-canvas .react-flow__node > div {
+    animation: agent-canvas-block-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}

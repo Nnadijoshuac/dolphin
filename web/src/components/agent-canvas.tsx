@@ -12,6 +12,7 @@ import {
   type Node,
   type NodeProps,
   useReactFlow,
+  useStore,
 } from "@xyflow/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -228,16 +229,22 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Edge
 }
 
 /**
- * `fitView` on <ReactFlow> fits once, on mount. A draft grows while the
- * builder talks, so re-fit whenever the number of blocks changes - a new tool
- * would otherwise land below the fold.
+ * `fitView` on <ReactFlow> fits once, on mount - and the canvas mounts inside
+ * a column that is still animating open from 0px (use-panel-layout.ts), so a
+ * one-off fit would size the agent to a sliver. Re-fit whenever the number of
+ * blocks changes (a new tool would land below the fold) or the canvas settles
+ * at a new width or height - after the slide-in, and after a person drags a
+ * panel border.
  */
-function FitOnGrow({ count }: { count: number }) {
+function FitOnChange({ count }: { count: number }) {
   const flow = useReactFlow();
+  const width = useStore((state) => state.width);
+  const height = useStore((state) => state.height);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => void flow.fitView({ padding: 0.2, maxZoom: 1, duration: 250 }));
-    return () => cancelAnimationFrame(frame);
-  }, [count, flow]);
+    if (width < 120 || height < 120) return;
+    const timer = window.setTimeout(() => void flow.fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 160);
+    return () => window.clearTimeout(timer);
+  }, [count, flow, width, height]);
   return null;
 }
 
@@ -276,7 +283,7 @@ export function AgentCanvas({
       >
         <Background gap={20} size={1.2} variant={BackgroundVariant.Dots} />
         <Controls position="bottom-left" showInteractive={false} />
-        <FitOnGrow count={graph.nodes.length} />
+        <FitOnChange count={graph.nodes.length} />
       </ReactFlow>
 
       {conversationKey && selected ? (

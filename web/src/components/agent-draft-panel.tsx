@@ -157,7 +157,7 @@ export function AgentDraftPanel({
         })}
       </ol>
 
-      <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-2">
+      <div className="sleek-scroll mt-4 min-h-0 flex-1 overflow-y-auto px-2">
         <dl>
           <Field label="Name" value={draft.name} />
           <Field label="What it does" value={draft.description} />

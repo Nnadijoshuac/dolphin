@@ -1760,3 +1760,56 @@ select {
     animation: agent-canvas-block-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 }
+
+/*
+ * Slide-over panels (components/slide-over.tsx, 2026-09-28): a blur behind,
+ * never a tint, and a panel that slides from its edge in and out.
+ */
+.slide-over__backdrop {
+  background: transparent;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.slide-over__panel {
+  width: min(88vw, 20rem);
+  box-shadow: 0 24px 64px -12px rgba(15, 23, 42, 0.28), 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.slide-over__panel--right {
+  width: min(88vw, 22rem);
+}
+
+@keyframes slide-over-fade-in { from { opacity: 0; } }
+@keyframes slide-over-fade-out { to { opacity: 0; } }
+@keyframes slide-over-in-left { from { transform: translateX(-104%); } }
+@keyframes slide-over-out-left { to { transform: translateX(-104%); } }
+@keyframes slide-over-in-right { from { transform: translateX(104%); } }
+@keyframes slide-over-out-right { to { transform: translateX(104%); } }
+
+@media (prefers-reduced-motion: no-preference) {
+  .slide-over[data-state="open"] .slide-over__backdrop { animation: slide-over-fade-in 280ms ease both; }
+  .slide-over[data-state="closed"] .slide-over__backdrop { animation: slide-over-fade-out 240ms ease both; }
+  .slide-over[data-state="open"] .slide-over__panel--left { animation: slide-over-in-left 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .slide-over[data-state="closed"] .slide-over__panel--left { animation: slide-over-out-left 260ms cubic-bezier(0.4, 0, 1, 1) both; }
+  .slide-over[data-state="open"] .slide-over__panel--right { animation: slide-over-in-right 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .slide-over[data-state="closed"] .slide-over__panel--right { animation: slide-over-out-right 260ms cubic-bezier(0.4, 0, 1, 1) both; }
+}
+
+/* Reduced motion: no exit animation plays, so closing must not wait for one. */
+@media (prefers-reduced-motion: reduce) {
+  .slide-over[data-state="closed"] { display: none; }
+}
+
+/* Slim scrollbars: a thin thumb that only darkens under the pointer. */
+.sleek-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--line-strong) 80%, transparent) transparent;
+}
+.sleek-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.sleek-scroll::-webkit-scrollbar-track { background: transparent; }
+.sleek-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line-strong) 70%, transparent);
+}
+.sleek-scroll:hover::-webkit-scrollbar-thumb { background: var(--muted); }

@@ -64,7 +64,7 @@ function Shell({ title, onClose, children }: { title: string; onClose: () => voi
           <span aria-hidden className="text-base leading-none">×</span>
         </button>
       </div>
-      <div className="min-h-0 overflow-y-auto px-4 py-3">{children}</div>
+      <div className="sleek-scroll min-h-0 overflow-y-auto px-4 py-3">{children}</div>
     </div>
   );
 }

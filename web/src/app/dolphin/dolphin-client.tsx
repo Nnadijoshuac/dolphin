@@ -16,6 +16,7 @@ import { DolphinLoader } from "@/components/dolphin-loader";
 import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
 import { PublishAgentDialog } from "@/components/publish-agent-dialog";
+import { SlideOver } from "@/components/slide-over";
 import { TradeTicket } from "@/components/trade-ticket";
 import { builtAgentsApi } from "@/convex/api";
 import {
@@ -409,7 +410,7 @@ function ChatHistory({
         New chat
       </button>
 
-      <div className="mt-5 min-h-0 flex-1 overflow-y-auto">
+      <div className="sleek-scroll mt-5 min-h-0 flex-1 overflow-y-auto">
         {entries.length === 0 ? (
           <p className="px-2 text-[12px] leading-relaxed text-muted">
             Your chats appear here. They are saved on this device only.
@@ -477,6 +478,8 @@ export function DolphinClient({
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [draftOpen, setDraftOpen] = useState(false);
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
+  const closeDraftSheet = useCallback(() => setDraftOpen(false), []);
   /*
    * The new-conversation mode and the composer text live in the place store
    * (browser-only), so they survive leaving the page. Read only once mounted:
@@ -987,7 +990,7 @@ export function DolphinClient({
         </header>
 
         <div
-          className="min-h-0 flex-1 overflow-y-auto"
+          className="sleek-scroll min-h-0 flex-1 overflow-y-auto"
           onScroll={(event) => {
             const top = event.currentTarget.scrollTop;
             if (!conversationKey) return;
@@ -1124,23 +1127,15 @@ export function DolphinClient({
         ) : null}
       </div>
 
-      {draftOpen && withDraft ? (
-        <div className="fixed inset-0 z-30 flex justify-end lg:hidden">
-          <button
-            aria-label="Close agent draft"
-            className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]"
-            onClick={() => setDraftOpen(false)}
-            type="button"
-          />
-          <div className="relative h-full w-[min(88vw,22rem)] shadow-[-18px_0_50px_rgba(15,23,42,0.16)]">
-            <AgentDraftPanel
-              draft={agentDraft}
-              onClose={() => setDraftOpen(false)}
-              {...draftPanelActions}
-            />
-          </div>
-        </div>
-      ) : null}
+      <SlideOver
+        className="lg:hidden"
+        label="agent draft"
+        onClose={closeDraftSheet}
+        open={draftOpen && withDraft}
+        side="right"
+      >
+        <AgentDraftPanel draft={agentDraft} onClose={closeDraftSheet} {...draftPanelActions} />
+      </SlideOver>
 
       {publishOpen && buildConversationKey && agentDraft.name && agentDraft.description ? (
         <PublishAgentDialog
@@ -1151,27 +1146,23 @@ export function DolphinClient({
         />
       ) : null}
 
-      {historyOpen ? (
-        <div className={`fixed inset-0 z-30 flex justify-start ${showCanvas ? "" : "lg:hidden"}`}>
-          <button
-            aria-label="Close chat history"
-            className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]"
-            onClick={() => setHistoryOpen(false)}
-            type="button"
-          />
-          <div className="relative h-full w-[min(88vw,20rem)] shadow-[18px_0_50px_rgba(15,23,42,0.16)]">
-            <ChatHistory
-              activeKey={conversationKey}
-              entries={history}
-              onClear={clearHistory}
-              onClose={() => setHistoryOpen(false)}
-              onNew={startNew}
-              onOpen={openSavedConversation}
-              onRemove={removeSavedConversation}
-            />
-          </div>
-        </div>
-      ) : null}
+      <SlideOver
+        className={showCanvas ? "" : "lg:hidden"}
+        label="chat history"
+        onClose={closeHistory}
+        open={historyOpen}
+        side="left"
+      >
+        <ChatHistory
+          activeKey={conversationKey}
+          entries={history}
+          onClear={clearHistory}
+          onClose={closeHistory}
+          onNew={startNew}
+          onOpen={openSavedConversation}
+          onRemove={removeSavedConversation}
+        />
+      </SlideOver>
     </div>
   );
 }

@@ -817,7 +817,31 @@ export type AgentDraftTool = { agentKey: string; agentName: string; toolName: st
 
 /** Every text field is null until the person and the builder have settled it. */
 /** The model a draft thinks with, on its builder's own key. Never the key. */
-export type AgentBrain = { provider: "openai" | "openrouter"; model: string; keyName: string };
+export type AgentBrain = { provider: BrainProviderId; model: string; keyName: string; baseUrl?: string | null };
+
+/**
+ * The providers a Brain can run on. Mirrors BRAIN_PROVIDERS in
+ * convex/lib/openrouter.ts, where every endpoint was checked live on
+ * 2026-09-28. `example` is a model id shown as a placeholder, not a default.
+ */
+export const BRAIN_PROVIDER_OPTIONS = [
+  { id: "openai", label: "OpenAI", keyName: "OPENAI_API_KEY", example: "gpt-4o-mini" },
+  { id: "anthropic", label: "Anthropic", keyName: "ANTHROPIC_API_KEY", example: "claude-sonnet-5" },
+  { id: "openrouter", label: "OpenRouter", keyName: "OPENROUTER_API_KEY", example: "openai/gpt-4o-mini" },
+  { id: "google", label: "Google Gemini", keyName: "GEMINI_API_KEY", example: "gemini-2.5-flash" },
+  { id: "groq", label: "Groq", keyName: "GROQ_API_KEY", example: "llama-3.3-70b-versatile" },
+  { id: "deepseek", label: "DeepSeek", keyName: "DEEPSEEK_API_KEY", example: "deepseek-chat" },
+  { id: "mistral", label: "Mistral", keyName: "MISTRAL_API_KEY", example: "mistral-large-latest" },
+  { id: "xai", label: "xAI", keyName: "XAI_API_KEY", example: "grok-4" },
+  { id: "together", label: "Together", keyName: "TOGETHER_API_KEY", example: "meta-llama/Llama-3.3-70B-Instruct-Turbo" },
+  { id: "fireworks", label: "Fireworks", keyName: "FIREWORKS_API_KEY", example: "accounts/fireworks/models/llama-v3p3-70b-instruct" },
+  { id: "custom", label: "Custom endpoint", keyName: "CUSTOM_API_KEY", example: "the model id your endpoint expects" },
+] as const;
+export type BrainProviderId = (typeof BRAIN_PROVIDER_OPTIONS)[number]["id"];
+
+export function brainProviderLabel(id: string): string {
+  return BRAIN_PROVIDER_OPTIONS.find((option) => option.id === id)?.label ?? id;
+}
 
 /** A toolbox block. Mirrors AgentBlock in convex/lib/agentBlocks.ts. */
 export type AgentBlockData =

@@ -25,7 +25,7 @@ export type AgentDraft = {
   instructions: string | null;
   tools: readonly { agentKey: string; agentName: string; toolName: string }[];
   /** The model it thinks with, on the builder's own key. Null until chosen. */
-  brain?: { provider: "openai" | "openrouter"; model: string; keyName: string } | null;
+  brain?: { provider: string; model: string; keyName: string; baseUrl?: string | null } | null;
   /** Toolbox blocks: market, safety, risk, swap and triggers. */
   blocks?: readonly AgentBlockData[];
   /** Connections cut on the canvas: `tool:<agentKey>:<tool>`, `block:<id>`, `limits`. */

@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 
 import type { AgentDraft } from "@/components/agent-draft-panel";
-import { agentBuilderApi, envVarsApi, type AgentBlockData } from "@/convex/api";
+import { agentBuilderApi, BRAIN_PROVIDER_OPTIONS, envVarsApi, type AgentBlockData, type BrainProviderId } from "@/convex/api";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "@/store/use-toast-store";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -92,15 +92,11 @@ function SaveButton({ disabled, saving, onClick }: { disabled: boolean; saving: 
 const fieldClass =
   "mt-1 w-full rounded-lg border border-line bg-paper-strong px-2.5 py-1.5 text-[0.84rem] text-ink outline-none focus:border-line-strong";
 
-const PROVIDERS = [
-  { id: "openai", label: "OpenAI", example: "gpt-4o-mini" },
-  { id: "openrouter", label: "OpenRouter", example: "openai/gpt-4o-mini" },
-] as const;
-
 function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: string; draft: AgentDraft; onClose: () => void }) {
   const [name, setName] = useState(draft.name ?? "");
   const [description, setDescription] = useState(draft.description ?? "");
-  const [provider, setProvider] = useState<"openai" | "openrouter">(draft.brain?.provider ?? "openai");
+  const [provider, setProvider] = useState<BrainProviderId>((draft.brain?.provider as BrainProviderId) ?? "openai");
+  const [baseUrl, setBaseUrl] = useState(draft.brain?.baseUrl ?? "");
   const [model, setModel] = useState(draft.brain?.model ?? "");
   const [keyName, setKeyName] = useState(draft.brain?.keyName ?? "");
   const session = useWalletSession();
@@ -115,9 +111,12 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
   const brainChanged =
     provider !== (draft.brain?.provider ?? "openai") ||
     model.trim() !== (draft.brain?.model ?? "") ||
-    keyName !== (draft.brain?.keyName ?? "");
-  const brainComplete = model.trim().length >= 2 && keyName.length > 0;
-  const example = PROVIDERS.find((option) => option.id === provider)!.example;
+    keyName !== (draft.brain?.keyName ?? "") ||
+    baseUrl.trim() !== (draft.brain?.baseUrl ?? "");
+  const brainComplete =
+    model.trim().length >= 2 && keyName.length > 0 && (provider !== "custom" || baseUrl.trim().startsWith("https://"));
+  const option = BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === provider)!;
+  const example = option.example;
 
   return (
     <Shell onClose={onClose} title="Brain">
@@ -138,22 +137,34 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
 
       <div className="mt-4 border-t border-line/60 pt-3">
         <Label>Model · on your own key</Label>
-        <div className="mt-1.5 grid grid-cols-2 rounded-full bg-paper-muted/70 p-[3px]" role="radiogroup">
-          {PROVIDERS.map((option) => (
-            <button
-              aria-checked={provider === option.id}
-              className={`rounded-full py-1 !text-[12px] font-medium transition-colors ${
-                provider === option.id ? "bg-paper-strong text-ink shadow-sm" : "text-muted hover:text-ink"
-              }`}
-              key={option.id}
-              onClick={() => setProvider(option.id)}
-              role="radio"
-              type="button"
-            >
-              {option.label}
-            </button>
+        <select
+          aria-label="Provider"
+          className={`${fieldClass} mt-1.5`}
+          onChange={(event) => {
+            const next = event.target.value as BrainProviderId;
+            setProvider(next);
+            // Point at the usual key name for that provider, when this wallet has it.
+            const usual = BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === next)?.keyName;
+            if (usual && keys?.some((key) => key.name === usual)) setKeyName(usual);
+          }}
+          value={provider}
+        >
+          {BRAIN_PROVIDER_OPTIONS.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {candidate.label}
+            </option>
           ))}
-        </div>
+        </select>
+        {provider === "custom" ? (
+          <input
+            aria-label="Endpoint base URL"
+            className={`${fieldClass} mt-2 font-mono`}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://api.example.com/v1 (OpenAI-compatible)"
+            spellCheck={false}
+            value={baseUrl}
+          />
+        ) : null}
         <input
           aria-label="Model"
           className={`${fieldClass} mt-2 font-mono`}
@@ -168,7 +179,7 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
           </p>
         ) : keys && keys.length === 0 ? (
           <p className="mt-2 text-[0.72rem] leading-relaxed text-muted">
-            You have no keys yet. Add your {provider === "openai" ? "OpenAI" : "OpenRouter"} key in the Keys tab.
+            You have no keys yet. Add your {option.label} key in the Keys tab (e.g. {option.keyName}).
           </p>
         ) : (
           <select
@@ -194,7 +205,10 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
           void save({
             ...(textChanged ? { name, description } : {}),
             ...(brainChanged && brainComplete && session.sessionToken
-              ? { brain: { provider, model: model.trim(), keyName }, sessionToken: session.sessionToken }
+              ? {
+                  brain: { provider, model: model.trim(), keyName, baseUrl: provider === "custom" ? baseUrl.trim() : null },
+                  sessionToken: session.sessionToken,
+                }
               : {}),
           })
         }

@@ -3,7 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
-import { envVarsApi } from "@/convex/api";
+import { BRAIN_PROVIDER_OPTIONS, envVarsApi } from "@/convex/api";
 import { convexClient } from "@/providers/convex-provider";
 import { toast } from "@/store/use-toast-store";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -20,8 +20,8 @@ import { useWalletSession } from "@/wallet/wallet-session";
  * hosting provider makes about env vars, and the only honest one.
  */
 
-/* The two providers a Brain can run on (convex/lib/openrouter.ts BRAIN_PROVIDER_URLS). Claude is reachable through OpenRouter. */
-const SUGGESTED = ["OPENAI_API_KEY", "OPENROUTER_API_KEY"];
+/* The usual names for the providers a Brain can run on (BRAIN_PROVIDER_OPTIONS); any name works. */
+const SUGGESTED = BRAIN_PROVIDER_OPTIONS.filter((option) => option.id !== "custom").map((option) => option.keyName);
 
 function errorText(cause: unknown, fallback: string): string {
   const data = (cause as { data?: unknown } | null)?.data;

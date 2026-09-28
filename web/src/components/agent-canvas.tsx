@@ -28,7 +28,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import type { AgentDraft } from "@/components/agent-draft-panel";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { TradingChart } from "@/components/trading-chart";
-import { agentBuilderApi, type AgentBlockData } from "@/convex/api";
+import { agentBuilderApi, brainProviderLabel, type AgentBlockData } from "@/convex/api";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import type { Agent } from "@/types/agent";
 import { toast } from "@/store/use-toast-store";
@@ -380,7 +380,7 @@ export function draftGraph(
         kind: "brain",
         title: draft.name?.trim() || "Unnamed agent",
         detail: draft.brain
-          ? `${draft.brain.model} · your ${draft.brain.provider === "openai" ? "OpenAI" : "OpenRouter"} key`
+          ? `${draft.brain.model} · your ${brainProviderLabel(draft.brain.provider)} key`
           : "No model yet · choose your key",
         empty: !draft.name?.trim() || !draft.brain,
       },

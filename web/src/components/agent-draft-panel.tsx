@@ -154,7 +154,9 @@ export function AgentDraftPanel({
       </div>
 
       {/* A visibly darker track and a white selected pill (owner, 2026-09-28: "you can't tell if it's on Keys or Draft"). */}
-      <div aria-label="Panel" className="panel-tabs mx-2 mt-2 grid grid-cols-2 rounded-full p-[3px]" role="tablist">
+      <div aria-label="Panel" className="panel-tabs relative mx-2 mt-2 grid grid-cols-2 rounded-full p-[3px]" role="tablist">
+        {/* The white pill glides to the open tab rather than jumping (owner: micro-animations). */}
+        <span aria-hidden className="panel-tabs__pill" data-tab={tab} />
         {(["draft", "keys"] as const).map((option) => (
           <button
             aria-selected={tab === option}
@@ -169,12 +171,14 @@ export function AgentDraftPanel({
         ))}
       </div>
 
-      {tab === "keys" ? (
-        <div className="sleek-scroll mt-4 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          <EnvVarsPanel />
-        </div>
-      ) : (
-      <>
+      {/*
+        * Both pages sit side by side and slide across together, so switching
+        * tabs moves the page with the pill instead of snapping. The hidden one
+        * is inert: no focus, no screen reader.
+        */}
+      <div className="relative mt-0 min-h-0 flex-1 overflow-hidden">
+        <div className="panel-slider flex h-full" data-tab={tab}>
+      <div className="flex h-full w-1/2 min-w-0 flex-col" inert={tab !== "draft"}>
       <ol className="mt-3 flex items-center gap-1.5 px-2" aria-label="Build steps">
         {STEPS.map((step, index) => {
           const done = index < currentStep;
@@ -297,8 +301,12 @@ export function AgentDraftPanel({
               : `Needs ${listGaps(gaps)} before you can try it. It stays free and private.`}
         </p>
       </div>
-      </>
-      )}
+      </div>
+      <div className="sleek-scroll h-full w-1/2 min-w-0 overflow-y-auto px-2 pb-2 pt-4" inert={tab !== "keys"}>
+        <EnvVarsPanel />
+      </div>
+        </div>
+      </div>
     </aside>
   );
 }

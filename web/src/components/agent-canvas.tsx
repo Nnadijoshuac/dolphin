@@ -24,10 +24,13 @@ import { useMutation } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AgentCanvasInspector } from "@/components/agent-canvas-inspector";
+import { AgentIcon } from "@/components/agent-icon";
 import type { AgentDraft } from "@/components/agent-draft-panel";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { TradingChart } from "@/components/trading-chart";
 import { agentBuilderApi, type AgentBlockData } from "@/convex/api";
+import { useAgentsByKeys } from "@/hooks/use-agents";
+import type { Agent } from "@/types/agent";
 import { toast } from "@/store/use-toast-store";
 
 /**
@@ -75,6 +78,8 @@ type BlockData = {
   member?: string;
   /** Cut on the canvas: the agent will not use it until it is connected again. */
   detached?: boolean;
+  /** A tool's publisher, drawn with its own icon rather than a spanner (owner, 2026-09-28). */
+  agent?: { category: string; seed: string | null; uri: string | null };
 };
 
 type BlockNode = Node<BlockData, "block">;
@@ -144,9 +149,15 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
       ) : null}
 
       <div className="flex items-start gap-2.5">
-        <span className="agent-block__icon">
-          <CategoryGlyph color="currentColor" name={data.glyph ?? KIND_GLYPH[kind]} size={15} strokeWidth={2} />
-        </span>
+        {data.agent ? (
+          <span className="agent-block__icon agent-block__icon--agent">
+            <AgentIcon category={data.agent.category} seed={data.agent.seed ?? undefined} size={30} uri={data.agent.uri ?? undefined} />
+          </span>
+        ) : (
+          <span className="agent-block__icon">
+            <CategoryGlyph color="currentColor" name={data.glyph ?? KIND_GLYPH[kind]} size={15} strokeWidth={2} />
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted">{data.label ?? KIND_LABEL[kind]}</span>
@@ -287,7 +298,10 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
 }
 
 /** The default layout for a draft. Pure, so it is the same on every render. */
-export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: FlowEdge[] } {
+export function draftGraph(
+  draft: AgentDraft,
+  agents: ReadonlyMap<string, Agent> = new Map(),
+): { nodes: BlockNode[]; edges: FlowEdge[] } {
   const blocks = draft.blocks ?? [];
   const cut = new Set(draft.detached ?? []);
   const middle = NODE_WIDTH + COLUMN_GAP;
@@ -328,7 +342,20 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Flow
       pushLeft({
         id: `tool-${index}`,
         type: "block",
-        data: { kind: "tool", title: tool.toolName, detail: `via ${tool.agentName}`, member, detached: cut.has(member) },
+        data: {
+          kind: "tool",
+          title: tool.toolName,
+          detail: `via ${tool.agentName}`,
+          member,
+          detached: cut.has(member),
+          agent: agents.get(tool.agentKey)
+            ? {
+                category: agents.get(tool.agentKey)!.category,
+                seed: agents.get(tool.agentKey)!.iconSeed ?? null,
+                uri: agents.get(tool.agentKey)!.iconUrl ?? null,
+              }
+            : undefined,
+        },
       });
     });
     if (draft.tools.length < MAX_TOOLS) {
@@ -523,38 +550,46 @@ function FitOnChange({ count, version }: { count: number; version: number }) {
 }
 
 /**
- * The toolbox tray (owner, 2026-09-28: "a small toolbox down that they can
- * click and see other things they can add"). Grouped the way a trading desk
- * thinks - what starts the agent, what it senses, what it may do - with each
- * block once. A block that needs another first says which, and waits.
+ * THE TOOLBOX (owner, 2026-09-28): one quiet "Add block" button that opens a
+ * panel of described blocks - what each does, whether it is on the canvas,
+ * and what it needs first - grouped the way a trading desk thinks. The first
+ * version was a strip of labelled buttons the owner found cheap.
  */
-const TOOLBOX: { title: string; items: { type: AgentBlockData["type"] | "tool"; label: string; glyph: GlyphName; needs?: AgentBlockData["type"] }[] }[] = [
+type ToolboxItem = {
+  type: AgentBlockData["type"] | "tool";
+  label: string;
+  about: string;
+  glyph: GlyphName;
+  needs?: AgentBlockData["type"];
+};
+
+const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
   {
     title: "Triggers",
     items: [
-      { type: "schedule", label: "Schedule", glyph: "clock" },
-      { type: "price", label: "Price", glyph: "dollar", needs: "market" },
-      { type: "walletWatch", label: "Wallet watch", glyph: "eye" },
+      { type: "schedule", label: "Schedule", about: "Run on a clock, every 15 minutes to daily", glyph: "clock" },
+      { type: "price", label: "Price", about: "Run when the token crosses a level", glyph: "dollar", needs: "market" },
+      { type: "walletWatch", label: "Wallet watch", about: "Run when a KOL or whale transacts", glyph: "eye" },
     ],
   },
   {
     title: "Senses",
     items: [
-      { type: "market", label: "Market", glyph: "layers" },
-      { type: "safety", label: "Safety", glyph: "shield" },
-      { type: "tool", label: "Agent tool", glyph: "spanner" },
+      { type: "market", label: "Market", about: "A token's live price, candles and chart", glyph: "layers" },
+      { type: "safety", label: "Safety", about: "Honeypot, taxes and owner-power checks", glyph: "shield" },
+      { type: "tool", label: "Agent tool", about: "A tool from an agent listed on Dolphin", glyph: "agents" },
     ],
   },
   {
     title: "Hands",
     items: [
-      { type: "risk", label: "Risk limits", glyph: "filter" },
-      { type: "swap", label: "Swap", glyph: "wallet", needs: "risk" },
+      { type: "risk", label: "Risk limits", about: "Dollars per trade and trades per day", glyph: "filter" },
+      { type: "swap", label: "Swap", about: "Propose PancakeSwap trades within the limits", glyph: "wallet", needs: "risk" },
     ],
   },
 ];
 
-const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = { market: "Add a Market first", risk: "Add Risk limits first" };
+const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = { market: "Needs a Market", risk: "Needs Risk limits" };
 
 function Toolbox({
   blocks,
@@ -567,51 +602,107 @@ function Toolbox({
   selected: string | null;
   onPick: (id: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const needle = query.trim().toLowerCase();
+  const groups = TOOLBOX.map((group) => ({
+    ...group,
+    items: group.items.filter(
+      (item) => !needle || item.label.toLowerCase().includes(needle) || item.about.toLowerCase().includes(needle),
+    ),
+  })).filter((group) => group.items.length > 0);
+
   return (
-    <div aria-label="Toolbox" className="canvas-toolbox" role="toolbar">
-      {TOOLBOX.map((group) => (
-        <div className="canvas-toolbox__group" key={group.title}>
-          <span className="canvas-toolbox__title">{group.title}</span>
-          <div className="canvas-toolbox__items">
-            {group.items.map((item) => {
-              if (item.type === "tool") {
-                return (
-                  <button
-                    className="canvas-toolbox__item"
-                    data-active={selected === "add-tool" || undefined}
-                    disabled={toolCount >= MAX_TOOLS}
-                    key={item.type}
-                    onClick={() => onPick(toolCount === 0 ? "tool-empty" : "add-tool")}
-                    title={toolCount >= MAX_TOOLS ? `An agent can have ${MAX_TOOLS} tools` : "A tool from an agent listed on Dolphin"}
-                    type="button"
-                  >
-                    <CategoryGlyph color="currentColor" name={item.glyph} size={14} strokeWidth={2} />
-                    {item.label}
-                  </button>
-                );
-              }
-              const existing = blocks.find((block) => block.type === item.type);
-              const missing = item.needs && !blocks.some((block) => block.type === item.needs) ? item.needs : null;
-              const id = existing ? `block-${existing.id}` : `new-${item.type}`;
-              return (
-                <button
-                  className="canvas-toolbox__item"
-                  data-active={selected === id || undefined}
-                  disabled={Boolean(missing)}
-                  key={item.type}
-                  onClick={() => onPick(id)}
-                  title={missing ? NEEDS_LABEL[missing] : existing ? "Already on the canvas - open it" : `Add ${item.label}`}
-                  type="button"
-                >
-                  <CategoryGlyph color="currentColor" name={item.glyph} size={14} strokeWidth={2} />
-                  {item.label}
-                  {existing ? <span aria-label="added" className="text-[10px] opacity-60">✓</span> : null}
-                </button>
-              );
-            })}
+    <div className="relative flex flex-col items-center">
+      {open ? (
+        <>
+          <button aria-label="Close the block panel" className="fixed inset-0 cursor-default" onClick={() => setOpen(false)} type="button" />
+          <div aria-label="Add a block" className="block-panel" role="dialog">
+            <input
+              aria-label="Search blocks"
+              autoFocus
+              className="block-panel__search"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search blocks…"
+              value={query}
+            />
+            <div className="block-panel__scroll sleek-scroll">
+              {groups.map((group) => (
+                <section key={group.title}>
+                  <p className="block-panel__group">{group.title}</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {group.items.map((item) => {
+                      const existing = item.type === "tool" ? null : blocks.find((block) => block.type === item.type);
+                      const missing =
+                        item.type !== "tool" && item.needs && !blocks.some((block) => block.type === item.needs) ? item.needs : null;
+                      const full = item.type === "tool" && toolCount >= MAX_TOOLS;
+                      const id =
+                        item.type === "tool"
+                          ? toolCount === 0
+                            ? "tool-empty"
+                            : "add-tool"
+                          : existing
+                            ? `block-${existing.id}`
+                            : `new-${item.type}`;
+                      return (
+                        <button
+                          className="block-card"
+                          data-active={selected === id || undefined}
+                          disabled={Boolean(missing) || full}
+                          key={item.type}
+                          onClick={() => {
+                            onPick(id);
+                            setOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <span className="block-card__icon">
+                            <CategoryGlyph color="currentColor" name={item.glyph} size={15} strokeWidth={2} />
+                          </span>
+                          <span className="min-w-0 flex-1 text-left">
+                            <span className="flex items-center gap-1.5">
+                              <span className="block-card__name">{item.label}</span>
+                              {existing ? <span className="block-card__badge">On canvas</span> : null}
+                            </span>
+                            <span className="block-card__about">
+                              {missing ? NEEDS_LABEL[missing] : full ? `${MAX_TOOLS} tools is the most` : item.about}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+              {groups.length === 0 ? <p className="px-1 py-3 text-[0.76rem] text-muted">No block matches that.</p> : null}
+            </div>
           </div>
-        </div>
-      ))}
+        </>
+      ) : null}
+      <button
+        aria-expanded={open}
+        className="add-block-button"
+        onClick={() => {
+          setQuery("");
+          setOpen((value) => !value);
+        }}
+        type="button"
+      >
+        <span className="add-block-button__plus" data-open={open || undefined}>
+          <CategoryGlyph color="currentColor" name="add" size={15} strokeWidth={2.2} />
+        </span>
+        Add block
+      </button>
     </div>
   );
 }
@@ -629,7 +720,10 @@ export function AgentCanvas({
   layoutKey: string | null;
   run?: CanvasRun | null;
 }) {
-  const base = useMemo(() => applyRun(draft, draftGraph(draft), run), [draft, run]);
+  // The tools' publishers, in one batched read, for their icons.
+  const toolAgentKeys = useMemo(() => draft.tools.map((tool) => tool.agentKey), [draft.tools]);
+  const toolAgents = useAgentsByKeys(toolAgentKeys);
+  const base = useMemo(() => applyRun(draft, draftGraph(draft, toolAgents), run), [draft, run, toolAgents]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Positions the person dragged, over the default layout. Read lazily on the
   // client only (this component never renders on the server - it sits behind
@@ -864,7 +958,7 @@ export function AgentCanvas({
         </div>
       ) : editKey && !market ? (
         <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted backdrop-blur">
-          Click a block to change it · drag to move it · add more from the toolbox
+          Click a block to change it · drag dots to connect · double-click a line to cut it
         </p>
       ) : run ? (
         <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted backdrop-blur">

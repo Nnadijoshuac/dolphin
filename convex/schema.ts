@@ -699,6 +699,46 @@ export default defineSchema({
    * kept out of ranking.
    */
   /**
+   * TRADE KEYS: session keys that let one agent trade by itself, with no tap
+   * (owner's approval, 2026-09-28). One Altana session per grant, scoped
+   * ON-CHAIN by the Dolphin Wallet's account contract: only PancakeSwap's two
+   * routers and approve() on Dolphin's verified tokens, daily spend caps from
+   * the agent's Risk limits, and an expiry (7 days by default; 1 or 30).
+   *
+   * The private key is generated in an action, sealed with lib/secretBox.ts,
+   * and never leaves the backend; the browser only ever sees the public key,
+   * which it grants with the owner's passkey. "Stop" deletes the sealed key at
+   * once (Dolphin can no longer trade with it); "revoke" is the owner's
+   * on-chain revocation, which kills it everywhere.
+   *
+   * status: pending (prepared, not yet granted) -> active -> stopped/expired;
+   * revokedAt is set when the on-chain revoke is confirmed.
+   */
+  agentTradeKeys: defineTable({
+    draftId: v.id("agentDrafts"),
+    /** The signed-in wallet that owns the agent (and its Brain key). */
+    ownerAddress: v.string(),
+    /** The Dolphin Wallet (Altana smart account) the session acts on. */
+    altanaWalletAddress: v.string(),
+    sessionPublicKey: v.string(),
+    sessionAddress: v.string(),
+    /** Sealed private key; null once stopped. */
+    ciphertext: v.union(v.string(), v.null()),
+    iv: v.union(v.string(), v.null()),
+    /** The exact permissions granted, JSON with bigints as decimal strings. */
+    permissionsJson: v.string(),
+    /** Unix seconds. */
+    expiry: v.number(),
+    durationDays: v.number(),
+    status: v.union(v.literal("pending"), v.literal("active"), v.literal("stopped")),
+    grantTransactionHash: v.union(v.string(), v.null()),
+    createdAt: v.string(),
+    grantedAt: v.union(v.string(), v.null()),
+    stoppedAt: v.union(v.string(), v.null()),
+    revokedAt: v.union(v.string(), v.null()),
+  }).index("by_draft", ["draftId", "createdAt"]),
+
+  /**
    * Armed autopilot triggers (2026-09-28). One row per trigger block of a
    * draft whose autopilot is on; turning it off deletes them. The scheduler
    * reads only rows that are due (`by_next_run`), so an idle deployment

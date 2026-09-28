@@ -20,34 +20,12 @@ import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { open, seal } from "./lib/secretBox";
 import { requireWalletAddress } from "./lib/walletAuth";
 
 const NAME_PATTERN = /^[A-Z][A-Z0-9_]{1,63}$/;
 const MAX_VALUE_CHARS = 4_000;
 export const MAX_VARS_PER_WALLET = 50;
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-/** Typed on a plain ArrayBuffer: Web Crypto's BufferSource rejects a SharedArrayBuffer-backed view. */
-function fromBase64(text: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(text);
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-async function encryptionKey(): Promise<CryptoKey> {
-  const raw = process.env.DOLPHIN_ENV_KEY;
-  const bytes = raw ? fromBase64(raw) : null;
-  if (!bytes || bytes.length !== 32) {
-    throw new ConvexError("Keys cannot be stored yet: this deployment has no encryption key configured.");
-  }
-  return crypto.subtle.importKey("raw", bytes, "AES-GCM", false, ["encrypt", "decrypt"]);
-}
 
 /** The session's wallet, for actions (which have no db of their own). */
 export const walletFor = internalQuery({
@@ -87,20 +65,9 @@ export const set = action({
     if (value.length === 0) throw new ConvexError("The value is empty.");
     if (value.length > MAX_VALUE_CHARS) throw new ConvexError(`Values are limited to ${MAX_VALUE_CHARS} characters.`);
 
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const sealed = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      await encryptionKey(),
-      new TextEncoder().encode(value),
-    );
+    const box = await seal(value);
     const last4 = value.length > 8 ? value.slice(-4) : "";
-    await ctx.runMutation(internal.envVars.store, {
-      walletAddress,
-      name,
-      ciphertext: toBase64(new Uint8Array(sealed)),
-      iv: toBase64(iv),
-      last4,
-    });
+    await ctx.runMutation(internal.envVars.store, { walletAddress, name, ...box, last4 });
     return { name, last4 };
   },
 });
@@ -161,11 +128,6 @@ export const reveal = internalAction({
   handler: async (ctx, args): Promise<string | null> => {
     const row = await ctx.runQuery(internal.envVars.sealedFor, args);
     if (!row) return null;
-    const opened = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: fromBase64(row.iv) },
-      await encryptionKey(),
-      fromBase64(row.ciphertext),
-    );
-    return new TextDecoder().decode(opened);
+    return open({ ciphertext: row.ciphertext, iv: row.iv });
   },
 });

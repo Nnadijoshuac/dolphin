@@ -123,7 +123,7 @@ export const TRY_CONSULT_PROMPT = `You are the evidence-gathering step of an AI 
 
 export function tryAnswerPrompt(
   draft: DraftSpec,
-  abilities: { canPropose?: boolean; triggered?: boolean } = {},
+  abilities: { canPropose?: boolean; canTrade?: boolean; triggered?: boolean } = {},
 ): string {
   return `You are "${draft.name}", an AI agent that a person built on Dolphin, a marketplace of AI agents on BNB Chain. ${draft.description ?? ""}
 
@@ -133,7 +133,9 @@ ${draft.instructions}
 RULES THAT OVERRIDE THE INSTRUCTIONS ABOVE:
 - Only quote a number that a tool returned in this conversation. With no live reading, say you do not have one. Never guess a price, APY, balance or health factor.
 ${
-    abilities.canPropose
+    abilities.canTrade
+      ? "- You may TRADE with block_propose_swap: the owner granted you a trade key, so a swap within your Risk limits executes at once from their Dolphin Wallet. Trade only when your instructions and the data call for it. Say exactly what the tool reports - traded, or not traded and why. Never claim a trade the tool did not report."
+      : abilities.canPropose
       ? "- You cannot sign, send or move funds. You MAY propose a trade with block_propose_swap; the owner reviews it and signs it from their Dolphin Wallet. Say you proposed it - never that you traded. Propose only when your instructions and the data call for it."
       : "- You can only read. You cannot sign, send, trade or move funds, and you cannot set anything up. If a tool returned an unsigned transaction, say the person would sign it from their own wallet. Never say you did it."
   }
@@ -365,7 +367,14 @@ export const runtimeForDraft = internalQuery({
   handler: async (ctx, { draftId }) => {
     const draft = await ctx.db.get(draftId);
     const today = new Date().toISOString().slice(0, 10);
+    const tradeKeys = await ctx.db
+      .query("agentTradeKeys")
+      .withIndex("by_draft", (q) => q.eq("draftId", draftId))
+      .order("desc")
+      .take(3);
+    const autotradeActive = tradeKeys.some((key) => key.status === "active" && key.ciphertext && key.expiry > Date.now() / 1000);
     return {
+      autotradeActive,
       brain: draft?.brain ?? null,
       // Only what is still plugged in on the canvas.
       blocks: activeBlocks((draft?.blocks ?? []) as AgentBlock[], draft?.detached),
@@ -1112,9 +1121,33 @@ export async function runTryTurn(
               });
               const result = await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
               if (result.ticket && draftId) {
-                ticket = result.ticket;
                 proposalsToday += 1;
                 await ctx.runMutation(internal.agentBuilder.recordProposal, { draftId });
+                /*
+                 * NO-TAP TRADING (convex/autotrade.ts): with a live trade key the
+                 * swap executes now, inside the limits the wallet contract enforces.
+                 * Anything that stops it leaves the ticket for the owner to sign.
+                 */
+                const auto: { attempted: boolean; executed: boolean; text: string } = await ctx.runAction(
+                  internal.autotrade.executeTrade,
+                  {
+                    draftId,
+                    agentName: draft.name ?? "Agent",
+                    ticket: result.ticket as {
+                      kind: "swap";
+                      amountIn: string;
+                      tokenIn: { address: string | null; symbol: string; decimals: number; verified: boolean };
+                      tokenOut: { address: string | null; symbol: string; decimals: number; verified: boolean };
+                      safety: null;
+                    },
+                  },
+                );
+                if (auto.executed) {
+                  result.text = auto.text;
+                } else {
+                  ticket = result.ticket;
+                  if (auto.attempted) result.text = `${auto.text} It is waiting as a ticket for the owner to sign instead.`;
+                }
               }
               await ctx.runMutation(internal.dolphin.completeToolCall, {
                 toolCallId,
@@ -1150,7 +1183,11 @@ export async function runTryTurn(
         status: "thinking",
       });
 
-      let system = `${tryAnswerPrompt(draft, { canPropose: blocks.some((block) => block.type === "swap"), triggered })}${addressNote}`;
+      let system = `${tryAnswerPrompt(draft, {
+        canPropose: blocks.some((block) => block.type === "swap"),
+        canTrade: Boolean(runtime?.autotradeActive),
+        triggered,
+      })}${addressNote}`;
       const unreachable = [
         ...menu.unreachable.map((u) => `- ${u.agentName} did not answer: ${u.reason}`),
         ...rows

@@ -170,6 +170,10 @@ export const getDraft = query({
             description: draft.description,
             instructions: draft.instructions,
             tools: draft.tools,
+            // Which model and which of the builder's keys - never the key.
+            brain: draft.brain
+              ? { provider: draft.brain.provider, model: draft.brain.model, keyName: draft.brain.keyName }
+              : null,
             updatedAt: draft.updatedAt,
           }
         : null,
@@ -309,6 +313,12 @@ export const toolCatalog = internalQuery({
   },
 });
 
+/** A draft's brain, with the wallet whose key it runs on. Internal: the runtime's only. */
+export const brainForDraft = internalQuery({
+  args: { draftId: v.id("agentDrafts") },
+  handler: async (ctx, { draftId }) => (await ctx.db.get(draftId))?.brain ?? null,
+});
+
 /** The catalog rows behind a draft's tools, for the try-run's menu. */
 export const toolAgents = internalQuery({
   args: { agentKeys: v.array(v.string()) },
@@ -440,6 +450,22 @@ export const updateDraft = mutation({
     description: v.optional(v.string()),
     instructions: v.optional(v.string()),
     tools: v.optional(v.array(v.object({ agentKey: v.string(), toolName: v.string() }))),
+    /**
+     * The model and key the agent thinks with. Setting one needs a signed-in
+     * wallet that holds a variable of that name: a draft can only ever run on
+     * its builder's own key. null clears it.
+     */
+    brain: v.optional(
+      v.union(
+        v.null(),
+        v.object({
+          provider: v.union(v.literal("openai"), v.literal("openrouter")),
+          model: v.string(),
+          keyName: v.string(),
+        }),
+      ),
+    ),
+    sessionToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const conversation = await ctx.db
@@ -509,9 +535,26 @@ export const updateDraft = mutation({
       next.tools = picked;
     }
 
+    let brain = existing?.brain;
+    if (args.brain === null) brain = undefined;
+    if (args.brain) {
+      if (!args.sessionToken) throw new ConvexError("Sign in with your wallet to choose a key for the brain.");
+      const walletAddress = await requireWalletAddress(ctx, args.sessionToken, "Choosing the brain's key");
+      const model = args.brain.model.trim();
+      if (!/^[A-Za-z0-9._:/-]{2,100}$/.test(model)) {
+        throw new ConvexError("That model name does not look right. Use the provider's id, like gpt-4o-mini or openai/gpt-4o-mini.");
+      }
+      const key = await ctx.db
+        .query("userEnvVars")
+        .withIndex("by_wallet_name", (q) => q.eq("walletAddress", walletAddress).eq("name", args.brain!.keyName))
+        .unique();
+      if (!key) throw new ConvexError(`You have no key called ${args.brain.keyName}. Add it in the Keys tab first.`);
+      brain = { provider: args.brain.provider, model, keyName: args.brain.keyName, walletAddress };
+    }
+
     const now = Date.now();
     if (existing) {
-      await ctx.db.patch(existing._id, { ...next, updatedAt: now });
+      await ctx.db.patch(existing._id, { ...next, brain, updatedAt: now });
     } else {
       await ctx.db.insert("agentDrafts", {
         conversationId: conversation._id,
@@ -850,6 +893,29 @@ export const tryAsk = action({
       }
 
       /*
+       * THE BRAIN IS THE BUILDER'S OWN (owner, 2026-09-28: "we are not giving
+       * anybody free agents"). No brain, no run - never a silent fallback to
+       * Dolphin's model. The key is decrypted here, used for this turn's calls,
+       * and never written anywhere or returned.
+       */
+      const brain = draftId ? await ctx.runQuery(internal.agentBuilder.brainForDraft, { draftId }) : null;
+      const apiKey = brain
+        ? await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: brain.keyName })
+        : null;
+      if (!brain || !apiKey) {
+        await ctx.runMutation(internal.dolphin.setMessageStatus, {
+          messageId: assistantId,
+          status: "error",
+          errorReason: !brain
+            ? "This agent has no brain yet. Add your model's API key in the Keys tab, then choose it on the Brain block."
+            : `The key ${brain.keyName} is gone from your Keys. Add it again, or choose another on the Brain block.`,
+          errorKind: "input",
+        });
+        return { messageId: assistantId };
+      }
+      const endpoint = { provider: brain.provider, apiKey, model: brain.model };
+
+      /*
        * The menu is the draft's tools and nothing else. An agent that has left
        * the catalog, or a tool its server no longer lists, is named to the
        * model as unreachable rather than silently dropped.
@@ -899,7 +965,7 @@ export const tryAsk = action({
         });
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
-            const turn = await chatCompletion({ messages, tools: menu.tools, toolChoice: "auto" });
+            const turn = await chatCompletion({ messages, tools: menu.tools, toolChoice: "auto", endpoint });
             /* Consult prose is never carried forward. See the same note in dolphin.ask. */
             if (turn.toolCalls.length === 0) break;
             messages.push({ role: "assistant", content: null, tool_calls: turn.toolCalls });
@@ -946,7 +1012,7 @@ export const tryAsk = action({
       }
       messages[0] = { role: "system", content: system };
 
-      const final = await chatCompletion({ messages });
+      const final = await chatCompletion({ messages, endpoint });
       const content = stripRawPayloads(final.content).trim();
 
       if (content.length === 0 || looksLikeLeakedReasoning(content)) {

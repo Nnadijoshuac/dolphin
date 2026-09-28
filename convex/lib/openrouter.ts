@@ -49,6 +49,21 @@
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+/**
+ * Where a builder's own key is sent (2026-09-28). Both speak the OpenAI chat
+ * completions dialect, tools included, so one request builder serves both.
+ * Anthropic's native API does not; Claude models are reachable through
+ * OpenRouter with an OpenRouter key.
+ */
+export const BRAIN_PROVIDER_URLS = {
+  openai: "https://api.openai.com/v1/chat/completions",
+  openrouter: OPENROUTER_URL,
+} as const;
+export type BrainProvider = keyof typeof BRAIN_PROVIDER_URLS;
+
+/** A person's own model endpoint, in place of Dolphin's. */
+export type BrainEndpoint = { provider: BrainProvider; apiKey: string; model: string };
+
 /** Verified present in OpenRouter's live model list on 2026-09-08. */
 export const DOLPHIN_PRIMARY_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
@@ -199,9 +214,15 @@ async function chatCompletionOnce(options: {
    * attached - see the block comment below.
    */
   allowFallbacks?: boolean;
+  /**
+   * A builder's own provider, key and model. When set, nothing of Dolphin's is
+   * used - not its key, not its model, not its free-model fallback chain.
+   */
+  endpoint?: BrainEndpoint;
 }): Promise<ChatResult> {
-  const apiKey = readApiKey();
-  const model = options.model ?? DOLPHIN_PRIMARY_MODEL;
+  const endpoint = options.endpoint;
+  const apiKey = endpoint ? endpoint.apiKey : readApiKey();
+  const model = endpoint ? endpoint.model : (options.model ?? DOLPHIN_PRIMARY_MODEL);
   const hasTools = Boolean(options.tools && options.tools.length > 0);
 
   /*
@@ -240,7 +261,7 @@ async function chatCompletionOnce(options: {
    * fallbacks off, every one of those is a dead turn. With them on, the worst
    * case is a clear error the guards produce.
    */
-  const useFallbacks = options.allowFallbacks ?? true;
+  const useFallbacks = endpoint ? false : (options.allowFallbacks ?? true);
 
   const body: Record<string, unknown> = {
     model,
@@ -273,7 +294,7 @@ async function chatCompletionOnce(options: {
 
   let response: Response;
   try {
-    response = await fetch(OPENROUTER_URL, {
+    response = await fetch(endpoint ? BRAIN_PROVIDER_URLS[endpoint.provider] : OPENROUTER_URL, {
       method: "POST",
       headers: {
         authorization: `Bearer ${apiKey}`,
@@ -294,6 +315,15 @@ async function chatCompletionOnce(options: {
 
   const text = await response.text();
 
+  if (endpoint && (response.status === 401 || response.status === 403)) {
+    throw new OpenRouterError(`Your ${endpoint.provider === "openai" ? "OpenAI" : "OpenRouter"} key was refused (HTTP ${response.status}). Check it in the Keys tab.`);
+  }
+  if (endpoint && response.status === 429) {
+    throw new OpenRouterError(
+      `Your ${endpoint.provider === "openai" ? "OpenAI" : "OpenRouter"} key hit its rate limit or quota. Try again shortly, or check its billing.`,
+      true,
+    );
+  }
   if (response.status === 429) {
     throw new OpenRouterError(
       "Dolphin has used up its free model calls for now. Free-tier limits reset " +

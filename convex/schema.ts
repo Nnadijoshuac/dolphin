@@ -1036,6 +1036,19 @@ export default defineSchema({
         toolName: v.string(),
       }),
     ),
+    /**
+     * The model the agent thinks with, on its builder's own key (2026-09-28:
+     * no agent runs on Dolphin's free model). `keyName` names one of
+     * `walletAddress`'s userEnvVars; the key itself never lives here.
+     */
+    brain: v.optional(
+      v.object({
+        provider: v.union(v.literal("openai"), v.literal("openrouter")),
+        model: v.string(),
+        keyName: v.string(),
+        walletAddress: v.string(),
+      }),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

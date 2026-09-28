@@ -240,7 +240,14 @@ export function draftGraph(draft: AgentDraft): { nodes: BlockNode[]; edges: Flow
       id: "brain",
       type: "block",
       position: { x: middle, y: brainY },
-      data: { kind: "brain", title: draft.name?.trim() || "Unnamed agent", detail: "Dolphin's free model", empty: !draft.name?.trim() },
+      data: {
+        kind: "brain",
+        title: draft.name?.trim() || "Unnamed agent",
+        detail: draft.brain
+          ? `${draft.brain.model} · your ${draft.brain.provider === "openai" ? "OpenAI" : "OpenRouter"} key`
+          : "No model yet · choose your key",
+        empty: !draft.name?.trim() || !draft.brain,
+      },
     },
     {
       id: "output",

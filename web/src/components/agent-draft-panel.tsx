@@ -23,6 +23,8 @@ export type AgentDraft = {
   description: string | null;
   instructions: string | null;
   tools: readonly { agentKey: string; agentName: string; toolName: string }[];
+  /** The model it thinks with, on the builder's own key. Null until chosen. */
+  brain?: { provider: "openai" | "openrouter"; model: string; keyName: string } | null;
 };
 
 export const EMPTY_AGENT_DRAFT: AgentDraft = {
@@ -39,6 +41,8 @@ export function draftGaps(draft: AgentDraft): string[] {
   if (!draft.description?.trim()) gaps.push("a description of what it does");
   if (!draft.instructions?.trim()) gaps.push("instructions");
   if (draft.tools.length === 0) gaps.push("at least one tool");
+  // No agent runs on Dolphin's model (owner, 2026-09-28).
+  if (!draft.brain) gaps.push("a brain (your own model key)");
   return gaps;
 }
 

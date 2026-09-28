@@ -1743,6 +1743,16 @@ export function humanizeError(cause: unknown): { message: string; kind: DolphinE
   const lower = raw.toLowerCase();
 
   /*
+   * A builder's own model key refused or out of quota (convex/lib/openrouter.ts,
+   * `endpoint`). The sentence already names the key and what to do; wrapping it
+   * as "something unexpected, maybe upstream of Dolphin" would send them
+   * looking in the wrong place.
+   */
+  if (/^your (openai|openrouter) key /i.test(raw)) {
+    return { message: raw, kind: "input" };
+  }
+
+  /*
    * Leaked tool syntax, or a tool call the parser could not recover.
    *
    * This branch used to return "Dolphin consulted live marketplace

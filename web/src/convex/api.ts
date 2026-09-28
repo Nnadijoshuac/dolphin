@@ -816,11 +816,15 @@ export type DolphinConversationMode = "chat" | "build" | "try";
 export type AgentDraftTool = { agentKey: string; agentName: string; toolName: string };
 
 /** Every text field is null until the person and the builder have settled it. */
+/** The model a draft thinks with, on its builder's own key. Never the key. */
+export type AgentBrain = { provider: "openai" | "openrouter"; model: string; keyName: string };
+
 export type AgentDraftData = {
   name: string | null;
   description: string | null;
   instructions: string | null;
   tools: AgentDraftTool[];
+  brain: AgentBrain | null;
   updatedAt: number;
 };
 
@@ -871,6 +875,8 @@ export const agentBuilderApi = anyApi as unknown as {
         description?: string;
         instructions?: string;
         tools?: { agentKey: string; toolName: string }[];
+        brain?: AgentBrain | null;
+        sessionToken?: string;
       },
       { gaps: string[] }
     >;

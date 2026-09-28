@@ -20,7 +20,8 @@ import { useWalletSession } from "@/wallet/wallet-session";
  * hosting provider makes about env vars, and the only honest one.
  */
 
-const SUGGESTED = ["OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"];
+/* The two providers a Brain can run on (convex/lib/openrouter.ts BRAIN_PROVIDER_URLS). Claude is reachable through OpenRouter. */
+const SUGGESTED = ["OPENAI_API_KEY", "OPENROUTER_API_KEY"];
 
 function errorText(cause: unknown, fallback: string): string {
   const data = (cause as { data?: unknown } | null)?.data;

@@ -716,6 +716,7 @@ export function DolphinClient({
         description: builder.draft.description,
         instructions: builder.draft.instructions,
         tools: builder.draft.tools,
+        brain: builder.draft.brain ?? null,
       }
     : EMPTY_AGENT_DRAFT;
   const draftName = agentDraft.name?.trim() || "your agent";

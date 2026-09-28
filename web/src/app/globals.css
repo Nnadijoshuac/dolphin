@@ -1813,3 +1813,116 @@ select {
   background: color-mix(in srgb, var(--line-strong) 70%, transparent);
 }
 .sleek-scroll:hover::-webkit-scrollbar-thumb { background: var(--muted); }
+
+/* ── Agent canvas blocks and flows (components/agent-canvas.tsx) ──────────── */
+.agent-canvas {
+  --kind-trigger: var(--info);
+  --kind-tool: #2f7f86;
+  --kind-melon: var(--accent-ink);
+  --kind-brain: #6450c8;
+  --kind-output: var(--ink-soft);
+  --kind-add: var(--muted);
+  --flow: var(--accent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .agent-canvas {
+    --kind-tool: #62b7be;
+    --kind-melon: var(--accent);
+    --kind-brain: #a99cf2;
+  }
+}
+:root[data-theme="dark"] .agent-canvas {
+  --kind-tool: #62b7be;
+  --kind-melon: var(--accent);
+  --kind-brain: #a99cf2;
+}
+
+.agent-block {
+  --kind: var(--kind-tool);
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 13px;
+  background: linear-gradient(180deg, var(--paper-strong), var(--paper));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 26px -18px rgba(15, 23, 42, 0.3);
+  transition: border-color 220ms ease, box-shadow 260ms ease, transform 220ms ease;
+}
+.agent-block--trigger { --kind: var(--kind-trigger); }
+.agent-block--tool { --kind: var(--kind-tool); }
+.agent-block--melon { --kind: var(--kind-melon); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.agent-block--brain { --kind: var(--kind-brain); }
+.agent-block--output { --kind: var(--kind-output); }
+.agent-block--add { --kind: var(--kind-add); }
+.agent-block:hover {
+  border-color: var(--line-strong);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.06), 0 16px 34px -18px rgba(15, 23, 42, 0.38);
+}
+.agent-block--empty { border-style: dashed; border-color: var(--line-strong); background: color-mix(in srgb, var(--paper) 60%, transparent); box-shadow: none; }
+.agent-block[data-selected] {
+  border-color: var(--kind);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--kind) 18%, transparent), 0 16px 34px -18px rgba(15, 23, 42, 0.38);
+}
+.agent-block[data-state="active"] {
+  border-color: color-mix(in srgb, var(--flow) 75%, var(--line));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--flow) 20%, transparent), 0 0 28px -6px color-mix(in srgb, var(--flow) 55%, transparent);
+}
+.agent-block[data-state="done"] { border-color: color-mix(in srgb, var(--kind) 40%, var(--line)); }
+.agent-block[data-state="error"] { border-color: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent); }
+
+.agent-block__icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--kind);
+  background: color-mix(in srgb, var(--kind) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kind) 22%, transparent);
+}
+.agent-block__tick { font-size: 10px; font-weight: 800; color: var(--kind); }
+.agent-block__live {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--flow);
+}
+.agent-block__live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--flow);
+  animation: agent-live-ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes agent-live-ping { 75%, 100% { transform: scale(2.6); opacity: 0; } }
+
+.agent-canvas .react-flow__handle {
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--paper-strong);
+  background: var(--line-strong);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.agent-block[data-state="active"] .react-flow__handle { background: var(--flow); box-shadow: 0 0 0 1px var(--flow); }
+
+.agent-canvas .agent-edge { stroke: var(--line-strong); stroke-width: 1.7; transition: stroke 400ms ease; }
+.agent-canvas .agent-edge--used { stroke: color-mix(in srgb, var(--flow) 55%, var(--line-strong)); }
+.agent-canvas .agent-edge--active { stroke: color-mix(in srgb, var(--flow) 45%, transparent); stroke-width: 2; }
+.agent-edge__flow {
+  stroke: var(--flow);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 1 13;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--flow) 70%, transparent));
+  animation: agent-flow-dash 0.8s linear infinite;
+}
+.agent-edge__flow[data-reverse] { animation-direction: reverse; }
+@keyframes agent-flow-dash { to { stroke-dashoffset: -14; } }
+.agent-edge__pulse { fill: var(--flow); filter: drop-shadow(0 0 5px var(--flow)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-edge__flow, .agent-block__live::after { animation: none; }
+  .agent-edge__pulse { display: none; }
+}

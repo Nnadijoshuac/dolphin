@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import "@xyflow/react/dist/style.css";
 
 import styles from "@/app/dolphin/dolphin-chat.module.css";
-import { AgentCanvas } from "@/components/agent-canvas";
+import { AgentCanvas, type CanvasRun } from "@/components/agent-canvas";
 import { AgentDraftPanel, EMPTY_AGENT_DRAFT } from "@/components/agent-draft-panel";
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -666,7 +666,40 @@ export function DolphinClient({
    * beside the workflow. History moves behind its button. The empty Build
    * screen is untouched: there is nothing to draw before the first turn.
    */
-  const showCanvas = building && conversationKey !== null && !isEmpty;
+  const showCanvas = conversationKey !== null && ((building && !isEmpty) || trying);
+
+  /*
+   * THE RUN, AS IT HAPPENS (owner: "see that engine work"). Derived from the
+   * latest answer's real status and its real tool calls - a call is recorded
+   * before it runs and completed after (convex/dolphin.ts recordToolCall), so
+   * "running" here means a request is actually in flight.
+   */
+  const canvasRun = useMemo<CanvasRun | null>(() => {
+    if (!trying) return null;
+    const last = [...turns].reverse().find((turn) => turn.role === "assistant");
+    if (!last) return null;
+    const tools = last.toolCalls.map((call) => ({
+      agentKey: call.agentKey,
+      toolName: call.toolName,
+      state: (call.isError || call.transportError
+        ? "error"
+        : call.latencyMs === null && call.resultText === null
+          ? "running"
+          : "done") as CanvasRun["tools"][number]["state"],
+    }));
+    const working = last.status === "thinking" || last.status === "consulting";
+    const phase: CanvasRun["phase"] =
+      last.status === "error"
+        ? "error"
+        : !working
+          ? "done"
+          : tools.some((tool) => tool.state === "running")
+            ? "consulting"
+            : tools.length > 0 || last.content.length > 0
+              ? "writing"
+              : "thinking";
+    return { phase, tools };
+  }, [trying, turns]);
   const { measure: measurePanels, ...panels } = usePanelLayout(showCanvas ? "canvas" : withDraft ? "draft" : "chat");
   const askedPrompts = useMemo(
     () => turns.filter((turn) => turn.role === "user").map((turn) => turn.content),
@@ -1111,7 +1144,14 @@ export function DolphinClient({
       </section>
 
       <div className="relative z-0 hidden min-h-0 min-w-0 overflow-hidden lg:block">
-        {showCanvas ? <AgentCanvas conversationKey={buildConversationKey} draft={agentDraft} /> : null}
+        {showCanvas ? (
+          <AgentCanvas
+            draft={agentDraft}
+            editKey={building ? buildConversationKey : null}
+            layoutKey={buildConversationKey}
+            run={canvasRun}
+          />
+        ) : null}
       </div>
 
       {/*

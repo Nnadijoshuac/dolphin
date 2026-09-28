@@ -31,6 +31,7 @@ import type * as discovery from "../discovery.js";
 import type * as dolphin from "../dolphin.js";
 import type * as engagement from "../engagement.js";
 import type * as facets from "../facets.js";
+import type * as favorites from "../favorites.js";
 import type * as healthAlerts from "../healthAlerts.js";
 import type * as http from "../http.js";
 import type * as iconProcessing from "../iconProcessing.js";
@@ -112,6 +113,7 @@ declare const fullApi: ApiFromModules<{
   dolphin: typeof dolphin;
   engagement: typeof engagement;
   facets: typeof facets;
+  favorites: typeof favorites;
   healthAlerts: typeof healthAlerts;
   http: typeof http;
   iconProcessing: typeof iconProcessing;

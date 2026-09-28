@@ -120,7 +120,7 @@ export const detect = action({
       note: forced
         ? `${BRAIN_PROVIDERS[forced].label} did not accept this key, or could not list its models. You can still type a model id.`
         : candidates.length === 1
-          ? `This looks like a ${BRAIN_PROVIDERS[candidates[0]].label} key, but ${BRAIN_PROVIDERS[candidates[0]].label} did not accept it. Check the key.`
+          ? `This looks like ${/^[AEIOU]/.test(BRAIN_PROVIDERS[candidates[0]].label) ? "an" : "a"} ${BRAIN_PROVIDERS[candidates[0]].label} key, but ${BRAIN_PROVIDERS[candidates[0]].label} did not accept it. Check the key.`
           : "No provider this key's format fits accepted it. Check the key, or choose the provider.",
     };
   },

@@ -31,7 +31,7 @@ export const TRADING_PLAYBOOK = `WHAT A GOOD TRADING AGENT IS (Dolphin's playboo
 /** The short form every trading agent carries at run time. */
 export const TRADING_RUN_RULES = `TRADING DISCIPLINE (these override any looser instruction):
 - Spot only; never leverage, never short. Only trade when your written rule is met by numbers a tool returned this run.
-- Know your position before acting: read it from memory or your wallet holdings. Never buy what you already hold unless your rule says to add.
+- Know your position before acting: read it from memory. Never buy what you already hold unless your rule says to add.
 - Every buy has its exits decided now: record entry price, size, stop-loss and take-profit to memory in the same run.
 - If data is missing, stale or contradictory, do nothing and say why. Doing nothing is a valid, common outcome.
 - Never trade a token that failed its safety check, and never act on a watched wallet's move alone.`;

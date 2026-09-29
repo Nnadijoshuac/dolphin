@@ -258,8 +258,7 @@ export function AgentDraftPanel({
       {tradeKeyConversation ? (
         <AutoTradeCard
           conversationKey={tradeKeyConversation}
-          // An agent with its own Wallet block already trades without asking, from that wallet.
-          hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap")) && !draft.blocks?.some((block) => block.type === "wallet")}
+          hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))}
           riskDailyUsd={(() => {
             const risk = draft.blocks?.find((block) => block.type === "risk");
             return risk && risk.type === "risk" ? risk.config.maxTradeUsd * risk.config.maxTradesPerDay : null;

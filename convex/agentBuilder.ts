@@ -48,8 +48,6 @@ import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { memoryBrief, recall, remember, type MemoryTarget } from "./lib/agentMemory";
 import { mergeBuilderBlocks } from "./lib/builderBlocks";
-import { readHoldings } from "./lib/walletHoldings";
-import { AGENT_WALLETS_FROZEN } from "./agentWallet";
 import { TRADING_PLAYBOOK, TRADING_RUN_RULES } from "./lib/tradingPlaybook";
 import { chatCompletion, customChatUrl, isBrainProvider, type ChatMessage } from "./lib/openrouter";
 import { assertSafeUrl } from "./lib/safeFetch";
@@ -106,7 +104,7 @@ WHAT AN AGENT BUILT HERE IS. Never promise more than this:
   - Market (the token it trades: live price, candles and a chart), Safety (token security checks).
   - Triggers: Schedule (every 15 minutes to daily), Price (when the token crosses a level), Wallet watch (when a wallet they follow - a KOL, a whale - transacts). With Autopilot switched on, the agent runs on these by itself, up to 48 times a day.
   - Risk limits (dollars per trade, trades per day) and Swap: the agent may then PROPOSE PancakeSwap trades within those limits. By default the person approves and signs every trade. They can opt in to "Trade without asking" (Draft tab) so it trades by itself for 1-30 days within limits the wallet enforces, and stop it any time. Nothing guarantees a profit - never promise one.
-  - (The separate agent Wallet block is PAUSED - do not suggest it. To trade without signing each time, the person turns on "Trade without asking" in the Draft tab: a limited key on their own Dolphin Wallet.)
+  - There is no separate agent wallet (removed 2026-09-29: Dolphin holds no keys that move funds). To trade without signing each time, the person turns on "Trade without asking" in the Draft tab: a limited, revocable key on their own Dolphin Wallet.
   - Memory: the person's OWN memory server (any https address that speaks Dolphin's two-call memory interface; a one-file server is offered to download). The agent reads its recent memories before every run, a record of each run is saved after it, and it can remember and recall notes. Dolphin keeps none of it. Suggest it for scheduled agents that must know what they did before.
   - Hire an agent: one paid A2A agent from Dolphin's catalog. The agent can ask it to do a task and gets its price; the person confirms each payment from their Dolphin Wallet with their passkey. The result is delivered later, on-chain - not into the conversation.
 ${TRADING_PLAYBOOK}
@@ -148,7 +146,7 @@ RULES THAT OVERRIDE THE INSTRUCTIONS ABOVE:
 - Only quote a number that a tool returned in this conversation. With no live reading, say you do not have one. Never guess a price, APY, balance or health factor.
 ${
     abilities.canTrade
-      ? "- You may TRADE with block_propose_swap: a swap within your Risk limits executes at once - from your own agent wallet if you have one, otherwise from the owner's Dolphin Wallet with the trade key they granted. Trade only when your instructions and the data call for it. Say exactly what the tool reports - traded, or not traded and why. Never claim a trade the tool did not report."
+      ? "- You may TRADE with block_propose_swap: a swap within your Risk limits executes at once - from the owner's Dolphin Wallet with the limited trade key they granted. Trade only when your instructions and the data call for it. Say exactly what the tool reports - traded, or not traded and why. Never claim a trade the tool did not report."
       : abilities.canPropose
       ? "- You cannot sign, send or move funds. You MAY propose a trade with block_propose_swap; the owner reviews it and signs it from their Dolphin Wallet. Say you proposed it - never that you traded. Propose only when your instructions and the data call for it."
       : "- You can only read. You cannot sign, send, trade or move funds, and you cannot set anything up. If a tool returned an unsigned transaction, say the person would sign it from their own wallet. Never say you did it."
@@ -233,7 +231,8 @@ export const getDraft = query({
                   baseUrl: draft.brain.baseUrl ?? null,
                 }
               : null,
-            blocks: (draft.blocks ?? []) as AgentBlock[],
+            // A legacy "wallet" block (removed 2026-09-29) is not sent to the canvas.
+            blocks: ((draft.blocks ?? []) as AgentBlock[]).filter((block) => (block.type as string) !== "wallet"),
             detached: draft.detached ?? [],
             autopilot: draft.autopilot
               ? { on: draft.autopilot.on, conversationKey: draft.autopilot.conversationKey }
@@ -390,16 +389,8 @@ export const runtimeForDraft = internalQuery({
       .take(3);
     const autotradeActive = tradeKeys.some((key) => key.status === "active" && key.ciphertext && key.expiry > Date.now() / 1000);
     const blocks = activeBlocks((draft?.blocks ?? []) as AgentBlock[], draft?.detached);
-    // The agent's own wallet trades only while its Wallet block is plugged in - and never while frozen.
-    const ownWallet = !AGENT_WALLETS_FROZEN && blocks.some((block) => block.type === "wallet")
-      ? await ctx.db
-          .query("agentWallets")
-          .withIndex("by_draft", (q) => q.eq("draftId", draftId))
-          .first()
-      : null;
     return {
       autotradeActive,
-      agentWallet: ownWallet?.address ?? null,
       brain: draft?.brain ?? null,
       // Only what is still plugged in on the canvas.
       blocks,
@@ -1098,7 +1089,7 @@ export async function runTryTurn(
       const brain = runtime?.brain ?? null;
       const blocks = runtime?.blocks ?? [];
       let proposalsToday = runtime?.proposalsToday ?? 0;
-      const canExecute = Boolean(runtime?.agentWallet) || Boolean(runtime?.autotradeActive);
+      const canExecute = Boolean(runtime?.autotradeActive);
       const blockTools = blockToolDefinitions(blocks, canExecute ? "execute" : "propose");
       let ticket: unknown = undefined;
       // What the run did with money, for the record written to memory afterwards.
@@ -1276,8 +1267,6 @@ export async function runTryTurn(
                   ? await askToHire(ctx, blocks, call.function.arguments)
                   : call.function.name === "block_remember" || call.function.name === "block_recall"
                     ? await useMemory(memoryTarget, call.function.name, call.function.arguments)
-                    : call.function.name === "block_wallet_holdings"
-                      ? await holdingsOf(runtime?.agentWallet ?? null)
                     : await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
               if (!result.isError && /^(Traded|Proposed|Not traded)/.test(result.text)) tradeLines.push(result.text.slice(0, 240));
               if (result.ticket && (result.ticket as { kind?: string }).kind === "hire") {
@@ -1287,11 +1276,10 @@ export async function runTryTurn(
                 proposalsToday += 1;
                 await ctx.runMutation(internal.agentBuilder.recordProposal, { draftId });
                 /*
-                 * NO-TAP TRADING. With the agent's own Wallet block plugged in, the
-                 * swap executes from that wallet (convex/agentWallet.ts). Otherwise,
-                 * with a live trade key, from the owner's Dolphin Wallet inside the
-                 * limits its contract enforces (convex/autotrade.ts). Anything that
-                 * stops it leaves the ticket for the owner to sign.
+                 * NO-TAP TRADING (convex/autotrade.ts): with a live trade key the swap
+                 * executes from the owner's Dolphin Wallet, inside the limits its
+                 * contract enforces. Anything that stops it leaves the ticket for the
+                 * owner to sign.
                  */
                 const swapTicket = result.ticket as {
                   kind: "swap";
@@ -1300,9 +1288,11 @@ export async function runTryTurn(
                   tokenOut: { address: string | null; symbol: string; decimals: number; verified: boolean };
                   safety: null;
                 };
-                const auto: { attempted: boolean; executed: boolean; text: string } = runtime?.agentWallet
-                  ? await ctx.runAction(internal.agentWallet.executeTrade, { draftId, agentName: draft.name ?? "Agent", ticket: swapTicket })
-                  : await ctx.runAction(internal.autotrade.executeTrade, { draftId, agentName: draft.name ?? "Agent", ticket: swapTicket });
+                const auto: { attempted: boolean; executed: boolean; text: string } = await ctx.runAction(internal.autotrade.executeTrade, {
+                  draftId,
+                  agentName: draft.name ?? "Agent",
+                  ticket: swapTicket,
+                });
                 if (auto.executed) {
                   result.text = auto.text;
                 } else {
@@ -1426,7 +1416,6 @@ const BLOCK_LABELS: Record<AgentBlock["type"], string> = {
   schedule: "Schedule",
   price: "Price trigger",
   walletWatch: "Wallet watch",
-  wallet: "Wallet",
   hire: "Hired agent",
   memory: "Memory",
 };
@@ -1440,9 +1429,7 @@ function blockToolNameFor(type: AgentBlock["type"]): string | null {
         ? "block_propose_swap"
         : type === "hire"
           ? "block_hire_agent"
-          : type === "wallet"
-            ? "block_wallet_holdings"
-            : null;
+          : null;
 }
 
 /**
@@ -1480,19 +1467,6 @@ async function runReadBlock(
   return result.text;
 }
 
-/** block_wallet_holdings: what the agent's own wallet holds, read live. */
-async function holdingsOf(address: string | null): Promise<BlockToolResult> {
-  if (!address) return { text: "You have no wallet of your own plugged in.", isError: true };
-  try {
-    const holdings = await readHoldings(getAddress(address) as `0x${string}`);
-    if (holdings.length === 0) return { text: "Your wallet is empty: no BNB and none of Dolphin's verified tokens.", isError: false };
-    const lines = holdings.map((row) => `${Number(row.amount).toPrecision(6)} ${row.symbol}${row.usd === null ? " (no live price)" : ` (about $${row.usd.toFixed(2)})`}`);
-    const total = holdings.every((row) => row.usd !== null) ? holdings.reduce((sum, row) => sum + (row.usd ?? 0), 0) : null;
-    return { text: `Your wallet holds: ${lines.join(", ")}.${total === null ? "" : ` Total about $${total.toFixed(2)}.`} Keep some BNB for gas.`, isError: false };
-  } catch (cause) {
-    return { text: `Your wallet could not be read right now: ${cause instanceof Error ? cause.message : String(cause)}`, isError: true };
-  }
-}
 
 /** block_remember / block_recall against the builder's own memory server. */
 async function useMemory(target: MemoryTarget | null, name: string, rawArgs: string): Promise<BlockToolResult> {

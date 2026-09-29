@@ -5,12 +5,10 @@ import { useEffect, useState } from "react";
 
 import type { AgentDraft } from "@/components/agent-draft-panel";
 import { AgentIcon } from "@/components/agent-icon";
-import { AgentWalletPanel } from "@/components/agent-wallet-panel";
 import { ChoiceList, type Choice } from "@/components/choice-list";
 import {
   agentBuilderApi,
   agentMemoryApi,
-  agentWalletApi,
   api,
   brainModelsApi,
   BRAIN_PROVIDER_OPTIONS,
@@ -602,7 +600,6 @@ const BLOCK_TITLES: Record<BlockType, string> = {
   schedule: "Scheduler",
   price: "Price trigger",
   walletWatch: "Wallet watch",
-  wallet: "Wallet",
   hire: "Hire an agent",
   memory: "Memory",
 };
@@ -615,7 +612,6 @@ const BLOCK_ABOUT: Record<BlockType, string> = {
   schedule: "Makes its own signal: it fires the Trigger on a clock while Autopilot is on. Every run uses your own model key.",
   price: "Makes its own signal: it fires the Trigger when the Price feed's token crosses your level - once per crossing, not on every check.",
   walletWatch: "Makes its own signal: it fires the Trigger when a watched wallet transacts - a KOL, a whale, a fund. It sees any transaction they send, and exactly which tokens moved for your Price feed token and Dolphin's verified list.",
-  wallet: "The agent's own wallet. Fund it, and every trade within your Risk limits executes from it at once - no ticket, no tap - with what it buys landing back in it. Withdraw to your wallet any time.",
   memory: "Your agent's memory, kept on your own server - Dolphin stores none of it. Before every run it reads what it did last time; after it, a record of the run is saved. It can also note things down itself.",
   hire: "A paid agent from Dolphin's catalog that yours can call on. When it asks for work, the agent quotes a price and you confirm each payment from your Dolphin Wallet with your passkey. It delivers on-chain afterwards.",
 };
@@ -695,8 +691,6 @@ function BlockEditor({
     type === "hire" && existing ? { agentKey: String(config.agentKey), agentName: String(config.agentName) } : null,
   );
   const session = useWalletSession();
-  const createWallet = useAction(agentWalletApi.agentWallet.create);
-  const [creating, setCreating] = useState(false);
   const [memoryUrl, setMemoryUrl] = useState(typeof config.url === "string" ? config.url : "");
   const [memoryKey, setMemoryKey] = useState<string>(typeof config.keyName === "string" ? config.keyName : "");
   const [memoryCheck, setMemoryCheck] = useState<{ ok: boolean; text: string } | "checking" | null>(null);
@@ -765,7 +759,6 @@ function BlockEditor({
         return memoryUrl.trim().startsWith("https://") ? { id, type, config: { url: memoryUrl.trim(), keyName: memoryKey || null } } : null;
       case "safety":
       case "swap":
-      case "wallet":
         return { id, type, config: {} } as AgentBlockData;
     }
   })();
@@ -774,23 +767,6 @@ function BlockEditor({
     if (await save({ blocks: next })) onClose();
   };
 
-  /** A new Wallet block creates the wallet first: the block is only drawn once there is one. */
-  const addWallet = async (next: AgentBlockData[]) => {
-    setCreating(true);
-    try {
-      const sessionToken = session.sessionToken ?? (await session.signIn());
-      if (!sessionToken) return;
-      const { address } = await createWallet({ sessionToken, conversationKey });
-      if (await save({ blocks: next })) {
-        toast.success(`The agent's wallet is ${address.slice(0, 6)}…${address.slice(-4)}. Open the Wallet block to fund it.`);
-        onClose();
-      }
-    } catch (cause) {
-      toast.error(errorText(cause, "Could not create the agent's wallet."));
-    } finally {
-      setCreating(false);
-    }
-  };
 
   return (
     <Shell onClose={onClose} title={existing ? BLOCK_TITLES[type] : `Add ${BLOCK_TITLES[type]}`}>
@@ -914,16 +890,6 @@ function BlockEditor({
         </div>
       ) : null}
 
-      {type === "wallet" && existing ? (
-        <>
-          <p className="mt-2 rounded-lg bg-paper-muted/70 px-3 py-2 text-[0.72rem] leading-snug text-ink-soft">
-            Agent wallets are paused: a wallet whose key Dolphin holds is too big a risk to your funds. This agent no longer trades
-            from it. Withdraw what it holds below, then use &ldquo;Trade without asking&rdquo; in the Draft tab - a limited key on
-            your own Dolphin Wallet that you can revoke.
-          </p>
-          <AgentWalletPanel conversationKey={conversationKey} />
-        </>
-      ) : null}
 
       {type === "hire" ? (
         <div className="mt-3">
@@ -1058,15 +1024,15 @@ function BlockEditor({
         </div>
       ) : null}
 
-      {type === "wallet" && existing ? null : (
+      {(
         <SaveButton
           disabled={!built}
           onClick={() => {
             if (!built) return;
             const next = existing ? blocks.map((block) => (block.id === existing.id ? built : block)) : [...blocks, built];
-            void (type === "wallet" ? addWallet(next) : commit(next));
+            void commit(next);
           }}
-          saving={saving || creating}
+          saving={saving}
         />
       )}
       {existing ? (

@@ -312,7 +312,6 @@ export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label
   safety: { kind: "sense", label: "Safety check", glyph: "shield" },
   risk: { kind: "risk", label: "Risk limits", glyph: "filter" },
   swap: { kind: "hands", label: "Market", glyph: "wallet" },
-  wallet: { kind: "hands", label: "Wallet", glyph: "wallet" },
   hire: { kind: "hands", label: "Hired agent", glyph: "agents" },
   memory: { kind: "sense", label: "Memory", glyph: "receive" },
 };
@@ -343,8 +342,6 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
       return { title: `${money(block.config.maxTradeUsd)} a trade`, detail: `At most ${block.config.maxTradesPerDay} trade${block.config.maxTradesPerDay === 1 ? "" : "s"} a day` };
     case "swap":
       return { title: "Buy / sell", detail: "On PancakeSwap, after the Risk gate" };
-    case "wallet":
-      return { title: "Agent wallet", detail: "Trades from its own funds, no tap" };
     case "hire":
       return { title: block.config.agentName, detail: "Paid A2A agent · you confirm each payment" };
     case "memory":
@@ -436,12 +433,10 @@ export function draftGraph(
   // DOES: the answer; the trade chain (gate -> swap -> wallet); a hired agent.
   const risk = find("risk");
   const swap = find("swap");
-  const wallet = find("wallet");
   const hire = find("hire");
   const chain: AgentBlockData[] = [];
-  // Agent wallets are paused (convex/agentWallet.ts): the Wallet is not on the trade line.
   for (const block of [risk, swap]) if (block) chain.push(block);
-  const rows: string[] = ["output", ...(chain.length ? ["chain"] : []), ...(hire ? ["hire"] : []), ...(wallet ? ["wallet"] : [])];
+  const rows: string[] = ["output", ...(chain.length ? ["chain"] : []), ...(hire ? ["hire"] : [])];
   const rowY = (name: string) => brainY + (rows.indexOf(name) - (rows.length - 1) / 2) * ACTION_ROW;
   place("output", actionX, rowY("output"), { kind: "output", title: "Answer", detail: "Replies with what its tools returned" });
   chain.forEach((block, index) => {
@@ -450,8 +445,6 @@ export function draftGraph(
     place(`block-${block.id}`, actionX + index * (NODE_WIDTH + CHAIN_GAP), rowY("chain"), data);
   });
   if (hire) place(`block-${hire.id}`, actionX, rowY("hire"), { ...blockData(hire), agent: agentLook(hire.config.agentKey) });
-  // An existing, paused agent wallet: drawn unplugged, only to reach Withdraw.
-  if (wallet) place(`block-${wallet.id}`, actionX, rowY("wallet"), { ...blockData(wallet), title: "Agent wallet · paused", detail: "Open it to withdraw your funds", detached: true });
 
   const edge = (source: string, target: string, targetHandle: string, member?: string, sourceHandle = "out"): FlowEdge => ({
     id: `${source}->${target}`,
@@ -537,18 +530,13 @@ function applyRun(
     nodeState.set(id, blockState);
     const lit = running ? { active: true } : { used: true };
     if (block.type === "swap") {
-      // A trade runs the chain: Brain -> Risk gate -> Swap -> the agent's wallet.
+      // A trade runs the chain: Brain -> Risk gate -> Market.
       const gate = (draft.blocks ?? []).find((candidate) => candidate.type === "risk");
-      const purse = (draft.blocks ?? []).find((candidate) => candidate.type === "wallet");
       const head = gate ? `block-${gate.id}` : id;
       edgeState.set(`brain->${head}`, lit);
       if (gate) {
         nodeState.set(head, running ? "active" : "done");
         edgeState.set(`${head}->${id}`, lit);
-      }
-      if (purse && !failed) {
-        nodeState.set(`block-${purse.id}`, blockState);
-        edgeState.set(`${id}->block-${purse.id}`, lit);
       }
     } else if (block.type === "hire") {
       edgeState.set(`brain->${id}`, lit);
@@ -987,12 +975,10 @@ export function AgentCanvas({
       if (source.id === "brain") {
         if (to === "risk") return swap ? `block:${swap.id}` : "limits";
         if (to === "swap" && !risk) return target.data.member ?? null;
-        if (to === "wallet" && !swap) return target.data.member ?? null;
         if (to === "hire") return target.data.member ?? null;
         return null;
       }
       if (from === "risk" && to === "swap") return "limits";
-      if (from === "swap" && to === "wallet") return target.data.member ?? null;
       return null;
     },
     [base.nodes, draft.blocks],

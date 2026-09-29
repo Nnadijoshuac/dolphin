@@ -862,7 +862,6 @@ export type AgentBlockData =
   | { id: string; type: "schedule"; config: { everyMinutes: number } }
   | { id: string; type: "price"; config: { direction: "above" | "below"; priceUsd: number } }
   | { id: string; type: "walletWatch"; config: { addresses: string[]; label: string | null } }
-  | { id: string; type: "wallet"; config: Record<string, never> }
   | { id: string; type: "hire"; config: { agentKey: string; agentName: string } }
   | { id: string; type: "memory"; config: { url: string; keyName: string | null } };
 
@@ -897,21 +896,6 @@ export type TradeKeySummary = {
 export const agentMemoryApi = anyApi as unknown as {
   agentMemoryCheck: {
     test: Action<{ sessionToken: string; url: string; keyName: string | null }, { ok: boolean; text: string }>;
-  };
-};
-
-export type AgentWalletHolding = { symbol: string; address: string | null; decimals: number; amount: string; usd: number | null };
-
-/** convex/agentWallet.ts - an agent's own wallet. No function returns key material. */
-export const agentWalletApi = anyApi as unknown as {
-  agentWallet: {
-    forDraft: Query<{ conversationKey: string }, { address: string; ownerAddress: string } | null>;
-    create: Action<{ sessionToken: string; conversationKey: string }, { address: string }>;
-    balances: Action<{ conversationKey: string }, { address: string; holdings: AgentWalletHolding[]; checkedAt: number } | null>;
-    withdraw: Action<
-      { sessionToken: string; conversationKey: string; symbol: string; amount: string },
-      { transactionHash: string; text: string }
-    >;
   };
 };
 

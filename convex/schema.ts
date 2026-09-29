@@ -744,30 +744,7 @@ export default defineSchema({
     takenAt: v.string(),
   }).index("by_day", ["day"]),
 
-  /**
-   * AGENT WALLETS: an agent's OWN wallet (owner, 2026-09-29: "that agent is
-   * going to have its own wallet that you can send money to... the agent can
-   * freely spend from it without needing you to confirm"). One per draft.
-   *
-   * A plain BNB Chain account. Its private key is generated in an action and
-   * sealed with lib/secretBox.ts; it is opened only to sign a trade that passed
-   * the Risk block, or a withdrawal to the owner's own wallet. Dolphin holds
-   * this key - the owner is told so, and to keep in it only what they would let
-   * the agent trade. Nothing else can send from it: no function takes a
-   * destination other than the owner's signed-in wallet.
-   */
-  agentWallets: defineTable({
-    draftId: v.id("agentDrafts"),
-    /** The signed-in wallet that created it: the only place withdrawals go. */
-    ownerAddress: v.string(),
-    /** Checksummed. */
-    address: v.string(),
-    ciphertext: v.string(),
-    iv: v.string(),
-    createdAt: v.string(),
-  })
-    .index("by_draft", ["draftId"])
-    .index("by_address", ["address"]),
+  // agentWallets: REMOVED 2026-09-29 (mentor review). Every key destroyed after each wallet was confirmed empty on-chain.
 
   /**
    * TRADE KEYS: session keys that let one agent trade by itself, with no tap

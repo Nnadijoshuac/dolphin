@@ -10,7 +10,8 @@
  *             block's limits, which the OWNER signs from the Dolphin Wallet.
  *             Nothing here signs anything.
  *   risk      limits a proposal: USD per trade, trades per day.
- *   wallet    the agent's OWN wallet (convex/agentWallet.ts). With it
+ *   (wallet   REMOVED 2026-09-29 - Dolphin holds no keys that move funds;
+ *             a legacy "wallet" entry in an old draft is dropped on read.)
  *             plugged in, a swap within the Risk limits executes at once from
  *             that wallet - no ticket, no tap - and what it buys lands there.
  *   memory    the builder's OWN memory server (lib/agentMemory.ts). Recalled
@@ -38,7 +39,7 @@ import type { ToolDefinition } from "./openrouter";
 import { assertSafeUrl } from "./safeFetch";
 import { verifiedTokenBySymbol, verifiedTokens, type TradeToken } from "./tradeTokens";
 
-export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "wallet", "hire", "memory"] as const;
+export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "hire", "memory"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export type MarketConfig = { tokenAddress: string; symbol: string; name: string; poolAddress: string | null };
@@ -57,7 +58,6 @@ export type AgentBlock =
   | { id: string; type: "schedule"; config: ScheduleConfig }
   | { id: string; type: "price"; config: PriceConfig }
   | { id: string; type: "walletWatch"; config: WalletWatchConfig }
-  | { id: string; type: "wallet"; config: Record<string, never> }
   | { id: string; type: "hire"; config: HireConfig }
   | { id: string; type: "memory"; config: MemoryConfig };
 
@@ -90,6 +90,8 @@ export function validateBlocks(input: unknown): AgentBlock[] {
   const out: AgentBlock[] = [];
 
   for (const raw of input as Array<Record<string, unknown>>) {
+    // The Wallet block was removed (2026-09-29); an old draft's entry is dropped quietly.
+    if (raw?.type === "wallet") continue;
     const id = typeof raw?.id === "string" && /^[a-z0-9-]{1,24}$/.test(raw.id) ? raw.id : null;
     if (!id || seenIds.has(id)) fail("Each block needs a short, unique id.");
     seenIds.add(id);
@@ -164,7 +166,6 @@ export function validateBlocks(input: unknown): AgentBlock[] {
       }
       case "safety":
       case "swap":
-      case "wallet":
         out.push({ id, type, config: {} } as AgentBlock);
         break;
     }
@@ -190,7 +191,8 @@ export const MAX_DETACHED = 40;
 export function activeBlocks(blocks: readonly AgentBlock[], detached: readonly string[] | undefined): AgentBlock[] {
   const cut = new Set(detached ?? []);
   return blocks.filter(
-    (block) => !cut.has(`block:${block.id}`) && !(block.type === "risk" && cut.has("limits")),
+    (block) =>
+      (block.type as string) !== "wallet" && !cut.has(`block:${block.id}`) && !(block.type === "risk" && cut.has("limits")),
   );
 }
 
@@ -388,16 +390,6 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "pro
           required: ["sellSymbol", "buySymbol", "sellAmount", "reason"],
           additionalProperties: false,
         },
-      },
-    });
-  }
-  if (blocks.some((block) => block.type === "wallet")) {
-    tools.push({
-      type: "function",
-      function: {
-        name: "block_wallet_holdings",
-        description: "What your own wallet holds right now - BNB and Dolphin's verified tokens, with dollar values. Check it before sizing a trade or selling.",
-        parameters: { type: "object", properties: {}, additionalProperties: false },
       },
     });
   }

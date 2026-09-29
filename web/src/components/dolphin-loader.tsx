@@ -21,6 +21,7 @@ export function DolphinLoader({ label }: { label: string }) {
         {createElement("dolphin-loader", {
           "aria-label": label,
           className: styles.element,
+          state: "working",
         })}
       </span>
       <span className="text-[0.85rem] text-muted">{label}</span>

@@ -25,16 +25,33 @@ const LIFETIME_MS: Record<Toast["tone"], number> = {
 function ToastItem({ toast }: { toast: Toast }) {
   const dismiss = useToastStore((state) => state.dismiss);
   const [paused, setPaused] = useState(false);
+  /*
+   * LEAVING (owner, 2026-09-29: "it should slide in from the side it comes
+   * out of, and slide back out"). A toast plays its exit before it is removed;
+   * the store only drops it once the animation has finished.
+   */
+  const [leaving, setLeaving] = useState(false);
+  const leave = () => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) dismiss(toast.id);
+    else setLeaving(true);
+  };
 
   useEffect(() => {
-    if (paused) return;
-    const timer = window.setTimeout(() => dismiss(toast.id), LIFETIME_MS[toast.tone]);
+    if (paused || leaving) return;
+    const timer = window.setTimeout(() => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) dismiss(toast.id);
+      else setLeaving(true);
+    }, LIFETIME_MS[toast.tone]);
     return () => window.clearTimeout(timer);
-  }, [dismiss, paused, toast.id, toast.tone]);
+  }, [dismiss, leaving, paused, toast.id, toast.tone]);
 
   return (
     <div
       className={`toast toast--${toast.tone}`}
+      data-leaving={leaving || undefined}
+      onAnimationEnd={(event) => {
+        if (leaving && event.target === event.currentTarget) dismiss(toast.id);
+      }}
       onBlur={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onMouseEnter={() => setPaused(true)}
@@ -56,7 +73,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       <button
         aria-label="Dismiss"
         className="toast__close"
-        onClick={() => dismiss(toast.id)}
+        onClick={leave}
         type="button"
       >
         <CategoryGlyph color="currentColor" name="close" size={12} strokeWidth={2.2} />

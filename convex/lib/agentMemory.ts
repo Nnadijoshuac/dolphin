@@ -39,13 +39,22 @@ function endpoint(base: string, path: "remember" | "recall"): string {
 }
 
 async function post(target: MemoryTarget, path: "remember" | "recall", body: Record<string, unknown>, fetcher: Fetcher): Promise<unknown> {
-  const response = await fetcher(endpoint(target.url, path), {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(target.key ? { authorization: `Bearer ${target.key}` } : {}) },
-    body: JSON.stringify({ agent: target.agent, ...body }),
-    timeoutMs: TIMEOUT_MS,
-    maxBytes: MAX_BYTES,
-  });
+  let response: SafeResponse;
+  try {
+    response = await fetcher(endpoint(target.url, path), {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(target.key ? { authorization: `Bearer ${target.key}` } : {}) },
+      body: JSON.stringify({ agent: target.agent, ...body }),
+      timeoutMs: TIMEOUT_MS,
+      maxBytes: MAX_BYTES,
+    });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    // Dolphin's own refusals (a private address) say what is wrong; a network failure does not.
+    if (/^Refusing|private|reserved/i.test(message)) throw new Error(message);
+    if (/timed out|timeout/i.test(message)) throw new Error("the memory server did not answer in time");
+    throw new Error("the memory server could not be reached at that address");
+  }
   if (response.status === 401 || response.status === 403) throw new Error("the memory server refused the key");
   if (!response.ok) throw new Error(`the memory server answered HTTP ${response.status}`);
   try {

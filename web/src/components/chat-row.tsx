@@ -82,8 +82,8 @@ export function ChatRow({
   const openMenu = () => {
     const rect = dotsRef.current?.getBoundingClientRect();
     if (!rect) return;
-    // Directly under the dots, starting at their left edge, kept on screen (owner: "like Claude").
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - MENU_WIDTH - 8));
+    // Under the dots, its right edge on theirs, so it opens back over the sidebar (owner, 2026-09-29).
+    const left = Math.max(8, Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8));
     setMenu({ top: rect.bottom + 4, left, view: "menu" });
   };
 

@@ -3779,4 +3779,4 @@ select {
 }
 .chat-row__dots { width: 24px; height: 24px; margin-right: 3px; }
 .chat-row[data-active]:not(:hover):not([data-menu]) .chat-row__dots:not(:focus-visible) { opacity: 0; }
-.chat-menu { transform-origin: top left; }
+.chat-menu { transform-origin: top right; }

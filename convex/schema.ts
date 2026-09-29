@@ -981,6 +981,14 @@ export default defineSchema({
    */
   builtAgents: defineTable({
     hash: v.string(),
+    /**
+     * PAYOUT WALLET (mentor review: "cheap, non-custodial, do it"): where this
+     * agent's payments go - the builder's own address, never a key Dolphin
+     * holds. Published in the registration file as ERC-8004 `agentWallet`.
+     */
+    payoutAddress: v.optional(v.string()),
+    purpose: v.optional(v.union(v.literal("private"), v.literal("tools"), v.literal("hire"))),
+    hirePriceUsd: v.optional(v.union(v.number(), v.null())),
     draftId: v.id("agentDrafts"),
     ownerAddress: v.string(),
     network: v.union(v.literal("bsc"), v.literal("bsc-testnet")),
@@ -1131,6 +1139,15 @@ export default defineSchema({
    */
   agentDrafts: defineTable({
     conversationId: v.id("dolphinConversations"),
+    /**
+     * WHO IT IS FOR (mentor review, 2026-09-29: plain language, protocols in an
+     * advanced panel). private = "just for me" (a flow); tools = "others can use
+     * its tools" (published as an MCP server); hire = "others can hire it" (paid
+     * jobs - its price is recorded, paid delivery is not open yet).
+     */
+    purpose: v.optional(v.union(v.literal("private"), v.literal("tools"), v.literal("hire"))),
+    /** For purpose "hire": the price per job the builder asks, in US dollars. */
+    hirePriceUsd: v.optional(v.union(v.number(), v.null())),
     ownerAddress: v.union(v.string(), v.null()),
     name: v.union(v.string(), v.null()),
     description: v.union(v.string(), v.null()),

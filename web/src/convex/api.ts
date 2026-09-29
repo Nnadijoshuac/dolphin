@@ -875,8 +875,14 @@ export type AgentDraftData = {
   /** Canvas connections the builder cut. */
   detached: string[];
   autopilot: { on: boolean; conversationKey: string } | null;
+  /** Who it is for (see purpose in convex/schema.ts). Null until chosen. */
+  purpose: AgentPurpose | null;
+  hirePriceUsd: number | null;
   updatedAt: number;
 };
+
+/** "Just for me", "others can use its tools", "others can hire it". */
+export type AgentPurpose = "private" | "tools" | "hire";
 
 /** One agent trade key as the panel sees it. Never key material. */
 export type TradeKeySummary = {
@@ -990,6 +996,8 @@ export const agentBuilderApi = anyApi as unknown as {
         sessionToken?: string;
         blocks?: AgentBlockData[];
         detached?: string[];
+        purpose?: AgentPurpose;
+        hirePriceUsd?: number | null;
       },
       { gaps: string[] }
     >;
@@ -1281,6 +1289,8 @@ export const builtAgentsApi = anyApi as unknown as {
         website?: string;
         x?: string;
         email?: string;
+        /** Where its payments go; defaults to the signed-in wallet. */
+        payoutAddress?: string;
       },
       { hash: string; tokenURI: string; registry: string; chainId: number; pageUrl: string }
     >;

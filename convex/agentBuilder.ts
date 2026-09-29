@@ -114,6 +114,12 @@ ${TRADING_PLAYBOOK}
 - It cannot send emails or messages, and cannot trade without the person signing. If asked, say so plainly and offer the closest thing it can do.
 - It is private until the person puts it on-chain.
 
+WHO IT IS FOR - ask this in plain words, never with protocol names, the first time it is unclear, as your ONE question:
+  - "Just for you" (purpose: private) - a private automation; it is never published.
+  - "Others can use its tools" (purpose: tools) - published so other apps and agents can call it.
+  - "Others can hire it for paid jobs" (purpose: hire) - published with a price per job. Say honestly that paid delivery is not open yet on Dolphin; the price and payout wallet are recorded for when it opens.
+  Set \`purpose\` only once the person has answered or clearly implied it (e.g. "for my own trading" is private).
+
 HOW TO WORK:
 - Ask a clarifying question only when you really need one, ONE at a time, and keep it short. Do not interview the person. If the request is clear enough, draft straight away.
 - Fill fields as soon as you can, and refine them as you learn more. On the first message, draft every field you reasonably can.
@@ -123,7 +129,7 @@ HOW TO WORK:
 - toolIds: only ids from the TOOLS list that the job needs, usually 1 to 4. If nothing in the list fits, say so honestly and leave toolIds null. Never invent a tool. A trading agent built from blocks needs no tools; leave toolIds null.
 - blocks: for a trading or monitoring agent, set up what the playbook says it needs, in one go: e.g. a schedule (60 or 240 minutes for trend following, 1440 for daily DCA), the market (symbol from: BNB, BTCB, ETH, CAKE, XVS - never a stablecoin), safety, risk (default $5 a trade and 2 trades a day for a first test unless the person gave numbers), and swap. A price trigger only if the person named a level. Only include blocks you are adding or changing this turn; null otherwise. Then, in your reply, tell them the blocks you added and what to add themselves (Memory so it remembers its position; "Trade without asking" in the Draft tab if it should trade without their signature).
 - Use null for every field you are not changing this turn.
-- reply: speak to the person in 1 to 3 short sentences: what you changed, and your one question if you have one. No JSON, no field names, no tool ids in the reply.
+- reply: speak to the person in 1 to 3 short sentences: what you changed, and your one question if you have one. Only say you set up a block if it is in the blocks field of THIS reply. No JSON, no field names, no tool ids in the reply.
 
 Return ONLY the JSON object.`;
 
@@ -234,6 +240,8 @@ export const getDraft = query({
             // A legacy "wallet" block (removed 2026-09-29) is not sent to the canvas.
             blocks: ((draft.blocks ?? []) as AgentBlock[]).filter((block) => (block.type as string) !== "wallet"),
             detached: draft.detached ?? [],
+            purpose: draft.purpose ?? null,
+            hirePriceUsd: draft.hirePriceUsd ?? null,
             autopilot: draft.autopilot
               ? { on: draft.autopilot.on, conversationKey: draft.autopilot.conversationKey }
               : null,
@@ -469,6 +477,18 @@ export const saveDraft = internalMutation({
   },
 });
 
+/** The builder records who the agent is for, once the person has said. */
+export const savePurpose = internalMutation({
+  args: { conversationId: v.id("dolphinConversations"), purpose: v.union(v.literal("private"), v.literal("tools"), v.literal("hire")) },
+  handler: async (ctx, { conversationId, purpose }) => {
+    const draft = await ctx.db
+      .query("agentDrafts")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+      .unique();
+    if (draft && draft.purpose !== purpose) await ctx.db.patch(draft._id, { purpose, updatedAt: Date.now() });
+  },
+});
+
 /** A draft's blocks, for the builder to merge into. */
 export const blocksForConversation = internalQuery({
   args: { conversationId: v.id("dolphinConversations") },
@@ -606,8 +626,15 @@ export const updateDraft = mutation({
     blocks: v.optional(v.any()),
     /** Canvas connections cut by the builder (see `detached` in schema.ts). */
     detached: v.optional(v.array(v.string())),
+    /** Who it is for: private ("just for me"), tools ("others use its tools"), hire ("others hire it"). */
+    purpose: v.optional(v.union(v.literal("private"), v.literal("tools"), v.literal("hire"))),
+    /** For purpose "hire": the price per job, in US dollars. null clears it. */
+    hirePriceUsd: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
+    if (args.hirePriceUsd !== undefined && args.hirePriceUsd !== null && !(args.hirePriceUsd > 0 && args.hirePriceUsd <= 10_000)) {
+      throw new ConvexError("A price per job must be between $0.01 and $10,000.");
+    }
     const conversation = await ctx.db
       .query("dolphinConversations")
       .withIndex("by_key", (q) => q.eq("conversationKey", args.conversationKey))
@@ -711,8 +738,12 @@ export const updateDraft = mutation({
     }
 
     const now = Date.now();
+    const purposeFields = {
+      ...(args.purpose !== undefined ? { purpose: args.purpose } : {}),
+      ...(args.hirePriceUsd !== undefined ? { hirePriceUsd: args.hirePriceUsd } : {}),
+    };
     if (existing) {
-      await ctx.db.patch(existing._id, { ...next, brain, blocks, detached, updatedAt: now });
+      await ctx.db.patch(existing._id, { ...next, brain, blocks, detached, ...purposeFields, updatedAt: now });
       // An armed agent's triggers follow its blocks - and its connections - at once.
       if ((args.blocks !== undefined || args.detached !== undefined) && existing.autopilot?.on) {
         await syncTriggers(ctx, existing._id, activeBlocks(blocks, detached), true);
@@ -726,11 +757,12 @@ export const updateDraft = mutation({
         brain,
         blocks,
         detached,
+        ...purposeFields,
         createdAt: now,
         updatedAt: now,
       });
     }
-    return { gaps: draftGaps(next) };
+    return { gaps: draftGaps(next, blocks.length) };
   },
 });
 
@@ -983,18 +1015,36 @@ export const ask = action({
        * Saved after the fields, so a brand-new draft exists to hold them.
        */
       let blockNote = "";
+      let blocksSet = false;
       if (compiled.reply.blocks) {
         const currentBlocks: AgentBlock[] = await ctx.runQuery(internal.agentBuilder.blocksForConversation, { conversationId });
         const merged = await mergeBuilderBlocks(currentBlocks, compiled.reply.blocks);
         if (merged.added.length > 0) {
           const saved: boolean = await ctx.runMutation(internal.agentBuilder.saveBuilderBlocks, { conversationId, ownerAddress, blocks: merged.blocks });
-          if (saved) applied.changed.push("tools");
+          if (saved) {
+            applied.changed.push("tools");
+            blocksSet = true;
+          }
         }
         if (merged.skipped.length > 0) blockNote = `I could not add ${merged.skipped.join("; ")}.`;
       }
 
+      if (compiled.reply.purpose) {
+        await ctx.runMutation(internal.agentBuilder.savePurpose, { conversationId, purpose: compiled.reply.purpose });
+      }
+
       let reply = resolveToolIdReferences(stripRawPayloads(compiled.reply.reply), offered).trim();
       if (blockNote) reply = `${reply}${reply ? "\n\n" : ""}${blockNote}`;
+      /*
+       * NEVER CLAIM WORK THAT WAS NOT DONE. Measured 2026-09-29: the free model
+       * wrote "I've set up a scheduler, market feed, safety check, risk limits
+       * and a swap block" with no blocks in its structured answer, so none were
+       * saved. When the prose claims blocks and none were set up, it says so.
+       */
+      const claimsBlocks = /\b(set up|added|created)\b[^.]*\b(scheduler|schedule|price feed|market|safety|risk|swap)\b/i.test(reply);
+      if (claimsBlocks && !blocksSet) {
+        reply += `${reply ? "\n\n" : ""}(Correction: those blocks were not set up this time. Say "add the blocks" and I will, or add them from the toolbox.)`;
+      }
       if (looksLikeLeakedReasoning(reply)) reply = "";
       if (applied.overLimit.length > 0) {
         reply += `${reply ? "\n\n" : ""}I kept the tools to what one agent can run at once, so I left out ${applied.overLimit
@@ -1068,7 +1118,8 @@ export async function runTryTurn(
 
     try {
       const draft = draftId ? await ctx.runQuery(internal.agentBuilder.draftById, { draftId }) : null;
-      const gaps = draft ? draftGaps(draft) : ["a draft"];
+      const blockCount = draftId ? ((await ctx.runQuery(internal.agentBuilder.runtimeForDraft, { draftId }))?.blocks.length ?? 0) : 0;
+      const gaps = draft ? draftGaps(draft, blockCount) : ["a draft"];
       if (!draft || gaps.length > 0) {
         await ctx.runMutation(internal.dolphin.setMessageStatus, {
           messageId: assistantId,

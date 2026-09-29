@@ -1,11 +1,13 @@
 "use client";
 
+import { useMutation } from "convex/react";
 import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AutoTradeCard } from "@/components/auto-trade-card";
 import { EnvVarsPanel } from "@/components/env-vars-panel";
-import type { AgentBlockData } from "@/convex/api";
+import { agentBuilderApi, type AgentBlockData, type AgentPurpose } from "@/convex/api";
+import { toast } from "@/store/use-toast-store";
 
 /**
  * The agent a user is building, as the Build mode of /dolphin shows it.
@@ -32,6 +34,9 @@ export type AgentDraft = {
   /** Connections cut on the canvas: `tool:<agentKey>:<tool>`, `block:<id>`, `limits`. */
   detached?: readonly string[];
   autopilot?: { on: boolean; conversationKey: string } | null;
+  /** Who it is for. Null until the builder or the person chooses. */
+  purpose?: AgentPurpose | null;
+  hirePriceUsd?: number | null;
 };
 
 export const EMPTY_AGENT_DRAFT: AgentDraft = {
@@ -47,7 +52,8 @@ export function draftGaps(draft: AgentDraft): string[] {
   if (!draft.name?.trim()) gaps.push("a name");
   if (!draft.description?.trim()) gaps.push("a description of what it does");
   if (!draft.instructions?.trim()) gaps.push("instructions");
-  if (draft.tools.length === 0) gaps.push("at least one tool");
+  // A flow built from blocks needs no MCP tool (2026-09-29).
+  if (draft.tools.length === 0 && (draft.blocks?.length ?? 0) === 0) gaps.push("at least one tool or block");
   // No agent runs on Dolphin's model (owner, 2026-09-28).
   if (!draft.brain) gaps.push("a brain (your own model key)");
   return gaps;
@@ -211,6 +217,7 @@ export function AgentDraftPanel({
       </ol>
 
       <div className="sleek-scroll mt-4 min-h-0 flex-1 overflow-y-auto px-2">
+        {tradeKeyConversation && !trying ? <PurposePicker conversationKey={tradeKeyConversation} draft={draft} /> : null}
         <dl>
           <Field label="Name" value={draft.name} />
           <Field label="What it does" value={draft.description} />
@@ -300,18 +307,23 @@ export function AgentDraftPanel({
             <span className="font-semibold">View</span>
           </a>
         ))}
-        <button
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line/80 px-4 text-[13px] font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={!ready || !onPublish || trying}
-          onClick={onPublish}
-          type="button"
-        >
-          Put on-chain
-        </button>
+        {/* "Just for me" is never published, so it offers no button that could publish it. */}
+        {draft.purpose === "private" ? null : (
+          <button
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line/80 px-4 text-[13px] font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!ready || !onPublish || trying}
+            onClick={onPublish}
+            type="button"
+          >
+            Put on-chain
+          </button>
+        )}
         <p className="text-[0.7rem] leading-relaxed text-muted">
           {trying
             ? "This run is private. Only you can see it, and it uses only the tools in the draft."
-            : ready
+            : ready && draft.purpose === "private"
+              ? "Just for you: it runs privately and is never published. Change who it is for above to share it."
+              : ready
               ? "Putting it on-chain registers it from your own wallet. Until then it stays free and private to you."
               : `Needs ${listGaps(gaps)} before you can try it. It stays free and private.`}
         </p>
@@ -378,4 +390,68 @@ function AutopilotCard({
       ) : null}
     </div>
   );
+}
+
+/**
+ * WHO IS IT FOR (mentor review, 2026-09-29: ask in plain language; keep the
+ * protocol names - MCP, A2A - out of the way). Saved to the draft at once.
+ */
+const PURPOSES: { value: AgentPurpose; label: string; about: string }[] = [
+  { value: "private", label: "Just for me", about: "A private automation. It runs for you and is never published." },
+  { value: "tools", label: "Others can use it", about: "Published so other apps and agents can call its tools (as an MCP server)." },
+  { value: "hire", label: "Others can hire it", about: "Published with a price per job. Paid delivery is not open on Dolphin yet - your price and payout wallet are recorded for when it is." },
+];
+
+function PurposePicker({ conversationKey, draft }: { conversationKey: string; draft: AgentDraft }) {
+  const update = useMutation(agentBuilderApi.agentBuilder.updateDraft);
+  const [price, setPrice] = useState(draft.hirePriceUsd ? String(draft.hirePriceUsd) : "");
+  const choose = (purpose: AgentPurpose) => {
+    void update({ conversationKey, purpose }).catch((cause) => toast.error(errorText(cause, "Could not save that.")));
+  };
+  const savePrice = () => {
+    const value = Number(price);
+    if (!price.trim() || !(value > 0)) return;
+    void update({ conversationKey, hirePriceUsd: value }).catch((cause) => toast.error(errorText(cause, "Could not save that price.")));
+  };
+  const current = PURPOSES.find((option) => option.value === draft.purpose) ?? null;
+  return (
+    <div className="border-b border-line/60 pb-3">
+      <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Who is it for?</p>
+      <div className="mt-1.5 grid grid-cols-3 gap-1" role="radiogroup" aria-label="Who is it for">
+        {PURPOSES.map((option) => (
+          <button
+            aria-checked={draft.purpose === option.value}
+            className={`rounded-lg border px-1.5 py-1.5 !text-[11px] font-semibold leading-tight transition-colors ${
+              draft.purpose === option.value ? "border-ink bg-paper-strong text-ink" : "border-line/80 text-muted hover:text-ink"
+            }`}
+            key={option.value}
+            onClick={() => choose(option.value)}
+            role="radio"
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[0.7rem] leading-snug text-muted">{current ? current.about : "Choose one - Dolphin's builder will also ask you."}</p>
+      {draft.purpose === "hire" ? (
+        <label className="mt-2 flex items-center gap-2 text-[0.74rem] text-ink-soft">
+          Price per job ($)
+          <input
+            className="w-24 rounded-lg border border-line bg-paper-strong px-2 py-1 font-mono text-[0.8rem] text-ink"
+            inputMode="decimal"
+            onBlur={savePrice}
+            onChange={(event) => setPrice(event.target.value.replace(/[^0-9.]/g, ""))}
+            placeholder="e.g. 0.50"
+            value={price}
+          />
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
+function errorText(cause: unknown, fallback: string): string {
+  const data = (cause as { data?: unknown } | null)?.data;
+  return typeof data === "string" ? data : fallback;
 }

@@ -107,6 +107,8 @@ export function PublishAgentDialog({
   const [website, setWebsite] = useState("");
   const [xHandle, setXHandle] = useState("");
   const [email, setEmail] = useState("");
+  // Where its payments go: the connected wallet unless the builder names another of their own.
+  const [payout, setPayout] = useState("");
   const [network, setNetwork] = useState<Network>("bsc");
   const [review, setReview] = useState<Review | null>(null);
   const [stage, setStage] = useState<"form" | "reviewing" | "switching" | "signing" | "confirming" | "done">("form");
@@ -171,6 +173,7 @@ export function PublishAgentDialog({
         ...(website.trim() ? { website: website.trim() } : {}),
         ...(xHandle.trim() ? { x: xHandle.trim() } : {}),
         ...(email.trim() ? { email: email.trim() } : {}),
+        ...(payout.trim() ? { payoutAddress: payout.trim() } : {}),
       });
       /* The fee, read now: this exact call's gas at this moment's price. */
       const client = readClient(network);
@@ -391,6 +394,12 @@ export function PublishAgentDialog({
                 { label: "Website (optional)", value: website, set: edited(setWebsite), placeholder: "https://…" },
                 { label: "X handle (optional)", value: xHandle, set: edited(setXHandle), placeholder: "@handle" },
                 { label: "Contact email (optional, public)", value: email, set: edited(setEmail), placeholder: "you@example.com" },
+                {
+                  label: "Payout wallet - where this agent's payments go (your own address; Dolphin never holds its key)",
+                  value: payout,
+                  set: edited(setPayout),
+                  placeholder: wallet.address ? `${wallet.address} (your connected wallet)` : "0x…",
+                },
               ].map((field) => (
                 <label className="block text-[0.78rem] text-ink-soft" key={field.label}>
                   {field.label}

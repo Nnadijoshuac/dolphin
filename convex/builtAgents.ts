@@ -140,9 +140,14 @@ export const prepareListing = mutation({
     website: v.optional(v.string()),
     x: v.optional(v.string()),
     email: v.optional(v.string()),
+    /** Where its payments go. Defaults to the signed-in wallet; never a key Dolphin holds. */
+    payoutAddress: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const owner = await requireWalletAddress(ctx, args.sessionToken, "Putting an agent on-chain");
+    const payoutRaw = (args.payoutAddress ?? "").trim();
+    if (payoutRaw && !isAddress(payoutRaw)) throw new ConvexError("The payout wallet is not a valid address.");
+    const payoutAddress = getAddress(payoutRaw || owner);
 
     const build = await ctx.db
       .query("dolphinConversations")
@@ -163,7 +168,10 @@ export const prepareListing = mutation({
       .unique();
     if (!draft) throw new ConvexError("This draft is empty. Describe the agent first.");
 
-    const gaps = draftGaps(draft);
+    if ((draft.purpose ?? null) === "private") {
+      throw new ConvexError("This agent is set to \"Just for me\". Change who it is for in the Draft tab to share it.");
+    }
+    const gaps = draftGaps(draft, (draft.blocks ?? []).length);
     if (gaps.length > 0) throw new ConvexError(`The agent needs ${gaps.join(", ")} before it can go on-chain.`);
     const name = draft.name as string;
     const description = draft.description as string;
@@ -248,6 +256,9 @@ export const prepareListing = mutation({
       tools: draft.tools,
       category: args.category,
       links: { website, x: xHandle, email },
+      payoutAddress,
+      purpose: draft.purpose ?? "tools",
+      hirePriceUsd: draft.purpose === "hire" ? (draft.hirePriceUsd ?? null) : null,
       iconStorageId: icon.storageId,
       iconContentType: icon.contentType,
       updatedAt: Date.now(),

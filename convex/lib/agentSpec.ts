@@ -74,6 +74,8 @@ export type BuilderReply = {
   toolIds: string[] | null;
   /** Blocks to add or update (lib/builderBlocks.ts decides). Null or absent: none. */
   blocks: BuilderBlock[] | null;
+  /** Who it is for, once the person has said. Null: unchanged. */
+  purpose: "private" | "tools" | "hire" | null;
 };
 
 /**
@@ -86,7 +88,7 @@ export const BUILDER_REPLY_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["reply", "name", "description", "instructions", "toolIds", "blocks"],
+    required: ["reply", "name", "description", "instructions", "toolIds", "blocks", "purpose"],
     properties: {
       reply: {
         type: "string",
@@ -105,6 +107,11 @@ export const BUILDER_REPLY_SCHEMA = {
         type: ["array", "null"],
         items: { type: "string" },
         description: "The complete set of tool ids the agent should have, or null to keep them.",
+      },
+      purpose: {
+        type: ["string", "null"],
+        enum: ["private", "tools", "hire", null],
+        description: "Who it is for, once the person has said: private (just for them), tools (others can use its tools), hire (others can hire it). Null otherwise.",
       },
       blocks: {
         type: ["array", "null"],
@@ -191,6 +198,7 @@ export function parseBuilderReply(content: string): BuilderReply | null {
       instructions,
       toolIds: toolIds as string[] | null,
       blocks: blocks && blocks.length ? blocks : null,
+      purpose: record.purpose === "private" || record.purpose === "tools" || record.purpose === "hire" ? record.purpose : null,
     };
   }
 
@@ -331,11 +339,12 @@ function sameTools(a: readonly DraftTool[], b: readonly DraftTool[]): boolean {
 }
 
 /** What a draft still needs before it can be tried. Empty means runnable. */
-export function draftGaps(draft: DraftSpec): string[] {
+export function draftGaps(draft: DraftSpec, blockCount = 0): string[] {
   const gaps: string[] = [];
   if (!draft.name) gaps.push("a name");
   if (!draft.description) gaps.push("a description of what it does");
   if (!draft.instructions) gaps.push("instructions");
-  if (draft.tools.length === 0) gaps.push("at least one tool");
+  // A flow built from blocks (a Price feed, a Market...) needs no MCP tool (2026-09-29).
+  if (draft.tools.length === 0 && blockCount === 0) gaps.push("at least one tool or block");
   return gaps;
 }

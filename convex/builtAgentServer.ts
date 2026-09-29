@@ -47,6 +47,8 @@ export function registrationFile(listing: Listing) {
     { name: "web", endpoint: `${siteBase()}/agent/${listing.hash}` },
     { name: "MCP", endpoint: `${base}/mcp`, version: MCP_PROTOCOL_VERSION },
   ];
+  // ERC-8004's agent-wallet form: where this agent is paid. The builder's own address.
+  if (listing.payoutAddress) services.push({ name: "agentWallet", endpoint: `eip155:${listing.chainId}:${listing.payoutAddress}` });
   if (listing.links.email) services.push({ name: "email", endpoint: listing.links.email });
   if (listing.links.website) services.push({ name: "website", endpoint: listing.links.website });
   if (listing.links.x) services.push({ name: "x", endpoint: `https://x.com/${listing.links.x}` });
@@ -70,6 +72,11 @@ export function registrationFile(listing: Listing) {
      */
     builtWith: { platform: "Dolphin", url: siteBase(), network: NETWORKS[listing.network].label },
     category: listing.category,
+    /*
+     * "Others can hire it": the builder's asking price, stated honestly as not
+     * yet open - paid delivery needs a signer Dolphin will not hold.
+     */
+    ...(listing.purpose === "hire" ? { hire: { priceUsd: listing.hirePriceUsd ?? null, paidDeliveryOpen: false } } : {}),
   };
 }
 

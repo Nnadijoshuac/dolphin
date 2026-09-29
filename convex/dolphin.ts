@@ -1,10 +1,11 @@
 import { TRADING_PLAYBOOK } from "./lib/tradingPlaybook";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -483,6 +484,11 @@ export const createConversation = mutation({
   },
 });
 
+/** A person does not type faster than this; a script does. */
+const CHAT_TURNS_PER_MINUTE = 8;
+/** Across everyone, per minute. Well above launch traffic; caps what a script can spend. */
+const SITE_TURNS_PER_MINUTE = 120;
+
 export const appendTurn = internalMutation({
   args: {
     conversationKey: v.string(),
@@ -511,6 +517,34 @@ export const appendTurn = internalMutation({
     }
 
     const now = Date.now();
+
+    /*
+     * RATE LIMITS (pre-launch security review, 2026-09-29). Every turn spends
+     * Dolphin's model allowance, and this was reachable without limit. Per
+     * conversation: faster than anyone types. Site-wide: well above launch
+     * traffic, well below what a script could burn through.
+     */
+    const recentInChat = await ctx.db
+      .query("dolphinMessages")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id).gte("createdAt", now - 60_000))
+      .collect();
+    if (recentInChat.filter((message) => message.role === "user").length >= CHAT_TURNS_PER_MINUTE) {
+      throw new ConvexError("You are sending messages very fast. Wait a moment and try again.");
+    }
+    const windowRow = await ctx.db
+      .query("rateWindows")
+      .withIndex("by_key", (q) => q.eq("key", "chat-turns"))
+      .unique();
+    if (windowRow && now - windowRow.windowStart < 60_000) {
+      if (windowRow.count >= SITE_TURNS_PER_MINUTE) {
+        throw new ConvexError("Dolphin is busy right now. Try again in a minute.");
+      }
+      await ctx.db.patch(windowRow._id, { count: windowRow.count + 1 });
+    } else if (windowRow) {
+      await ctx.db.patch(windowRow._id, { windowStart: now, count: 1 });
+    } else {
+      await ctx.db.insert("rateWindows", { key: "chat-turns", windowStart: now, count: 1 });
+    }
 
     let ownerAddress = conversation.ownerAddress;
     if (!ownerAddress && userAddress) {
@@ -1046,7 +1080,9 @@ export const recentHistory = internalQuery({
  * Run it with:
  *   npx convex run dolphin:checkModelBudget '{}'
  */
-export const checkModelBudget = action({
+/* INTERNAL since the 2026-09-29 pre-launch review: public, it let anyone spend
+   model calls and read the key's usage. Run it with `npx convex run`. */
+export const checkModelBudget = internalAction({
   args: { text: v.optional(v.string()) },
   handler: async (
     ctx,

@@ -1401,6 +1401,18 @@ export default defineSchema({
    * calls are removed. No text, no wallet address, no conversation key: the
    * mode, how long it was, and which agents' tools it used, counted.
    */
+  /**
+   * One counter per rate limit, per window (2026-09-29 pre-launch review):
+   * the chat runs on Dolphin's own model key, and nothing stopped a script
+   * from spending its whole allowance. A row per limit key, reset when its
+   * window passes - so the table stays a handful of rows.
+   */
+  rateWindows: defineTable({
+    key: v.string(),
+    windowStart: v.number(),
+    count: v.number(),
+  }).index("by_key", ["key"]),
+
   chatSummaries: defineTable({
     mode: v.union(v.literal("chat"), v.literal("build"), v.literal("try")),
     userMessages: v.number(),

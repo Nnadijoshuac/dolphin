@@ -33,7 +33,6 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
-  action,
   internalAction,
   internalMutation,
   internalQuery,
@@ -772,7 +771,10 @@ export const report = query({
   },
 });
 
-export const runBatchNow = action({
+/* INTERNAL since 2026-09-29's pre-launch security review: this was public with no
+   guard, so anyone could run it. Operators use admin.trigger* (key-gated) or
+   `npx convex run`. */
+export const runBatchNow = internalAction({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args): Promise<{ scheduled: number }> =>
     ctx.runMutation(internal.verification.scheduleBatch, args),
@@ -787,7 +789,10 @@ export const runBatchNow = action({
  * `Promise<null>`, and returning it straight out of a `Promise<void>` handler
  * does not typecheck. Awaiting and returning nothing is what this always meant.
  */
-export const verifyNow = action({
+/* INTERNAL since 2026-09-29's pre-launch security review: this was public with no
+   guard, so anyone could run it. Operators use admin.trigger* (key-gated) or
+   `npx convex run`. */
+export const verifyNow = internalAction({
   args: { agentKey: v.string() },
   handler: async (ctx, { agentKey }): Promise<void> => {
     await ctx.runAction(internal.verification.verifyOne, { agentKey });

@@ -44,7 +44,7 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery, action, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { screenAgent, SCREEN_RULES } from "./lib/screen";
 import {
   PAGE_SIZE,
@@ -759,7 +759,10 @@ export const getStats = query({
   },
 });
 
-export const runNow = action({
+/* INTERNAL since 2026-09-29's pre-launch security review: this was public with no
+   guard, so anyone could run it. Operators use admin.trigger* (key-gated) or
+   `npx convex run`. */
+export const runNow = internalAction({
   args: { backfill: v.optional(v.boolean()), budgetMs: v.optional(v.number()) },
   handler: async (ctx, args): Promise<DiscoveryReport> =>
     ctx.runAction(internal.discovery.run, args),
@@ -777,7 +780,10 @@ export const runNow = action({
  * its probe history, because re-walking is idempotent - the point is to change
  * where the walk resumes, not to forget what it found.
  */
-export const resetBackfill = action({
+/* INTERNAL since 2026-09-29's pre-launch security review: this was public with no
+   guard, so anyone could run it. Operators use admin.trigger* (key-gated) or
+   `npx convex run`. */
+export const resetBackfill = internalAction({
   args: {},
   handler: async (ctx): Promise<{ reset: true }> => {
     await ctx.runMutation(internal.discovery.rewindCursor, {});

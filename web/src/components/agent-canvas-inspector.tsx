@@ -573,7 +573,16 @@ export function AgentCanvasInspector({
     return <ToolEditor conversationKey={conversationKey} draft={draft} index={index} onClose={onClose} />;
   }
   if (selectedId === "trigger") {
-    return <InfoPanel body="Your agent runs when someone sends it a message, and answers in the conversation." onClose={onClose} title="Trigger" />;
+    return (
+      <InfoPanel
+        body="Every run starts here. Whatever plugs into it - a message, the Scheduler, a price crossing, a watched wallet - fires it once, and it hands one run to the Brain."
+        onClose={onClose}
+        title="Trigger"
+      />
+    );
+  }
+  if (selectedId === "source-chat") {
+    return <InfoPanel body="Fires the Trigger when someone sends your agent a message. It answers in the conversation." onClose={onClose} title="When asked" />;
   }
   if (selectedId === "output") {
     return <InfoPanel body="It replies with what its tools returned. It quotes no number a tool did not give it." onClose={onClose} title="Output" />;
@@ -586,11 +595,11 @@ export function AgentCanvasInspector({
 type BlockType = AgentBlockData["type"];
 
 const BLOCK_TITLES: Record<BlockType, string> = {
-  market: "Market",
+  market: "Price feed",
   safety: "Safety check",
-  swap: "Swap",
+  swap: "Market",
   risk: "Risk limits",
-  schedule: "Schedule",
+  schedule: "Scheduler",
   price: "Price trigger",
   walletWatch: "Wallet watch",
   wallet: "Wallet",
@@ -599,13 +608,13 @@ const BLOCK_TITLES: Record<BlockType, string> = {
 };
 
 const BLOCK_ABOUT: Record<BlockType, string> = {
-  market: "The token this agent trades. Its live chart appears on the canvas, and the Brain can read its price, liquidity, volume and recent candles.",
+  market: "The token this agent watches and trades. Its live chart appears on the canvas, and every run reads its price, liquidity, volume, candles and daily trend for the Brain.",
   safety: "Lets the Brain check a token's contract before acting: honeypot, taxes, owner powers and holder concentration.",
-  swap: "Lets the Brain propose a PancakeSwap trade within your Risk limits. Every trade comes to you as a ticket: you approve and sign it from your Dolphin Wallet. The agent never signs.",
+  swap: "Where the agent buys and sells, on PancakeSwap - after every order passes your Risk limits. Each trade comes to you as a ticket to sign, unless you turn on \"Trade without asking\" in the Draft tab.",
   risk: "Hard limits on what the agent may propose, checked in code on every trade, whatever the Brain decides.",
-  schedule: "Runs the agent on a clock while Autopilot is on. Every run uses your own model key.",
-  price: "Runs the agent when the Market token's price crosses your level - once per crossing, not on every check.",
-  walletWatch: "Runs the agent when a watched wallet transacts - a KOL, a whale, a fund. It sees any transaction they send, and exactly which tokens moved for your Market token and Dolphin's verified list.",
+  schedule: "Makes its own signal: it fires the Trigger on a clock while Autopilot is on. Every run uses your own model key.",
+  price: "Makes its own signal: it fires the Trigger when the Price feed's token crosses your level - once per crossing, not on every check.",
+  walletWatch: "Makes its own signal: it fires the Trigger when a watched wallet transacts - a KOL, a whale, a fund. It sees any transaction they send, and exactly which tokens moved for your Price feed token and Dolphin's verified list.",
   wallet: "The agent's own wallet. Fund it, and every trade within your Risk limits executes from it at once - no ticket, no tap - with what it buys landing back in it. Withdraw to your wallet any time.",
   memory: "Your agent's memory, kept on your own server - Dolphin stores none of it. Before every run it reads what it did last time; after it, a record of the run is saved. It can also note things down itself.",
   hire: "A paid agent from Dolphin's catalog that yours can call on. When it asks for work, the agent quotes a price and you confirm each payment from your Dolphin Wallet with your passkey. It delivers on-chain afterwards.",

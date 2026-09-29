@@ -1,4 +1,5 @@
 import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
+import AiBrain01Icon from "@hugeicons/core-free-icons/AiBrain01Icon";
 import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
 import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
@@ -103,6 +104,7 @@ export type GlyphName =
   | "search"
   | "agents"
   | "bot"
+  | "brain"
   | "wallet"
   | "shield"
   | "clock"
@@ -145,6 +147,7 @@ const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
   // `bot` is this app's older alias for the same thing. Both map to one mark
   // rather than to two similar ones.
   bot: Robot01Icon,
+  brain: AiBrain01Icon,
   wallet: Wallet01Icon,
   shield: Shield01Icon,
   clock: Clock01Icon,

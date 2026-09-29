@@ -111,6 +111,7 @@ WHAT AN AGENT BUILT HERE IS. Never promise more than this:
   - Hire an agent: one paid A2A agent from Dolphin's catalog. The agent can ask it to do a task and gets its price; the person confirms each payment from their Dolphin Wallet with their passkey. The result is delivered later, on-chain - not into the conversation.
 ${TRADING_PLAYBOOK}
 
+- NAMES ON THE CANVAS - use these when you talk to the person: the schedule block is the "Scheduler", the market data block is the "Price feed", and the swap block is the "Market" (where it buys and sells, after Risk limits). Every run source (a message, the Scheduler, a Price trigger, Wallet watch) plugs into one "Trigger", which starts the Brain once per run. The Brain's connected read blocks (Price feed, Safety, Memory) run automatically on every run.
 - Write the instructions so they use what is there: e.g. "When your price trigger fires, read the market snapshot, check safety, and propose a trade only if...". Rules with exact numbers beat vague judgement.
 - It cannot send emails or messages, and cannot trade without the person signing. If asked, say so plainly and offer the closest thing it can do.
 - It is private until the person puts it on-chain.
@@ -1140,11 +1141,17 @@ export async function runTryTurn(
           ? await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: memoryBlock.config.keyName })
           : null;
         memoryTarget = { url: memoryBlock.config.url, key: memoryKey, agent: draftId };
-        try {
-          memoryNote = `\n\n${memoryBrief(await recall(memoryTarget))}`;
-        } catch (cause) {
-          memoryNote = `\n\nYOUR MEMORY could not be reached this run (${cause instanceof Error ? cause.message : "no answer"}). Say so if it matters, and do not assume what you did before.`;
-        }
+        const target = memoryTarget;
+        memoryNote = `\n\n${await runReadBlock(ctx, { conversationId, messageId: assistantId, blockId: memoryBlock.id, label: "Memory", toolName: "block_recall" }, async () => {
+          try {
+            return { text: memoryBrief(await recall(target)), isError: false };
+          } catch (cause) {
+            return {
+              text: `YOUR MEMORY could not be reached this run (${cause instanceof Error ? cause.message : "no answer"}). Say so if it matters, and do not assume what you did before.`,
+              isError: true,
+            };
+          }
+        })}`;
       }
 
       /*
@@ -1186,15 +1193,49 @@ export async function runTryTurn(
         ? `\n\nTHE USER'S WALLET ADDRESS: ${targetAddress}. When a tool asks for the user's address, pass this one. Never ask them to paste it.`
         : "\n\nNo wallet is connected. If a question needs the user's address, ask them to connect a wallet or paste an address.";
 
+      /*
+       * THE FLOW RUNS ITS READ BLOCKS FIRST (owner, 2026-09-29: "the brain
+       * doesn't touch any other part of the node"). Measured on dev: a free
+       * model given the tools answered in prose and called none, so nothing
+       * lit and the Brain decided blind. Like blocks in a flow, the Price feed
+       * (and a safety check of its token) now run on every run, whatever the
+       * model does, and their results are handed to the Brain. The model is
+       * left to decide ACTIONS - trade, hire, remember - and any MCP tool.
+       */
+      const readNotes: string[] = [];
+      const priceFeed = blocks.find((block) => block.type === "market");
+      if (priceFeed && priceFeed.type === "market") {
+        readNotes.push(
+          await runReadBlock(ctx, { conversationId, messageId: assistantId, blockId: priceFeed.id, label: "Price feed", toolName: "block_market_snapshot" }, () =>
+            runBlockTool(blocks, "block_market_snapshot", "{}", proposalsToday),
+          ),
+        );
+        const safetyBlock = blocks.find((block) => block.type === "safety");
+        if (safetyBlock) {
+          const args = JSON.stringify({ tokenAddress: priceFeed.config.tokenAddress });
+          readNotes.push(
+            `Safety check of ${priceFeed.config.symbol}: ` +
+              (await runReadBlock(ctx, { conversationId, messageId: assistantId, blockId: safetyBlock.id, label: "Safety check", toolName: "block_token_safety", argumentsJson: args }, () =>
+                runBlockTool(blocks, "block_token_safety", args, proposalsToday),
+              )),
+          );
+        }
+      }
+      const readNote = readNotes.length
+        ? `\n\nDATA YOUR BLOCKS READ THIS RUN (fetched live just now - use these numbers, quote only these):\n${readNotes.join("\n")}`
+        : "";
+
       const messages: ChatMessage[] = [
-        { role: "system", content: `${TRY_CONSULT_PROMPT}${addressNote}${memoryNote}` },
+        { role: "system", content: `${TRY_CONSULT_PROMPT}${addressNote}${memoryNote}${readNote}` },
         ...history,
         { role: "user", content: text },
       ];
 
-      const allTools = [...menu.tools, ...blockTools];
+      // The Price feed already ran this run; offering it again would only spend a call.
+      const allTools = [...menu.tools, ...blockTools.filter((tool) => !(priceFeed && tool.function.name === "block_market_snapshot"))];
       let callsRemaining = MAX_TOOL_CALLS_PER_TURN;
       if (allTools.length > 0) {
+        // (Read blocks above already ran; this is the Brain choosing tools and actions.)
         await ctx.runMutation(internal.dolphin.setMessageStatus, {
           messageId: assistantId,
           status: "consulting",
@@ -1307,7 +1348,7 @@ export async function runTryTurn(
         canPropose: blocks.some((block) => block.type === "swap"),
         canTrade: canExecute,
         triggered,
-      })}${addressNote}${memoryNote}`;
+      })}${addressNote}${memoryNote}${readNote}`;
       const unreachable = [
         ...menu.unreachable.map((u) => `- ${u.agentName} did not answer: ${u.reason}`),
         ...rows
@@ -1402,6 +1443,41 @@ function blockToolNameFor(type: AgentBlock["type"]): string | null {
           : type === "wallet"
             ? "block_wallet_holdings"
             : null;
+}
+
+/**
+ * Runs one read block as part of the flow, recorded exactly like a tool call
+ * (before, then completed) so the transcript shows it and its block lights on
+ * the canvas. Returns the text handed to the Brain.
+ */
+async function runReadBlock(
+  ctx: ActionCtx,
+  where: { conversationId: Id<"dolphinConversations">; messageId: Id<"dolphinMessages">; blockId: string; label: string; toolName: string; argumentsJson?: string },
+  read: () => Promise<BlockToolResult>,
+): Promise<string> {
+  const started = Date.now();
+  const toolCallId = await ctx.runMutation(internal.dolphin.recordToolCall, {
+    conversationId: where.conversationId,
+    messageId: where.messageId,
+    agentKey: `block:${where.blockId}`,
+    agentName: where.label,
+    toolName: where.toolName,
+    argumentsJson: where.argumentsJson ?? "{}",
+  });
+  let result: BlockToolResult;
+  try {
+    result = await read();
+  } catch (cause) {
+    result = { text: `${where.label} could not be read: ${cause instanceof Error ? cause.message : String(cause)}`, isError: true };
+  }
+  await ctx.runMutation(internal.dolphin.completeToolCall, {
+    toolCallId,
+    resultText: result.text,
+    isError: result.isError,
+    transportError: null,
+    latencyMs: Date.now() - started,
+  });
+  return result.text;
 }
 
 /** block_wallet_holdings: what the agent's own wallet holds, read live. */

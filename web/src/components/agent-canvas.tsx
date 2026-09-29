@@ -39,13 +39,21 @@ import { toast } from "@/store/use-toast-store";
  * the brain reaches out to the other components... risk limit is a regulator,
  * it sits in between two things").
  *
- *                         Strategy
- *                            ⇅  consults, and is answered
- *   Trigger ──────────>   BRAIN  ──> Answer
- *                            │   ──> Risk limits ──> Swap ──> Wallet
- *                            │   ──> Hired agent
- *                            ▼
- *              Market · Safety · Memory · Tools   (it reads them)
+ *                                           Strategy
+ *                                              ⇅  consults, and is answered
+ *   When asked ─┐
+ *   Schedule ───┼──> TRIGGER ──(once)──>   BRAIN  ──> Answer
+ *   Price ──────┤                            │   ──> Risk limits ──> Market (buy / sell)
+ *   Wallet watch┘                            │   ──> Hired agent
+ *                                            ▼
+ *                        Price feed · Safety · Memory · Tools   (it reads them)
+ *
+ * (2026-09-29, the owner: "the schedule should hit the trigger and then the
+ * trigger goes to the brain"; "the trigger is like a trigger of a gun - it
+ * fires once and the action starts, like a domino".) Every source of a run
+ * plugs into ONE Trigger, which fires into the Brain once per run. On the
+ * canvas the trade block is called "Market" (where the purchase happens) and
+ * the data block "Price feed"; in code they are still `swap` and `market`.
  *
  * Arrows run the way the work does: a trigger starts the Brain; the Brain
  * calls out to everything else. Nothing pushes into the Brain but its
@@ -99,10 +107,12 @@ type BlockData = {
   order?: number;
   /** The Market block's expand button: opens the chart over the canvas. */
   onExpand?: () => void;
+  /** The one Trigger every run source plugs into. */
+  hub?: boolean;
 };
 
 type BlockNode = Node<BlockData, "block">;
-type FlowEdge = Edge<{ active?: boolean; reverse?: boolean; both?: boolean; used?: boolean; member?: string; cutAt?: number }, "flow">;
+type FlowEdge = Edge<{ active?: boolean; reverse?: boolean; both?: boolean; once?: boolean; used?: boolean; member?: string; cutAt?: number }, "flow">;
 
 /** What a try-run is doing right now. Null when nothing is running or has run. */
 export type CanvasRun = {
@@ -128,7 +138,7 @@ const KIND_GLYPH = {
   trigger: "arrow-right",
   tool: "spanner",
   melon: "sparkle",
-  brain: "bot",
+  brain: "brain",
   output: "check",
   add: "add",
   sense: "layers",
@@ -159,7 +169,7 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
           <Handle id="reads" position={Position.Bottom} type="source" />
         </>
       ) : null}
-      {kind === "output" || kind === "hands" || kind === "risk" ? <Handle id="in" position={Position.Left} type="target" /> : null}
+      {kind === "output" || kind === "hands" || kind === "risk" || data.hub ? <Handle id="in" position={Position.Left} type="target" /> : null}
       {data.onExpand ? (
         <button
           aria-label="Expand the chart"
@@ -239,8 +249,8 @@ function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosi
       {active ? (
         <>
           <path className="agent-edge__glow" d={path} fill="none" />
-          <path className="agent-edge__comet" d={path} data-reverse={reverse || undefined} fill="none" pathLength={1} />
-          {[0, 0.55].map((delay, index) => (
+          <path className="agent-edge__comet" d={path} data-once={data?.once || undefined} data-reverse={reverse || undefined} fill="none" pathLength={1} />
+          {(data?.once ? [] : [0, 0.55]).map((delay, index) => (
             <circle className="agent-edge__pulse" key={delay} r={3.2}>
               <animateMotion
                 begin={`${delay}s`}
@@ -295,13 +305,13 @@ const edgeTypes = { flow: FlowEdgeView };
 
 /** How each toolbox block is drawn. */
 export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label: string; glyph: GlyphName }> = {
-  schedule: { kind: "trigger", label: "Schedule", glyph: "clock" },
+  schedule: { kind: "trigger", label: "Scheduler", glyph: "clock" },
   price: { kind: "trigger", label: "Price trigger", glyph: "dollar" },
   walletWatch: { kind: "trigger", label: "Wallet watch", glyph: "eye" },
-  market: { kind: "sense", label: "Market", glyph: "layers" },
+  market: { kind: "sense", label: "Price feed", glyph: "layers" },
   safety: { kind: "sense", label: "Safety check", glyph: "shield" },
   risk: { kind: "risk", label: "Risk limits", glyph: "filter" },
-  swap: { kind: "hands", label: "Swap", glyph: "wallet" },
+  swap: { kind: "hands", label: "Market", glyph: "wallet" },
   wallet: { kind: "hands", label: "Wallet", glyph: "wallet" },
   hire: { kind: "hands", label: "Hired agent", glyph: "agents" },
   memory: { kind: "sense", label: "Memory", glyph: "receive" },
@@ -316,7 +326,7 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
   switch (block.type) {
     case "schedule": {
       const minutes = block.config.everyMinutes;
-      return { title: minutes >= 60 ? `Every ${minutes / 60} hour${minutes === 60 ? "" : "s"}` : `Every ${minutes} minutes`, detail: "Runs the agent on a clock" };
+      return { title: minutes >= 60 ? `Every ${minutes / 60} hour${minutes === 60 ? "" : "s"}` : `Every ${minutes} minutes`, detail: "Fires the Trigger on a clock" };
     }
     case "price":
       return { title: `Price ${block.config.direction} ${money(block.config.priceUsd)}`, detail: "Fires once each time it crosses" };
@@ -332,7 +342,7 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
     case "risk":
       return { title: `${money(block.config.maxTradeUsd)} a trade`, detail: `At most ${block.config.maxTradesPerDay} trade${block.config.maxTradesPerDay === 1 ? "" : "s"} a day` };
     case "swap":
-      return { title: "Propose a swap", detail: "You approve and sign every trade" };
+      return { title: "Buy / sell", detail: "On PancakeSwap, after the Risk gate" };
     case "wallet":
       return { title: "Agent wallet", detail: "Trades from its own funds, no tap" };
     case "hire":
@@ -356,7 +366,9 @@ export function draftGraph(
 ): { nodes: BlockNode[]; edges: FlowEdge[] } {
   const blocks = draft.blocks ?? [];
   const cut = new Set(draft.detached ?? []);
-  const brainX = NODE_WIDTH + COLUMN_GAP;
+  // Sources, then the one Trigger, then the Brain.
+  const hubX = NODE_WIDTH + COLUMN_GAP;
+  const brainX = hubX + NODE_WIDTH + COLUMN_GAP;
   const actionX = brainX + NODE_WIDTH + COLUMN_GAP;
   const brainY = 0;
   const nodes: BlockNode[] = [];
@@ -385,15 +397,16 @@ export function draftGraph(
   });
   place("melon", brainX, brainY - 190, { kind: "melon", title: instructions ? "Strategy" : "Not drafted yet", detail: instructions, empty: !instructions });
 
-  // WHEN: what starts a run, down the left.
+  // WHEN: what can start a run, down the left - each plugs into the one Trigger.
   const triggers: { id: string; data: BlockData }[] = [
-    { id: "trigger", data: { kind: "trigger", title: "When asked", detail: "Runs when someone sends it a message" } },
+    { id: "source-chat", data: { kind: "trigger", title: "When asked", detail: "Someone sends it a message" } },
   ];
   for (const type of ["schedule", "price", "walletWatch"] as const) {
     const block = find(type);
     if (block) triggers.push({ id: `block-${block.id}`, data: blockData(block) });
   }
   triggers.forEach((trigger, index) => place(trigger.id, 0, brainY + (index - (triggers.length - 1) / 2) * TRIGGER_ROW, trigger.data));
+  place("trigger", hubX, brainY, { kind: "trigger", title: "Trigger", detail: "Fires once, and the run begins", hub: true });
 
   // KNOWS: what the Brain can read, in rows beneath it.
   const senses: { id: string; data: BlockData }[] = [];
@@ -453,7 +466,8 @@ export function draftGraph(
   const edges: FlowEdge[] = [
     // The Brain consults its strategy.
     edge("brain", "melon", "in", undefined, "strategy"),
-    ...triggers.filter((t) => live(t.data.member)).map((t) => edge(t.id, "brain", "in", t.data.member)),
+    ...triggers.filter((t) => live(t.data.member)).map((t) => edge(t.id, "trigger", "in", t.data.member)),
+    edge("trigger", "brain", "in"),
     // The Brain reaches down for what it reads.
     ...senses
       .filter((x) => x.id !== "tool-empty" && x.id !== "add-tool" && live(x.data.member))
@@ -487,8 +501,13 @@ function applyRun(
   const working = run.phase === "thinking" || run.phase === "consulting" || run.phase === "writing";
 
   if (working || run.phase === "done") {
+    // One shot: the Trigger fires into the Brain once, then the line rests as "used".
     nodeState.set("trigger", "done");
-    edgeState.set("trigger->brain", run.phase === "thinking" ? { active: true } : { used: true });
+    edgeState.set("trigger->brain", run.phase === "thinking" ? { active: true, once: true } : { used: true });
+    if (!run.triggeredBy) {
+      nodeState.set("source-chat", "done");
+      edgeState.set("source-chat->trigger", run.phase === "thinking" ? { active: true, once: true } : { used: true });
+    }
   }
   // Consulting the strategy: light both ways while it thinks.
   edgeState.set("brain->melon", run.phase === "thinking" ? { active: true, both: true } : working || run.phase === "done" ? { used: true } : {});
@@ -543,7 +562,7 @@ function applyRun(
     for (const block of draft.blocks ?? []) {
       if (run.triggeredBy && run.triggeredBy === block.type) {
         nodeState.set(`block-${block.id}`, "done");
-        edgeState.set(`block-${block.id}->brain`, run.phase === "thinking" ? { active: true } : { used: true });
+        edgeState.set(`block-${block.id}->trigger`, run.phase === "thinking" ? { active: true, once: true } : { used: true });
       }
     }
   }
@@ -627,7 +646,7 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
   {
     title: "Triggers",
     items: [
-      { type: "schedule", label: "Schedule", about: "Run on a clock, every 15 minutes to daily", glyph: "clock" },
+      { type: "schedule", label: "Scheduler", about: "Fires on a clock, every 15 minutes to daily", glyph: "clock" },
       { type: "price", label: "Price", about: "Run when the token crosses a level", glyph: "dollar", needs: "market" },
       { type: "walletWatch", label: "Wallet watch", about: "Run when a KOL or whale transacts", glyph: "eye" },
     ],
@@ -635,7 +654,7 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
   {
     title: "Senses",
     items: [
-      { type: "market", label: "Market", about: "A token's live price, candles and chart", glyph: "layers" },
+      { type: "market", label: "Price feed", about: "A token's live price, trend and chart", glyph: "layers" },
       { type: "safety", label: "Safety", about: "Honeypot, taxes and owner-power checks", glyph: "shield" },
       { type: "memory", label: "Memory", about: "Remembers past runs - on your own server", glyph: "receive" },
       { type: "tool", label: "Agent tool", about: "A tool from an agent listed on Dolphin", glyph: "agents" },
@@ -646,12 +665,12 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
     title: "Hands",
     items: [
       { type: "risk", label: "Risk limits", about: "Dollars per trade and trades per day", glyph: "filter" },
-      { type: "swap", label: "Swap", about: "Propose PancakeSwap trades within the limits", glyph: "wallet", needs: "risk" },
+      { type: "swap", label: "Market", about: "Buys and sells on PancakeSwap, after the Risk gate", glyph: "wallet", needs: "risk" },
     ],
   },
 ];
 
-const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = { market: "Needs a Market", risk: "Needs Risk limits", swap: "Needs a Swap" };
+const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = { market: "Needs a Price feed", risk: "Needs Risk limits", swap: "Needs a Market" };
 
 function Toolbox({
   blocks,
@@ -961,10 +980,9 @@ export function AgentCanvas({
       const risk = blocks.find((block) => block.type === "risk");
       const from = source.data.blockType;
       const to = target.data.blockType;
-      if (target.id === "brain") {
-        if (connection.targetHandle === "in" && source.data.kind === "trigger") return source.data.member ?? null;
-        return null;
-      }
+      // A run source plugs into the Trigger; the Trigger's own line into the Brain is fixed.
+      if (target.id === "trigger" && source.data.kind === "trigger" && !source.data.hub) return source.data.member ?? null;
+      if (target.id === "brain") return null;
       if (source.id === "brain" && (target.data.kind === "tool" || target.data.kind === "sense")) return target.data.member ?? null;
       if (source.id === "brain") {
         if (to === "risk") return swap ? `block:${swap.id}` : "limits";
@@ -1127,7 +1145,7 @@ export function AgentCanvas({
         </div>
       ) : editKey && !market ? (
         <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted backdrop-blur">
-          Click a block to change it · drag dots to connect · double-click a line to cut it
+          Click a block to change it · drag from a dot to connect · double-click a line to cut it
         </p>
       ) : run ? (
         <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted backdrop-blur">

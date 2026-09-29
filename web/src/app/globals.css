@@ -2557,3 +2557,11 @@ select {
 .agent-canvas .react-flow__handle:hover { transform: translate(-50%, -50%); scale: 1.5; }
 .agent-canvas .react-flow__handle.connectingto,
 .agent-canvas .react-flow__handle.valid { transform: translate(-50%, -50%); scale: 1.6; }
+
+/* A trigger fires once (owner, 2026-09-29: "like a domino"): one comet, then the line rests. */
+@keyframes agent-comet-once {
+  0% { stroke-dashoffset: 1.18; opacity: 1; }
+  85% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+.agent-edge__comet[data-once] { animation: agent-comet-once 900ms cubic-bezier(0.45, 0, 0.25, 1) 1 forwards; }

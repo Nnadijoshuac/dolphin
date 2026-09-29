@@ -890,7 +890,7 @@ export function DolphinClient({
                 onClick={() => setDraftOpen(true)}
                 type="button"
               >
-                <CategoryGlyph name="bot" size={14} strokeWidth={1.9} />
+                <CategoryGlyph name="brain" size={14} strokeWidth={1.9} />
                 Draft
               </button>
             ) : null}

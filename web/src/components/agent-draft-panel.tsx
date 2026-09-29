@@ -137,7 +137,7 @@ export function AgentDraftPanel({
     >
       <div className="flex items-center gap-2.5 px-2 py-1.5">
         <div className="grid size-8 place-items-center rounded-lg bg-paper-muted text-ink">
-          <CategoryGlyph name="bot" size={16} strokeWidth={1.8} />
+          <CategoryGlyph name="brain" size={16} strokeWidth={1.8} />
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[13px] font-semibold text-ink">

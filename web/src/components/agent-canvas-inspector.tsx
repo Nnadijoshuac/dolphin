@@ -104,7 +104,7 @@ function SaveButton({ disabled, saving, onClick }: { disabled: boolean; saving: 
 }
 
 const fieldClass =
-  "mt-1 w-full rounded-lg border border-line bg-paper-strong px-2.5 py-1.5 text-[0.84rem] text-ink outline-none focus:border-line-strong";
+  "mt-1 w-full rounded-lg border border-line bg-paper-strong px-2.5 py-1.5 text-[0.84rem] text-ink outline-none";
 
 /**
  * Which provider a pasted key is for, by its prefix alone - only to NAME it

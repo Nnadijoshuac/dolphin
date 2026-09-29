@@ -274,29 +274,22 @@ video {
 }
 
 /*
- * FOCUSED FIELDS (fixed 2026-09-12).
+ * FOCUSED TEXT FIELDS: THE CARET IS THE INDICATOR (owner, 2026-09-29: "we
+ * don't need a glowing round something, we just need the cursor to start
+ * blinking there").
  *
- * This used to be `outline: none !important; box-shadow: none !important`,
- * which removed the outline the rule above had just granted and put NOTHING in
- * its place — so a keyboard user tabbing through any form on this site could
- * not see where they were. That is a straight WCAG 2.4.7 failure and it was
- * invisible to everyone who navigates with a mouse.
- *
- * The outline is still suppressed, because an offset rectangle around a
- * rounded field looks wrong and that is presumably why it was killed. What
- * replaces it is a ring drawn ON the field, which also happens to be the
- * correct material behaviour: the well stays sunk and lights up.
+ * History: until 2026-09-12 this rule was `outline: none; box-shadow: none`,
+ * which left keyboard users nothing; that fix drew a 3px glow ring on every
+ * field. A text field that has focus shows a blinking caret, and that is the
+ * focus indicator here - so fields get no outline and no ring, and keep
+ * whatever shadow their own rule gives them. Everything WITHOUT a caret
+ * (buttons, checkboxes, radios, sliders, selects) keeps the :focus-visible
+ * outline above, so tabbing through a form still shows where you are.
  */
-input:focus,
-input:focus-visible,
-textarea:focus,
-textarea:focus-visible,
-select:focus,
-select:focus-visible {
+input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"]):focus,
+textarea:focus {
   outline: none !important;
-  box-shadow:
-    inset 0 1px 3px var(--sink-top),
-    0 0 0 3px color-mix(in srgb, var(--focus) 38%, transparent) !important;
+  caret-color: var(--ink);
 }
 
 .site-frame {
@@ -1820,6 +1813,26 @@ select {
   .slide-over[data-state="closed"] { display: none; }
 }
 
+/*
+ * ONE SCROLLBAR FOR THE WHOLE SITE (owner, 2026-09-29: the side panels'
+ * scrollbar "for every other place... modals... the whole page"). The
+ * standard properties cover Firefox and current Chrome/Edge/Safari; the
+ * -webkit- rules cover older WebKit. `.no-scrollbar` still hides it where a
+ * strip scrolls sideways on purpose.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--line-strong) 80%, transparent) transparent;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line-strong) 70%, transparent);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
 /* Slim scrollbars: a thin thumb that only darkens under the pointer. */
 .sleek-scroll {
   scrollbar-width: thin;
@@ -2151,7 +2164,6 @@ select {
   color: var(--ink);
   outline: none;
 }
-.block-panel__search:focus { border-color: var(--line-strong); }
 .block-panel__scroll { max-height: 22rem; overflow-y: auto; margin-top: 8px; padding-right: 2px; }
 .block-panel__group { margin: 10px 4px 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
 .block-panel__group:first-child { margin-top: 2px; }
@@ -2211,10 +2223,7 @@ select {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 .choice-list__trigger:hover { border-color: var(--line-strong); }
-.choice-list__trigger[data-open] {
-  border-color: var(--line-strong);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 30%, transparent);
-}
+.choice-list__trigger[data-open] { border-color: var(--line-strong); }
 .choice-list__chevron { flex-shrink: 0; color: var(--muted); transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .choice-list__trigger[data-open] .choice-list__chevron { transform: rotate(180deg); color: var(--ink); }
 .choice-list__pop {

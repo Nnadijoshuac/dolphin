@@ -29,7 +29,7 @@ function errorText(cause: unknown, fallback: string): string {
 }
 
 const fieldClass =
-  "w-full rounded-lg border border-line bg-paper-strong px-2.5 py-1.5 text-[0.82rem] text-ink outline-none focus:border-line-strong";
+  "w-full rounded-lg border border-line bg-paper-strong px-2.5 py-1.5 text-[0.82rem] text-ink outline-none";
 
 function Gate({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
   return (

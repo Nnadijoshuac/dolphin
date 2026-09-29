@@ -214,7 +214,7 @@ export function WithdrawDialog({
                 <span>Amount</span>
                 <span className="tabular-nums">Available {heldText}</span>
               </span>
-              <span className="mt-1.5 flex items-center rounded-xl border border-line bg-paper pr-1.5 focus-within:border-ink">
+              <span className="mt-1.5 flex items-center rounded-xl border border-line bg-paper pr-1.5">
                 <input
                   className="min-h-12 w-full min-w-0 bg-transparent px-3 text-lg tabular-nums text-ink outline-none"
                   inputMode="decimal"

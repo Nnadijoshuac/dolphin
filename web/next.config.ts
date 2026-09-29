@@ -21,6 +21,30 @@ const nextConfig: NextConfig = {
    * domain and survives a backend move. The .site host is the .cloud URL with
    * one word changed - that is Convex's own convention for a deployment.
    */
+  /*
+   * SECURITY HEADERS (pre-launch review, 2026-09-29). The site sent none.
+   * For a wallet app the one that matters most is framing: without it any
+   * page could load Dolphin invisibly and trick a click on Hire or Grant.
+   * `frame-ancestors 'none'` is the whole CSP on purpose - a full policy has
+   * to list every wallet, RPC, data and media origin, and one miss would
+   * break the live site; that is a follow-up with its own test pass.
+   * Shape verified against node_modules/next/dist/docs (content-security-policy.md).
+   */
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL?.trim().replace(/\/+$/, "");
     if (!convexUrl) return [];

@@ -1393,6 +1393,28 @@ export default defineSchema({
    * and rendered as a quotation attributed to that agent, never as Dolphin's
    * own statement of fact.
    */
+  /**
+   * WHAT A DELETED CHAT WAS ABOUT - and nothing that says whose it was.
+   * (Owner, 2026-09-29: people can delete their chats, fully; we keep only
+   * what we need to understand how Dolphin is used.) Written by
+   * convex/chatDeletion.ts just before a conversation's messages and tool
+   * calls are removed. No text, no wallet address, no conversation key: the
+   * mode, how long it was, and which agents' tools it used, counted.
+   */
+  chatSummaries: defineTable({
+    mode: v.union(v.literal("chat"), v.literal("build"), v.literal("try")),
+    userMessages: v.number(),
+    assistantMessages: v.number(),
+    toolCalls: v.array(
+      v.object({ agentKey: v.string(), agentName: v.string(), toolName: v.string(), calls: v.number(), errors: v.number() }),
+    ),
+    startedAt: v.number(),
+    lastActiveAt: v.number(),
+    deletedAt: v.number(),
+    /** True once the sweep has finished (large chats are deleted in batches). */
+    complete: v.boolean(),
+  }).index("by_deleted", ["deletedAt"]),
+
   dolphinToolCalls: defineTable({
     conversationId: v.id("dolphinConversations"),
     messageId: v.id("dolphinMessages"),

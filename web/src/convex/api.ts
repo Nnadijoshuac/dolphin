@@ -295,6 +295,13 @@ export const myAgentsApi = anyApi as unknown as {
   };
 };
 
+/** convex/chatDeletion.ts - deletes chats from the database; keeps only an anonymous summary. */
+export const chatDeletionApi = anyApi as unknown as {
+  chatDeletion: {
+    deleteConversations: Mutation<{ conversationKeys: string[] }, { started: number }>;
+  };
+};
+
 export const agentHiresApi = anyApi as unknown as {
   agentHires: {
     hireReadOnlyAgent: Mutation<

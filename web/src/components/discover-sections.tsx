@@ -19,10 +19,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { AgentCard } from "@/components/agent-card";
-import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { categoryDescription } from "@/constants/agents";
 import type { AgentShelfData } from "@/convex/api";
 import type { AgentSignals } from "@/hooks/use-agents";
@@ -32,21 +32,30 @@ import { track } from "@/lib/analytics";
 const TILE_MIN = 3;
 
 /**
- * Only six categories have a hand-drawn glyph (category-glyph.tsx); for the
- * rest an honest stand-in, so no tile shows an empty square.
+ * A COLOUR PER CATEGORY, not an icon (owner, 2026-09-29: the icons "are
+ * ugly", and the page "looks somewhat colourless"). Restrained, mid-tone hues
+ * that read on both themes; a category nobody has thought of gets one by hash.
  */
-const DRAWN = new Set(["monitoring", "grid-trading", "rebalancing", "health-factor", "yield", "trading"]);
-const STAND_IN: Record<string, GlyphName> = {
-  payments: "dollar",
-  general: "agents",
-  development: "spanner",
-  security: "shield",
-  research: "search",
-  automation: "refresh",
-  content: "layers",
-  prediction: "sparkle",
-  companion: "bot",
+const HUES: Record<string, string> = {
+  yield: "#1f9d55",
+  "grid-trading": "#2f6fdf",
+  rebalancing: "#0e9aa7",
+  "health-factor": "#d1435b",
+  trading: "#7c5ce6",
+  payments: "#d98a14",
+  general: "#6f7a8a",
+  monitoring: "#e0662a",
+  security: "#b0452f",
+  research: "#3b82a6",
 };
+const SPARE = ["#1f9d55", "#2f6fdf", "#0e9aa7", "#d1435b", "#7c5ce6", "#d98a14"];
+function hueFor(slug: string): string {
+  if (HUES[slug]) return HUES[slug];
+  let hash = 0;
+  for (const char of slug) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return SPARE[hash % SPARE.length];
+}
+
 /** One plain line per job, for people who are new to this. */
 const PLAIN: Record<string, string> = {
   yield: "Put idle money to work where it earns the most.",
@@ -60,10 +69,6 @@ const PLAIN: Record<string, string> = {
   security: "Check contracts and approvals for risk.",
   research: "Dig up and summarise what is going on.",
 };
-function tileGlyph(slug: string): GlyphName {
-  return DRAWN.has(slug) ? slug : STAND_IN[slug] ?? "agents";
-}
-
 export function HeroSearch() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -98,7 +103,6 @@ export function HeroSearch() {
         </button>
       </form>
       <Link className="discover-build-btn" href="/dolphin" onClick={() => track("build_cta_clicked", { surface: "hero" })}>
-        <CategoryGlyph color="currentColor" name="brain" size={17} />
         Build an agent
       </Link>
     </div>
@@ -152,27 +156,34 @@ export function CategoryTiles({
                 href={`/search?category=${category.slug}`}
                 key={category.slug}
                 onClick={() => track("category_selected", { surface: "discover", category: category.slug, count: category.count })}
-                style={{ animationDelay: `${index * 35}ms` }}
+                style={{ "--hue": hueFor(category.slug), animationDelay: `${index * 35}ms` } as CSSProperties}
               >
-                <span aria-hidden="true" className="discover-tile__glyph">
-                  <CategoryGlyph color="currentColor" name={tileGlyph(category.slug)} size={20} />
+                <span className="discover-tile__label">
+                  <span aria-hidden="true" className="discover-tile__dot" />
+                  {category.label}
                 </span>
-                <span className="discover-tile__label">{category.label}</span>
                 <span className="discover-tile__desc">{PLAIN[category.slug] ?? categoryDescription(category.slug) ?? `Agents for ${category.label.toLowerCase()}.`}</span>
                 <span className="discover-tile__count">
-                  {category.count} {category.count === 1 ? "agent" : "agents"}
+                  <span>
+                    <strong>{category.count}</strong> {category.count === 1 ? "agent" : "agents"}
+                  </span>
+                  <span aria-hidden="true" className="discover-tile__arrow">
+                    <CategoryGlyph color="currentColor" name="arrow-right" size={15} strokeWidth={2} />
+                  </span>
                 </span>
               </Link>
             ))}
         {!isLoading && rest.length > 0 ? (
-          <Link className="discover-tile discover-tile--more" href="/search">
-            <span aria-hidden="true" className="discover-tile__glyph">
-              <CategoryGlyph color="currentColor" name="categories" size={20} />
-            </span>
+          <Link className="discover-tile discover-tile--more" href="/search" style={{ "--hue": "var(--ink-soft)" } as CSSProperties}>
             <span className="discover-tile__label">More categories</span>
             <span className="discover-tile__desc">{rest.map((category) => category.label).join(", ")}</span>
             <span className="discover-tile__count">
-              {restCount} {restCount === 1 ? "agent" : "agents"}
+              <span>
+                <strong>{restCount}</strong> {restCount === 1 ? "agent" : "agents"}
+              </span>
+              <span aria-hidden="true" className="discover-tile__arrow">
+                <CategoryGlyph color="currentColor" name="arrow-right" size={15} strokeWidth={2} />
+              </span>
             </span>
           </Link>
         ) : null}
@@ -278,17 +289,17 @@ export function FeaturedTabs({
 export function HowItWorks3() {
   const steps = [
     {
-      glyph: "search" as const,
+      hue: "#2f6fdf",
       title: "Find one that answers",
       body: "Dolphin calls every agent before listing it. If it does not answer, it is not here.",
     },
     {
-      glyph: "wallet" as const,
+      hue: "#1f9d55",
       title: "Hire it, or connect it",
       body: "Pay per job - your money is held until it delivers. Or connect a tools agent to your AI app for free.",
     },
     {
-      glyph: "brain" as const,
+      hue: "#7c5ce6",
       title: "Or build your own",
       body: "Describe what you want in plain words. Dolphin puts the blocks together and it practises with pretend money first.",
     },
@@ -305,13 +316,8 @@ export function HowItWorks3() {
       </div>
       <ol className="discover-steps">
         {steps.map((step, index) => (
-          <li className="discover-step" key={step.title}>
-            <span className="discover-step__top">
-              <span aria-hidden="true" className="discover-tile__glyph">
-                <CategoryGlyph color="currentColor" name={step.glyph} size={20} />
-              </span>
-              <span className="discover-step__num">0{index + 1}</span>
-            </span>
+          <li className="discover-step" key={step.title} style={{ "--hue": step.hue } as CSSProperties}>
+            <span className="discover-step__num">0{index + 1}</span>
             <span className="discover-step__title">{step.title}</span>
             <span className="discover-step__body">{step.body}</span>
           </li>
@@ -340,13 +346,88 @@ export function BuildBand() {
           </Link>
         </div>
       </div>
-      <div aria-hidden="true" className="discover-build__flow">
-        {["Every hour", "Trigger", "Brain", "Risk limits", "Market"].map((node, index) => (
-          <span className="discover-build__node" data-kind={index === 2 ? "brain" : undefined} key={node} style={{ animationDelay: `${index * 140}ms` }}>
-            {node}
-          </span>
+      <BuilderDemo />
+    </section>
+  );
+}
+
+/*
+ * THE BUILDER, RUNNING (owner, 2026-09-29: "make it like the actual workflow
+ * animation... let it look real"). The same shape as the real canvas -
+ * a source into a Trigger that fires once, the Brain, its Strategy beside it,
+ * then Risk limits before the Market - with a pulse travelling the wires and
+ * each block lighting as it arrives. One 8-second loop, CSS only.
+ *
+ * It is labelled a demo, and its status lines are words, not numbers: no
+ * price, P&L or fill is shown, because none of it is a real reading.
+ */
+const DEMO_NODES = [
+  { id: "hour", label: "Every hour", status: "Tick", x: 0, y: 0, at: 0 },
+  { id: "trigger", label: "Trigger", status: "Fired once", x: 0, y: 1, at: 0.14 },
+  { id: "brain", label: "Brain", status: "Thinking...", x: 1, y: 1, at: 0.28, brain: true },
+  { id: "strategy", label: "Strategy", status: "Rules read", x: 1, y: 2, at: 0.42 },
+  { id: "risk", label: "Risk limits", status: "Within limits", x: 2, y: 1, at: 0.6 },
+  { id: "market", label: "Market", status: "Order placed (paper)", x: 2, y: 2, at: 0.76 },
+] as const;
+const DEMO_EDGES = [
+  { from: "hour", to: "trigger", at: 0.07 },
+  { from: "trigger", to: "brain", at: 0.21 },
+  { from: "brain", to: "strategy", at: 0.35 },
+  { from: "brain", to: "risk", at: 0.53 },
+  { from: "risk", to: "market", at: 0.69 },
+] as const;
+const COL = 150;
+const ROW = 92;
+const NODE_W = 124;
+const NODE_H = 52;
+const CYCLE_S = 8;
+
+function centre(id: string) {
+  const node = DEMO_NODES.find((item) => item.id === id)!;
+  return { x: node.x * COL + NODE_W / 2, y: node.y * ROW + NODE_H / 2 };
+}
+
+function BuilderDemo() {
+  const width = 2 * COL + NODE_W;
+  const height = 2 * ROW + NODE_H;
+  return (
+    <div aria-hidden="true" className="builder-demo">
+      <div className="builder-demo__canvas" style={{ width, height }}>
+        <svg className="builder-demo__wires" height={height} viewBox={`0 0 ${width} ${height}`} width={width}>
+          {DEMO_EDGES.map((edge) => {
+            const a = centre(edge.from);
+            const b = centre(edge.to);
+            return (
+              <g key={`${edge.from}-${edge.to}`}>
+                <line className="builder-demo__wire" x1={a.x} x2={b.x} y1={a.y} y2={b.y} />
+                <line
+                  className="builder-demo__pulse"
+                  pathLength={1}
+                  style={{ animationDelay: `${edge.at * CYCLE_S}s` }}
+                  x1={a.x}
+                  x2={b.x}
+                  y1={a.y}
+                  y2={b.y}
+                />
+              </g>
+            );
+          })}
+        </svg>
+        {DEMO_NODES.map((node) => (
+          <div
+            className="builder-demo__node"
+            data-brain={"brain" in node ? true : undefined}
+            key={node.id}
+            style={{ left: node.x * COL, top: node.y * ROW, width: NODE_W, height: NODE_H, animationDelay: `${node.at * CYCLE_S}s` }}
+          >
+            <span className="builder-demo__label">{node.label}</span>
+            <span className="builder-demo__status" style={{ animationDelay: `${node.at * CYCLE_S}s` }}>
+              {node.status}
+            </span>
+          </div>
         ))}
       </div>
-    </section>
+      <p className="builder-demo__caption">A demo of a real flow</p>
+    </div>
   );
 }

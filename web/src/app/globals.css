@@ -3271,3 +3271,132 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .discover-tile, .discover-build__node { animation: none; }
 }
+
+/* ── Landing page, round two (2026-09-29): colour, no icons, a running builder ── */
+.discover-tile { position: relative; overflow: hidden; min-height: 158px; }
+/* A soft wash of the category's colour in the corner - colour, not decoration. */
+.discover-tile::before {
+  content: "";
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 170px;
+  height: 170px;
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--hue) 22%, transparent), transparent 70%);
+  opacity: 0.7;
+  transition: opacity 260ms ease, transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.discover-tile:hover::before { opacity: 1; transform: scale(1.12); }
+.discover-tile:hover { border-color: color-mix(in srgb, var(--hue) 45%, var(--line)); }
+.discover-tile__label { display: flex; align-items: center; gap: 9px; margin-top: 0; font-size: 1.02rem; }
+.discover-tile__dot { width: 9px; height: 9px; flex-shrink: 0; border-radius: 999px; background: var(--hue); box-shadow: 0 0 0 4px color-mix(in srgb, var(--hue) 16%, transparent); }
+.discover-tile__desc { position: relative; margin-top: 8px; font-size: 0.84rem; }
+.discover-tile__count { position: relative; display: flex; align-items: center; justify-content: space-between; font-weight: 500; color: var(--muted); }
+.discover-tile__count strong { font-size: 1.15rem; font-weight: 650; letter-spacing: -0.02em; color: var(--hue); }
+.discover-tile--more .discover-tile__count strong { color: var(--ink); }
+.discover-tile__arrow { display: flex; color: var(--faint); transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), color 160ms ease; }
+.discover-tile:hover .discover-tile__arrow { transform: translateX(3px); color: var(--hue); }
+
+.discover-step { position: relative; overflow: hidden; }
+.discover-step::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--hue);
+  opacity: 0.85;
+}
+.discover-step__num { font-size: 1.6rem; font-weight: 650; letter-spacing: -0.04em; color: var(--hue); }
+.discover-step__title { margin-top: 10px; }
+
+.discover-stats li:first-child::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 999px;
+  background: #22a55b;
+  align-self: center;
+  box-shadow: 0 0 0 3px rgb(34 165 91 / 18%);
+}
+
+/* The builder demo: wires, a travelling pulse, blocks that light in turn. */
+.builder-demo { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.builder-demo__canvas {
+  position: relative;
+  padding: 0;
+  background-image: radial-gradient(rgb(244 243 237 / 9%) 1px, transparent 1px);
+  background-size: 18px 18px;
+  background-position: -9px -9px;
+}
+.builder-demo__wires { position: absolute; inset: 0; overflow: visible; }
+.builder-demo__wire { stroke: rgb(244 243 237 / 16%); stroke-width: 2; stroke-linecap: round; }
+.builder-demo__pulse {
+  stroke: #f0b90b;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.35 1;
+  stroke-dashoffset: 0.35;
+  opacity: 0;
+  animation: demo-pulse 8s linear infinite both;
+}
+@keyframes demo-pulse {
+  0% { stroke-dashoffset: 0.35; opacity: 0; }
+  0.5% { opacity: 1; }
+  7% { stroke-dashoffset: -1; opacity: 1; }
+  7.01%, 100% { stroke-dashoffset: -1; opacity: 0; }
+}
+.builder-demo__node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 12px;
+  border: 1px solid rgb(244 243 237 / 16%);
+  border-radius: 12px;
+  background: #1d1e16;
+  animation: demo-node 8s ease both infinite;
+}
+.builder-demo__node[data-brain] { border-color: rgb(139 108 240 / 55%); animation-name: demo-brain; }
+.builder-demo__label { font-size: 0.8rem; font-weight: 650; color: #f4f3ed; }
+.builder-demo__status {
+  font-size: 0.68rem;
+  color: #f0b90b;
+  white-space: nowrap;
+  opacity: 0;
+  animation: demo-status 8s ease both infinite;
+}
+.builder-demo__node[data-brain] .builder-demo__status { color: #b9a6ff; animation-name: demo-status-long; }
+@keyframes demo-node {
+  0% { border-color: rgb(244 243 237 / 16%); box-shadow: none; }
+  3%, 20% { border-color: #f0b90b; box-shadow: 0 0 0 4px rgb(240 185 11 / 14%); }
+  28%, 100% { border-color: rgb(244 243 237 / 16%); box-shadow: none; }
+}
+@keyframes demo-brain {
+  0% { box-shadow: none; }
+  4% { box-shadow: 0 0 0 4px rgb(139 108 240 / 22%); }
+  12% { box-shadow: 0 0 0 8px rgb(139 108 240 / 10%); }
+  20% { box-shadow: 0 0 0 4px rgb(139 108 240 / 22%); }
+  28% { box-shadow: 0 0 0 8px rgb(139 108 240 / 10%); }
+  36% { box-shadow: 0 0 0 4px rgb(139 108 240 / 22%); }
+  44%, 100% { box-shadow: none; }
+}
+@keyframes demo-status {
+  0% { opacity: 0; transform: translateY(2px); }
+  4%, 22% { opacity: 1; transform: none; }
+  30%, 100% { opacity: 0; }
+}
+@keyframes demo-status-long {
+  0% { opacity: 0; }
+  4%, 38% { opacity: 1; }
+  46%, 100% { opacity: 0; }
+}
+.builder-demo__caption { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: rgb(244 243 237 / 38%); }
+@media (max-width: 1023px) { .builder-demo { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .builder-demo__pulse, .builder-demo__node, .builder-demo__status { animation: none; }
+  .builder-demo__status { opacity: 1; }
+}

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { BacktestPanel } from "@/components/backtest-panel";
+
 /**
  * The live chart for the token a trading agent works on. (owner, 2026-09-28:
  * "you should be able to see what that currency is actually doing IRL")
@@ -20,7 +22,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  */
 
 type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
-type Frame = "15m" | "1h" | "4h" | "1d";
+export type Frame = "15m" | "1h" | "4h" | "1d";
 
 const FRAMES: Record<Frame, string> = {
   "15m": "minute?aggregate=15",
@@ -35,7 +37,7 @@ const SMALL_COUNT = 64;
 const PAD_SMALL = { top: 10, right: 52, bottom: 18, left: 6 };
 const PAD_LARGE = { top: 16, right: 68, bottom: 26, left: 10 };
 
-async function findPool(tokenAddress: string): Promise<string | null> {
+export async function findPool(tokenAddress: string): Promise<string | null> {
   const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
   if (!response.ok) return null;
   const data = (await response.json()) as { pairs?: Array<{ chainId: string; pairAddress: string; liquidity?: { usd?: number } }> };
@@ -44,10 +46,10 @@ async function findPool(tokenAddress: string): Promise<string | null> {
   return pairs[0]?.pairAddress ?? null;
 }
 
-async function loadCandles(pool: string, tokenAddress: string, frame: Frame): Promise<Candle[]> {
+export async function loadCandles(pool: string, tokenAddress: string, frame: Frame, limit = FETCH_LIMIT): Promise<Candle[]> {
   const joiner = FRAMES[frame].includes("?") ? "&" : "?";
   const response = await fetch(
-    `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${pool}/ohlcv/${FRAMES[frame]}${joiner}limit=${FETCH_LIMIT}&currency=usd&token=${tokenAddress}`,
+    `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${pool}/ohlcv/${FRAMES[frame]}${joiner}limit=${limit}&currency=usd&token=${tokenAddress}`,
     { headers: { accept: "application/json" } },
   );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -107,6 +109,9 @@ export function TradingChart({
   >({ status: "loading" });
   const [hover, setHover] = useState<{ index: number; y: number } | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  // Expanded, the chart can switch to testing a rule on this token's history.
+  const [view, setView] = useState<"chart" | "backtest">("chart");
+  const testing = expanded && view === "backtest";
   // The drawing's real size, so the SVG is never stretched.
   const [box, setBox] = useState({ w: 560, h: 170 });
   const measure = useCallback((element: HTMLDivElement | null) => {
@@ -212,6 +217,22 @@ export function TradingChart({
             ))}
           </div>
         ) : null}
+        {expanded ? (
+          <div className="flex rounded-full bg-paper-muted p-[2px]" role="tablist" aria-label="Chart or backtest">
+            {(["chart", "backtest"] as const).map((option) => (
+              <button
+                aria-selected={view === option}
+                className={`rounded-full px-2.5 py-0.5 !text-[11px] font-semibold ${view === option ? "bg-paper-strong text-ink shadow-sm" : "text-muted hover:text-ink"}`}
+                key={option}
+                onClick={() => setView(option)}
+                role="tab"
+                type="button"
+              >
+                {option === "chart" ? "Chart" : "Backtest"}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {onToggleExpand ? (
           <button
             aria-label={expanded ? "Shrink the chart" : "Expand the chart"}
@@ -225,7 +246,9 @@ export function TradingChart({
         ) : null}
       </div>
 
-      {expanded && geometry ? (
+      {testing ? <BacktestPanel poolAddress={poolAddress} symbol={symbol} tokenAddress={tokenAddress} /> : null}
+
+      {!testing && expanded && geometry ? (
         <div className="trading-chart__stats">
           {hovered ? (
             <>
@@ -247,7 +270,7 @@ export function TradingChart({
         </div>
       ) : null}
 
-      {showBody ? (
+      {showBody && !testing ? (
         <div className="trading-chart__body" ref={measure}>
           {state.status === "loading" ? (
             <div className="grid h-full place-items-center text-[0.72rem] text-muted">Loading the market…</div>

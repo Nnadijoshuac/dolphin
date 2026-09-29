@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { useBalance } from "wagmi";
 
@@ -16,7 +17,11 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { ReceiveSheet } from "@/components/receive-sheet";
 import { StatePanel } from "@/components/state-panel";
 import { WalletAvatar } from "@/components/wallet-avatar";
-import type { AgentSessionRow } from "@/convex/api";
+import { autotradeApi, myAgentsApi, type AgentSessionRow } from "@/convex/api";
+import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
+import { OptionalFeature } from "@/components/optional-feature";
+import { toast } from "@/store/use-toast-store";
+import { useWalletSession } from "@/wallet/wallet-session";
 import { useBnbPrice, type BnbPriceState } from "@/hooks/use-bnb-price";
 import { useNow } from "@/hooks/use-now";
 import { useWalletErrorToasts } from "@/hooks/use-wallet-error-toasts";
@@ -457,7 +462,9 @@ function WalletHero({
    */
   const caption =
     total.kind === "ready"
-      ? `${total.accounts} ${total.accounts === 1 ? "account" : "accounts"}`
+      ? total.accounts === 1
+        ? "In your wallet"
+        : `Across your ${total.accounts} wallets`
       : total.kind === "reading"
         ? "Checking accounts…"
         : total.kind === "partial"
@@ -527,7 +534,7 @@ function WalletHero({
         <QuickAction
           disabled={receiveTarget === null}
           glyph="receive"
-          label="Receive"
+          label="Add funds"
           onClick={onReceive}
         />
         {receiveTarget ? (
@@ -612,9 +619,9 @@ function IdentityWalletCard({
   if (!identity.isConnected || !identity.address) {
     return (
       <div aria-label="Identity wallet" className="wcard wcard--empty">
-        <p className="wcard__eyebrow">Your wallet</p>
+        <p className="wcard__eyebrow">Connected wallet</p>
         <p className="wcard__title">Not connected</p>
-        <p className="wcard__sub">Remembers your hires. Reads the public address only.</p>
+        <p className="wcard__sub">Signs you in. Dolphin never spends from it.</p>
         <div className="wcard__foot">
           <WalletConnectButton connectLabel="Connect" />
         </div>
@@ -629,7 +636,7 @@ function IdentityWalletCard({
       <div className="wcard__head">
         <WalletAvatar address={address} className="wcard__avatar" kind="human" size={34} />
         <div className="wcard__head-text">
-          <p className="wcard__eyebrow">Your wallet</p>
+          <p className="wcard__eyebrow">Connected wallet</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
       </div>
@@ -638,7 +645,7 @@ function IdentityWalletCard({
         amount={data ? renderAmount(data.value, currency, price, hidden) : null}
         loading={isLoading}
       />
-      <p className="wcard__sub">Signs in · hire records</p>
+      <p className="wcard__sub">Signs you in · never spends</p>
 
       {/*
        * Disconnect lives HERE, on the card for the account it disconnects. It
@@ -676,12 +683,12 @@ function AgentWalletCard({
     const blocked = wallet.status === "unsupported";
     return (
       <div aria-label="Agent payments wallet" className="wcard wcard--agent wcard--empty">
-        <p className="wcard__eyebrow">Agent payments</p>
+        <p className="wcard__eyebrow">Dolphin Wallet</p>
         <p className="wcard__title">{blocked ? "Unavailable here" : "Not set up"}</p>
         <p className="wcard__sub">
           {blocked
             ? wallet.unsupportedReason ?? "This browser cannot hold a passkey wallet."
-            : "Pays the agents you hire. Optional."}
+            : "Pays for the agents you hire, and your agents' trades - only within limits you set. Secured by your passkey."}
         </p>
         {!blocked && (
           <div className="wcard__foot">
@@ -746,7 +753,7 @@ function AgentWalletCard({
            * convex/agentPayments.ts verifies the payee against. This balance is
            * outbound only.
            */}
-          <p className="wcard__eyebrow">Agent payments</p>
+          <p className="wcard__eyebrow">Dolphin Wallet</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
         <button
@@ -768,7 +775,7 @@ function AgentWalletCard({
       ) : (
         <CardAmount amount={uAmount} loading={uBalance.isLoading} />
       )}
-      <p className="wcard__sub">Pays your hires</p>
+      <p className="wcard__sub">Pays your hires and trades</p>
 
       {/* Styled as Disconnect on the card beside it: an account action. */}
       <div className="wcard__foot">
@@ -791,6 +798,181 @@ function AgentWalletCard({
        * destination. The chip is the one that belongs to this account.
        */}
     </div>
+  );
+}
+
+/* ─────────────── holdings (2026-09-29) ─────────────── */
+
+/**
+ * WHAT YOU HOLD, TOKEN BY TOKEN - the first thing a wallet page answers
+ * (owner: "what is that thing they are looking for?"). The hero had one total
+ * and a caption saying "1 account"; nobody could see which token sat in which
+ * wallet. Every row is a read: an unreadable balance says so, never 0.
+ */
+function HoldingsSection({ price }: { price: BnbPriceState }) {
+  const identity = useWallet();
+  const dolphin = useAltanaWallet();
+  const hidden = useAppStore((s) => s.hideBalances);
+  const identityAddress = identity.isConnected ? identity.address : null;
+  const identityBalance = useBalance({
+    address: identityAddress as `0x${string}` | undefined,
+    chainId: ALTANA_CHAIN_ID,
+    query: { enabled: Boolean(identityAddress) },
+  });
+  const uBalance = useDolphinUBalance();
+  const uRates = usePaymentRates([{ token: U_TOKEN, decimals: uBalance.data?.decimals ?? 18 }]);
+  const uRate = uRates.get(U_TOKEN.toLowerCase()) ?? null;
+
+  type Row = { key: string; asset: WalletAsset; where: string; amount: string | null; usd: string | null; loading: boolean };
+  const rows: Row[] = [];
+  if (dolphin.status === "connected" && dolphin.address) {
+    const wei = !dolphin.balanceError ? dolphin.balanceWei : null;
+    rows.push({
+      key: "dolphin-bnb",
+      asset: "BNB",
+      where: "Dolphin Wallet",
+      amount: wei !== null ? `${formatBnb(wei)} BNB` : null,
+      usd: wei !== null && price.status === "ready" ? formatUsdFromWei(wei, price.price) : null,
+      loading: dolphin.isReadingBalance,
+    });
+    const u = uBalance.data ?? null;
+    rows.push({
+      key: "dolphin-u",
+      asset: "U",
+      where: "Dolphin Wallet",
+      amount: u ? `${formatTokenAmount(u.raw, u.decimals)} ${u.symbol}` : null,
+      usd: u && uRate ? formatUsd(u.raw, u.decimals, uRate) : null,
+      loading: uBalance.isLoading,
+    });
+  }
+  if (identityAddress) {
+    const wei = identityBalance.data?.value ?? null;
+    rows.push({
+      key: "identity-bnb",
+      asset: "BNB",
+      where: "Connected wallet",
+      amount: wei !== null ? `${formatBnb(wei)} BNB` : null,
+      usd: wei !== null && price.status === "ready" ? formatUsdFromWei(wei, price.price) : null,
+      loading: identityBalance.isLoading,
+    });
+  }
+
+  return (
+    <section aria-labelledby="holdings-heading" className="wallet-block">
+      <h2 className="wallet-block__title" id="holdings-heading">
+        Holdings
+      </h2>
+      {rows.length === 0 ? (
+        <p className="wallet-block__empty">Connect a wallet to see what you hold.</p>
+      ) : (
+        <ul className="holdings">
+          {rows.map((row) => (
+            <li className="holdings__row" key={row.key}>
+              <span className="holdings__logo">
+                <AssetLogo asset={row.asset} size={28} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="holdings__name">{row.asset}</span>
+                <span className="holdings__where">{row.where}</span>
+              </span>
+              <span className="holdings__value">
+                <span className="holdings__amount">
+                  {hidden ? HIDDEN : row.amount ?? (row.loading ? "Reading..." : "Unavailable")}
+                </span>
+                {row.usd && !hidden ? <span className="holdings__usd">{row.usd}</span> : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/* ─────────────── what your agents can spend (2026-09-29) ─────────────── */
+
+/**
+ * THE TRUST QUESTION, ANSWERED WHERE THE MONEY IS. Which of your agents may
+ * trade on their own, with what, until when - and a Stop on each. The
+ * campaign brief: "spend caps and a revoke path must work, not just be
+ * described". Read from convex/myAgents.ts (session-gated); Stop is the same
+ * autotrade.stop the builder's card uses, and deletes the key at once.
+ *
+ * Hires are not listed because they cannot spend on their own: every paid hire
+ * is approved with the passkey, one job at a time.
+ */
+function AgentSpendingSection() {
+  const identity = useWallet();
+  const session = useWalletSession();
+  const built = useQuery(myAgentsApi.myAgents.built, session.sessionToken ? { sessionToken: session.sessionToken } : "skip");
+  const stop = useMutation(autotradeApi.autotrade.stop);
+  const [stopping, setStopping] = useState<string | null>(null);
+  const trading = (built ?? []).filter((agent) => agent.trading?.status === "active" && agent.conversationKey);
+
+  return (
+    <section aria-labelledby="spending-heading" className="wallet-block">
+      <h2 className="wallet-block__title" id="spending-heading">
+        What your agents can spend
+      </h2>
+      {!identity.isConnected || !identity.address ? (
+        <p className="wallet-block__empty">Connect your wallet to see which agents can spend.</p>
+      ) : !session.sessionToken ? (
+        <div className="wallet-block__empty">
+          <p>Sign in to see which of your agents can trade on their own.</p>
+          <button className="manage-btn manage-btn--quiet mt-3 !min-h-9" onClick={() => void session.signIn(identity.address!)} type="button">
+            Sign in
+          </button>
+        </div>
+      ) : built === undefined ? (
+        <div aria-hidden="true" className="skeleton h-16 rounded-xl" />
+      ) : trading.length === 0 ? (
+        <p className="wallet-block__empty">
+          None. No agent can spend from your wallet on its own. Every hire asks for your passkey.
+        </p>
+      ) : (
+        <ul className="spenders">
+          {trading.map((agent) => (
+            <li className="spenders__row" key={agent.conversationKey!}>
+              <div className="min-w-0 flex-1">
+                <p className="spenders__name">
+                  <span aria-hidden="true" className="spenders__dot" />
+                  {agent.name}
+                </p>
+                <p className="spenders__meta">
+                  Trades on its own until{" "}
+                  {new Intl.DateTimeFormat("en", { day: "numeric", month: "short" }).format(new Date(agent.trading!.expiresAt))}
+                  {agent.trading!.spends.length ? ` · can spend ${agent.trading!.spends.join(", ")}` : ""}
+                </p>
+              </div>
+              <button
+                className="manage-btn manage-btn--danger-quiet !min-h-8 !px-3 !text-[0.78rem]"
+                disabled={stopping === agent.conversationKey}
+                onClick={() => {
+                  const key = agent.conversationKey!;
+                  setStopping(key);
+                  stop({ sessionToken: session.sessionToken!, conversationKey: key }).then(
+                    () => {
+                      setStopping(null);
+                      toast.success(`${agent.name} can no longer trade on its own.`);
+                    },
+                    () => {
+                      setStopping(null);
+                      toast.error("That could not be stopped. Try again.");
+                    },
+                  );
+                }}
+                type="button"
+              >
+                {stopping === agent.conversationKey ? "Stopping..." : "Stop"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {trading.length > 0 ? (
+        <p className="wallet-block__note">Stop takes effect at once. To also revoke it on-chain, open the agent in the builder.</p>
+      ) : null}
+    </section>
   );
 }
 
@@ -973,37 +1155,51 @@ export function AltanaWalletPanel() {
   const heroTarget = dolphinAddress ?? identityAddress;
 
   return (
-    <div className="wallet-dashboard">
-      <WalletHero
-        onReceive={() => setReceiving(heroTarget)}
-        price={price}
-        receiveTarget={heroTarget}
-      />
+    /*
+     * THE LAYOUT (2026-09-29, owner: "what would our user want to look for?").
+     * Left, what you have: the total and its actions, every holding, what
+     * happened. Right, your wallets in plain words and what may spend from
+     * them, with a Stop on each. Alerts and device access last.
+     */
+    <div className="wallet-dashboard wallet-v2">
+      <div className="wallet-v2__main">
+        <WalletHero
+          onReceive={() => setReceiving(heroTarget)}
+          price={price}
+          receiveTarget={heroTarget}
+        />
+        <HoldingsSection price={price} />
+        <AgentActivity hidden={hidden} />
+      </div>
 
-      <section aria-label="Accounts" className="wallet-accounts">
+      <aside aria-label="Your wallets" className="wallet-v2__side">
         <AgentWalletCard onReceive={setReceiving} price={price} />
         <IdentityWalletCard onReceive={setReceiving} price={price} />
-      </section>
 
-      {/* Only when there is something to act on (2026-09-26): a green
-          "recoverable" note on every visit is reassurance nobody asked for. */}
-      {dolphinAddress && wallet.recoverability !== "registered" && (
-        <RecoverabilityPanel onDeposit={() => setReceiving(dolphinAddress)} />
-      )}
+        {/* Only when there is something to act on (2026-09-26): a green
+            "recoverable" note on every visit is reassurance nobody asked for. */}
+        {dolphinAddress && wallet.recoverability !== "registered" && (
+          <RecoverabilityPanel onDeposit={() => setReceiving(dolphinAddress)} />
+        )}
 
-      <AgentActivity hidden={hidden} />
+        <AgentSpendingSection />
+        {FEATURE_SESSION_EXECUTION && <PermissionsSection />}
+      </aside>
 
-      {FEATURE_SESSION_EXECUTION && <PermissionsSection />}
-
-      {dolphinAddress && <DeviceAccessSection />}
+      <div className="wallet-v2__foot">
+        <OptionalFeature label="Liquidation alerts">
+          <LiquidationAlertPanel />
+        </OptionalFeature>
+        {dolphinAddress && <DeviceAccessSection />}
+      </div>
 
       {receiving && (
         <ReceiveSheet
           address={receiving}
           label={
             receiving.toLowerCase() === dolphinAddress?.toLowerCase()
-              ? "Agent payments"
-              : "Your wallet"
+              ? "Dolphin Wallet"
+              : "Connected wallet"
           }
           onClose={() => setReceiving(null)}
         />

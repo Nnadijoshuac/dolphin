@@ -20,6 +20,16 @@ import { query } from "./_generated/server";
 import { requireWalletAddress } from "./lib/walletAuth";
 
 const MAX_DRAFTS = 12;
+
+/** The symbols of the allowances recorded on a trade key; empty when unreadable. */
+function spendSymbols(permissionsJson: string): string[] {
+  try {
+    const parsed = JSON.parse(permissionsJson) as { approvals?: { symbol?: unknown }[] };
+    return [...new Set((parsed.approvals ?? []).map((approval) => String(approval.symbol ?? "")).filter(Boolean))].slice(0, 6);
+  } catch {
+    return [];
+  }
+}
 const TRADE_COUNT_CAP = 50;
 
 export const built = query({
@@ -95,6 +105,8 @@ export const built = query({
             ? {
                 status: key.status === "active" && key.expiry <= nowSec ? ("expired" as const) : key.status,
                 expiresAt: key.expiry * 1000,
+                // Which tokens the key may spend - the allowances the owner approved at grant time.
+                spends: spendSymbols(key.permissionsJson),
               }
             : null,
           nextRunAt,

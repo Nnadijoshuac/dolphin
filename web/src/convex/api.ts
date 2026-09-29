@@ -283,7 +283,7 @@ export type MyBuiltAgent = {
   updatedAt: number;
   paperMode: boolean;
   published: { hash: string; visibility: "public" | "private"; priceUsd: number | null; network: "bsc" | "bsc-testnet" } | null;
-  trading: { status: "active" | "stopped" | "expired"; expiresAt: number } | null;
+  trading: { status: "active" | "stopped" | "expired"; expiresAt: number; spends: string[] } | null;
   nextRunAt: number | null;
   practiceTrades: number;
   practiceTradesCapped: boolean;

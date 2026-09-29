@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import { BnbLogo, BrandMark } from "@/components/brand-mark";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { DOLPHIN_CONTRACTS, NETWORK_LABEL } from "@/constants/agents";
 import { useCategoryFacets } from "@/hooks/use-agents";
 
@@ -35,164 +37,146 @@ function InstagramLogo({ size = 20 }: { size?: number }) {
 }
 
 /*
- * FROM THE CATALOG. This was hand-listed, then derived from AGENT_CATEGORIES -
- * and each time it went stale the moment the backend classified an agent into
- * a category the constant did not know about. It is now the same
- * convex/facets.ts row the Discover rail and the Search tabs read, so all three
- * agree by construction rather than by remembering to update three files.
- *
- * Capped at eight, in the backend's order - the four Set and Earn categories
- * first, then by population (convex/facets.ts) - because a
- * footer column is not a category index - it is the top of one. "Browse all"
- * carries the rest.
+ * FROM THE CATALOG. The same convex/facets.ts row the landing tiles and the
+ * search pills read, so all three agree by construction. Capped: a footer
+ * column is the top of a category index, not the index.
  */
-const FOOTER_CATEGORY_LIMIT = 8;
+const FOOTER_CATEGORY_LIMIT = 6;
 
-const accountLinks = [
-  { href: "/my-agents", label: "My agents" },
-  { href: "/wallet", label: "Wallet & permissions" },
-  { href: "/search", label: "Search the catalog" },
-  { href: "/policies/conflicts", label: "Conflicts of interest" },
+const COLUMNS = [
+  {
+    title: "Product",
+    links: [
+      { href: "/", label: "Discover" },
+      { href: "/search", label: "Search agents" },
+      { href: "/dolphin", label: "Build an agent" },
+    ],
+  },
+  {
+    title: "Account",
+    links: [
+      { href: "/my-agents", label: "My agents" },
+      { href: "/wallet", label: "Wallet" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { href: "/policies/terms", label: "Terms of Use" },
+      { href: "/policies/privacy", label: "Privacy Policy" },
+      { href: "/policies/risk", label: "Risk Disclosure" },
+      { href: "/policies/security", label: "Security" },
+      { href: "/policies/conflicts", label: "Conflicts of interest" },
+    ],
+  },
 ] as const;
 
+/**
+ * THE FOOTER (reorganised 2026-09-29 - owner: "why are we having Dolphin up
+ * and contracts down... a lot of things are wrong"). Brand and four columns
+ * on one row; the contract addresses - kept, because every one is checkable -
+ * fold behind a toggle in the bottom bar instead of taking a full band.
+ */
 export function SiteFooter() {
   const facets = useCategoryFacets();
-  const browseLinks = facets.categories
-    .slice(0, FOOTER_CATEGORY_LIMIT)
-    .map((category) => ({
-      href: `/search?category=${category.slug}`,
-      label: category.label,
-    }));
+  const [contractsOpen, setContractsOpen] = useState(false);
+  const categories = facets.categories.slice(0, FOOTER_CATEGORY_LIMIT);
 
   return (
-    <footer className="mt-24 border-t border-line bg-paper">
-      <div className="site-frame py-12 sm:py-16">
-        <div className="grid gap-10 border-b border-line pb-12 lg:grid-cols-[minmax(0,2.5fr)_minmax(150px,0.6fr)_minmax(170px,0.7fr)]">
-          <div className="max-w-lg">
-            <Link
-              aria-label="Dolphin home"
-              className="inline-flex items-center gap-3 no-underline"
-              href="/"
-            >
+    <footer className="site-footer">
+      <div className="site-frame">
+        <div className="site-footer__top">
+          <div className="site-footer__brand">
+            <Link aria-label="Dolphin home" className="inline-flex items-center gap-3 no-underline" href="/">
               <BrandMark size={34} />
               <span className="text-lg font-semibold tracking-[-0.03em]">Dolphin</span>
             </Link>
-            <p className="mt-4 max-w-[48ch] text-sm leading-6 text-muted">
-              A clearer way to discover and control ERC-8004 agents on BNB Chain.
-              Data sources, freshness, and permission boundaries stay visible where
-              they matter.
-            </p>
-            <div className="mt-5 flex items-center gap-4 text-xs font-medium text-ink-soft">
-              <BnbLogo size={16} />
-              <span>{NETWORK_LABEL} (chain 56)</span>
-              <span className="text-line">|</span>
-              <a
-                aria-label="Dolphin on X (Twitter)"
-                className="interactive text-muted hover:text-ink"
-                href="https://x.com/dolphin_Agents"
-                rel="noreferrer"
-                target="_blank"
-              >
+            <p className="site-footer__tagline">Hire AI agents on BNB Chain, or build your own.</p>
+            <div className="site-footer__social">
+              <a aria-label="Dolphin on X" href="https://x.com/dolphin_Agents" rel="noreferrer" target="_blank">
                 <XLogo size={15} />
               </a>
-              <a
-                aria-label="Dolphin on Instagram"
-                className="interactive text-muted hover:text-ink"
-                href="https://www.instagram.com/dolphinamp/"
-                rel="noreferrer"
-                target="_blank"
-              >
+              <a aria-label="Dolphin on Instagram" href="https://www.instagram.com/dolphinamp/" rel="noreferrer" target="_blank">
                 <InstagramLogo size={15} />
               </a>
             </div>
           </div>
 
-          <nav aria-label="Browse agents">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
-              Browse
-            </h2>
-            <ul className="mt-4 space-y-3 text-sm text-muted">
-              {browseLinks.map((link) => (
-                <li key={link.href}>
-                  <Link className="interactive hover:text-ink" href={link.href}>
-                    {link.label}
-                  </Link>
+          <nav aria-label="Footer" className="site-footer__cols">
+            <div>
+              <h2 className="site-footer__heading">{COLUMNS[0].title}</h2>
+              <ul>
+                {COLUMNS[0].links.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href}>{link.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h2 className="site-footer__heading">Categories</h2>
+              <ul>
+                {categories.map((category) => (
+                  <li key={category.slug}>
+                    <Link href={`/search?category=${category.slug}`}>{category.label}</Link>
+                  </li>
+                ))}
+                {/* Always present, so the column is never a heading over nothing. */}
+                <li>
+                  <Link href="/search">{categories.length > 0 ? "All categories" : "Browse the catalog"}</Link>
                 </li>
-              ))}
-              {/*
-               * Always present, including while the facets load and when the
-               * catalog is unreachable, so this column is never an empty list
-               * with a heading over it.
-               */}
-              <li>
-                <Link className="interactive hover:text-ink" href="/search">
-                  {browseLinks.length > 0 ? "All categories" : "Browse the catalog"}
-                </Link>
-              </li>
-            </ul>
-          </nav>
-
-          <nav aria-label="Account controls">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
-              Control
-            </h2>
-            <ul className="mt-4 space-y-3 text-sm text-muted">
-              {accountLinks.map((link) => (
-                <li key={link.href}>
-                  <Link className="interactive hover:text-ink" href={link.href}>
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+              </ul>
+            </div>
+            {COLUMNS.slice(1).map((column) => (
+              <div key={column.title}>
+                <h2 className="site-footer__heading">{column.title}</h2>
+                <ul>
+                  {column.links.map((link) => (
+                    <li key={link.href}>
+                      <Link href={link.href}>{link.label}</Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </nav>
         </div>
 
-        {/* Every contract the catalog reads and every hire pays through, each one checkable. */}
-        <section aria-labelledby="footer-contracts" className="border-b border-line py-8">
-          <h2
-            className="text-xs font-semibold uppercase tracking-[0.12em] text-faint"
-            id="footer-contracts"
-          >
-            Contracts · {NETWORK_LABEL}
-          </h2>
-          <ul className="mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-            {DOLPHIN_CONTRACTS.map((contract) => (
-              <li className="min-w-0" key={contract.address}>
-                <p className="text-muted">{contract.label}</p>
-                <a
-                  className="interactive block truncate font-mono text-xs text-ink-soft hover:text-ink"
-                  href={`https://bscscan.com/address/${contract.address}`}
-                  rel="noreferrer"
-                  target="_blank"
-                  title={contract.address}
-                >
-                  {contract.address}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <div className="flex flex-col gap-4 pt-6 text-xs text-faint sm:flex-row sm:items-center sm:justify-between">
-          <p>© 2026 Dolphin. Built for the BNB Chain Smart Money Era Hackathon.</p>
-          <div className="flex flex-wrap gap-x-5 gap-y-2">
-            <a
-              className="interactive hover:text-ink"
-              href="https://8004scan.io"
-              rel="noreferrer"
-              target="_blank"
-            >
+        <div className="site-footer__bottom">
+          <p>© 2026 Dolphin · Built for the BNB Chain Smart Money Era Hackathon</p>
+          <div className="site-footer__bottom-links">
+            <span className="inline-flex items-center gap-2">
+              <BnbLogo size={14} />
+              {NETWORK_LABEL}
+            </span>
+            <button aria-expanded={contractsOpen} className="site-footer__toggle" onClick={() => setContractsOpen((open) => !open)} type="button">
+              Contracts
+              <span className={`flex transition-transform duration-200 ${contractsOpen ? "rotate-90" : ""}`}>
+                <CategoryGlyph color="currentColor" name="chevron-right" size={12} />
+              </span>
+            </button>
+            <a href="https://8004scan.io" rel="noreferrer" target="_blank">
               ERC-8004 registry
             </a>
-            <a
-              className="interactive hover:text-ink"
-              href="https://bscscan.com"
-              rel="noreferrer"
-              target="_blank"
-            >
+            <a href="https://bscscan.com" rel="noreferrer" target="_blank">
               BscScan
             </a>
+          </div>
+        </div>
+
+        {/* Every contract the catalog reads and every hire pays through, each one checkable. */}
+        <div className="reveal" data-open={contractsOpen || undefined} inert={!contractsOpen}>
+          <div className="reveal__inner">
+            <ul className="site-footer__contracts">
+              {DOLPHIN_CONTRACTS.map((contract) => (
+                <li key={contract.address}>
+                  <span>{contract.label}</span>
+                  <a href={`https://bscscan.com/address/${contract.address}`} rel="noreferrer" target="_blank" title={contract.address}>
+                    {contract.address}
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </div>

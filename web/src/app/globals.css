@@ -3400,3 +3400,103 @@ select {
   .builder-demo__pulse, .builder-demo__node, .builder-demo__status { animation: none; }
   .builder-demo__status { opacity: 1; }
 }
+
+/* ── Legal pages (components/legal-doc.tsx), 2026-09-29 ─────────────────── */
+.legal { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 56px; padding-top: 2.5rem; }
+.legal__aside { position: sticky; top: 96px; align-self: start; display: flex; flex-direction: column; gap: 28px; }
+.legal__docs { display: flex; flex-direction: column; gap: 2px; }
+.legal__docs a {
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-size: 0.86rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.legal__docs a:hover { background: var(--paper-muted); color: var(--ink); }
+.legal__docs a[aria-current="page"] { background: var(--paper); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--line); }
+.legal__toc-title { padding: 0 10px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+.legal__toc ol { margin-top: 8px; padding: 0; list-style: none; }
+.legal__toc a { display: block; padding: 4px 10px; font-size: 0.8rem; line-height: 1.4; color: var(--muted); text-decoration: none; }
+.legal__toc a:hover { color: var(--ink); }
+.legal__body { max-width: 44rem; }
+.legal__eyebrow { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-ink); }
+.legal__title { margin-top: 8px; font-size: clamp(2rem, 3.4vw, 2.6rem); font-weight: 650; letter-spacing: -0.04em; color: var(--ink); }
+.legal__updated { margin-top: 6px; font-size: 0.84rem; color: var(--faint); }
+.legal__summary {
+  margin-top: 22px;
+  padding: 16px 20px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-left: 3px solid #f0b90b;
+  border-radius: 12px;
+  background: var(--paper);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+.legal__section { padding-top: 34px; scroll-margin-top: 96px; }
+.legal__section h2 { display: flex; align-items: baseline; gap: 12px; font-size: 1.12rem; font-weight: 650; letter-spacing: -0.015em; color: var(--ink); }
+.legal__num { min-width: 1.5rem; font-size: 0.86rem; font-weight: 650; color: var(--faint); font-variant-numeric: tabular-nums; }
+.legal__text { margin-top: 10px; padding-left: calc(1.5rem + 12px); font-size: 0.93rem; line-height: 1.7; color: var(--ink-soft); }
+.legal__text p + p, .legal__text p + ul, .legal__text ul + p { margin-top: 10px; }
+.legal__text ul { padding-left: 1.1rem; list-style: disc; }
+.legal__text li + li { margin-top: 6px; }
+.legal__text li::marker { color: var(--faint); }
+.legal__text strong { font-weight: 600; color: var(--ink); }
+.legal__text a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+.legal__text a:hover { text-decoration-color: currentColor; }
+@media (max-width: 899px) {
+  .legal { grid-template-columns: 1fr; gap: 20px; padding-top: 1rem; }
+  .legal__aside { position: static; }
+  .legal__docs { flex-direction: row; flex-wrap: wrap; }
+  .legal__toc { display: none; }
+  .legal__text { padding-left: 0; }
+}
+
+/* ── Site footer (components/site-footer.tsx), 2026-09-29 ───────────────── */
+.site-footer { margin-top: 6rem; border-top: 1px solid var(--line); background: var(--paper); }
+.site-footer__top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.2fr); gap: 48px; padding: 56px 0 44px; }
+.site-footer__tagline { margin-top: 14px; max-width: 30ch; font-size: 0.9rem; line-height: 1.55; color: var(--muted); }
+.site-footer__social { display: flex; gap: 8px; margin-top: 18px; }
+.site-footer__social a {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.site-footer__social a:hover { border-color: var(--line-strong); color: var(--ink); }
+.site-footer__cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+.site-footer__heading { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+.site-footer__cols ul { margin-top: 14px; padding: 0; list-style: none; }
+.site-footer__cols li + li { margin-top: 10px; }
+.site-footer__cols a { font-size: 0.88rem; color: var(--muted); text-decoration: none; transition: color 140ms ease; }
+.site-footer__cols a:hover { color: var(--ink); }
+.site-footer__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 20px 0 24px;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--faint);
+}
+.site-footer__bottom-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.site-footer__bottom-links a, .site-footer__toggle { color: var(--muted); text-decoration: none; transition: color 140ms ease; }
+.site-footer__bottom-links a:hover, .site-footer__toggle:hover { color: var(--ink); }
+.site-footer__toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; }
+.site-footer__contracts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 28px; margin: 0; padding: 4px 0 28px; list-style: none; }
+.site-footer__contracts li { display: flex; min-width: 0; flex-direction: column; gap: 2px; font-size: 0.78rem; color: var(--muted); }
+.site-footer__contracts a { overflow: hidden; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; color: var(--ink-soft); text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
+.site-footer__contracts a:hover { color: var(--ink); }
+@media (max-width: 1023px) {
+  .site-footer__top { grid-template-columns: 1fr; gap: 36px; }
+  .site-footer__cols { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }
+  .site-footer__contracts { grid-template-columns: 1fr; }
+}

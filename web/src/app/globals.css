@@ -3636,3 +3636,34 @@ select {
 .manage-hold { --hold-danger: #c9362b; }
 :root[data-theme="dark"] .manage-hold { --hold-danger: #f07167; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .manage-hold { --hold-danger: #f07167; } }
+
+/* Shiny text (components/shiny-text.tsx) - a sweep of light across the letters. */
+.shiny-text {
+  display: inline-block;
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation-name: shiny-sweep;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.shiny-text[data-pause]:hover { animation-play-state: paused; }
+.shiny-text[data-disabled] { animation: none; background: none; -webkit-text-fill-color: var(--shine-color); }
+@keyframes shiny-sweep { from { background-position: 150% center; } to { background-position: -50% center; } }
+@media (prefers-reduced-motion: reduce) {
+  .shiny-text { animation: none; background: none; -webkit-text-fill-color: var(--shine-color); }
+}
+/* The composer's placeholder, laid over the empty textarea at its own padding. */
+.composer-placeholder {
+  position: absolute;
+  inset: 0 auto auto 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.94rem;
+  line-height: 1.625;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}

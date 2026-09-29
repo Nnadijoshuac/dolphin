@@ -13,6 +13,7 @@ import { AgentDraftPanel, EMPTY_AGENT_DRAFT } from "@/components/agent-draft-pan
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
+import { ShinyText } from "@/components/shiny-text";
 import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
 import { PublishAgentDialog } from "@/components/publish-agent-dialog";
@@ -833,6 +834,11 @@ export function DolphinClient({
    * bottom of a conversation. Only one of the two places renders it at a time,
    * so the textarea ref always points at the box on screen.
    */
+  const composerPlaceholder = building
+    ? "Describe the agent you want to build…"
+    : trying
+      ? `Ask ${draftName} something…`
+      : "Ask about an agent, a position, or a yield…";
   const composer = (
     <form
       onSubmit={(event) => {
@@ -841,36 +847,47 @@ export function DolphinClient({
       }}
     >
       <div className="flex w-full flex-col rounded-[1.4rem] border border-line/80 bg-paper p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-14px_rgba(15,23,42,0.18)]">
-        <textarea
-          aria-label={
-            building ? "Describe the agent to build" : trying ? `Message ${draftName}` : "Message Dolphin"
-          }
-          className={`max-h-[400px] w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none placeholder:text-faint focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ${
-            isEmpty ? "min-h-[3.4rem]" : "min-h-0"
-          }`}
-          onChange={(event) => {
-            setComposerText(event.target.value);
-            event.target.style.height = "auto";
-            event.target.style.height = `${Math.min(event.target.scrollHeight, 400)}px`;
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              if (draft.trim().length === 0) return;
-              event.preventDefault();
-              submit(draft);
+        {/*
+          * THE PLACEHOLDER SHIMMERS (owner, 2026-09-29), in Chat, Build and
+          * Try alike. A native placeholder cannot carry a moving gradient, so
+          * the textarea's own is empty and this sits over it while the box is
+          * empty; the aria-label still names the field.
+          */}
+        <div className="relative">
+          {draft.length === 0 ? (
+            <span aria-hidden="true" className="composer-placeholder">
+              <ShinyText
+                color="var(--faint)"
+                shineColor="var(--ink)"
+                speed={2.6}
+                text={composerPlaceholder}
+              />
+            </span>
+          ) : null}
+          <textarea
+            aria-label={
+              building ? "Describe the agent to build" : trying ? `Message ${draftName}` : "Message Dolphin"
             }
-          }}
-          placeholder={
-            building
-              ? "Describe the agent you want to build…"
-              : trying
-                ? `Ask ${draftName} something…`
-                : "Ask about an agent, a position, or a yield…"
-          }
-          ref={textareaRef}
-          rows={1}
-          value={draft}
-        />
+            className={`max-h-[400px] w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none placeholder:text-faint focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ${
+              isEmpty ? "min-h-[3.4rem]" : "min-h-0"
+            }`}
+            onChange={(event) => {
+              setComposerText(event.target.value);
+              event.target.style.height = "auto";
+              event.target.style.height = `${Math.min(event.target.scrollHeight, 400)}px`;
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                if (draft.trim().length === 0) return;
+                event.preventDefault();
+                submit(draft);
+              }
+            }}
+            ref={textareaRef}
+            rows={1}
+            value={draft}
+          />
+        </div>
         <div className="flex items-center justify-between gap-2 pl-1">
           <div className="flex min-w-0 items-center gap-1.5">
             {/*

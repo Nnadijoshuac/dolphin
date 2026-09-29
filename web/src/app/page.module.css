@@ -79,7 +79,7 @@
 }
 
 .heroTitle {
-  max-width: 15ch;
+  max-width: none;
   margin-top: 1.25rem;
   font-size: clamp(3rem, 6.1vw, 5.55rem);
   font-weight: 650;
@@ -90,6 +90,11 @@
 
 .heroTitle span {
   display: block;
+}
+
+/* Two lines, each a whole sentence: "Hire an agent." / "Or build your own." */
+@media (min-width: 768px) {
+  .heroTitle span { white-space: nowrap; }
 }
 
 .searchAction {

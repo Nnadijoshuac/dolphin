@@ -9,10 +9,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
-import { AgentIcon } from "@/components/agent-icon";
-import { AgentShelf, AgentShelfSkeleton } from "@/components/agent-shelf";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { FavoriteButton } from "@/components/favorite-button";
+import {
+  BuildBand,
+  CategoryTiles,
+  FeaturedTabs,
+  HeroSearch,
+  HeroStats,
+  HowItWorks3,
+} from "@/components/discover-sections";
 import {
   CatalogUnavailable,
   useBackendStatus,
@@ -22,7 +27,6 @@ import { HeroVideo } from "@/components/hero-video";
 import { MobileAgentRow } from "@/components/mobile-agent-row";
 import { MobileDiscoverHero } from "@/components/mobile-discover-hero";
 import { OnboardingPrompt } from "@/components/onboarding-prompt";
-import { SignalStrip } from "@/components/signal-strip";
 import { categoryDescription, categoryLabel } from "@/constants/agents";
 import {
   useAgentList,
@@ -32,11 +36,9 @@ import {
 } from "@/hooks/use-agents";
 import { useFavorites } from "@/hooks/use-favorites";
 import { track } from "@/lib/analytics";
-import { useImpression } from "@/hooks/use-impression";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
-import type { AgentSignals } from "@/hooks/use-agents";
 import type { AgentShelfData } from "@/convex/api";
-import type { Agent, AgentCategory } from "@/types/agent";
+import type { AgentCategory } from "@/types/agent";
 
 import styles from "./page.module.css";
 
@@ -91,88 +93,6 @@ function subscribeToCategoryChanges(onStoreChange: () => void) {
     window.removeEventListener("popstate", onStoreChange);
     window.removeEventListener(categoryChangeEvent, onStoreChange);
   };
-}
-
-function getRecordSource(agent: Agent) {
-  return agent.sourceLabels[0]?.label ?? "Source not listed";
-}
-
-function DiscoverAgentCard({
-  agent,
-  signals,
-}: {
-  agent: Agent;
-  signals?: AgentSignals;
-}) {
-  const label = categoryLabel(agent.category);
-  const recordLabel =
-    agent.recordStatus === "indexed" ? "Indexed record" : "Editorial record";
-  const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
-  const favorites = useFavorites();
-
-  return (
-    <div className={styles.agentCardWrap}>
-      <Link
-        className={styles.agentCard}
-        href={`/agent/${agent.tokenId}`}
-        ref={impressionRef}
-        onClick={() =>
-          track("agent_card_opened", {
-            agentKey: agent.agentKey,
-            category: agent.category,
-            surface: "discover",
-          })
-        }
-      >
-        <article className="flex h-full flex-col">
-          {/* Room for the star, which sits over this corner outside the link. */}
-          <div className={`flex items-start justify-between gap-4 ${favorites.visible ? "pr-11" : ""}`}>
-            <AgentIcon category={agent.category} seed={agent.iconSeed} size={58} uri={agent.iconUrl} />
-            <span className={styles.recordBadge}>
-              <span aria-hidden="true" className={styles.statusDot} />
-              {recordLabel}
-            </span>
-          </div>
-
-          <div className="mt-6">
-            <p className="text-xs font-semibold text-accent-ink">{label}</p>
-            <h3 className="mt-2 text-xl font-semibold leading-tight tracking-[-0.035em] text-ink sm:text-2xl">
-              {agent.name}
-            </h3>
-            <p className={styles.agentTagline}>{agent.tagline}</p>
-          </div>
-
-          {/* The comparison signal. `verifiedAt` is the one part of it that is
-              true for every listed agent - see signal-strip. */}
-          <SignalStrip className="mt-4" signals={signals} verifiedAt={agent.verifiedAt} />
-
-          <dl className={styles.agentEvidence}>
-            <div>
-              <dt>Record source</dt>
-              <dd>{getRecordSource(agent)}</dd>
-            </div>
-            <div>
-              <dt>Identity</dt>
-              <dd>ERC-8004 #{agent.tokenId}</dd>
-            </div>
-          </dl>
-
-          <div className={styles.agentCardFooter}>
-            <span>Open record</span>
-            <span aria-hidden="true" className={styles.cardArrow}>
-              <CategoryGlyph
-                color="currentColor"
-                name="arrow-right"
-                size={17}
-                strokeWidth={2}
-              />
-            </span>
-          </div>
-        </article>
-      </Link>
-      <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className={styles.cardStar} />
-    </div>
-  );
 }
 
 function CatalogSkeleton() {
@@ -272,7 +192,9 @@ export default function DiscoverPage() {
    */
   const { agents, status, isLoading, loadMore } = useAgentList({
     category: selectedCategory ?? undefined,
-    enabled: !isMobile || selectedCategory !== null || !facets.isLoading,
+    // Desktop no longer renders a catalog grid here (it links to /search), so
+    // only the phone layout reads it - one fewer 24-row read per desktop visit.
+    enabled: isMobile && (selectedCategory !== null || !facets.isLoading),
   });
 
   /*
@@ -289,12 +211,9 @@ export default function DiscoverPage() {
   const signals = useAgentSignals(agents);
 
   /*
-   * THE STORE FRONT (2026-09-25): themed shelves above the catalog, Play Store
-   * style, on the landing view only. Keyed on the URL's category rather than
-   * `selectedCategory`, because on a phone the catalog auto-selects its first
-   * category and that is not the reader asking to browse one.
+   * THE STORE FRONT (2026-09-25, reshaped 2026-09-29): the shelves now feed
+   * one tabbed carousel (components/discover-sections.tsx).
    */
-  const showShelves = requestedCategory === null;
   const { shelves: catalogShelves, isLoading: shelvesLoading } = useAgentShelves();
   /*
    * "Your favorites" leads, for a connected wallet that has starred anything:
@@ -357,6 +276,17 @@ export default function DiscoverPage() {
   /* Show the skeleton only while there is genuinely nothing to draw yet. */
   const showInitialLoading = isLoading && !hasCatalog && !isUnavailable;
   const showUnavailable = isUnavailable && !hasCatalog;
+
+  /*
+   * An old "/?category=" link on desktop goes to that category's search page:
+   * the landing page no longer filters a catalog of its own.
+   */
+  useEffect(() => {
+    // Read the media query directly: during hydration isMobile can still be the server's false.
+    if (requestedCategory && !window.matchMedia("(max-width: 767px)").matches) {
+      window.location.replace(`/search?category=${requestedCategory}`);
+    }
+  }, [isMobile, requestedCategory]);
 
   /** Emitted once the catalog has actually rendered, not on mount. */
   const reportedCatalog = useRef(false);
@@ -483,83 +413,53 @@ export default function DiscoverPage() {
 
         <div className="site-frame">
           <div className={styles.heroCopy}>
-            <p className="eyebrow">ERC-8004 discovery on BNB Chain</p>
+            <p className="eyebrow">AI agents on BNB Chain</p>
             <h1 className={styles.heroTitle} id="discover-heading">
-              <span>Know the agent.</span>
-              <span>Hire with context.</span>
+              <span>Hire an agent.</span>
+              <span>Or build your own.</span>
             </h1>
-            <p className="body-copy mt-6 max-w-[52ch]">
-              Compare each job, its evidence, and required access before you commit.
+            <p className="body-copy mt-6 max-w-[48ch]">
+              Every agent here answered when Dolphin called it. See what it does and what it costs before you pay anything.
             </p>
-
-            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
-              <Link className={styles.searchAction} href="/search">
-                <span className="flex min-w-0 items-center gap-3">
-                  <span aria-hidden="true" className="text-muted">
-                    <CategoryGlyph color="currentColor" name="search" size={19} />
-                  </span>
-                  <span className="truncate">Search agents, protocols, or skills</span>
-                </span>
-                <span aria-hidden="true" className={styles.searchArrow}>
-                  <CategoryGlyph
-                    color="currentColor"
-                    name="arrow-right"
-                    size={17}
-                    strokeWidth={2}
-                  />
-                </span>
-              </Link>
-            </div>
-
-            <ul
-              aria-label="What Dolphin shows before hiring"
-              className={styles.trustList}
-            >
-              {[
-                "Registry identity",
-                "Sources in view",
-                "Access before hire",
-              ].map((item) => (
-                <li key={item}>
-                  <span aria-hidden="true" className="text-accent-ink">
-                    <CategoryGlyph
-                      color="currentColor"
-                      name="check"
-                      size={16}
-                      strokeWidth={2}
-                    />
-                  </span>
-                  {item}
-                </li>
-              ))}
-            </ul>
+            <HeroSearch />
+            <HeroStats categories={facets.categories.length} totalLive={facets.totalLive} />
           </div>
         </div>
       </section>
 
+      {!isMobile ? (
+        <div className="desktop-only site-frame">
+          <CategoryTiles categories={facets.categories} isLoading={facets.isLoading} />
+          <FeaturedTabs isLoading={shelvesLoading} shelves={shelves} signals={shelfSignals} />
+          <HowItWorks3 />
+          <BuildBand />
+        </div>
+      ) : null}
       {/*
-       * Offered here rather than as a forced interstitial, and below the hero
-       * rather than above it, so it never displaces the thing a returning
-       * visitor came for. See components/onboarding-prompt.tsx.
-       */}
-      <div className="desktop-only"><OnboardingPrompt /></div>
-
-      {showShelves && (shelvesLoading || shelves.length > 0) ? (
-        <div aria-label="Featured agents" className={`site-frame ${styles.shelves}`} role="region">
-          {shelvesLoading && shelves.length === 0 ? (
-            <AgentShelfSkeleton />
-          ) : (
-            shelves.map((shelf) => (
-              <AgentShelf key={shelf.id} shelf={shelf} signals={shelfSignals} />
-            ))
-          )}
+        Offered here, after the page has made its case, rather than as a
+        forced interstitial. It carries its own site-frame, so it sits outside
+        the one above. See components/onboarding-prompt.tsx.
+      */}
+      {!isMobile ? (
+        <div className="desktop-only mt-12">
+          <OnboardingPrompt />
+        </div>
+      ) : null}
+      {!isMobile ? (
+        <div className="desktop-only site-frame">
+          <div className="discover-closing">
+            <Link className="discover-link discover-link--big" href="/search">
+              Browse all {facets.totalLive > 0 ? facets.totalLive.toLocaleString() : ""} agents
+              <CategoryGlyph color="currentColor" name="arrow-right" size={16} strokeWidth={2} />
+            </Link>
+          </div>
         </div>
       ) : null}
 
       <section
         aria-labelledby="catalog-heading"
         id="browse-by-role"
-        className={`site-frame py-14 sm:py-20 ${styles.catalogSection}`}
+        className={`site-frame py-14 sm:py-20 ${styles.catalogSection} ${isMobile ? "" : "hidden"}`}
       >
         <div className={styles.catalogLayout}>
           <aside className={styles.catalogAside}>
@@ -692,15 +592,6 @@ export default function DiscoverPage() {
                 <div className={`mobile-only ${styles.mobileRows}`}>
                   {displayedAgents.map((agent) => (
                     <MobileAgentRow agent={agent} key={agent.agentKey} signals={signals.get(agent.agentKey)} surface="discover" />
-                  ))}
-                </div>
-                <div className={`${styles.agentGrid} ${styles.desktopCards}`}>
-                  {displayedAgents.map((agent) => (
-                    <DiscoverAgentCard
-                      agent={agent}
-                      key={agent.id}
-                      signals={signals.get(agent.agentKey)}
-                    />
                   ))}
                 </div>
                 {status === "CanLoadMore" ? (

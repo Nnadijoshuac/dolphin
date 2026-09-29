@@ -166,6 +166,8 @@ export type AnalyticsEvents = {
   /** Onboarding progress, so "does anyone finish it" is answerable. */
   onboarding_step_viewed: { step: number; total: number };
   onboarding_completed: { skipped: boolean };
+  /** A landing-page "Build an agent" button, so "does the front page send anyone to the builder" is answerable. */
+  build_cta_clicked: { surface: "hero" | "band" };
 };
 
 export type AnalyticsEventName = keyof AnalyticsEvents;

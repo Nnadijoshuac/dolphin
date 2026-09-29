@@ -605,12 +605,12 @@ const BLOCK_TITLES: Record<BlockType, string> = {
 };
 
 const BLOCK_ABOUT: Record<BlockType, string> = {
-  market: "The token this agent watches and trades. Its live chart appears on the canvas, and every run reads its price, liquidity, volume, candles and daily trend for the Brain.",
+  market: "The token this agent watches and trades. Its live chart appears on the canvas, and every run reads its price, liquidity, volume, candles and daily trend for the Brain. Indicators use closed candles only - the candle still forming is left out, so nothing is decided on a price that could still change. The live price is reported separately.",
   safety: "Lets the Brain check a token's contract before acting: honeypot, taxes, owner powers and holder concentration.",
   swap: "Where the agent buys and sells, on PancakeSwap - after every order passes your Risk limits. Each trade comes to you as a ticket to sign, unless you turn on \"Trade without asking\" in the Draft tab.",
   risk: "Hard limits on what the agent may propose, checked in code on every trade, whatever the Brain decides.",
   schedule: "Makes its own signal: it fires the Trigger on a clock while Autopilot is on. Every run uses your own model key.",
-  price: "Makes its own signal: it fires the Trigger when the Price feed's token crosses your level - once per crossing, not on every check.",
+  price: "Makes its own signal: it fires the Trigger when the Price feed's token crosses your level - once per crossing, not on every check. This one watches the live price, not closed candles.",
   walletWatch: "Makes its own signal: it fires the Trigger when a watched wallet transacts - a KOL, a whale, a fund. It sees any transaction they send, and exactly which tokens moved for your Price feed token and Dolphin's verified list.",
   memory: "Your agent's memory, kept on your own server - Dolphin stores none of it. Before every run it reads what it did last time; after it, a record of the run is saved. It can also note things down itself.",
   hire: "A paid agent from Dolphin's catalog that yours can call on. When it asks for work, the agent quotes a price and you confirm each payment from your Dolphin Wallet with your passkey. It delivers on-chain afterwards.",

@@ -260,9 +260,18 @@ async function poolCandles(
   const data = (await getJson(
     `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${poolAddress}/ohlcv/${timeframe}?limit=${limit}&currency=usd&token=${tokenAddress}`,
   )) as { data?: { attributes?: { ohlcv_list?: number[][] } } };
+  const period = timeframe === "day" ? 86_400 : 3_600;
+  const now = Date.now() / 1000;
   return (data.data?.attributes?.ohlcv_list ?? [])
     .map((row) => [row[0], row[1], row[2], row[3], row[4]] as [number, number, number, number, number])
-    .sort((a, b) => a[0] - b[0]);
+    .sort((a, b) => a[0] - b[0])
+    /*
+     * CLOSED CANDLES ONLY (mentor review, 2026-09-29: "computing indicators on
+     * a candle that hasn't closed yet makes results look better than
+     * reality"). The candle still forming is dropped; the live price is
+     * reported on its own line.
+     */
+    .filter((candle) => candle[0] + period <= now);
 }
 
 /* ── indicators, computed here so the model never does the arithmetic ────── */
@@ -313,7 +322,9 @@ function round(value: number | null, digits = 2): string {
 function trendReport(daily: ReadonlyArray<[number, number, number, number, number]>, price: number | null): string {
   const closes = daily.map((candle) => candle[4]);
   if (closes.length < 20) return `Daily trend: not enough history (${closes.length} daily candles).`;
-  const last = price ?? closes[closes.length - 1];
+  // Indicators compare CLOSED candles only; the live price is reported separately.
+  const last = closes[closes.length - 1];
+  const lastDay = new Date(daily[daily.length - 1][0] * 1000).toISOString().slice(0, 10);
   const sma20 = sma(closes, 20);
   const sma50 = sma(closes, 50);
   const month = daily.slice(-30);
@@ -328,9 +339,10 @@ function trendReport(daily: ReadonlyArray<[number, number, number, number, numbe
           ? "DOWNTREND (price below the 50-day average, 20-day below 50-day)"
           : "MIXED (price and averages disagree)";
   return (
-    `Daily trend (computed from ${closes.length} daily closes): ${verdict}. ` +
+    `Daily trend (computed from ${closes.length} CLOSED daily candles, the last closing ${lastDay}): ${verdict}. ` +
     `20-day average $${round(sma20, 4)}, 50-day average ${sma50 === null ? "unknown" : `$${round(sma50, 4)}`}, ` +
-    `price ${sma50 === null ? "" : `${(((last - sma50) / sma50) * 100).toFixed(1)}% vs the 50-day, `}` +
+    `last close ${sma50 === null ? "" : `${(((last - sma50) / sma50) * 100).toFixed(1)}% vs the 50-day, `}` +
+    `(live price now ${price === null ? "unknown" : `$${round(price, 4)}`}), ` +
     `14-day RSI ${round(rsi(closes), 1)}, 30-day volatility ${round(volatility(closes), 0)}% a year, ` +
     `30-day high $${round(high30, 4)} and low $${round(low30, 4)} (now ${(((last - high30) / high30) * 100).toFixed(1)}% from the high).`
   );

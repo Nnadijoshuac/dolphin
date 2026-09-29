@@ -1,0 +1,60 @@
+{
+  "measuredAt": "2026-09-29T09:10:46.280Z",
+  "kernel": "0xEa4DAa3100A767e86FDed867729ae7446476EBA6",
+  "jobCounter": "56847",
+  "sampled": {
+    "fromJobId": "54848",
+    "toJobId": "56847",
+    "read": 2000
+  },
+  "statuses": {
+    "SUBMITTED": 1638,
+    "FUNDED": 124,
+    "COMPLETED": 97,
+    "OPEN": 95,
+    "EXPIRED": 38,
+    "REJECTED": 8
+  },
+  "fundedWithBudget": 1886,
+  "withDeliverable": 1743,
+  "distinctClients": 1356,
+  "distinctProviders": 110,
+  "topClientShare": 0.097,
+  "top5ClientsShare": 0.162,
+  "topProviderShare": 0.694,
+  "repeatPairs": 150,
+  "providersWithARepeatClient": 62,
+  "topProviders": [
+    {
+      "address": "0xc0d7d888d8ff8925dc95fbb16c89217718bf7c8d",
+      "jobs": 1387
+    },
+    {
+      "address": "0x9019669126da3494897c549157558c75eed12cd4",
+      "jobs": 193
+    },
+    {
+      "address": "0xe12d7bd7333018c2a2a423bf078255951b934272",
+      "jobs": 24
+    },
+    {
+      "address": "0xdd2786838af0a20a3ebbc56724433ec898fee2ed",
+      "jobs": 20
+    },
+    {
+      "address": "0x73809f69916fcf7ddc5bb1315fbdf96a569a5963",
+      "jobs": 19
+    }
+  ],
+  "jobsByExpiryMonth": {
+    "2026-06": 1259,
+    "2026-07": 472,
+    "2026-08": 63,
+    "2026-09": 146,
+    "2026-10": 60
+  },
+  "relatedPartySignals": {
+    "clientIsProvider": 247,
+    "clientIsEvaluator": 6
+  }
+}

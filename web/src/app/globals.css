@@ -3786,12 +3786,12 @@ select {
 .wallet-v2 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
-  grid-template-areas: "main side" "foot foot";
+  grid-template-areas: "main side";
   gap: 20px 24px;
   align-items: start;
 }
 .wallet-v2__main { grid-area: main; display: flex; min-width: 0; flex-direction: column; gap: 20px; }
-.wallet-v2__side { grid-area: side; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 92px; }
+.wallet-v2__side { grid-area: side; display: flex; min-width: 0; flex-direction: column; gap: 14px; }
 .wallet-v2__foot { grid-area: foot; min-width: 0; }
 .wallet-v2__side .wcard { min-height: 0; gap: 10px; }
 .wallet-v2__side .wcard__foot { margin-top: 8px; }
@@ -3827,8 +3827,7 @@ select {
 .spenders__meta { margin-top: 2px; font-size: 0.74rem; line-height: 1.45; color: var(--muted); }
 
 @media (max-width: 1023px) {
-  .wallet-v2 { grid-template-columns: 1fr; grid-template-areas: "main" "side" "foot"; }
-  .wallet-v2__side { position: static; }
+  .wallet-v2 { grid-template-columns: 1fr; grid-template-areas: "main" "side"; }
 }
 @media (prefers-reduced-motion: reduce) { .spenders__dot::after { animation: none; } }
 /* Activity and alerts as cards, like the rest of the wallet (2026-09-29). */
@@ -3841,13 +3840,21 @@ select {
 .wallet-v2 .wallet-activity .eyebrow { display: none; }
 .wallet-v2 .wallet-activity h2 { margin-top: 0; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.015em; }
 .wallet-v2 .wallet-activity > header { border-bottom: 0; padding-bottom: 0; }
-.wallet-v2__foot section[aria-labelledby="alerts-heading"] {
+.wallet-v2__main section[aria-labelledby="alerts-heading"] {
   margin-top: 0;
   padding: 20px 22px;
   border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
   border-radius: 16px;
   background: var(--paper);
 }
-.wallet-v2__foot section[aria-labelledby="alerts-heading"] .wallet-section__header { border-bottom: 0; padding-bottom: 0; }
-.wallet-v2__foot section[aria-labelledby="alerts-heading"] h2 { margin-top: 0; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.015em; }
+.wallet-v2__main section[aria-labelledby="alerts-heading"] .wallet-section__header { border-bottom: 0; padding-bottom: 0; }
+.wallet-v2__main section[aria-labelledby="alerts-heading"] h2 { margin-top: 0; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.015em; }
 .wallet-v2__foot > * + * { margin-top: 16px; }
+
+/* Wallet, round three: alerts sit in the main column; the empty activity is
+   short, not a tall blank card; the hero's first action is the primary one. */
+.wallet-v2 .wallet-activity-empty { padding-block: 18px 8px; }
+.wallet-v2 .wallet-hero__actions > :first-child { background: var(--accent); border-color: var(--accent-hover); color: #17180f; }
+.wallet-v2 .wallet-hero__actions > :first-child:hover:not(:disabled) { background: var(--accent-hover); }
+.wallet-v2 .wallet-hero__actions > :first-child:disabled { background: var(--paper-muted); border-color: var(--line); color: var(--faint); }
+.wallet-v2__side .wallet-danger { padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--line) 85%, transparent); border-radius: 14px; background: var(--paper); }

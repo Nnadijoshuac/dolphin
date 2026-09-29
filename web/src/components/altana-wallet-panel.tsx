@@ -926,9 +926,7 @@ function AgentSpendingSection() {
       ) : built === undefined ? (
         <div aria-hidden="true" className="skeleton h-16 rounded-xl" />
       ) : trading.length === 0 ? (
-        <p className="wallet-block__empty">
-          None. No agent can spend from your wallet on its own. Every hire asks for your passkey.
-        </p>
+        <p className="wallet-block__empty">Nothing can spend on its own. Hires ask for your passkey each time.</p>
       ) : (
         <ul className="spenders">
           {trading.map((agent) => (
@@ -1170,6 +1168,9 @@ export function AltanaWalletPanel() {
         />
         <HoldingsSection price={price} />
         <AgentActivity hidden={hidden} />
+        <OptionalFeature label="Liquidation alerts">
+          <LiquidationAlertPanel />
+        </OptionalFeature>
       </div>
 
       <aside aria-label="Your wallets" className="wallet-v2__side">
@@ -1184,14 +1185,8 @@ export function AltanaWalletPanel() {
 
         <AgentSpendingSection />
         {FEATURE_SESSION_EXECUTION && <PermissionsSection />}
-      </aside>
-
-      <div className="wallet-v2__foot">
-        <OptionalFeature label="Liquidation alerts">
-          <LiquidationAlertPanel />
-        </OptionalFeature>
         {dolphinAddress && <DeviceAccessSection />}
-      </div>
+      </aside>
 
       {receiving && (
         <ReceiveSheet

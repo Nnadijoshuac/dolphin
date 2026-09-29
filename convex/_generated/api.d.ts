@@ -31,6 +31,7 @@ import type * as categoryStats from "../categoryStats.js";
 import type * as categoryStatsValidators from "../categoryStatsValidators.js";
 import type * as census from "../census.js";
 import type * as chatDeletion from "../chatDeletion.js";
+import type * as chatTitles from "../chatTitles.js";
 import type * as crons from "../crons.js";
 import type * as discovery from "../discovery.js";
 import type * as dolphin from "../dolphin.js";
@@ -133,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   categoryStatsValidators: typeof categoryStatsValidators;
   census: typeof census;
   chatDeletion: typeof chatDeletion;
+  chatTitles: typeof chatTitles;
   crons: typeof crons;
   discovery: typeof discovery;
   dolphin: typeof dolphin;

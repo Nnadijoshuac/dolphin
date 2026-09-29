@@ -558,6 +558,14 @@ export const appendTurn = internalMutation({
         title = seedDoc?.name ? `About ${seedDoc.name}` : userText.trim().slice(0, 80);
       } else {
         title = userText.trim().slice(0, 80);
+        // The first message stands in; a short summary replaces it when the model answers (chatTitles.ts).
+        if (title) {
+          await ctx.scheduler.runAfter(0, internal.chatTitles.summarize, {
+            conversationId: conversation._id,
+            firstMessage: userText,
+            standIn: title,
+          });
+        }
       }
     }
     await ctx.db.patch(conversation._id, { title, updatedAt: now });

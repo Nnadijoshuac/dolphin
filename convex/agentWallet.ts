@@ -41,6 +41,18 @@ import { verifiedTokens } from "./lib/tradeTokens";
 import { readHoldings, type Holding } from "./lib/walletHoldings";
 import { requireWalletAddress } from "./lib/walletAuth";
 
+/**
+ * FROZEN 2026-09-29 (the mentor review; the owner said "adhere to his advice").
+ * A plain wallet whose key Dolphin holds is custody: one server breach could
+ * drain every agent's wallet at once, and holding keys that move user value
+ * is the clearest trigger for custody / money-transmission licensing. So:
+ * no new agent wallets, and no trade executes from one. What stays is the way
+ * out - balances and withdraw-to-owner - so nobody's funds are stranded.
+ * Autonomous trading continues through scoped trade keys on the owner's own
+ * smart wallet (autotrade.ts). Kept, not deleted: unfreezing is a decision.
+ */
+export const AGENT_WALLETS_FROZEN = true;
+
 /** BNB kept back for gas when the agent sells BNB or the owner withdraws it all. */
 const GAS_RESERVE_BNB = "0.0006";
 
@@ -101,6 +113,9 @@ export const create = action({
     const owned: { draftId: Id<"agentDrafts">; ownerAddress: string } = await ctx.runQuery(internal.agentWallet.ownedDraft, args);
     const existing: Doc<"agentWallets"> | null = await ctx.runQuery(internal.agentWallet.walletForDraft, { draftId: owned.draftId });
     if (existing) return { address: existing.address };
+    if (AGENT_WALLETS_FROZEN) {
+      throw new ConvexError("Agent wallets are paused. Use \"Trade without asking\" in the Draft tab: a limited key on your own Dolphin Wallet.");
+    }
     const privateKey = generatePrivateKey();
     const account = privateKeyToAccount(privateKey);
     const box = await seal(privateKey);
@@ -175,6 +190,7 @@ export const executeTrade = internalAction({
   handler: async (ctx, { draftId, agentName, ticket }): Promise<{ attempted: boolean; executed: boolean; text: string; transactionHash?: string }> => {
     const wallet: Doc<"agentWallets"> | null = await ctx.runQuery(internal.agentWallet.walletForDraft, { draftId });
     if (!wallet) return { attempted: false, executed: false, text: "" };
+    if (AGENT_WALLETS_FROZEN) return { attempted: false, executed: false, text: "" };
     const address = getAddress(wallet.address) as Address;
     const tokenIn: TradeSide = { address: ticket.tokenIn.address, symbol: ticket.tokenIn.symbol, decimals: ticket.tokenIn.decimals };
     const tokenOut: TradeSide = { address: ticket.tokenOut.address, symbol: ticket.tokenOut.symbol, decimals: ticket.tokenOut.decimals };

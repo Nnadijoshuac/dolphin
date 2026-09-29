@@ -426,18 +426,19 @@ export function draftGraph(
   const wallet = find("wallet");
   const hire = find("hire");
   const chain: AgentBlockData[] = [];
-  for (const block of [risk, swap, wallet]) if (block) chain.push(block);
-  const rows: string[] = ["output", ...(chain.length ? ["chain"] : []), ...(hire ? ["hire"] : [])];
+  // Agent wallets are paused (convex/agentWallet.ts): the Wallet is not on the trade line.
+  for (const block of [risk, swap]) if (block) chain.push(block);
+  const rows: string[] = ["output", ...(chain.length ? ["chain"] : []), ...(hire ? ["hire"] : []), ...(wallet ? ["wallet"] : [])];
   const rowY = (name: string) => brainY + (rows.indexOf(name) - (rows.length - 1) / 2) * ACTION_ROW;
   place("output", actionX, rowY("output"), { kind: "output", title: "Answer", detail: "Replies with what its tools returned" });
   chain.forEach((block, index) => {
     const data = blockData(block, block.type === "risk" ? "limits" : `block:${block.id}`);
-    // What a swap does depends on where the money is.
-    if (block.type === "swap" && wallet && !cut.has(`block:${wallet.id}`)) Object.assign(data, { title: "Trade", detail: "Executes from the agent's wallet" });
     if (block.type === "risk") Object.assign(data, { detail: `${data.detail} · every trade passes through` });
     place(`block-${block.id}`, actionX + index * (NODE_WIDTH + CHAIN_GAP), rowY("chain"), data);
   });
   if (hire) place(`block-${hire.id}`, actionX, rowY("hire"), { ...blockData(hire), agent: agentLook(hire.config.agentKey) });
+  // An existing, paused agent wallet: drawn unplugged, only to reach Withdraw.
+  if (wallet) place(`block-${wallet.id}`, actionX, rowY("wallet"), { ...blockData(wallet), title: "Agent wallet · paused", detail: "Open it to withdraw your funds", detached: true });
 
   const edge = (source: string, target: string, targetHandle: string, member?: string, sourceHandle = "out"): FlowEdge => ({
     id: `${source}->${target}`,
@@ -646,7 +647,6 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
     items: [
       { type: "risk", label: "Risk limits", about: "Dollars per trade and trades per day", glyph: "filter" },
       { type: "swap", label: "Swap", about: "Propose PancakeSwap trades within the limits", glyph: "wallet", needs: "risk" },
-      { type: "wallet", label: "Wallet", about: "Its own wallet - it trades without asking you", glyph: "wallet", needs: "swap" },
     ],
   },
 ];

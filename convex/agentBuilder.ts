@@ -49,6 +49,7 @@ import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { memoryBrief, recall, remember, type MemoryTarget } from "./lib/agentMemory";
 import { mergeBuilderBlocks } from "./lib/builderBlocks";
 import { readHoldings } from "./lib/walletHoldings";
+import { AGENT_WALLETS_FROZEN } from "./agentWallet";
 import { TRADING_PLAYBOOK, TRADING_RUN_RULES } from "./lib/tradingPlaybook";
 import { chatCompletion, customChatUrl, isBrainProvider, type ChatMessage } from "./lib/openrouter";
 import { assertSafeUrl } from "./lib/safeFetch";
@@ -101,11 +102,11 @@ WHAT AN AGENT BUILT HERE IS. Never promise more than this:
 - A name, a short description, instructions (its strategy, called the Melon), and a few tools.
 - Its tools come ONLY from the TOOLS list you are given. They belong to other agents listed on Dolphin, and they only READ: prices, pools, positions, protocol data. Some return an unsigned transaction that the person would sign from their own wallet.
 - Its brain runs on the person's OWN model key (OpenAI or OpenRouter), which they add in the Keys tab and choose on the Brain block. Dolphin does not supply one.
-- The canvas TOOLBOX adds more. YOU set up Schedule, Price, Market, Safety, Risk limits and Swap through the \`blocks\` field (below). The person adds Wallet watch, Wallet, Memory and Hire themselves - tell them which to add when the job needs them:
+- The canvas TOOLBOX adds more. YOU set up Schedule, Price, Market, Safety, Risk limits and Swap through the \`blocks\` field (below). The person adds Wallet watch, Memory and Hire themselves - tell them which to add when the job needs them:
   - Market (the token it trades: live price, candles and a chart), Safety (token security checks).
   - Triggers: Schedule (every 15 minutes to daily), Price (when the token crosses a level), Wallet watch (when a wallet they follow - a KOL, a whale - transacts). With Autopilot switched on, the agent runs on these by itself, up to 48 times a day.
   - Risk limits (dollars per trade, trades per day) and Swap: the agent may then PROPOSE PancakeSwap trades within those limits. By default the person approves and signs every trade. They can opt in to "Trade without asking" (Draft tab) so it trades by itself for 1-30 days within limits the wallet enforces, and stop it any time. Nothing guarantees a profit - never promise one.
-  - Wallet: the agent's OWN wallet, which the person funds. With it plugged in, trades within the Risk limits execute from that wallet at once, with no tap, and what they buy lands back in it; the person withdraws to their own wallet any time. Dolphin holds that wallet's key, so it should hold only what they would let the agent trade.
+  - (The separate agent Wallet block is PAUSED - do not suggest it. To trade without signing each time, the person turns on "Trade without asking" in the Draft tab: a limited key on their own Dolphin Wallet.)
   - Memory: the person's OWN memory server (any https address that speaks Dolphin's two-call memory interface; a one-file server is offered to download). The agent reads its recent memories before every run, a record of each run is saved after it, and it can remember and recall notes. Dolphin keeps none of it. Suggest it for scheduled agents that must know what they did before.
   - Hire an agent: one paid A2A agent from Dolphin's catalog. The agent can ask it to do a task and gets its price; the person confirms each payment from their Dolphin Wallet with their passkey. The result is delivered later, on-chain - not into the conversation.
 ${TRADING_PLAYBOOK}
@@ -121,7 +122,7 @@ HOW TO WORK:
 - description: one or two sentences saying concretely what it does and for whom.
 - instructions: written TO the agent in the second person ("You check..."). Say what it does, which tool to use for what, what to do when a tool fails or returns nothing, and that it must never guess a number. Plain text, no markdown headings.
 - toolIds: only ids from the TOOLS list that the job needs, usually 1 to 4. If nothing in the list fits, say so honestly and leave toolIds null. Never invent a tool. A trading agent built from blocks needs no tools; leave toolIds null.
-- blocks: for a trading or monitoring agent, set up what the playbook says it needs, in one go: e.g. a schedule (60 or 240 minutes for trend following, 1440 for daily DCA), the market (symbol from: BNB, BTCB, ETH, CAKE, XVS - never a stablecoin), safety, risk (default $5 a trade and 2 trades a day for a first test unless the person gave numbers), and swap. A price trigger only if the person named a level. Only include blocks you are adding or changing this turn; null otherwise. Then, in your reply, tell them the blocks you added and which to add themselves (Wallet to trade without signing, Memory so it remembers its position).
+- blocks: for a trading or monitoring agent, set up what the playbook says it needs, in one go: e.g. a schedule (60 or 240 minutes for trend following, 1440 for daily DCA), the market (symbol from: BNB, BTCB, ETH, CAKE, XVS - never a stablecoin), safety, risk (default $5 a trade and 2 trades a day for a first test unless the person gave numbers), and swap. A price trigger only if the person named a level. Only include blocks you are adding or changing this turn; null otherwise. Then, in your reply, tell them the blocks you added and what to add themselves (Memory so it remembers its position; "Trade without asking" in the Draft tab if it should trade without their signature).
 - Use null for every field you are not changing this turn.
 - reply: speak to the person in 1 to 3 short sentences: what you changed, and your one question if you have one. No JSON, no field names, no tool ids in the reply.
 
@@ -388,8 +389,8 @@ export const runtimeForDraft = internalQuery({
       .take(3);
     const autotradeActive = tradeKeys.some((key) => key.status === "active" && key.ciphertext && key.expiry > Date.now() / 1000);
     const blocks = activeBlocks((draft?.blocks ?? []) as AgentBlock[], draft?.detached);
-    // The agent's own wallet trades only while its Wallet block is plugged in.
-    const ownWallet = blocks.some((block) => block.type === "wallet")
+    // The agent's own wallet trades only while its Wallet block is plugged in - and never while frozen.
+    const ownWallet = !AGENT_WALLETS_FROZEN && blocks.some((block) => block.type === "wallet")
       ? await ctx.db
           .query("agentWallets")
           .withIndex("by_draft", (q) => q.eq("draftId", draftId))

@@ -905,7 +905,16 @@ function BlockEditor({
         </div>
       ) : null}
 
-      {type === "wallet" && existing ? <AgentWalletPanel conversationKey={conversationKey} /> : null}
+      {type === "wallet" && existing ? (
+        <>
+          <p className="mt-2 rounded-lg bg-paper-muted/70 px-3 py-2 text-[0.72rem] leading-snug text-ink-soft">
+            Agent wallets are paused: a wallet whose key Dolphin holds is too big a risk to your funds. This agent no longer trades
+            from it. Withdraw what it holds below, then use &ldquo;Trade without asking&rdquo; in the Draft tab - a limited key on
+            your own Dolphin Wallet that you can revoke.
+          </p>
+          <AgentWalletPanel conversationKey={conversationKey} />
+        </>
+      ) : null}
 
       {type === "hire" ? (
         <div className="mt-3">

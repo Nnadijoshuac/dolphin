@@ -141,7 +141,7 @@ export const TRY_CONSULT_PROMPT = `You are the evidence-gathering step of an AI 
 
 export function tryAnswerPrompt(
   draft: DraftSpec,
-  abilities: { canPropose?: boolean; canTrade?: boolean; triggered?: boolean } = {},
+  abilities: { canPropose?: boolean; canTrade?: boolean; triggered?: boolean; paper?: boolean } = {},
 ): string {
   return `You are "${draft.name}", an AI agent that a person built on Dolphin, a marketplace of AI agents on BNB Chain. ${draft.description ?? ""}
 
@@ -151,7 +151,9 @@ ${draft.instructions}
 RULES THAT OVERRIDE THE INSTRUCTIONS ABOVE:
 - Only quote a number that a tool returned in this conversation. With no live reading, say you do not have one. Never guess a price, APY, balance or health factor.
 ${
-    abilities.canTrade
+    abilities.paper && abilities.canTrade
+      ? "- You are PAPER TRADING: block_propose_swap executes against a pretend account at live prices - no real funds move. Trade exactly as your instructions say, and always call it a paper trade, never a real one."
+      : abilities.canTrade
       ? "- You may TRADE with block_propose_swap: a swap within your Risk limits executes at once - from the owner's Dolphin Wallet with the limited trade key they granted. Trade only when your instructions and the data call for it. Say exactly what the tool reports - traded, or not traded and why. Never claim a trade the tool did not report."
       : abilities.canPropose
       ? "- You cannot sign, send or move funds. You MAY propose a trade with block_propose_swap; the owner reviews it and signs it from their Dolphin Wallet. Say you proposed it - never that you traded. Propose only when your instructions and the data call for it."
@@ -242,6 +244,7 @@ export const getDraft = query({
             detached: draft.detached ?? [],
             purpose: draft.purpose ?? null,
             hirePriceUsd: draft.hirePriceUsd ?? null,
+            paperMode: draft.paperMode !== false,
             autopilot: draft.autopilot
               ? { on: draft.autopilot.on, conversationKey: draft.autopilot.conversationKey }
               : null,
@@ -399,6 +402,8 @@ export const runtimeForDraft = internalQuery({
     const blocks = activeBlocks((draft?.blocks ?? []) as AgentBlock[], draft?.detached);
     return {
       autotradeActive,
+      // Absent means on: an agent practises with pretend money first.
+      paperMode: draft?.paperMode !== false,
       brain: draft?.brain ?? null,
       // Only what is still plugged in on the canvas.
       blocks,
@@ -1140,7 +1145,9 @@ export async function runTryTurn(
       const brain = runtime?.brain ?? null;
       const blocks = runtime?.blocks ?? [];
       let proposalsToday = runtime?.proposalsToday ?? 0;
-      const canExecute = Boolean(runtime?.autotradeActive);
+      const paperMode = Boolean(runtime?.paperMode);
+      // In paper mode every trade "executes" - against pretend money.
+      const canExecute = paperMode || Boolean(runtime?.autotradeActive);
       const blockTools = blockToolDefinitions(blocks, canExecute ? "execute" : "propose");
       let ticket: unknown = undefined;
       // What the run did with money, for the record written to memory afterwards.
@@ -1263,6 +1270,9 @@ export async function runTryTurn(
           );
         }
       }
+      if (paperMode && draftId && blocks.some((block) => block.type === "swap")) {
+        readNotes.push(await ctx.runQuery(internal.paperTrading.brief, { draftId }));
+      }
       const readNote = readNotes.length
         ? `\n\nDATA YOUR BLOCKS READ THIS RUN (fetched live just now - use these numbers, quote only these):\n${readNotes.join("\n")}`
         : "";
@@ -1319,7 +1329,7 @@ export async function runTryTurn(
                   : call.function.name === "block_remember" || call.function.name === "block_recall"
                     ? await useMemory(memoryTarget, call.function.name, call.function.arguments)
                     : await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
-              if (!result.isError && /^(Traded|Proposed|Not traded)/.test(result.text)) tradeLines.push(result.text.slice(0, 240));
+              if (!result.isError && /^(Traded|Proposed|Not traded|PAPER trade|Paper trade)/.test(result.text)) tradeLines.push(result.text.slice(0, 240));
               if (result.ticket && (result.ticket as { kind?: string }).kind === "hire") {
                 // A paid hire always waits for the owner's passkey.
                 ticket = result.ticket;
@@ -1339,11 +1349,14 @@ export async function runTryTurn(
                   tokenOut: { address: string | null; symbol: string; decimals: number; verified: boolean };
                   safety: null;
                 };
-                const auto: { attempted: boolean; executed: boolean; text: string } = await ctx.runAction(internal.autotrade.executeTrade, {
-                  draftId,
-                  agentName: draft.name ?? "Agent",
-                  ticket: swapTicket,
-                });
+                // PAPER MODE (convex/paperTrading.ts): simulated against a live quote; nothing is signed.
+                const auto: { attempted: boolean; executed: boolean; text: string } = paperMode
+                  ? { attempted: true, executed: true, text: (await ctx.runAction(internal.paperTrading.fill, { draftId, ticket: swapTicket })).text }
+                  : await ctx.runAction(internal.autotrade.executeTrade, {
+                      draftId,
+                      agentName: draft.name ?? "Agent",
+                      ticket: swapTicket,
+                    });
                 if (auto.executed) {
                   result.text = auto.text;
                 } else {
@@ -1388,6 +1401,7 @@ export async function runTryTurn(
       let system = `${tryAnswerPrompt(draft, {
         canPropose: blocks.some((block) => block.type === "swap"),
         canTrade: canExecute,
+        paper: paperMode,
         triggered,
       })}${addressNote}${memoryNote}${readNote}`;
       const unreachable = [

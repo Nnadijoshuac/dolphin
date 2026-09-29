@@ -734,6 +734,7 @@ export function DolphinClient({
         autopilot: builder.draft.autopilot ?? null,
         purpose: builder.draft.purpose ?? null,
         hirePriceUsd: builder.draft.hirePriceUsd ?? null,
+        paperMode: builder.draft.paperMode ?? true,
       }
     : EMPTY_AGENT_DRAFT;
   const draftName = agentDraft.name?.trim() || "your agent";

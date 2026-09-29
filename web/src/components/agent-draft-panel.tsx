@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AutoTradeCard } from "@/components/auto-trade-card";
+import { PaperTradingCard } from "@/components/paper-trading-card";
 import { EnvVarsPanel } from "@/components/env-vars-panel";
 import { agentBuilderApi, type AgentBlockData, type AgentPurpose } from "@/convex/api";
 import { toast } from "@/store/use-toast-store";
@@ -37,6 +38,8 @@ export type AgentDraft = {
   /** Who it is for. Null until the builder or the person chooses. */
   purpose?: AgentPurpose | null;
   hirePriceUsd?: number | null;
+  /** False only when switched to Live; absent means paper (convex/paperTrading.ts). */
+  paperMode?: boolean;
 };
 
 export const EMPTY_AGENT_DRAFT: AgentDraft = {
@@ -263,6 +266,11 @@ export function AgentDraftPanel({
       ) : null}
 
       {tradeKeyConversation ? (
+        <PaperTradingCard conversationKey={tradeKeyConversation} hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))} />
+      ) : null}
+
+      {/* Live trading only: in paper mode no real trade is made, so no trade key is offered. */}
+      {tradeKeyConversation && draft.paperMode === false ? (
         <AutoTradeCard
           conversationKey={tradeKeyConversation}
           hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))}

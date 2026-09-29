@@ -707,6 +707,29 @@ export default defineSchema({
    * Written sparingly, for the I/O budget: an event only when an agent GAINS
    * or LOSES "live" (not per probe), and one snapshot a day. Never deleted.
    */
+  /**
+   * PAPER TRADING (convex/paperTrading.ts): one account per agent - simulated
+   * money, real PancakeSwap quotes - and one row per simulated trade.
+   */
+  paperAccounts: defineTable({
+    draftId: v.id("agentDrafts"),
+    startUsd: v.number(),
+    holdings: v.array(v.object({ symbol: v.string(), address: v.union(v.string(), v.null()), decimals: v.number(), amount: v.string() })),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index("by_draft", ["draftId"]),
+  paperTrades: defineTable({
+    draftId: v.id("agentDrafts"),
+    sellSymbol: v.string(),
+    sellAmount: v.string(),
+    buySymbol: v.string(),
+    buyAmount: v.string(),
+    route: v.string(),
+    gasBnb: v.string(),
+    sellUsd: v.union(v.number(), v.null()),
+    at: v.string(),
+  }).index("by_draft", ["draftId", "at"]),
+
   livenessEvents: defineTable({
     agentKey: v.string(),
     /** The state before; "new" for an agent's first result. */
@@ -1148,6 +1171,8 @@ export default defineSchema({
     purpose: v.optional(v.union(v.literal("private"), v.literal("tools"), v.literal("hire"))),
     /** For purpose "hire": the price per job the builder asks, in US dollars. */
     hirePriceUsd: v.optional(v.union(v.number(), v.null())),
+    /** Paper trading (convex/paperTrading.ts). Absent means ON: an agent practises before it touches funds. */
+    paperMode: v.optional(v.boolean()),
     ownerAddress: v.union(v.string(), v.null()),
     name: v.union(v.string(), v.null()),
     description: v.union(v.string(), v.null()),

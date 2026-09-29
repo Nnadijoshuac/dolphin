@@ -83,6 +83,7 @@ import type * as lib_walletActionLogs from "../lib/walletActionLogs.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as liveness from "../liveness.js";
 import type * as model_agent from "../model/agent.js";
+import type * as paperTrading from "../paperTrading.js";
 import type * as protocols_aave from "../protocols/aave.js";
 import type * as protocols_pancakeswap from "../protocols/pancakeswap.js";
 import type * as protocols_types from "../protocols/types.js";
@@ -179,6 +180,7 @@ declare const fullApi: ApiFromModules<{
   "lib/walletAuth": typeof lib_walletAuth;
   liveness: typeof liveness;
   "model/agent": typeof model_agent;
+  paperTrading: typeof paperTrading;
   "protocols/aave": typeof protocols_aave;
   "protocols/pancakeswap": typeof protocols_pancakeswap;
   "protocols/types": typeof protocols_types;

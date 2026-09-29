@@ -878,6 +878,8 @@ export type AgentDraftData = {
   /** Who it is for (see purpose in convex/schema.ts). Null until chosen. */
   purpose: AgentPurpose | null;
   hirePriceUsd: number | null;
+  /** Absent or true: paper trading. */
+  paperMode?: boolean;
   updatedAt: number;
 };
 
@@ -902,6 +904,26 @@ export type TradeKeySummary = {
 export const agentMemoryApi = anyApi as unknown as {
   agentMemoryCheck: {
     test: Action<{ sessionToken: string; url: string; keyName: string | null }, { ok: boolean; text: string }>;
+  };
+};
+
+export type PaperHolding = { symbol: string; address: string | null; decimals: number; amount: string };
+
+/** convex/paperTrading.ts - pretend money, real prices. */
+export const paperTradingApi = anyApi as unknown as {
+  paperTrading: {
+    forDraft: Query<
+      { conversationKey: string },
+      {
+        paperMode: boolean;
+        startUsd: number;
+        holdings: PaperHolding[];
+        trades: { at: string; sellSymbol: string; sellAmount: string; buySymbol: string; buyAmount: string; route: string; gasBnb: string }[];
+      } | null
+    >;
+    setMode: Mutation<{ conversationKey: string; paperMode: boolean }, null>;
+    reset: Mutation<{ conversationKey: string }, null>;
+    valuation: Action<{ conversationKey: string }, { valueUsd: number | null; startUsd: number; checkedAt: number } | null>;
   };
 };
 

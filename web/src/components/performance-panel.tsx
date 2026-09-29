@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "convex/react";
 
-import { StatePanel } from "@/components/state-panel";
 import { categoryStatsApi } from "@/convex/api";
 import { statsCategoryFor } from "@/hooks/use-category-stats";
 import { convexClient } from "@/providers/convex-provider";
@@ -85,27 +83,12 @@ function formatDate(value: string) {
 export function PerformancePanel({ agent }: { agent: Agent }) {
   const statsCategory = statsCategoryFor(agent.category);
 
-  if (!statsCategory) {
-    return (
-      <StatePanel
-        body="No protocol reader is wired for this category, so Dolphin takes no timed measurement of this agent and has nothing to plot. A chart of an unmeasured value would be a chart of nothing."
-        compact
-        state="unavailable"
-        title="No charted metric for this category"
-      />
-    );
-  }
-
-  if (!convexClient) {
-    return (
-      <StatePanel
-        body="The observation history lives in the shared backend, which is not configured for this deployment."
-        compact
-        state="unavailable"
-        title="History unavailable"
-      />
-    );
-  }
+  /*
+   * Nothing to plot renders NOTHING (owner cleanup, 2026-09-29): no category
+   * reader, no backend, or fewer than two measurements. Three explanatory
+   * panels for an absent chart were the loudest thing on most agent pages.
+   */
+  if (!statsCategory || !convexClient) return null;
 
   return <BackendPerformancePanel agent={agent} />;
 }
@@ -124,29 +107,12 @@ function BackendPerformancePanel({ agent }: { agent: Agent }) {
   );
 
   if (history === undefined) {
-    return <div className="skeleton h-60 w-full rounded-xl" />;
+    return null;
   }
 
   const dataPoints = history.points;
 
-  if (dataPoints.length < 2) {
-    return (
-      <StatePanel
-        body={
-          dataPoints.length === 1
-            ? "Dolphin has taken one measurement of this agent. A second one draws the first line — each point is a real protocol read, so this fills in as the agent is observed rather than all at once."
-            : "Dolphin has not measured this agent yet. Points are recorded when its record is opened, at most once an hour, and every one of them is a real on-chain read."
-        }
-        compact
-        state="empty"
-        title={
-          dataPoints.length === 1
-            ? "One observation so far"
-            : "No observations yet"
-        }
-      />
-    );
-  }
+  if (dataPoints.length < 2) return null;
 
   const width = 800;
   const height = 200;
@@ -154,12 +120,9 @@ function BackendPerformancePanel({ agent }: { agent: Agent }) {
   const values = dataPoints.map((point) => point.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
-  const sources = Array.from(
-    new Map(dataPoints.map((point) => [point.source.id, point.source])).values(),
-  );
 
   return (
-    <figure className="border-y border-line py-6">
+    <figure className="rounded-2xl border border-line/85 bg-paper p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-medium">
         <span className="text-ink">{history.metricLabel ?? "Observed value"}</span>
         <span className="text-muted">
@@ -210,26 +173,6 @@ function BackendPerformancePanel({ agent }: { agent: Agent }) {
         <span>
           {formatDate(dataPoints[0].timestamp)} –{" "}
           {formatDate(dataPoints[dataPoints.length - 1].timestamp)}
-        </span>
-        <span>
-          Read from:{" "}
-          {sources.map((source, index) => (
-            <span key={source.id}>
-              {index > 0 && ", "}
-              {source.url ? (
-                <Link
-                  className="font-medium text-accent-ink underline-offset-4 hover:underline"
-                  href={source.url}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  {source.label}
-                </Link>
-              ) : (
-                <span className="font-medium text-ink">{source.label}</span>
-              )}
-            </span>
-          ))}
         </span>
       </figcaption>
     </figure>

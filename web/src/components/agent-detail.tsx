@@ -11,9 +11,9 @@ import { AgentTrialPanel } from "@/components/agent-trial-panel";
 import { FavoriteButton } from "@/components/favorite-button";
 import { HireAction } from "@/components/hire-action";
 import { McpUseAction } from "@/components/mcp-use-action";
-import { MetricCell } from "@/components/metric-cell";
 import { MobileAgentDetail } from "@/components/mobile-agent-detail";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { useNow } from "@/hooks/use-now";
 import { PerformancePanel } from "@/components/performance-panel";
 import { TrackRecord } from "@/components/track-record";
 import { useAgentCategoryStats } from "@/hooks/use-category-stats";
@@ -82,167 +82,89 @@ function BackendLiveStats({ agent }: { agent: Agent }) {
   return <LiveStatsView stats={stats} />;
 }
 
+type StatTile = { label: string; value: string | null; stale: boolean };
+
+function tile<T>(label: string, metric: LiveMetric<T>, format: (value: T) => string): StatTile {
+  const has = (metric.status === "live" || metric.status === "stale") && metric.value !== null;
+  return { label, value: has ? format(metric.value as T) : null, stale: metric.status === "stale" };
+}
+
+function tilesFor(stats: AgentLiveStats): StatTile[] {
+  switch (stats.category) {
+    case "monitoring":
+      return [
+        tile("Alert frequency", stats.alertFrequency, (value) => value),
+        tile("Assets watched", stats.assetsWatched, formatList),
+        tile("Last alert", stats.lastAlertAt, (value) => value),
+        tile("False positives", stats.falsePositiveRate, (value) => `${value.toFixed(1)}%`),
+      ];
+    case "rebalancing":
+      return [
+        tile("Historical win rate", stats.winRate, (value) => `${value.toFixed(1)}%`),
+        tile("Active LP range", stats.activeRange, (value) => value),
+        tile("Current P&L", stats.currentPnl, (value) => value),
+        tile("LP positions monitored", stats.positionCount, (value) => String(value)),
+      ];
+    case "grid-trading":
+      return [
+        tile("Historical win rate", stats.winRate, (value) => `${value.toFixed(1)}%`),
+        tile("Active grid range", stats.activeRange, (value) => value),
+        tile("Current P&L", stats.currentPnl, (value) => value),
+        tile("Positions monitored", stats.positionCount, (value) => String(value)),
+      ];
+    case "health-factor":
+      return [
+        tile("Venus health factor", stats.averageHealthFactor, (value) => value.toFixed(2)),
+        tile("Loan positions monitored", stats.positionsMonitored, (value) => String(value)),
+        tile("Liquidations prevented", stats.liquidationsPrevented, (value) => String(value)),
+        tile("Response latency", stats.responseLatencyMs, (value) => `${value}ms`),
+      ];
+    case "yield":
+      /*
+       * "Total value managed" and "Protocols used" were REMOVED (2026-09-12):
+       * both read the agent's OWN wallet, which an agent managing YOUR position
+       * never funds, so they could never be non-zero. See git history.
+       */
+      return [
+        tile("Current APY", stats.currentApy, (value) => `${value.toFixed(2)}%`),
+        tile("Rebalance cadence", stats.rebalanceFrequency, (value) => value),
+      ];
+    case "trading":
+      return [
+        tile("Historical win rate", stats.winRate, (value) => `${value.toFixed(1)}%`),
+        tile("Trades executed", stats.tradesExecuted, (value) => String(value)),
+        tile("Realized P&L", stats.realizedPnl, (value) => value),
+        tile("Markets traded", stats.marketsTraded, formatList),
+      ];
+    default:
+      return [];
+  }
+}
+
+/**
+ * ONLY WHAT WAS READ (owner cleanup, 2026-09-29). This rendered every metric
+ * the category defines, and for most agents most of them are unavailable - a
+ * wall of "Unavailable" with a source and a timestamp under each. §5 forbids
+ * inventing a number; it does not require listing every number we lack. A
+ * metric with a real reading is shown; the rest are left out, and when none
+ * has one the section is not rendered at all.
+ */
 function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
+  const shown = tilesFor(stats).filter((item) => item.value !== null);
+  if (shown.length === 0) return null;
   return (
-    <div className="grid border-l border-t border-line sm:grid-cols-2">
-      {stats.category === "monitoring" ? (
-        <>
-          <MetricCell
-            format={(value) => value}
-            label="Alert frequency"
-            metric={stats.alertFrequency}
-          />
-          <MetricCell format={formatList} label="Assets watched" metric={stats.assetsWatched} />
-          <MetricCell
-            format={(value) => value}
-            label="Last alert"
-            metric={stats.lastAlertAt}
-          />
-          <MetricCell
-            format={(value) => `${value.toFixed(1)}%`}
-            label="False positives"
-            metric={stats.falsePositiveRate}
-          />
-        </>
-      ) : null}
-
-      {stats.category === "rebalancing" ? (
-        <>
-          <MetricCell
-            format={(value) => `${value.toFixed(1)}%`}
-            label="Historical win rate"
-            metric={stats.winRate}
-          />
-          <MetricCell
-            format={(value) => value}
-            label="Active LP range"
-            metric={stats.activeRange}
-          />
-          <MetricCell
-            format={(value) => value}
-            label="Current P&L"
-            metric={stats.currentPnl}
-          />
-          <MetricCell
-            format={(value) => String(value)}
-            label="LP positions monitored"
-            metric={stats.positionCount}
-          />
-        </>
-      ) : null}
-
-      {stats.category === "grid-trading" ? (
-        <>
-          <MetricCell
-            format={(value) => `${value.toFixed(1)}%`}
-            label="Historical win rate"
-            metric={stats.winRate}
-          />
-          <MetricCell
-            format={(value) => value}
-            label="Active grid range"
-            metric={stats.activeRange}
-          />
-          <MetricCell
-            format={(value) => value}
-            label="Current P&L"
-            metric={stats.currentPnl}
-          />
-          <MetricCell
-            format={(value) => String(value)}
-            label="Positions monitored"
-            metric={stats.positionCount}
-          />
-        </>
-      ) : null}
-
-      {stats.category === "health-factor" ? (
-        <>
-          <MetricCell
-            format={(value) => value.toFixed(2)}
-            label="Venus health factor"
-            metric={stats.averageHealthFactor}
-          />
-          <MetricCell
-            format={(value) => String(value)}
-            label="Loan positions monitored"
-            metric={stats.positionsMonitored}
-          />
-          <MetricCell
-            format={(value) => String(value)}
-            label="Liquidations prevented"
-            metric={stats.liquidationsPrevented}
-          />
-          <MetricCell
-            format={(value) => `${value}ms`}
-            label="Response latency"
-            metric={stats.responseLatencyMs}
-          />
-        </>
-      ) : null}
-
-      {stats.category === "yield" ? (
-        <>
-          <MetricCell
-            format={(value) => `${value.toFixed(2)}%`}
-            label="Current APY"
-            metric={stats.currentApy}
-          />
-          {/*
-            * "Total value managed" and "Protocols used" were REMOVED here
-            * (2026-09-12), and they are the same bug rather than two.
-            *
-            * Both read the AGENT'S OWN WALLET —
-            * Pool.getUserAccountData(agentWallet).totalCollateralBase, and
-            * whether that same wallet holds an Aave position. An agent that
-            * rebalances YOUR position never holds anything itself, which is
-            * the design this whole product is built around. So the tiles were
-            * not merely empty pending data: they were structurally incapable
-            * of ever being non-zero, and rendered "$0.00M" and "None" on every
-            * agent, forever, under a heading that says "Live".
-            *
-            * A permanently-zero metric labelled Live is worse than a missing
-            * one. It reads as a measurement of the agent's competence and it
-            * is nothing of the kind.
-            *
-            * What would be honest here is the agent's ESCROW record — jobs
-            * funded, delivered, refunded — which is about work it did for
-            * other people rather than money it happens to be sitting on. That
-            * belongs to the track-record section, which already exists.
-            */}
-          <MetricCell
-            format={(value) => value}
-            label="Rebalance cadence"
-            metric={stats.rebalanceFrequency}
-          />
-        </>
-      ) : null}
-
-      {stats.category === "trading" ? (
-        <>
-          <MetricCell
-            format={(value) => `${value.toFixed(1)}%`}
-            label="Historical win rate"
-            metric={stats.winRate}
-          />
-          <MetricCell
-            format={(value) => String(value)}
-            label="Trades executed"
-            metric={stats.tradesExecuted}
-          />
-          <MetricCell
-            format={(value) => value}
-            label="Realized P&L"
-            metric={stats.realizedPnl}
-          />
-          <MetricCell
-            format={formatList}
-            label="Markets traded"
-            metric={stats.marketsTraded}
-          />
-        </>
-      ) : null}
-    </div>
+    <section className="detail-card">
+      <h2 className="detail-card__title">Live on-chain</h2>
+      <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {shown.map((item) => (
+          <div className="min-w-0 rounded-xl bg-paper-muted/60 px-4 py-3" key={item.label}>
+            <dt className="truncate text-[0.72rem] text-muted">{item.label}</dt>
+            <dd className="mt-1 truncate text-xl font-semibold tracking-[-0.03em] text-ink">{item.value}</dd>
+            {item.stale ? <dd className="mt-0.5 text-[0.68rem] text-faint">Earlier reading</dd> : null}
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -255,24 +177,42 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
  * line: an agent Dolphin had delisted after five failed probes rendered
  * exactly like a healthy one, hire button and all.
  */
+/** "Answering · checked 7h ago" - relative, in the header's one meta line. */
+function AnsweringBadge({ agent }: { agent: Agent }) {
+  const now = useNow();
+  if (agent.status !== "live") return null;
+  const lastChecked = agent.verification?.lastProbeAt ?? agent.verifiedAt;
+  const ago = relativeAgo(lastChecked, now);
+  return (
+    <span className="inline-flex items-center gap-1.5" title={lastChecked ? `Last checked ${formatDate(lastChecked)} UTC` : undefined}>
+      {/* The same live green as the catalog cards' "Answered" dot. */}
+      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#22a55b]" />
+      <span className="font-medium text-ink-soft">Answering</span>
+      {ago ? <span className="text-faint">· checked {ago}</span> : null}
+    </span>
+  );
+}
+
+function relativeAgo(value: string | null | undefined, now: number): string | null {
+  if (!value || now === 0) return null;
+  const at = new Date(value).getTime();
+  if (Number.isNaN(at) || at > now) return null;
+  const minutes = Math.round((now - at) / 60_000);
+  if (minutes < 2) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 function AvailabilityNotice({ agent }: { agent: Agent }) {
   const check = agent.verification;
   const lastChecked = check?.lastProbeAt ?? agent.verifiedAt;
   const lastAnswered = check?.lastOkAt ?? null;
 
   if (agent.status === "live") {
-    return (
-      <p
-        aria-label={`Answering, last checked ${formatDate(lastChecked)} UTC`}
-        className="mt-4 inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium leading-none text-muted"
-      >
-        <span className="inline-flex items-center gap-1.5 font-semibold text-success">
-          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
-          <span>Answering</span>
-        </span>
-        <span className="text-faint">last checked {formatDate(lastChecked)} UTC</span>
-      </p>
-    );
+    // Said inline in the header's meta line (AnsweringBadge), not as a notice.
+    return null;
   }
 
   if (agent.status === "duplicate") {
@@ -357,28 +297,25 @@ function TechnicalDetailsAccordion({
   const registrationRecord = `https://bscscan.com/nft/${agent.registryAddress}/${agent.tokenId}`;
 
   return (
-    <section className="rounded-2xl border border-line bg-paper overflow-hidden">
+    <section className="detail-card overflow-hidden !p-0">
       <button
         aria-expanded={isOpen}
-        className="interactive flex w-full items-center justify-between p-6 sm:p-7 text-left"
+        className="interactive flex w-full items-center justify-between px-6 py-5 text-left"
         onClick={() => setIsOpen((prev) => !prev)}
         type="button"
       >
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-ink">Details & Registry Record</h2>
+            <h2 className="detail-card__title">Registry details</h2>
             {isRegistryVerified ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-semibold text-success border border-success/30">
                 Verified
               </span>
             ) : null}
           </div>
-          <p className="mt-1 text-xs text-muted">
-            On-chain parameters, smart contract addresses, and verification sources.
-          </p>
         </div>
         <span
-          className={`flex h-8 w-8 items-center justify-center rounded-full border border-line bg-paper-muted text-muted transition-transform duration-200 ${
+          className={`flex h-7 w-7 items-center justify-center rounded-full text-muted transition-transform duration-200 ${
             isOpen ? "rotate-90" : ""
           }`}
         >
@@ -387,7 +324,7 @@ function TechnicalDetailsAccordion({
       </button>
 
       {isOpen ? (
-        <div className="border-t border-line p-6 sm:p-7 pt-4 space-y-6 animate-in fade-in duration-150">
+        <div className="space-y-6 border-t border-line/70 px-6 pb-6 pt-4">
           <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 text-xs">
             {facts.map(([label, value]) => (
               <div
@@ -455,6 +392,10 @@ export function AgentDetail({ agent }: { agent: Agent }) {
     (registryStatus.status === "live" || registryStatus.status === "stale") &&
     registryStatus.value;
 
+  const normalized = (text: string) => text.trim().replace(/\s+/g, " ").toLowerCase();
+  const showDescription =
+    Boolean(agent.description?.trim()) && normalized(agent.description) !== normalized(agent.tagline ?? "");
+
   const publisherDisplay = agent.publisher?.startsWith("0x")
     ? shortAddress(agent.publisher)
     : agent.publisher || "Unlisted publisher";
@@ -491,10 +432,10 @@ export function AgentDetail({ agent }: { agent: Agent }) {
       </nav>
 
       {/* ── Hero Header ── */}
-      <header className="border-b border-line pb-8 pt-6 sm:pb-10 sm:pt-8">
+      <header className="pb-2 pt-6 sm:pt-8">
         <div className="flex flex-col sm:flex-row sm:items-start gap-5">
           <div className="shrink-0">
-            <AgentIcon category={agent.category} seed={agent.iconSeed} size={84} uri={agent.iconUrl} />
+            <AgentIcon category={agent.category} seed={agent.iconSeed} size={72} uri={agent.iconUrl} />
           </div>
 
           {/*
@@ -520,7 +461,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           <div className="min-w-0 flex-1">
             {/* Agent Name */}
             <div className="flex items-start justify-between gap-4">
-              <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+              <h1 className="text-3xl font-semibold tracking-[-0.035em] text-ink sm:text-[2.4rem]">
                 {agent.name}
                 {agent.firstParty ? <ByDolphin /> : null}
               </h1>
@@ -529,20 +470,18 @@ export function AgentDetail({ agent }: { agent: Agent }) {
 
             {/* Tagline */}
             {agent.tagline ? (
-              <p className="mt-2.5 text-base font-medium leading-relaxed text-ink/80 max-w-3xl">
+              <p className="mt-2 max-w-3xl text-[1.02rem] leading-relaxed text-ink-soft">
                 {agent.tagline}
               </p>
             ) : null}
 
             {/* Metadata Footer */}
-            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted">
+            {/* One quiet line. Token id and chain live in Registry details. */}
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.8rem] text-muted">
               <span>
-                By <span className="font-semibold text-ink">{publisherDisplay}</span>
+                by <span className="font-medium text-ink">{publisherDisplay}</span>
               </span>
-              <span aria-hidden="true">·</span>
-              <span>Token #{agent.tokenId}</span>
-              <span aria-hidden="true">·</span>
-              <span>BNB Smart Chain · Mainnet · 56</span>
+              <AnsweringBadge agent={agent} />
             </div>
           </div>
         </div>
@@ -597,60 +536,52 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         </aside>
 
         {/* Left Column: Core Agent Information */}
-        <div className="order-2 lg:order-1 space-y-8 min-w-0">
-          {/* 1. About section (Top priority) */}
-          <section className="rounded-2xl border border-line bg-paper p-6 sm:p-7">
-            <h2 className="text-base font-bold tracking-tight text-ink">About this agent</h2>
-            <p className="mt-3 text-sm leading-7 text-ink/80 whitespace-pre-line">
-              {agent.description}
-            </p>
-
-            {/* Published Capabilities */}
-            {agent.skills.length > 0 ? (
-              <div className="mt-6 border-t border-line pt-5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted mb-3">
-                  Published Capabilities
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {agent.skills.map((skill) => (
-                    <span
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-paper-muted px-3 py-1.5 text-xs font-medium text-ink"
-                      key={`${skill.name}-${skill.evidence}`}
-                    >
-                      <span>{skill.name}</span>
-                      <span className="text-[10px] text-muted">({skill.evidence.replaceAll("-", " ")})</span>
-                    </span>
-                  ))}
+        <div className="order-2 min-w-0 space-y-5 lg:order-1">
+          {/*
+            1. ABOUT - only what the header has not already said (owner cleanup,
+            2026-09-29): many agents publish the same sentence as tagline and
+            description, and the page printed it twice.
+          */}
+          {showDescription || agent.skills.length > 0 ? (
+            <section className="detail-card">
+              {showDescription ? (
+                <>
+                  <h2 className="detail-card__title">About</h2>
+                  <p className="mt-2 whitespace-pre-line text-[0.9rem] leading-7 text-ink-soft">{agent.description}</p>
+                </>
+              ) : null}
+              {agent.skills.length > 0 ? (
+                <div className={showDescription ? "mt-6" : undefined}>
+                  <h2 className="detail-card__title">What it can do</h2>
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {agent.skills.map((skill) => (
+                      <li
+                        className="rounded-full border border-line/80 px-3 py-1.5 text-[0.8rem] text-ink"
+                        key={`${skill.name}-${skill.evidence}`}
+                      >
+                        {skill.name}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </div>
-            ) : null}
-          </section>
+              ) : null}
+            </section>
+          ) : null}
 
-          {/* 2. Track Record & Reviews */}
-          <section className="rounded-2xl border border-line bg-paper p-6 sm:p-7">
-            <h2 className="text-base font-bold tracking-tight text-ink">Track Record & Reviews</h2>
-            <p className="mt-1 text-xs text-muted">
-              Verified hire outcomes and structured feedback from wallets on BNB Chain.
-            </p>
-            <div className="mt-5">
+          {/* 2. Track record */}
+          <section className="detail-card">
+            <h2 className="detail-card__title">Track record</h2>
+            <div className="mt-3">
               <TrackRecord agentKey={agent.agentKey} agentName={agent.name} />
             </div>
           </section>
 
-          {/* 3. Live Protocol Evidence (shown only if agent has live stats) */}
+          {/* 3. Live on-chain readings and their chart - each renders only if it has something. */}
           {agent.hasLiveStats ? (
-            <section className="rounded-2xl border border-line bg-paper p-6 sm:p-7">
-              <h2 className="text-base font-bold tracking-tight text-ink">Live Protocol Evidence</h2>
-              <p className="mt-1 text-xs text-muted">
-                Direct on-chain metrics checked against live protocol contracts.
-              </p>
-              <div className="mt-5">
-                <LiveStats agent={agent} />
-              </div>
-              <div className="mt-6 border-t border-line pt-5">
-                <PerformancePanel agent={agent} />
-              </div>
-            </section>
+            <>
+              <LiveStats agent={agent} />
+              <PerformancePanel agent={agent} />
+            </>
           ) : null}
 
           {/* 4. Details & Technical Record (Collapsible Accordion) */}

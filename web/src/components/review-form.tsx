@@ -116,6 +116,13 @@ function BackendReviewForm({
 
   if (!eligibility.eligible) {
     /*
+     * HIDDEN unless it is an instruction to THIS visitor (owner rule: hide what
+     * the user cannot use). "Sign in with the wallet that hired this" and "only
+     * hirers can review" are shown to everyone who never hired, which is nearly
+     * everyone; only a hirer inside the one-day wait gets told when they can.
+     */
+    if (!eligibility.reason?.startsWith("You can review")) return null;
+    /*
      * The real reason, from the backend, verbatim. Not a generic "you cannot
      * review this": the difference between "sign in", "you have not hired this"
      * and "wait another 9 hours" is the difference between a dead end and an

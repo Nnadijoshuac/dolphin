@@ -87,137 +87,92 @@ function BackendTrackRecord({
 
   const loading = reviews === undefined || retention === undefined;
 
+  if (loading) {
+    return <div className="skeleton h-14 w-full rounded-xl" />;
+  }
+
+  const totalHires = retention?.totalHires ?? 0;
+  const totalReviews = reviews?.total ?? 0;
+
+  /*
+   * NOTHING YET, SAID ONCE (owner cleanup, 2026-09-29). A grid of 0, - and -
+   * with a paragraph on how the rate is computed told a visitor nothing that
+   * "no hires yet" does not, and took half a screen to do it.
+   */
+  if (totalHires === 0 && totalReviews === 0) {
+    return (
+      <>
+        <p className="text-sm text-muted">No hires or reviews yet.</p>
+        <ReviewForm agentKey={agentKey} agentName={agentName} />
+      </>
+    );
+  }
+
   return (
     <div>
-      {/* ---------------------------------------------------------------- */}
-      {/* RETENTION — Dolphin's own arithmetic, no reviewer involved.       */}
-      {/* ---------------------------------------------------------------- */}
-      <div className="grid border-l border-t border-line sm:grid-cols-3">
+      {/* RETENTION: Dolphin's own arithmetic over its hire records. */}
+      <dl className="grid grid-cols-3 gap-3">
         <RetentionCell
-          detail={
-            retention
-              ? `${retention.activeHires} of ${retention.totalHires} still running`
-              : null
-          }
+          detail={retention ? `${retention.activeHires} still running` : null}
           label="Hires"
-          loading={loading}
-          value={retention ? String(retention.totalHires) : null}
+          value={String(totalHires)}
         />
         <RetentionCell
           detail={
-            retention
-              ? retention.day7.rate !== null
-                ? `${retention.day7.retained} of ${retention.day7.eligible} hires`
-                : `${retention.day7.eligible} of ${MIN_RATE_DENOMINATOR} hires needed`
-              : null
+            retention && retention.day7.rate !== null
+              ? `${retention.day7.retained} of ${retention.day7.eligible}`
+              : `Needs ${MIN_RATE_DENOMINATOR} hires`
           }
-          label="Kept past 7 days"
-          loading={loading}
-          value={
-            retention?.day7.rate !== null && retention !== undefined
-              ? percent(retention.day7.rate as number)
-              : null
-          }
+          label="Kept 7 days"
+          value={retention?.day7.rate != null ? percent(retention.day7.rate) : null}
         />
         <RetentionCell
           detail={
-            retention
-              ? retention.day30.rate !== null
-                ? `${retention.day30.retained} of ${retention.day30.eligible} hires`
-                : `${retention.day30.eligible} of ${MIN_RATE_DENOMINATOR} hires needed`
-              : null
+            retention && retention.day30.rate !== null
+              ? `${retention.day30.retained} of ${retention.day30.eligible}`
+              : `Needs ${MIN_RATE_DENOMINATOR} hires`
           }
-          label="Kept past 30 days"
-          loading={loading}
-          value={
-            retention?.day30.rate !== null && retention !== undefined
-              ? percent(retention.day30.rate as number)
-              : null
-          }
+          label="Kept 30 days"
+          value={retention?.day30.rate != null ? percent(retention.day30.rate) : null}
         />
-      </div>
+      </dl>
 
-      <p className="mt-3 text-xs leading-5 text-muted">
-        Retention is computed by Dolphin from its own hire records, not reported
-        by the publisher. A percentage appears once {MIN_RATE_DENOMINATOR} hires
-        are old enough to have been kept or dropped; below that the counts are
-        shown instead, because a rate over a handful of hires reorders on one
-        person changing their mind.
-      </p>
-
-      {/* ---------------------------------------------------------------- */}
-      {/* REVIEWS                                                           */}
-      {/* ---------------------------------------------------------------- */}
-      <div className="mt-9 border-t border-line pt-7">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h3 className="text-sm font-semibold text-ink">
-            What hirers said
-          </h3>
-          {reviews && reviews.total > 0 ? (
+      {reviews && reviews.total > 0 ? (
+        <div className="mt-6 border-t border-line/70 pt-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h3 className="text-sm font-semibold text-ink">What hirers said</h3>
             <p className="text-xs text-muted">
               {reviews.total} {reviews.total === 1 ? "review" : "reviews"}
-              {reviews.paidReviews > 0
-                ? ` · ${reviews.paidReviews} from paid hires`
-                : ""}
-              {reviews.onChainReviews > 0
-                ? ` · ${reviews.onChainReviews} published on-chain`
-                : ""}
+              {reviews.paidReviews > 0 ? ` · ${reviews.paidReviews} from paid hires` : ""}
+              {reviews.onChainReviews > 0 ? ` · ${reviews.onChainReviews} on-chain` : ""}
             </p>
-          ) : null}
-        </div>
-
-        {loading ? (
-          <div className="mt-4 space-y-3">
-            <div className="skeleton h-16 w-full rounded-xl" />
-            <div className="skeleton h-16 w-full rounded-xl" />
           </div>
-        ) : reviews && reviews.total > 0 ? (
-          <>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <SummaryTile
-                label="Would hire again"
-                /*
-                 * Null below five. Rendering counts rather than a percentage is
-                 * not a degraded state - it is the accurate one.
-                 */
-                sub={
-                  reviews.wouldHireAgainRate !== null
-                    ? `${reviews.wouldHireAgainCount} of ${reviews.total}`
-                    : `${reviews.wouldHireAgainCount} of ${reviews.total} so far`
-                }
-                value={
-                  reviews.wouldHireAgainRate !== null
-                    ? percent(reviews.wouldHireAgainRate)
-                    : `${reviews.wouldHireAgainCount}/${reviews.total}`
-                }
-              />
-              <SummaryTile
-                label="Did the job"
-                sub={`${reviews.outcomes.partially} partially · ${reviews.outcomes.no} did not`}
-                value={`${reviews.outcomes.yes}/${reviews.total}`}
-              />
-            </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <SummaryTile
+              label="Would hire again"
+              /* Null below five: the counts are the accurate reading, not a fallback. */
+              sub={`${reviews.wouldHireAgainCount} of ${reviews.total}`}
+              value={
+                reviews.wouldHireAgainRate !== null
+                  ? percent(reviews.wouldHireAgainRate)
+                  : `${reviews.wouldHireAgainCount}/${reviews.total}`
+              }
+            />
+            <SummaryTile
+              label="Did the job"
+              sub={`${reviews.outcomes.partially} partially · ${reviews.outcomes.no} did not`}
+              value={`${reviews.outcomes.yes}/${reviews.total}`}
+            />
+          </div>
+          <ul className="mt-4 border-t border-line/70">
+            {reviews.reviews.map((review) => (
+              <ReviewRow key={`${review.walletAddress}-${review.updatedAt}`} review={review} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
-            <ul className="mt-6 border-t border-line">
-              {reviews.reviews.map((review) => (
-                <ReviewRow
-                  key={`${review.walletAddress}-${review.updatedAt}`}
-                  review={review}
-                />
-              ))}
-            </ul>
-          </>
-        ) : (
-          <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
-            Nobody who has hired {agentName} has reviewed it yet. Reviews here
-            can only be written by a wallet that hired the agent and kept it for
-            at least a day, which is why there are few of them and why they are
-            worth reading.
-          </p>
-        )}
-
-        <ReviewForm agentKey={agentKey} agentName={agentName} />
-      </div>
+      <ReviewForm agentKey={agentKey} agentName={agentName} />
     </div>
   );
 }
@@ -226,27 +181,17 @@ function RetentionCell({
   label,
   value,
   detail,
-  loading,
 }: {
   label: string;
   value: string | null;
   detail: string | null;
-  loading: boolean;
 }) {
   return (
-    <div className="min-w-0 border-b border-r border-line bg-paper p-5">
-      <h4 className="text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-muted">
-        {label}
-      </h4>
-      {loading ? (
-        <div className="skeleton mt-4 h-8 w-20 rounded-md" />
-      ) : (
-        <p className="mt-4 text-2xl font-semibold tracking-[-0.035em] text-ink">
-          {/* Not enough data is "—", never a zero or an invented percentage. */}
-          {value ?? "—"}
-        </p>
-      )}
-      {detail ? <p className="mt-2 text-xs leading-5 text-faint">{detail}</p> : null}
+    <div className="min-w-0 rounded-xl bg-paper-muted/60 px-4 py-3">
+      <dt className="text-[0.72rem] text-muted">{label}</dt>
+      {/* Not enough data is "-", never a zero or an invented percentage. */}
+      <dd className="mt-1 text-xl font-semibold tracking-[-0.03em] text-ink">{value ?? "—"}</dd>
+      {detail ? <dd className="mt-0.5 truncate text-[0.7rem] text-faint">{detail}</dd> : null}
     </div>
   );
 }
@@ -261,8 +206,8 @@ function SummaryTile({
   sub: string;
 }) {
   return (
-    <div className="rounded-xl border border-line bg-paper p-4">
-      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
+    <div className="rounded-xl bg-paper-muted/60 px-4 py-3">
+      <p className="text-[0.72rem] text-muted">
         {label}
       </p>
       <p className="mt-2 text-xl font-semibold tracking-[-0.03em] text-ink">

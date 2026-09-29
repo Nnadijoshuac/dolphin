@@ -2794,3 +2794,12 @@ select {
   .catalog-search__filter-label { display: none; }
   .catalog-search__filter { padding: 0 10px; }
 }
+
+/* ── Agent detail sections (components/agent-detail.tsx), 2026-09-29 ────── */
+.detail-card {
+  padding: 22px 24px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: 16px;
+  background: var(--paper);
+}
+.detail-card__title { font-size: 0.95rem; font-weight: 600; letter-spacing: -0.015em; color: var(--ink); }

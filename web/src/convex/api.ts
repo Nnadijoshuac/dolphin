@@ -863,7 +863,8 @@ export type AgentBlockData =
   | { id: string; type: "price"; config: { direction: "above" | "below"; priceUsd: number } }
   | { id: string; type: "walletWatch"; config: { addresses: string[]; label: string | null } }
   | { id: string; type: "wallet"; config: Record<string, never> }
-  | { id: string; type: "hire"; config: { agentKey: string; agentName: string } };
+  | { id: string; type: "hire"; config: { agentKey: string; agentName: string } }
+  | { id: string; type: "memory"; config: { url: string; keyName: string | null } };
 
 export type AgentDraftData = {
   name: string | null;
@@ -890,6 +891,13 @@ export type TradeKeySummary = {
 };
 
 /** convex/autotrade.ts - no-tap trading with a scoped session key. */
+/** convex/agentMemoryCheck.ts - one recall against the builder's own memory server. */
+export const agentMemoryApi = anyApi as unknown as {
+  agentMemoryCheck: {
+    test: Action<{ sessionToken: string; url: string; keyName: string | null }, { ok: boolean; text: string }>;
+  };
+};
+
 export type AgentWalletHolding = { symbol: string; address: string | null; decimals: number; amount: string; usd: number | null };
 
 /** convex/agentWallet.ts - an agent's own wallet. No function returns key material. */

@@ -2502,3 +2502,58 @@ select {
     animation: agent-block-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) both, agent-breathe 1.8s ease-in-out infinite;
   }
 }
+
+/* ══ Canvas, flow pass 2 (owner, 2026-09-29: "remove the glow, leave the purple around it... when the
+   brain is thinking, a very soft pulse... and something similar for the other nodes") ══ */
+.agent-block--brain {
+  background: linear-gradient(180deg, var(--paper-strong), var(--paper));
+  border-color: color-mix(in srgb, var(--kind-brain) 55%, var(--line));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 26px -18px rgba(15, 23, 42, 0.3);
+}
+.agent-port { display: none; }
+.agent-block[data-state="active"]::before { content: none; }
+
+/* A soft ring that swells and fades: working, not alarming. */
+@keyframes agent-soft-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--pulse) 30%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 11px color-mix(in srgb, var(--pulse) 0%, transparent); }
+}
+.agent-block { --pulse: var(--flow); }
+.agent-block--brain { --pulse: var(--kind-brain); }
+.agent-block--melon { --pulse: var(--kind-melon); }
+.agent-block[data-state="active"] { border-color: color-mix(in srgb, var(--pulse) 70%, var(--line)); box-shadow: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .agent-canvas .react-flow__node > .agent-block[data-state="active"],
+  .agent-canvas .react-flow__node > .agent-block--brain[data-state="active"] {
+    animation: agent-block-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) both, agent-soft-pulse 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+}
+
+/* The block panel eases in beside the canvas. */
+@keyframes inspector-in { from { opacity: 0; transform: translateX(14px) scale(0.985); } }
+@media (prefers-reduced-motion: no-preference) {
+  .inspector-pop { animation: inspector-in 340ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+
+/*
+ * NO TRANSFORMS ON A BLOCK (owner, 2026-09-29: "the lines are not connecting to
+ * the dots"). React Flow measures each dot's position from the block's box; a
+ * block measured mid-entrance (translated and scaled) had its dots stored up to
+ * 14px from where they are drawn, and a hover lift or a "done" pop moved the
+ * dots off their lines. Blocks now arrive and react with opacity, blur, colour
+ * and shadow only - nothing that moves a dot.
+ */
+@keyframes agent-block-rise {
+  0% { opacity: 0; filter: blur(5px); }
+  100% { opacity: 1; filter: none; }
+}
+@keyframes agent-done-pop {
+  0% { border-color: color-mix(in srgb, var(--kind) 80%, var(--line)); }
+}
+.agent-block:hover { transform: none; box-shadow: 0 2px 4px rgba(15, 23, 42, 0.07), 0 18px 36px -18px rgba(15, 23, 42, 0.42); }
+.agent-block[data-state="done"] { transform: none; }
+/* React Flow centres a dot with its own `transform`; growing one must use `scale`, which composes with it. */
+.agent-canvas .react-flow__handle { transition: scale 160ms ease, background 160ms ease; }
+.agent-canvas .react-flow__handle:hover { transform: translate(-50%, -50%); scale: 1.5; }
+.agent-canvas .react-flow__handle.connectingto,
+.agent-canvas .react-flow__handle.valid { transform: translate(-50%, -50%); scale: 1.6; }

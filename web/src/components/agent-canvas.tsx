@@ -34,24 +34,24 @@ import type { Agent } from "@/types/agent";
 import { toast } from "@/store/use-toast-store";
 
 /**
- * THE AGENT AS A FLOW DIAGRAM (owner, 2026-09-28: "like n8n"; 2026-09-29:
- * "the brain should have four connectors... a flow diagram, from here to here
- * to here").
+ * THE AGENT AS A FLOW DIAGRAM (owner, 2026-09-29: "from the trigger to the
+ * brain... the brain consults the strategy and the strategy gives back... then
+ * the brain reaches out to the other components... risk limit is a regulator,
+ * it sits in between two things").
  *
- *                      Melon (strategy)
- *                          │
- *   Triggers ──when──>  BRAIN  ──does──>  Answer
- *                          ▲               Risk limits ─> Swap ─> Wallet
- *                        knows             Hired agent
- *                          │
- *               Market · Safety · Tools
+ *                         Strategy
+ *                            ⇅  consults, and is answered
+ *   Trigger ──────────>   BRAIN  ──> Answer
+ *                            │   ──> Risk limits ──> Swap ──> Wallet
+ *                            │   ──> Hired agent
+ *                            ▼
+ *              Market · Safety · Memory · Tools   (it reads them)
  *
- * Four ports on the Brain: WHEN it runs (left), its STRATEGY (top), what it
- * KNOWS (bottom), and what it DOES (right). A trade is a chain the money
- * really follows: Risk limits is a gate every trade passes through before
- * Swap, and the Wallet at the end is where it executes. A hired A2A agent is
- * something the Brain does and pays for, so it sits on the right too - it is
- * not a source the Brain reads.
+ * Arrows run the way the work does: a trigger starts the Brain; the Brain
+ * calls out to everything else. Nothing pushes into the Brain but its
+ * trigger. Risk limits is a regulator on the trade line - no trade reaches
+ * the market without passing it - and the Wallet at the end is where a trade
+ * executes.
  *
  * The MELON is the agent's strategy - its instructions. Named for the organ in
  * a dolphin's forehead that focuses its echolocation: how it senses and
@@ -102,7 +102,7 @@ type BlockData = {
 };
 
 type BlockNode = Node<BlockData, "block">;
-type FlowEdge = Edge<{ active?: boolean; reverse?: boolean; used?: boolean; member?: string; cutAt?: number }, "flow">;
+type FlowEdge = Edge<{ active?: boolean; reverse?: boolean; both?: boolean; used?: boolean; member?: string; cutAt?: number }, "flow">;
 
 /** What a try-run is doing right now. Null when nothing is running or has run. */
 export type CanvasRun = {
@@ -155,11 +155,8 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
       {kind === "brain" ? (
         <>
           <Handle id="in" position={Position.Left} type="target" />
-          <Handle id="strategy" position={Position.Top} type="target" />
-          <Handle id="senses" position={Position.Bottom} type="target" />
-          <span aria-hidden className="agent-port agent-port--when">when</span>
-          <span aria-hidden className="agent-port agent-port--knows">knows</span>
-          <span aria-hidden className="agent-port agent-port--does">does</span>
+          <Handle id="strategy" position={Position.Top} type="source" />
+          <Handle id="reads" position={Position.Bottom} type="source" />
         </>
       ) : null}
       {kind === "output" || kind === "hands" || kind === "risk" ? <Handle id="in" position={Position.Left} type="target" /> : null}
@@ -211,9 +208,9 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
       </div>
 
       {kind === "trigger" ? <Handle id="out" position={Position.Right} type="source" /> : null}
-      {kind === "tool" || kind === "sense" ? <Handle id="out" position={Position.Top} type="source" /> : null}
+      {kind === "tool" || kind === "sense" ? <Handle id="in" position={Position.Top} type="target" /> : null}
       {kind === "risk" || data.blockType === "swap" ? <Handle id="out" position={Position.Right} type="source" /> : null}
-      {kind === "melon" ? <Handle id="out" position={Position.Bottom} type="source" /> : null}
+      {kind === "melon" ? <Handle id="in" position={Position.Bottom} type="target" /> : null}
       {kind === "brain" ? <Handle id="out" position={Position.Right} type="source" /> : null}
     </div>
   );
@@ -243,7 +240,7 @@ function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosi
         <>
           <path className="agent-edge__glow" d={path} fill="none" />
           <path className="agent-edge__comet" d={path} data-reverse={reverse || undefined} fill="none" pathLength={1} />
-          {[0, 0.55].map((delay) => (
+          {[0, 0.55].map((delay, index) => (
             <circle className="agent-edge__pulse" key={delay} r={3.2}>
               <animateMotion
                 begin={`${delay}s`}
@@ -252,7 +249,7 @@ function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosi
                 keySplines="0.45 0 0.25 1"
                 path={path}
                 repeatCount="indefinite"
-                {...motion}
+                {...(data?.both && index === 1 ? { keyPoints: reverse ? "0;1" : "1;0", keyTimes: "0;1" } : motion)}
               />
             </circle>
           ))}
@@ -307,6 +304,7 @@ export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label
   swap: { kind: "hands", label: "Swap", glyph: "wallet" },
   wallet: { kind: "hands", label: "Wallet", glyph: "wallet" },
   hire: { kind: "hands", label: "Hired agent", glyph: "agents" },
+  memory: { kind: "sense", label: "Memory", glyph: "receive" },
 };
 
 function money(value: number): string {
@@ -339,6 +337,8 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
       return { title: "Agent wallet", detail: "Trades from its own funds, no tap" };
     case "hire":
       return { title: block.config.agentName, detail: "Paid A2A agent · you confirm each payment" };
+    case "memory":
+      return { title: "Your memory server", detail: block.config.url.replace(/^https:\/\//, "") };
   }
 }
 
@@ -397,7 +397,7 @@ export function draftGraph(
 
   // KNOWS: what the Brain can read, in rows beneath it.
   const senses: { id: string; data: BlockData }[] = [];
-  for (const type of ["market", "safety"] as const) {
+  for (const type of ["market", "safety", "memory"] as const) {
     const block = find(type);
     if (block) senses.push({ id: `block-${block.id}`, data: blockData(block) });
   }
@@ -439,10 +439,10 @@ export function draftGraph(
   });
   if (hire) place(`block-${hire.id}`, actionX, rowY("hire"), { ...blockData(hire), agent: agentLook(hire.config.agentKey) });
 
-  const edge = (source: string, target: string, targetHandle: string, member?: string): FlowEdge => ({
+  const edge = (source: string, target: string, targetHandle: string, member?: string, sourceHandle = "out"): FlowEdge => ({
     id: `${source}->${target}`,
     source,
-    sourceHandle: "out",
+    sourceHandle,
     target,
     targetHandle,
     type: "flow",
@@ -450,9 +450,13 @@ export function draftGraph(
   });
   const live = (member: string | undefined) => !member || !cut.has(member);
   const edges: FlowEdge[] = [
-    edge("melon", "brain", "strategy"),
+    // The Brain consults its strategy.
+    edge("brain", "melon", "in", undefined, "strategy"),
     ...triggers.filter((t) => live(t.data.member)).map((t) => edge(t.id, "brain", "in", t.data.member)),
-    ...senses.filter((x) => x.id !== "tool-empty" && x.id !== "add-tool" && live(x.data.member)).map((x) => edge(x.id, "brain", "senses", x.data.member)),
+    // The Brain reaches down for what it reads.
+    ...senses
+      .filter((x) => x.id !== "tool-empty" && x.id !== "add-tool" && live(x.data.member))
+      .map((x) => edge("brain", x.id, "in", x.data.member, "reads")),
     edge("brain", "output", "in"),
   ];
   // The trade chain, link by link. Cutting any link stops trades where it is cut.
@@ -485,7 +489,9 @@ function applyRun(
     nodeState.set("trigger", "done");
     edgeState.set("trigger->brain", run.phase === "thinking" ? { active: true } : { used: true });
   }
-  edgeState.set("melon->brain", working ? { active: run.phase === "thinking" } : {});
+  // Consulting the strategy: light both ways while it thinks.
+  edgeState.set("brain->melon", run.phase === "thinking" ? { active: true, both: true } : working || run.phase === "done" ? { used: true } : {});
+  if (run.phase === "thinking") nodeState.set("melon", "active");
   nodeState.set("brain", run.phase === "error" ? "error" : working ? "active" : run.phase === "done" ? "done" : "idle");
 
   draft.tools.forEach((tool, index) => {
@@ -494,10 +500,10 @@ function applyRun(
     const id = `tool-${index}`;
     if (calls.some((call) => call.state === "running")) {
       nodeState.set(id, "active");
-      edgeState.set(`${id}->brain`, { active: true, reverse: true });
+      edgeState.set(`brain->${id}`, { active: true, both: true });
     } else {
       nodeState.set(id, calls.some((call) => call.state === "error") ? "error" : "done");
-      edgeState.set(`${id}->brain`, { used: true });
+      edgeState.set(`brain->${id}`, { used: true });
     }
   });
 
@@ -526,9 +532,9 @@ function applyRun(
       }
     } else if (block.type === "hire") {
       edgeState.set(`brain->${id}`, lit);
-    } else {
-      // The Brain reaches down for what it knows.
-      edgeState.set(`${id}->brain`, running ? { active: true, reverse: true } : { used: true });
+    } else if (!["schedule", "price", "walletWatch"].includes(block.type)) {
+      // The Brain reaches down for what it reads, and the answer comes back up.
+      edgeState.set(`brain->${id}`, running ? { active: true, both: true } : { used: true });
     }
   }
   // A trigger run lights the trigger that started it.
@@ -630,6 +636,7 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
     items: [
       { type: "market", label: "Market", about: "A token's live price, candles and chart", glyph: "layers" },
       { type: "safety", label: "Safety", about: "Honeypot, taxes and owner-power checks", glyph: "shield" },
+      { type: "memory", label: "Memory", about: "Remembers past runs - on your own server", glyph: "receive" },
       { type: "tool", label: "Agent tool", about: "A tool from an agent listed on Dolphin", glyph: "agents" },
       { type: "hire", label: "Hire an agent", about: "A paid A2A agent - you confirm each payment", glyph: "bot" },
     ],
@@ -803,6 +810,29 @@ export function AgentCanvas({
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number }>>({});
   const [fitVersion, setFitVersion] = useState(0);
 
+  /*
+   * PRESS THE CANVAS, AND THE PANEL GOES (owner, 2026-09-29: "once I click
+   * anything outside the modal it should close... so that I can do other
+   * things"). On pointer DOWN anywhere on the canvas outside the panel - empty
+   * space, or the start of a drag to pan - so it is gone before the drag
+   * begins. Only the canvas: the chat and the draft panel have nothing to do
+   * with it. A press on another block is left to React Flow, which opens that
+   * block's panel instead.
+   */
+  const inspector = useRef<HTMLDivElement>(null);
+  const canvasRoot = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!selectedId) return;
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!target || !canvasRoot.current?.contains(target) || inspector.current?.contains(target)) return;
+      if (target.closest(".react-flow__node, .block-panel, .add-block-button, .toaster, [role='listbox']")) return;
+      setSelectedId(null);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [selectedId]);
+
   // "new-<type>" is a block being added from the toolbox; it has no node yet.
   const selected =
     selectedId && (selectedId.startsWith("new-") || base.nodes.some((node) => node.id === selectedId)) ? selectedId : null;
@@ -933,9 +963,9 @@ export function AgentCanvas({
       const to = target.data.blockType;
       if (target.id === "brain") {
         if (connection.targetHandle === "in" && source.data.kind === "trigger") return source.data.member ?? null;
-        if (connection.targetHandle === "senses" && (source.data.kind === "tool" || source.data.kind === "sense")) return source.data.member ?? null;
         return null;
       }
+      if (source.id === "brain" && (target.data.kind === "tool" || target.data.kind === "sense")) return target.data.member ?? null;
       if (source.id === "brain") {
         if (to === "risk") return swap ? `block:${swap.id}` : "limits";
         if (to === "swap" && !risk) return target.data.member ?? null;
@@ -1012,7 +1042,7 @@ export function AgentCanvas({
   }, [layoutKey]);
 
   return (
-    <div aria-label="Agent canvas" className="agent-canvas relative h-full min-h-0 w-full" role="region">
+    <div aria-label="Agent canvas" className="agent-canvas relative h-full min-h-0 w-full" ref={canvasRoot} role="region">
       <ReactFlow
         connectionLineStyle={{ stroke: "var(--flow)", strokeWidth: 2, strokeDasharray: "5 5" }}
         connectionRadius={34}
@@ -1084,7 +1114,9 @@ export function AgentCanvas({
       ) : null}
 
       {editKey && selected ? (
-        <div className="absolute bottom-3 right-3 top-3 z-10 flex w-[21rem] flex-col justify-start">
+        // The frame spans the canvas's height but only the panel inside it takes clicks:
+        // the empty space below a short panel is canvas, and must pan and close like canvas.
+        <div className="inspector-pop pointer-events-none absolute bottom-3 right-3 top-3 z-10 flex w-[21rem] flex-col justify-start [&>*]:pointer-events-auto" ref={inspector}>
           <AgentCanvasInspector
             conversationKey={editKey}
             draft={draft}

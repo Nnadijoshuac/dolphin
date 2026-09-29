@@ -9,6 +9,7 @@ import { AgentWalletPanel } from "@/components/agent-wallet-panel";
 import { ChoiceList, type Choice } from "@/components/choice-list";
 import {
   agentBuilderApi,
+  agentMemoryApi,
   agentWalletApi,
   api,
   brainModelsApi,
@@ -594,6 +595,7 @@ const BLOCK_TITLES: Record<BlockType, string> = {
   walletWatch: "Wallet watch",
   wallet: "Wallet",
   hire: "Hire an agent",
+  memory: "Memory",
 };
 
 const BLOCK_ABOUT: Record<BlockType, string> = {
@@ -605,6 +607,7 @@ const BLOCK_ABOUT: Record<BlockType, string> = {
   price: "Runs the agent when the Market token's price crosses your level - once per crossing, not on every check.",
   walletWatch: "Runs the agent when a watched wallet transacts - a KOL, a whale, a fund. It sees any transaction they send, and exactly which tokens moved for your Market token and Dolphin's verified list.",
   wallet: "The agent's own wallet. Fund it, and every trade within your Risk limits executes from it at once - no ticket, no tap - with what it buys landing back in it. Withdraw to your wallet any time.",
+  memory: "Your agent's memory, kept on your own server - Dolphin stores none of it. Before every run it reads what it did last time; after it, a record of the run is saved. It can also note things down itself.",
   hire: "A paid agent from Dolphin's catalog that yours can call on. When it asks for work, the agent quotes a price and you confirm each payment from your Dolphin Wallet with your passkey. It delivers on-chain afterwards.",
 };
 
@@ -685,6 +688,14 @@ function BlockEditor({
   const session = useWalletSession();
   const createWallet = useAction(agentWalletApi.agentWallet.create);
   const [creating, setCreating] = useState(false);
+  const [memoryUrl, setMemoryUrl] = useState(typeof config.url === "string" ? config.url : "");
+  const [memoryKey, setMemoryKey] = useState<string>(typeof config.keyName === "string" ? config.keyName : "");
+  const [memoryCheck, setMemoryCheck] = useState<{ ok: boolean; text: string } | "checking" | null>(null);
+  const testMemory = useAction(agentMemoryApi.agentMemoryCheck.test);
+  const keys = useQuery(
+    envVarsApi.envVars.list,
+    type === "memory" && session.sessionToken ? { sessionToken: session.sessionToken } : "skip",
+  );
   // Paid agents a flow can hire: live A2A agents in the catalog.
   const hireResults = useQuery(
     api.agents.search,
@@ -741,6 +752,8 @@ function BlockEditor({
           : null;
       case "hire":
         return hirePick ? { id, type, config: hirePick } : null;
+      case "memory":
+        return memoryUrl.trim().startsWith("https://") ? { id, type, config: { url: memoryUrl.trim(), keyName: memoryKey || null } } : null;
       case "safety":
       case "swap":
       case "wallet":
@@ -939,6 +952,78 @@ function BlockEditor({
               </ul>
             </>
           )}
+        </div>
+      ) : null}
+
+      {type === "memory" ? (
+        <div className="mt-3">
+          <Label>Memory server</Label>
+          <input
+            aria-label="Memory server address"
+            className={`${fieldClass} font-mono`}
+            data-1p-ignore
+            data-lpignore="true"
+            name="dolphin-memory-url"
+            onChange={(event) => {
+              setMemoryUrl(event.target.value);
+              setMemoryCheck(null);
+            }}
+            placeholder="https://memory.example.com"
+            spellCheck={false}
+            value={memoryUrl}
+          />
+          <div className="mt-3">
+            <Label>Its key</Label>
+            <ChoiceList
+              ariaLabel="Memory key"
+              choices={[{ value: "", label: "No key" }, ...(keys ?? []).map((key) => ({ value: key.name, label: key.name, hint: key.last4 ? `••••${key.last4}` : undefined }))]}
+              mono
+              onChange={(next) => {
+                setMemoryKey(next);
+                setMemoryCheck(null);
+              }}
+              searchable={false}
+              value={memoryKey}
+            />
+            <p className="mt-1 text-[0.68rem] leading-snug text-muted">Sent to your server as a bearer token. Add it in the Keys tab.</p>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              className="shrink-0 rounded-lg border border-line px-3 py-1.5 !text-[12px] font-semibold text-ink hover:bg-paper-muted disabled:opacity-40"
+              disabled={!memoryUrl.trim().startsWith("https://") || memoryCheck === "checking"}
+              onClick={() => {
+                void (async () => {
+                  const sessionToken = session.sessionToken ?? (await session.signIn());
+                  if (!sessionToken) return;
+                  setMemoryCheck("checking");
+                  try {
+                    setMemoryCheck(await testMemory({ sessionToken, url: memoryUrl.trim(), keyName: memoryKey || null }));
+                  } catch (cause) {
+                    setMemoryCheck({ ok: false, text: errorText(cause, "Could not test it.") });
+                  }
+                })();
+              }}
+              type="button"
+            >
+              {memoryCheck === "checking" ? "Testing…" : "Test connection"}
+            </button>
+            {memoryCheck && memoryCheck !== "checking" ? (
+              <p className={`min-w-0 text-[0.72rem] leading-snug ${memoryCheck.ok ? "text-success" : "text-danger"}`}>{memoryCheck.text}</p>
+            ) : null}
+          </div>
+          <div className="mt-3 rounded-lg bg-paper-muted/70 px-3 py-2.5">
+            <p className="text-[0.72rem] font-semibold text-ink">No memory server yet?</p>
+            <p className="mt-1 text-[0.7rem] leading-relaxed text-muted">
+              Run Dolphin&apos;s one-file server on any machine you control (Node 18+, nothing to install), put it behind https, and paste its address above.
+            </p>
+            <a
+              className="mt-2 inline-flex !text-[0.72rem] font-semibold text-ink underline-offset-2 hover:underline"
+              download
+              href="/memory/dolphin-memory-server.mjs"
+            >
+              Download the server
+            </a>
+          </div>
         </div>
       ) : null}
 

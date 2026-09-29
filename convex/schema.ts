@@ -730,6 +730,15 @@ export default defineSchema({
     liveKeys: v.array(v.string()),
     /** sha256 of liveKeys joined by "\n". */
     liveKeysSha256: v.string(),
+    /**
+     * The chain (mentor review: "a hash you store yourself proves nothing; make
+     * each day's hash include the previous day's, and publish it").
+     * chainSha256 = sha256(prev + NL + day + NL + live + NL + liveKeysSha256),
+     * "genesis" for the first. Rewriting any past day breaks every later link.
+     * Optional only for rows written before the chain; see liveness.backfillChain.
+     */
+    prevChainSha256: v.optional(v.union(v.string(), v.null())),
+    chainSha256: v.optional(v.string()),
     gained: v.number(),
     lost: v.number(),
     takenAt: v.string(),

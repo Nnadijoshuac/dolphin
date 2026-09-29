@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as agentBuilder from "../agentBuilder.js";
 import type * as agentHires from "../agentHires.js";
+import type * as agentMemoryCheck from "../agentMemoryCheck.js";
 import type * as agentPayments from "../agentPayments.js";
 import type * as agentRetention from "../agentRetention.js";
 import type * as agentReviews from "../agentReviews.js";
@@ -41,6 +42,7 @@ import type * as healthAlerts from "../healthAlerts.js";
 import type * as http from "../http.js";
 import type * as iconProcessing from "../iconProcessing.js";
 import type * as lib_agentBlocks from "../lib/agentBlocks.js";
+import type * as lib_agentMemory from "../lib/agentMemory.js";
 import type * as lib_agentSpec from "../lib/agentSpec.js";
 import type * as lib_agentTransaction from "../lib/agentTransaction.js";
 import type * as lib_answerHygiene from "../lib/answerHygiene.js";
@@ -102,6 +104,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   agentBuilder: typeof agentBuilder;
   agentHires: typeof agentHires;
+  agentMemoryCheck: typeof agentMemoryCheck;
   agentPayments: typeof agentPayments;
   agentRetention: typeof agentRetention;
   agentReviews: typeof agentReviews;
@@ -132,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   iconProcessing: typeof iconProcessing;
   "lib/agentBlocks": typeof lib_agentBlocks;
+  "lib/agentMemory": typeof lib_agentMemory;
   "lib/agentSpec": typeof lib_agentSpec;
   "lib/agentTransaction": typeof lib_agentTransaction;
   "lib/answerHygiene": typeof lib_answerHygiene;

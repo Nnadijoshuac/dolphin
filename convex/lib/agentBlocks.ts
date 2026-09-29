@@ -13,6 +13,9 @@
  *   wallet    the agent's OWN wallet (convex/agentWallet.ts). With it
  *             plugged in, a swap within the Risk limits executes at once from
  *             that wallet - no ticket, no tap - and what it buys lands there.
+ *   memory    the builder's OWN memory server (lib/agentMemory.ts). Recalled
+ *             before every run, a record written after it, and the Brain gets
+ *             `remember` and `recall`. Dolphin keeps none of it.
  *   hire      a paid A2A agent from the catalog. Gives the Brain
  *             `hire_agent`: Dolphin asks the agent for a price for the task,
  *             and the OWNER confirms paying it from their Dolphin Wallet.
@@ -32,9 +35,10 @@ import { ConvexError } from "convex/values";
 import { getAddress, isAddress } from "viem";
 
 import type { ToolDefinition } from "./openrouter";
+import { assertSafeUrl } from "./safeFetch";
 import { verifiedTokenBySymbol, verifiedTokens, type TradeToken } from "./tradeTokens";
 
-export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "wallet", "hire"] as const;
+export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "wallet", "hire", "memory"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export type MarketConfig = { tokenAddress: string; symbol: string; name: string; poolAddress: string | null };
@@ -43,6 +47,7 @@ export type ScheduleConfig = { everyMinutes: number };
 export type PriceConfig = { direction: "above" | "below"; priceUsd: number };
 export type WalletWatchConfig = { addresses: string[]; label: string | null };
 export type HireConfig = { agentKey: string; agentName: string };
+export type MemoryConfig = { url: string; keyName: string | null };
 
 export type AgentBlock =
   | { id: string; type: "market"; config: MarketConfig }
@@ -53,7 +58,8 @@ export type AgentBlock =
   | { id: string; type: "price"; config: PriceConfig }
   | { id: string; type: "walletWatch"; config: WalletWatchConfig }
   | { id: string; type: "wallet"; config: Record<string, never> }
-  | { id: string; type: "hire"; config: HireConfig };
+  | { id: string; type: "hire"; config: HireConfig }
+  | { id: string; type: "memory"; config: MemoryConfig };
 
 export const MAX_BLOCKS = 12;
 /** Fastest schedule. Every run spends the builder's own model key. */
@@ -142,6 +148,18 @@ export function validateBlocks(input: unknown): AgentBlock[] {
         if (!/^\d+:0x[0-9a-f]{40}:\d+$/.test(agentKey)) fail("Choose an agent from Dolphin's catalog to hire.");
         const agentName = typeof config.agentName === "string" && config.agentName.trim() ? config.agentName.trim().slice(0, 60) : "Agent";
         out.push({ id, type, config: { agentKey, agentName } });
+        break;
+      }
+      case "memory": {
+        const url = typeof config.url === "string" ? config.url.trim().replace(/\/+$/, "") : "";
+        if (!url.startsWith("https://") || url.length > 300) fail("The memory server needs an https:// address.");
+        try {
+          assertSafeUrl(url);
+        } catch {
+          fail("That memory server address is not reachable from the internet.");
+        }
+        const keyName = typeof config.keyName === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(config.keyName) ? config.keyName : null;
+        out.push({ id, type, config: { url, keyName } });
         break;
       }
       case "safety":
@@ -291,6 +309,37 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "pro
         },
       },
     });
+  }
+  if (blocks.some((block) => block.type === "memory")) {
+    tools.push(
+      {
+        type: "function",
+        function: {
+          name: "block_remember",
+          description:
+            "Save one short note to your memory, for your next runs: a position you opened, a price you are waiting for, a decision and why. Your runs are recorded automatically; use this for what you will need to know later.",
+          parameters: {
+            type: "object",
+            properties: { text: { type: "string", description: "The note, in one or two sentences, with exact numbers." } },
+            required: ["text"],
+            additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "block_recall",
+          description: "Search your memory for notes about something (a token, a trade, a wallet). Your latest memories are already in front of you.",
+          parameters: {
+            type: "object",
+            properties: { query: { type: "string", description: "What to look for." } },
+            required: ["query"],
+            additionalProperties: false,
+          },
+        },
+      },
+    );
   }
   const hire = blocks.find((block) => block.type === "hire");
   if (hire) {

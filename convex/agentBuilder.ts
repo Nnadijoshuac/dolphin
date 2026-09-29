@@ -46,6 +46,7 @@ import { stripRawPayloads } from "./lib/answerHygiene";
 import { syncTriggers } from "./lib/triggerSync";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
+import { memoryBrief, recall, remember, type MemoryTarget } from "./lib/agentMemory";
 import { chatCompletion, customChatUrl, isBrainProvider, type ChatMessage } from "./lib/openrouter";
 import { assertSafeUrl } from "./lib/safeFetch";
 import { isMutating } from "./lib/toolCapability";
@@ -102,6 +103,7 @@ WHAT AN AGENT BUILT HERE IS. Never promise more than this:
   - Triggers: Schedule (every 15 minutes to daily), Price (when the token crosses a level), Wallet watch (when a wallet they follow - a KOL, a whale - transacts). With Autopilot switched on, the agent runs on these by itself, up to 48 times a day.
   - Risk limits (dollars per trade, trades per day) and Swap: the agent may then PROPOSE PancakeSwap trades within those limits. By default the person approves and signs every trade. They can opt in to "Trade without asking" (Draft tab) so it trades by itself for 1-30 days within limits the wallet enforces, and stop it any time. Nothing guarantees a profit - never promise one.
   - Wallet: the agent's OWN wallet, which the person funds. With it plugged in, trades within the Risk limits execute from that wallet at once, with no tap, and what they buy lands back in it; the person withdraws to their own wallet any time. Dolphin holds that wallet's key, so it should hold only what they would let the agent trade.
+  - Memory: the person's OWN memory server (any https address that speaks Dolphin's two-call memory interface; a one-file server is offered to download). The agent reads its recent memories before every run, a record of each run is saved after it, and it can remember and recall notes. Dolphin keeps none of it. Suggest it for scheduled agents that must know what they did before.
   - Hire an agent: one paid A2A agent from Dolphin's catalog. The agent can ask it to do a task and gets its price; the person confirms each payment from their Dolphin Wallet with their passkey. The result is delivered later, on-chain - not into the conversation.
 - Write the instructions so they use what is there: e.g. "When your price trigger fires, read the market snapshot, check safety, and propose a trade only if...". Rules with exact numbers beat vague judgement.
 - It cannot send emails or messages, and cannot trade without the person signing. If asked, say so plainly and offer the closest thing it can do.
@@ -1029,6 +1031,8 @@ export async function runTryTurn(
       const canExecute = Boolean(runtime?.agentWallet) || Boolean(runtime?.autotradeActive);
       const blockTools = blockToolDefinitions(blocks, canExecute ? "execute" : "propose");
       let ticket: unknown = undefined;
+      // What the run did with money, for the record written to memory afterwards.
+      const tradeLines: string[] = [];
       const apiKey = brain
         ? await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: brain.keyName })
         : null;
@@ -1053,6 +1057,26 @@ export async function runTryTurn(
         return { messageId: assistantId };
       }
       const endpoint = { provider: brain.provider, apiKey, model: brain.model, baseUrl: brain.baseUrl ?? null };
+
+      /*
+       * MEMORY, from the builder's own server (lib/agentMemory.ts). Read before
+       * the run so a scheduled agent knows what it did last time. Down or
+       * refusing: the run goes on and the agent is told so.
+       */
+      const memoryBlock = blocks.find((block) => block.type === "memory");
+      let memoryTarget: MemoryTarget | null = null;
+      let memoryNote = "";
+      if (memoryBlock && memoryBlock.type === "memory" && draftId) {
+        const memoryKey: string | null = memoryBlock.config.keyName
+          ? await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: memoryBlock.config.keyName })
+          : null;
+        memoryTarget = { url: memoryBlock.config.url, key: memoryKey, agent: draftId };
+        try {
+          memoryNote = `\n\n${memoryBrief(await recall(memoryTarget))}`;
+        } catch (cause) {
+          memoryNote = `\n\nYOUR MEMORY could not be reached this run (${cause instanceof Error ? cause.message : "no answer"}). Say so if it matters, and do not assume what you did before.`;
+        }
+      }
 
       /*
        * The menu is the draft's tools and nothing else. An agent that has left
@@ -1094,7 +1118,7 @@ export async function runTryTurn(
         : "\n\nNo wallet is connected. If a question needs the user's address, ask them to connect a wallet or paste an address.";
 
       const messages: ChatMessage[] = [
-        { role: "system", content: `${TRY_CONSULT_PROMPT}${addressNote}` },
+        { role: "system", content: `${TRY_CONSULT_PROMPT}${addressNote}${memoryNote}` },
         ...history,
         { role: "user", content: text },
       ];
@@ -1123,7 +1147,11 @@ export async function runTryTurn(
              * its block.
              */
             for (const call of batch.filter((c) => c.function.name.startsWith("block_"))) {
-              const block = blocks.find((candidate) => call.function.name === blockToolNameFor(candidate.type));
+              const block = blocks.find(
+                (candidate) =>
+                  call.function.name === blockToolNameFor(candidate.type) ||
+                  (candidate.type === "memory" && (call.function.name === "block_remember" || call.function.name === "block_recall")),
+              );
               const started = Date.now();
               const toolCallId = await ctx.runMutation(internal.dolphin.recordToolCall, {
                 conversationId,
@@ -1136,7 +1164,10 @@ export async function runTryTurn(
               const result =
                 call.function.name === "block_hire_agent"
                   ? await askToHire(ctx, blocks, call.function.arguments)
-                  : await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
+                  : call.function.name === "block_remember" || call.function.name === "block_recall"
+                    ? await useMemory(memoryTarget, call.function.name, call.function.arguments)
+                    : await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
+              if (!result.isError && /^(Traded|Proposed|Not traded)/.test(result.text)) tradeLines.push(result.text.slice(0, 240));
               if (result.ticket && (result.ticket as { kind?: string }).kind === "hire") {
                 // A paid hire always waits for the owner's passkey.
                 ticket = result.ticket;
@@ -1205,7 +1236,7 @@ export async function runTryTurn(
         canPropose: blocks.some((block) => block.type === "swap"),
         canTrade: canExecute,
         triggered,
-      })}${addressNote}`;
+      })}${addressNote}${memoryNote}`;
       const unreachable = [
         ...menu.unreachable.map((u) => `- ${u.agentName} did not answer: ${u.reason}`),
         ...rows
@@ -1255,6 +1286,13 @@ export async function runTryTurn(
         // A proposed swap rides on the answer as a ticket the owner signs.
         ...(ticket ? { ticket } : {}),
       });
+      if (memoryTarget) {
+        const record =
+          `${triggered ? "Triggered run" : "Asked"}: ${text.replace(/\s+/g, " ").slice(0, 200)} | ` +
+          (tradeLines.length ? `${tradeLines.join(" ")} | ` : "") +
+          `Answered: ${content.replace(/\s+/g, " ").slice(0, 400)}`;
+        await remember(memoryTarget, record, "run").catch((cause) => console.warn("[agentBuilder] memory record not written:", cause));
+      }
     } catch (cause) {
       const reason = humanizeError(cause);
       await ctx.runMutation(internal.dolphin.setMessageStatus, {
@@ -1278,6 +1316,7 @@ const BLOCK_LABELS: Record<AgentBlock["type"], string> = {
   walletWatch: "Wallet watch",
   wallet: "Wallet",
   hire: "Hired agent",
+  memory: "Memory",
 };
 
 function blockToolNameFor(type: AgentBlock["type"]): string | null {
@@ -1290,6 +1329,29 @@ function blockToolNameFor(type: AgentBlock["type"]): string | null {
         : type === "hire"
           ? "block_hire_agent"
           : null;
+}
+
+/** block_remember / block_recall against the builder's own memory server. */
+async function useMemory(target: MemoryTarget | null, name: string, rawArgs: string): Promise<BlockToolResult> {
+  if (!target) return { text: "This agent has no Memory block.", isError: true };
+  let args: { text?: unknown; query?: unknown } = {};
+  try {
+    args = JSON.parse(rawArgs || "{}");
+  } catch {
+    return { text: "The arguments were not valid JSON.", isError: true };
+  }
+  try {
+    if (name === "block_remember") {
+      const note = typeof args.text === "string" ? args.text : "";
+      if (note.trim().length < 3) return { text: "Say what to remember.", isError: true };
+      await remember(target, note, "note");
+      return { text: "Saved to memory.", isError: false };
+    }
+    const found = await recall(target, { query: typeof args.query === "string" ? args.query : undefined });
+    return { text: found.length ? memoryBrief(found) : "Nothing in memory matches that.", isError: false };
+  } catch (cause) {
+    return { text: `Memory could not be reached: ${cause instanceof Error ? cause.message : String(cause)}.`, isError: true };
+  }
 }
 
 /**

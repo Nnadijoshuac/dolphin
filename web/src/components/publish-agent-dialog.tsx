@@ -9,6 +9,7 @@ import { bsc, bscTestnet } from "viem/chains";
 import { switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 
 import { BUILT_AGENT_CATEGORIES, builtAgentsApi } from "@/convex/api";
+import { BSC_RPC_URL } from "@/constants/agents";
 import { BSC_TESTNET_RPC_URL, useWallet, wagmiConfig } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
 
@@ -56,7 +57,8 @@ const EXPLORER = { bsc: "https://bscscan.com", "bsc-testnet": "https://testnet.b
 
 function readClient(network: Network) {
   return network === "bsc"
-    ? createPublicClient({ chain: bsc, transport: http() })
+    ? // Our RPC, never the chain's default: viem's BSC default (rpc.thirdweb.com) refuses browsers (CORS).
+      createPublicClient({ chain: bsc, transport: http(BSC_RPC_URL) })
     : createPublicClient({ chain: bscTestnet, transport: http(BSC_TESTNET_RPC_URL) });
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useAction } from "convex/react";
+import { BSC_RPC_URL } from "@/constants/agents";
 import { ConvexError } from "convex/values";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -42,7 +43,8 @@ export function RepointAgentUri({ agent }: { agent: BuiltAgentPublic }) {
     queryKey: ["agent-token-uri", agent.registry, agent.tokenId],
     enabled: eligible,
     queryFn: () =>
-      createPublicClient({ chain: bsc, transport: http() }).readContract({
+      // Our RPC: viem's BSC default (rpc.thirdweb.com) refuses browsers (CORS) - seen in production 2026-09-29.
+      createPublicClient({ chain: bsc, transport: http(BSC_RPC_URL) }).readContract({
         address: agent.registry as Address,
         abi: REGISTRY_ABI,
         functionName: "tokenURI",

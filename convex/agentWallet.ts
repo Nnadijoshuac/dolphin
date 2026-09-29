@@ -34,16 +34,15 @@ import { bsc } from "viem/chains";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalAction, internalMutation, internalQuery, query, type ActionCtx, type QueryCtx } from "./_generated/server";
-import { bscPairFor } from "./lib/agentBlocks";
 import { BSC_RPC_URL, bscPublicClient } from "./lib/bscClient";
-import { assertTradeCallsAllowed, buildTradeCalls, describeRoute, quoteTrade, WBNB_BSC, type TradeSide } from "./lib/pancakeswapTrade";
+import { assertTradeCallsAllowed, buildTradeCalls, describeRoute, quoteTrade, type TradeSide } from "./lib/pancakeswapTrade";
 import { open, seal } from "./lib/secretBox";
 import { verifiedTokens } from "./lib/tradeTokens";
+import { readHoldings, type Holding } from "./lib/walletHoldings";
 import { requireWalletAddress } from "./lib/walletAuth";
 
 /** BNB kept back for gas when the agent sells BNB or the owner withdraws it all. */
 const GAS_RESERVE_BNB = "0.0006";
-const STABLE_SYMBOLS = new Set(["USDT", "USDC", "U"]);
 
 async function draftFor(ctx: QueryCtx, conversationKey: string) {
   const conversation = await ctx.db
@@ -128,32 +127,6 @@ export const forDraft = query({
     return wallet ? { address: wallet.address, ownerAddress: wallet.ownerAddress } : null;
   },
 });
-
-type Holding = { symbol: string; address: string | null; decimals: number; amount: string; usd: number | null };
-
-async function readHoldings(address: Address): Promise<Holding[]> {
-  const tokens = verifiedTokens();
-  const rows = await Promise.all(
-    tokens.map(async (token) => {
-      const raw = token.address
-        ? await bscPublicClient
-            .readContract({ address: getAddress(token.address) as Address, abi: erc20Abi, functionName: "balanceOf", args: [address] })
-            .catch(() => null)
-        : await bscPublicClient.getBalance({ address }).catch(() => null);
-      return { token, raw };
-    }),
-  );
-  const held = rows.filter((row) => row.raw !== null && row.raw > BigInt(0));
-  return Promise.all(
-    held.map(async ({ token, raw }) => {
-      const amount = formatUnits(raw as bigint, token.decimals);
-      const price = STABLE_SYMBOLS.has(token.symbol)
-        ? 1
-        : ((await bscPairFor(token.address ?? WBNB_BSC).catch(() => null))?.priceUsd ?? null);
-      return { symbol: token.symbol, address: token.address, decimals: token.decimals, amount, usd: price === null ? null : Number(amount) * price };
-    }),
-  );
-}
 
 /** What the agent's wallet holds of BNB and Dolphin's verified tokens, read live. */
 export const balances = action({

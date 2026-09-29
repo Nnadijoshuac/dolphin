@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { formatUnits } from "viem";
+import { formatUnits, getAddress } from "viem";
 
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -47,6 +47,9 @@ import { syncTriggers } from "./lib/triggerSync";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { memoryBrief, recall, remember, type MemoryTarget } from "./lib/agentMemory";
+import { mergeBuilderBlocks } from "./lib/builderBlocks";
+import { readHoldings } from "./lib/walletHoldings";
+import { TRADING_PLAYBOOK, TRADING_RUN_RULES } from "./lib/tradingPlaybook";
 import { chatCompletion, customChatUrl, isBrainProvider, type ChatMessage } from "./lib/openrouter";
 import { assertSafeUrl } from "./lib/safeFetch";
 import { isMutating } from "./lib/toolCapability";
@@ -98,13 +101,15 @@ WHAT AN AGENT BUILT HERE IS. Never promise more than this:
 - A name, a short description, instructions (its strategy, called the Melon), and a few tools.
 - Its tools come ONLY from the TOOLS list you are given. They belong to other agents listed on Dolphin, and they only READ: prices, pools, positions, protocol data. Some return an unsigned transaction that the person would sign from their own wallet.
 - Its brain runs on the person's OWN model key (OpenAI or OpenRouter), which they add in the Keys tab and choose on the Brain block. Dolphin does not supply one.
-- The person can add more from the canvas TOOLBOX - you cannot add these yourself, so tell them which to add when the job needs them:
+- The canvas TOOLBOX adds more. YOU set up Schedule, Price, Market, Safety, Risk limits and Swap through the \`blocks\` field (below). The person adds Wallet watch, Wallet, Memory and Hire themselves - tell them which to add when the job needs them:
   - Market (the token it trades: live price, candles and a chart), Safety (token security checks).
   - Triggers: Schedule (every 15 minutes to daily), Price (when the token crosses a level), Wallet watch (when a wallet they follow - a KOL, a whale - transacts). With Autopilot switched on, the agent runs on these by itself, up to 48 times a day.
   - Risk limits (dollars per trade, trades per day) and Swap: the agent may then PROPOSE PancakeSwap trades within those limits. By default the person approves and signs every trade. They can opt in to "Trade without asking" (Draft tab) so it trades by itself for 1-30 days within limits the wallet enforces, and stop it any time. Nothing guarantees a profit - never promise one.
   - Wallet: the agent's OWN wallet, which the person funds. With it plugged in, trades within the Risk limits execute from that wallet at once, with no tap, and what they buy lands back in it; the person withdraws to their own wallet any time. Dolphin holds that wallet's key, so it should hold only what they would let the agent trade.
   - Memory: the person's OWN memory server (any https address that speaks Dolphin's two-call memory interface; a one-file server is offered to download). The agent reads its recent memories before every run, a record of each run is saved after it, and it can remember and recall notes. Dolphin keeps none of it. Suggest it for scheduled agents that must know what they did before.
   - Hire an agent: one paid A2A agent from Dolphin's catalog. The agent can ask it to do a task and gets its price; the person confirms each payment from their Dolphin Wallet with their passkey. The result is delivered later, on-chain - not into the conversation.
+${TRADING_PLAYBOOK}
+
 - Write the instructions so they use what is there: e.g. "When your price trigger fires, read the market snapshot, check safety, and propose a trade only if...". Rules with exact numbers beat vague judgement.
 - It cannot send emails or messages, and cannot trade without the person signing. If asked, say so plainly and offer the closest thing it can do.
 - It is private until the person puts it on-chain.
@@ -115,7 +120,8 @@ HOW TO WORK:
 - name: 2 to 5 words, specific to what it does. Not generic like "DeFi Helper".
 - description: one or two sentences saying concretely what it does and for whom.
 - instructions: written TO the agent in the second person ("You check..."). Say what it does, which tool to use for what, what to do when a tool fails or returns nothing, and that it must never guess a number. Plain text, no markdown headings.
-- toolIds: only ids from the TOOLS list that the job needs, usually 1 to 4. If nothing in the list fits, say so honestly and leave toolIds null. Never invent a tool.
+- toolIds: only ids from the TOOLS list that the job needs, usually 1 to 4. If nothing in the list fits, say so honestly and leave toolIds null. Never invent a tool. A trading agent built from blocks needs no tools; leave toolIds null.
+- blocks: for a trading or monitoring agent, set up what the playbook says it needs, in one go: e.g. a schedule (60 or 240 minutes for trend following, 1440 for daily DCA), the market (symbol from: BNB, BTCB, ETH, CAKE, XVS - never a stablecoin), safety, risk (default $5 a trade and 2 trades a day for a first test unless the person gave numbers), and swap. A price trigger only if the person named a level. Only include blocks you are adding or changing this turn; null otherwise. Then, in your reply, tell them the blocks you added and which to add themselves (Wallet to trade without signing, Memory so it remembers its position).
 - Use null for every field you are not changing this turn.
 - reply: speak to the person in 1 to 3 short sentences: what you changed, and your one question if you have one. No JSON, no field names, no tool ids in the reply.
 
@@ -153,7 +159,9 @@ ${
 - Say which agent a fact came from, in a sentence ("according to X").
 - No JSON, no code blocks, no field names, no error codes. Say what a result means.
 - If a tool could not be reached, say so in one sentence and carry on with what you know.
-- Be brief.`;
+- Be brief.${abilities.canPropose || abilities.canTrade ? `
+
+${TRADING_RUN_RULES}` : ""}`;
 }
 
 /* ---------------------------------------------------------------------------
@@ -465,6 +473,48 @@ export const saveDraft = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/** A draft's blocks, for the builder to merge into. */
+export const blocksForConversation = internalQuery({
+  args: { conversationId: v.id("dolphinConversations") },
+  handler: async (ctx, { conversationId }) => {
+    const draft = await ctx.db
+      .query("agentDrafts")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+      .unique();
+    return (draft?.blocks ?? []) as AgentBlock[];
+  },
+});
+
+/** Saves the builder's blocks (already merged and validated). Triggers follow at once when Autopilot is armed. */
+export const saveBuilderBlocks = internalMutation({
+  args: { conversationId: v.id("dolphinConversations"), ownerAddress: v.union(v.string(), v.null()), blocks: v.array(v.any()) },
+  handler: async (ctx, { conversationId, ownerAddress, blocks: raw }) => {
+    const blocks = validateBlocks(raw);
+    const now = Date.now();
+    const draft = await ctx.db
+      .query("agentDrafts")
+      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+      .unique();
+    if (!draft) {
+      await ctx.db.insert("agentDrafts", {
+        conversationId,
+        ownerAddress,
+        name: null,
+        description: null,
+        instructions: null,
+        tools: [],
+        blocks,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return true;
+    }
+    await ctx.db.patch(draft._id, { blocks, updatedAt: now });
+    if (draft.autopilot?.on) await syncTriggers(ctx, draft._id, activeBlocks(blocks, draft.detached), true);
+    return true;
   },
 });
 
@@ -839,7 +889,9 @@ async function compileTurn(messages: ChatMessage[]): Promise<{ reply: BuilderRep
       messages,
       responseSchema: BUILDER_REPLY_SCHEMA,
       temperature: 0.3,
-      maxTokens: 2_500,
+      // Raised from 2,500 when replies began carrying blocks: a reasoning model spent the budget
+      // and the JSON was cut off (finishReason "length", measured 2026-09-29).
+      maxTokens: 4_500,
     });
     const reply = parseBuilderReply(result.content);
     if (reply) return { reply, model: result.model };
@@ -933,7 +985,23 @@ export const ask = action({
         });
       }
 
+      /*
+       * Blocks the builder set up (lib/builderBlocks.ts decides what is allowed).
+       * Saved after the fields, so a brand-new draft exists to hold them.
+       */
+      let blockNote = "";
+      if (compiled.reply.blocks) {
+        const currentBlocks: AgentBlock[] = await ctx.runQuery(internal.agentBuilder.blocksForConversation, { conversationId });
+        const merged = await mergeBuilderBlocks(currentBlocks, compiled.reply.blocks);
+        if (merged.added.length > 0) {
+          const saved: boolean = await ctx.runMutation(internal.agentBuilder.saveBuilderBlocks, { conversationId, ownerAddress, blocks: merged.blocks });
+          if (saved) applied.changed.push("tools");
+        }
+        if (merged.skipped.length > 0) blockNote = `I could not add ${merged.skipped.join("; ")}.`;
+      }
+
       let reply = resolveToolIdReferences(stripRawPayloads(compiled.reply.reply), offered).trim();
+      if (blockNote) reply = `${reply}${reply ? "\n\n" : ""}${blockNote}`;
       if (looksLikeLeakedReasoning(reply)) reply = "";
       if (applied.overLimit.length > 0) {
         reply += `${reply ? "\n\n" : ""}I kept the tools to what one agent can run at once, so I left out ${applied.overLimit
@@ -1166,6 +1234,8 @@ export async function runTryTurn(
                   ? await askToHire(ctx, blocks, call.function.arguments)
                   : call.function.name === "block_remember" || call.function.name === "block_recall"
                     ? await useMemory(memoryTarget, call.function.name, call.function.arguments)
+                    : call.function.name === "block_wallet_holdings"
+                      ? await holdingsOf(runtime?.agentWallet ?? null)
                     : await runBlockTool(blocks, call.function.name, call.function.arguments, proposalsToday);
               if (!result.isError && /^(Traded|Proposed|Not traded)/.test(result.text)) tradeLines.push(result.text.slice(0, 240));
               if (result.ticket && (result.ticket as { kind?: string }).kind === "hire") {
@@ -1328,7 +1398,23 @@ function blockToolNameFor(type: AgentBlock["type"]): string | null {
         ? "block_propose_swap"
         : type === "hire"
           ? "block_hire_agent"
-          : null;
+          : type === "wallet"
+            ? "block_wallet_holdings"
+            : null;
+}
+
+/** block_wallet_holdings: what the agent's own wallet holds, read live. */
+async function holdingsOf(address: string | null): Promise<BlockToolResult> {
+  if (!address) return { text: "You have no wallet of your own plugged in.", isError: true };
+  try {
+    const holdings = await readHoldings(getAddress(address) as `0x${string}`);
+    if (holdings.length === 0) return { text: "Your wallet is empty: no BNB and none of Dolphin's verified tokens.", isError: false };
+    const lines = holdings.map((row) => `${Number(row.amount).toPrecision(6)} ${row.symbol}${row.usd === null ? " (no live price)" : ` (about $${row.usd.toFixed(2)})`}`);
+    const total = holdings.every((row) => row.usd !== null) ? holdings.reduce((sum, row) => sum + (row.usd ?? 0), 0) : null;
+    return { text: `Your wallet holds: ${lines.join(", ")}.${total === null ? "" : ` Total about $${total.toFixed(2)}.`} Keep some BNB for gas.`, isError: false };
+  } catch (cause) {
+    return { text: `Your wallet could not be read right now: ${cause instanceof Error ? cause.message : String(cause)}`, isError: true };
+  }
 }
 
 /** block_remember / block_recall against the builder's own memory server. */

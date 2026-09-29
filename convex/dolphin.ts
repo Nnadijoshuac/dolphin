@@ -1,3 +1,4 @@
+import { TRADING_PLAYBOOK } from "./lib/tradingPlaybook";
 import { v } from "convex/values";
 
 import { api, internal } from "./_generated/api";
@@ -233,6 +234,10 @@ RESPONSE RULES:
     - MEMORY BLOCK: an agent's memory lives on the person's OWN server (an https address speaking Dolphin's two-call memory interface - remember and recall; a one-file server is offered to download). Dolphin stores no agent memory, only where it is. The agent reads recent memories before each run and a record of each run is saved after it.
     - HIRE BLOCK: an agent can hire one paid A2A agent from the catalog. It asks for a price; the person confirms each payment from their Dolphin Wallet with their passkey; the hired agent delivers on-chain later, and its result does not flow back into the agent's conversation.
     - "Try it privately" runs their agent and shows it working live on the canvas; they can then put it on-chain (ERC-8004) from their own wallet.
+    - The Build assistant now SETS UP a trading agent's blocks itself (schedule, market, safety, risk limits, swap) from a description; the person adds Wallet, Memory, Wallet watch and Hire.
+
+4b-3. WHEN SOMEONE ASKS ABOUT TRADING, A STRATEGY, OR WHAT A TRADING AGENT SHOULD DO, advise by this playbook - and never give personal financial advice or promise returns:
+${TRADING_PLAYBOOK}
     - Favorites: a connected wallet can star agents; starred ones lead Discover for them.
     - The email alert for a Venus health factor (rule 4b) is still the ONLY thing that notifies anyone. Autopilot runs appear in the agent's run feed; they send nothing.
 

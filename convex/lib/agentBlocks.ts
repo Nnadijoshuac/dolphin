@@ -243,14 +243,95 @@ export async function bscPairFor(tokenAddress: string): Promise<PairSnapshot | n
   };
 }
 
-/** The last `limit` hourly candles for a BSC pool, oldest first, from GeckoTerminal. */
-async function hourlyCandles(poolAddress: string, limit: number): Promise<Array<[number, number, number, number, number]>> {
+/**
+ * The last `limit` candles for a BSC pool, oldest first, from GeckoTerminal -
+ * in USD and for THIS token's side of the pool. Without `currency` and
+ * `token` a pool's candles can come back in the other token's terms (the
+ * web chart already asks this way; this did not until 2026-09-29).
+ */
+async function poolCandles(
+  poolAddress: string,
+  tokenAddress: string,
+  timeframe: "hour" | "day",
+  limit: number,
+): Promise<Array<[number, number, number, number, number]>> {
   const data = (await getJson(
-    `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${poolAddress}/ohlcv/hour?limit=${limit}`,
+    `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${poolAddress}/ohlcv/${timeframe}?limit=${limit}&currency=usd&token=${tokenAddress}`,
   )) as { data?: { attributes?: { ohlcv_list?: number[][] } } };
   return (data.data?.attributes?.ohlcv_list ?? [])
     .map((row) => [row[0], row[1], row[2], row[3], row[4]] as [number, number, number, number, number])
-    .reverse();
+    .sort((a, b) => a[0] - b[0]);
+}
+
+/* ── indicators, computed here so the model never does the arithmetic ────── */
+
+function sma(values: readonly number[], length: number): number | null {
+  if (values.length < length) return null;
+  const window = values.slice(-length);
+  return window.reduce((sum, value) => sum + value, 0) / length;
+}
+
+/** Wilder's 14-period RSI. */
+function rsi(closes: readonly number[], length = 14): number | null {
+  if (closes.length <= length) return null;
+  let gain = 0;
+  let loss = 0;
+  for (let i = 1; i <= length; i++) {
+    const change = closes[i] - closes[i - 1];
+    if (change >= 0) gain += change;
+    else loss -= change;
+  }
+  gain /= length;
+  loss /= length;
+  for (let i = length + 1; i < closes.length; i++) {
+    const change = closes[i] - closes[i - 1];
+    gain = (gain * (length - 1) + Math.max(change, 0)) / length;
+    loss = (loss * (length - 1) + Math.max(-change, 0)) / length;
+  }
+  if (loss === 0) return 100;
+  return 100 - 100 / (1 + gain / loss);
+}
+
+/** Annualised volatility of daily log returns over the last `days`. */
+function volatility(closes: readonly number[], days = 30): number | null {
+  const window = closes.slice(-(days + 1));
+  if (window.length < 10) return null;
+  const returns = window.slice(1).map((close, i) => Math.log(close / window[i]));
+  const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+  const variance = returns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (returns.length - 1);
+  return Math.sqrt(variance) * Math.sqrt(365) * 100;
+}
+
+function round(value: number | null, digits = 2): string {
+  if (value === null || !Number.isFinite(value)) return "unknown";
+  return value >= 1 ? value.toFixed(digits) : value.toPrecision(4);
+}
+
+/** The trend block of the snapshot: what the playbook's trend-following rule reads. */
+function trendReport(daily: ReadonlyArray<[number, number, number, number, number]>, price: number | null): string {
+  const closes = daily.map((candle) => candle[4]);
+  if (closes.length < 20) return `Daily trend: not enough history (${closes.length} daily candles).`;
+  const last = price ?? closes[closes.length - 1];
+  const sma20 = sma(closes, 20);
+  const sma50 = sma(closes, 50);
+  const month = daily.slice(-30);
+  const high30 = Math.max(...month.map((candle) => candle[2]));
+  const low30 = Math.min(...month.map((candle) => candle[3]));
+  const verdict =
+    sma50 === null
+      ? "unknown (fewer than 50 days of history)"
+      : last > sma50 && sma20 !== null && sma20 > sma50
+        ? "UPTREND (price above the 50-day average, 20-day above 50-day)"
+        : last < sma50 && sma20 !== null && sma20 < sma50
+          ? "DOWNTREND (price below the 50-day average, 20-day below 50-day)"
+          : "MIXED (price and averages disagree)";
+  return (
+    `Daily trend (computed from ${closes.length} daily closes): ${verdict}. ` +
+    `20-day average $${round(sma20, 4)}, 50-day average ${sma50 === null ? "unknown" : `$${round(sma50, 4)}`}, ` +
+    `price ${sma50 === null ? "" : `${(((last - sma50) / sma50) * 100).toFixed(1)}% vs the 50-day, `}` +
+    `14-day RSI ${round(rsi(closes), 1)}, 30-day volatility ${round(volatility(closes), 0)}% a year, ` +
+    `30-day high $${round(high30, 4)} and low $${round(low30, 4)} (now ${(((last - high30) / high30) * 100).toFixed(1)}% from the high).`
+  );
 }
 
 /* ── the Brain's built-in tools ─────────────────────────────────────────────── */
@@ -266,7 +347,7 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "pro
       type: "function",
       function: {
         name: "block_market_snapshot",
-        description: `Live market data for ${market.config.symbol} on BNB Chain: price, liquidity, 24h volume, 1h and 24h change, and the last 12 hourly candles.`,
+        description: `Live market data for ${market.config.symbol} on BNB Chain: price, liquidity, 24h volume, 1h and 24h change, the last 12 hourly candles, and the daily trend computed in code (20- and 50-day averages, 14-day RSI, 30-day volatility, high and low).`,
         parameters: { type: "object", properties: {}, additionalProperties: false },
       },
     });
@@ -307,6 +388,16 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "pro
           required: ["sellSymbol", "buySymbol", "sellAmount", "reason"],
           additionalProperties: false,
         },
+      },
+    });
+  }
+  if (blocks.some((block) => block.type === "wallet")) {
+    tools.push({
+      type: "function",
+      function: {
+        name: "block_wallet_holdings",
+        description: "What your own wallet holds right now - BNB and Dolphin's verified tokens, with dollar values. Check it before sizing a trade or selling.",
+        parameters: { type: "object", properties: {}, additionalProperties: false },
       },
     });
   }
@@ -390,7 +481,11 @@ export async function runBlockTool(
       if (!market) return { text: "This agent has no Market block.", isError: true };
       const pair = await bscPairFor(market.config.tokenAddress);
       if (!pair) return { text: `${market.config.symbol} has no BNB Chain pool with liquidity right now.`, isError: true };
-      const candles = await hourlyCandles(market.config.poolAddress ?? pair.pairAddress, 12).catch(() => []);
+      const pool = market.config.poolAddress ?? pair.pairAddress;
+      const [candles, daily] = await Promise.all([
+        poolCandles(pool, market.config.tokenAddress, "hour", 12).catch(() => []),
+        poolCandles(pool, market.config.tokenAddress, "day", 60).catch(() => []),
+      ]);
       const candleText = candles.length
         ? candles.map(([t, o, h, l, c]) => `${new Date(t * 1000).toISOString().slice(11, 16)}Z o${o.toPrecision(5)} h${h.toPrecision(5)} l${l.toPrecision(5)} c${c.toPrecision(5)}`).join("; ")
         : "unavailable";
@@ -398,7 +493,8 @@ export async function runBlockTool(
         text:
           `${market.config.symbol} on ${pair.dex}: price ${money(pair.priceUsd)}, liquidity ${money(pair.liquidityUsd)}, ` +
           `24h volume ${money(pair.volume24hUsd)}, 1h change ${pair.change1hPct ?? "unknown"}%, 24h change ${pair.change24hPct ?? "unknown"}%. ` +
-          `Hourly candles (UTC, oldest first): ${candleText}.`,
+          `Hourly candles (UTC, oldest first): ${candleText}. ` +
+          (daily.length ? trendReport(daily, pair.priceUsd) : "Daily trend: unavailable right now."),
         isError: false,
       };
     }

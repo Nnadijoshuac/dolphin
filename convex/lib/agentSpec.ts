@@ -25,6 +25,7 @@
  * reply that is not the requested JSON.
  */
 
+import type { BuilderBlock } from "./builderBlocks";
 import { MAX_AGENTS_PER_DECISION, MAX_TOOLS_PER_AGENT } from "./decisionTools";
 
 export const NAME_MAX_CHARS = 60;
@@ -71,6 +72,8 @@ export type BuilderReply = {
   description: string | null;
   instructions: string | null;
   toolIds: string[] | null;
+  /** Blocks to add or update (lib/builderBlocks.ts decides). Null or absent: none. */
+  blocks: BuilderBlock[] | null;
 };
 
 /**
@@ -83,7 +86,7 @@ export const BUILDER_REPLY_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["reply", "name", "description", "instructions", "toolIds"],
+    required: ["reply", "name", "description", "instructions", "toolIds", "blocks"],
     properties: {
       reply: {
         type: "string",
@@ -102,6 +105,24 @@ export const BUILDER_REPLY_SCHEMA = {
         type: ["array", "null"],
         items: { type: "string" },
         description: "The complete set of tool ids the agent should have, or null to keep them.",
+      },
+      blocks: {
+        type: ["array", "null"],
+        description: "Toolbox blocks to add or update this turn, or null for none. Fields a block type does not use are null.",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["type", "symbol", "everyMinutes", "direction", "priceUsd", "maxTradeUsd", "maxTradesPerDay"],
+          properties: {
+            type: { type: "string", enum: ["schedule", "price", "market", "safety", "risk", "swap"] },
+            symbol: { type: ["string", "null"], description: "market: a token symbol from the verified list." },
+            everyMinutes: { type: ["number", "null"], description: "schedule: 15, 30, 60, 240 or 1440." },
+            direction: { type: ["string", "null"], description: "price: above or below." },
+            priceUsd: { type: ["number", "null"], description: "price: the level in USD." },
+            maxTradeUsd: { type: ["number", "null"], description: "risk: dollars per trade." },
+            maxTradesPerDay: { type: ["number", "null"], description: "risk: trades per day." },
+          },
+        },
       },
     },
   },
@@ -139,6 +160,20 @@ export function parseBuilderReply(content: string): BuilderReply | null {
     const description = record.description ?? null;
     const instructions = record.instructions ?? null;
     const toolIds = record.toolIds ?? null;
+    // Blocks are optional and lenient: a malformed list is dropped, never the whole reply.
+    const blocks = Array.isArray(record.blocks)
+      ? (record.blocks as unknown[])
+          .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && typeof (item as { type?: unknown }).type === "string")
+          .map((item) => ({
+            type: String(item.type),
+            symbol: typeof item.symbol === "string" ? item.symbol : null,
+            everyMinutes: typeof item.everyMinutes === "number" ? item.everyMinutes : null,
+            direction: typeof item.direction === "string" ? item.direction : null,
+            priceUsd: typeof item.priceUsd === "number" ? item.priceUsd : null,
+            maxTradeUsd: typeof item.maxTradeUsd === "number" ? item.maxTradeUsd : null,
+            maxTradesPerDay: typeof item.maxTradesPerDay === "number" ? item.maxTradesPerDay : null,
+          }))
+      : null;
     if (!isStringOrNull(name) || !isStringOrNull(description) || !isStringOrNull(instructions)) {
       continue;
     }
@@ -155,6 +190,7 @@ export function parseBuilderReply(content: string): BuilderReply | null {
       description,
       instructions,
       toolIds: toolIds as string[] | null,
+      blocks: blocks && blocks.length ? blocks : null,
     };
   }
 

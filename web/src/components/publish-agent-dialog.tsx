@@ -109,6 +109,9 @@ export function PublishAgentDialog({
   const [email, setEmail] = useState("");
   // Where its payments go: the connected wallet unless the builder names another of their own.
   const [payout, setPayout] = useState("");
+  // Owner, 2026-09-29: the choice belongs here, at Put on-chain - "make public" or "just for me".
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
+  const [price, setPrice] = useState("");
   const [network, setNetwork] = useState<Network>("bsc");
   const [review, setReview] = useState<Review | null>(null);
   const [stage, setStage] = useState<"form" | "reviewing" | "switching" | "signing" | "confirming" | "done">("form");
@@ -173,7 +176,9 @@ export function PublishAgentDialog({
         ...(website.trim() ? { website: website.trim() } : {}),
         ...(xHandle.trim() ? { x: xHandle.trim() } : {}),
         ...(email.trim() ? { email: email.trim() } : {}),
-        ...(payout.trim() ? { payoutAddress: payout.trim() } : {}),
+        ...(payout.trim() && visibility === "public" ? { payoutAddress: payout.trim() } : {}),
+        visibility,
+        ...(visibility === "public" && Number(price) > 0 ? { priceUsd: Number(price) } : {}),
       });
       /* The fee, read now: this exact call's gas at this moment's price. */
       const client = readClient(network);
@@ -310,6 +315,41 @@ export function PublishAgentDialog({
           <div className="mt-4 space-y-5">
             <p className="text-[0.8rem] leading-relaxed text-ink-soft">{agentDescription}</p>
 
+            {/* 0. Who can use it */}
+            <section>
+              <h3 className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-muted">Who can use it</h3>
+              <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Who can use it">
+                {([
+                  { value: "public", label: "Make public", about: "Anyone can find and use it" },
+                  { value: "private", label: "Just for me", about: "Only your wallet holds it" },
+                ] as const).map((option) => (
+                  <button
+                    aria-checked={visibility === option.value}
+                    className={`rounded-xl border px-3 py-2.5 text-left text-[0.8rem] ${visibility === option.value ? "border-ink bg-paper-muted" : "border-line/80"}`}
+                    key={option.value}
+                    onClick={() => edited(setVisibility)(option.value)}
+                    role="radio"
+                    type="button"
+                  >
+                    <span className="block font-semibold text-ink">{option.label}</span>
+                    <span className="block text-[0.7rem] text-muted">{option.about}</span>
+                  </button>
+                ))}
+              </div>
+              {visibility === "public" ? (
+                <label className="mt-2 block text-[0.78rem] text-ink-soft">
+                  Price per job ($)
+                  <input
+                    className="mt-1 block w-full rounded-lg border border-line/80 bg-paper px-3 py-2 text-[0.86rem] text-ink"
+                    inputMode="decimal"
+                    onChange={(event) => edited(setPrice)(event.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder="Leave blank for free"
+                    value={price}
+                  />
+                </label>
+              ) : null}
+            </section>
+
             {/* 1. Wallet */}
             <section>
               <h3 className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-muted">Your wallet</h3>
@@ -394,12 +434,16 @@ export function PublishAgentDialog({
                 { label: "Website (optional)", value: website, set: edited(setWebsite), placeholder: "https://…" },
                 { label: "X handle (optional)", value: xHandle, set: edited(setXHandle), placeholder: "@handle" },
                 { label: "Contact email (optional, public)", value: email, set: edited(setEmail), placeholder: "you@example.com" },
-                {
-                  label: "Payout wallet - where this agent's payments go (your own address; Dolphin never holds its key)",
-                  value: payout,
-                  set: edited(setPayout),
-                  placeholder: wallet.address ? `${wallet.address} (your connected wallet)` : "0x…",
-                },
+                ...(visibility === "public"
+                  ? [
+                      {
+                        label: "Payout wallet (optional) - where its payments go",
+                        value: payout,
+                        set: edited(setPayout),
+                        placeholder: wallet.address ? `${wallet.address} (your connected wallet)` : "0x…",
+                      },
+                    ]
+                  : []),
               ].map((field) => (
                 <label className="block text-[0.78rem] text-ink-soft" key={field.label}>
                   {field.label}

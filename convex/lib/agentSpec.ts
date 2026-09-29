@@ -88,7 +88,7 @@ export const BUILDER_REPLY_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["reply", "name", "description", "instructions", "toolIds", "blocks", "purpose"],
+    required: ["reply", "name", "description", "instructions", "toolIds", "blocks"],
     properties: {
       reply: {
         type: "string",
@@ -107,11 +107,6 @@ export const BUILDER_REPLY_SCHEMA = {
         type: ["array", "null"],
         items: { type: "string" },
         description: "The complete set of tool ids the agent should have, or null to keep them.",
-      },
-      purpose: {
-        type: ["string", "null"],
-        enum: ["private", "tools", "hire", null],
-        description: "Who it is for, once the person has said: private (just for them), tools (others can use its tools), hire (others can hire it). Null otherwise.",
       },
       blocks: {
         type: ["array", "null"],

@@ -43,10 +43,14 @@ type Listing = Doc<"builtAgents">;
 
 export function registrationFile(listing: Listing) {
   const base = `${apiBase()}/api/v1/built/${listing.hash}`;
-  const services: Array<Record<string, unknown>> = [
-    { name: "web", endpoint: `${siteBase()}/agent/${listing.hash}` },
-    { name: "MCP", endpoint: `${base}/mcp`, version: MCP_PROTOCOL_VERSION },
-  ];
+  // "Just for me": registered to the owner's wallet, with no public door to call and no public page.
+  const isPrivate = listing.purpose === "private";
+  const services: Array<Record<string, unknown>> = isPrivate
+    ? []
+    : [
+        { name: "web", endpoint: `${siteBase()}/agent/${listing.hash}` },
+        { name: "MCP", endpoint: `${base}/mcp`, version: MCP_PROTOCOL_VERSION },
+      ];
   // ERC-8004's agent-wallet form: where this agent is paid. The builder's own address.
   if (listing.payoutAddress) services.push({ name: "agentWallet", endpoint: `eip155:${listing.chainId}:${listing.payoutAddress}` });
   if (listing.links.email) services.push({ name: "email", endpoint: listing.links.email });
@@ -60,7 +64,7 @@ export function registrationFile(listing: Listing) {
     image: `${base}/icon`,
     services,
     x402Support: false,
-    active: listing.status !== "unpublished",
+    active: listing.status !== "unpublished" && !isPrivate,
     registrations: listing.tokenId
       ? [{ agentId: Number(listing.tokenId), agentRegistry: `eip155:${listing.chainId}:${listing.registry}` }]
       : [],

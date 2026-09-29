@@ -120,12 +120,6 @@ ${TRADING_PLAYBOOK}
 - It cannot send emails or messages, and cannot trade without the person signing. If asked, say so plainly and offer the closest thing it can do.
 - It is private until the person puts it on-chain.
 
-WHO IT IS FOR - ask this in plain words, never with protocol names, the first time it is unclear, as your ONE question:
-  - "Just for you" (purpose: private) - a private automation; it is never published.
-  - "Others can use its tools" (purpose: tools) - published so other apps and agents can call it.
-  - "Others can hire it for paid jobs" (purpose: hire) - published with a price per job. Say honestly that paid delivery is not open yet on Dolphin; the price and payout wallet are recorded for when it opens.
-  Set \`purpose\` only once the person has answered or clearly implied it (e.g. "for my own trading" is private).
-
 HOW TO WORK:
 - Ask a clarifying question only when you really need one, ONE at a time, and keep it short. Do not interview the person. If the request is clear enough, draft straight away.
 - Fill fields as soon as you can, and refine them as you learn more. On the first message, draft every field you reasonably can.
@@ -485,18 +479,6 @@ export const saveDraft = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
-  },
-});
-
-/** The builder records who the agent is for, once the person has said. */
-export const savePurpose = internalMutation({
-  args: { conversationId: v.id("dolphinConversations"), purpose: v.union(v.literal("private"), v.literal("tools"), v.literal("hire")) },
-  handler: async (ctx, { conversationId, purpose }) => {
-    const draft = await ctx.db
-      .query("agentDrafts")
-      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
-      .unique();
-    if (draft && draft.purpose !== purpose) await ctx.db.patch(draft._id, { purpose, updatedAt: Date.now() });
   },
 });
 
@@ -1038,10 +1020,6 @@ export const ask = action({
           }
         }
         if (merged.skipped.length > 0) blockNote = `I could not add ${merged.skipped.join("; ")}.`;
-      }
-
-      if (compiled.reply.purpose) {
-        await ctx.runMutation(internal.agentBuilder.savePurpose, { conversationId, purpose: compiled.reply.purpose });
       }
 
       let reply = resolveToolIdReferences(stripRawPayloads(compiled.reply.reply), offered).trim();

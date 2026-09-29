@@ -1332,6 +1332,10 @@ export const builtAgentsApi = anyApi as unknown as {
         email?: string;
         /** Where its payments go; defaults to the signed-in wallet. */
         payoutAddress?: string;
+        /** Make public (anyone can use it) or just for me (registered to your wallet, never listed). */
+        visibility?: "public" | "private";
+        /** Price per job for a public agent; absent means free. */
+        priceUsd?: number | null;
       },
       { hash: string; tokenURI: string; registry: string; chainId: number; pageUrl: string }
     >;

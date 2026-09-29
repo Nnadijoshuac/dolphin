@@ -268,7 +268,8 @@ http.route({
     const path = builtPath(request);
     if (!path || path.resource !== "mcp") return notFound();
     const listing = await ctx.runQuery(internal.builtAgents.byHash, { hash: path.hash });
-    if (!listing || listing.status === "unpublished") return notFound();
+    // A "just for me" agent has no public door (convex/builtAgentServer.ts).
+    if (!listing || listing.status === "unpublished" || listing.purpose === "private") return notFound();
 
     const text = await request.text();
     const rpc = (body: unknown, status = 200) =>

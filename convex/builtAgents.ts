@@ -142,6 +142,15 @@ export const prepareListing = mutation({
     email: v.optional(v.string()),
     /** Where its payments go. Defaults to the signed-in wallet; never a key Dolphin holds. */
     payoutAddress: v.optional(v.string()),
+    /**
+     * WHO CAN USE IT, chosen here at "Put on-chain" (owner, 2026-09-29: part of
+     * the flow, not the first thing). public = anyone (free, or paid when a
+     * price is set); private = "just for me": registered to the owner's
+     * wallet, never listed, no public endpoint.
+     */
+    visibility: v.optional(v.union(v.literal("public"), v.literal("private"))),
+    /** Price per job in US dollars for a public agent. Absent or blank: free. */
+    priceUsd: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     const owner = await requireWalletAddress(ctx, args.sessionToken, "Putting an agent on-chain");
@@ -168,9 +177,9 @@ export const prepareListing = mutation({
       .unique();
     if (!draft) throw new ConvexError("This draft is empty. Describe the agent first.");
 
-    if ((draft.purpose ?? null) === "private") {
-      throw new ConvexError("This agent is set to \"Just for me\". Change who it is for in the Draft tab to share it.");
-    }
+    const visibility = args.visibility ?? "public";
+    const priceUsd = visibility === "public" && args.priceUsd !== undefined && args.priceUsd !== null ? args.priceUsd : null;
+    if (priceUsd !== null && !(priceUsd > 0 && priceUsd <= 10_000)) throw new ConvexError("A price per job must be between $0.01 and $10,000.");
     const gaps = draftGaps(draft, (draft.blocks ?? []).length);
     if (gaps.length > 0) throw new ConvexError(`The agent needs ${gaps.join(", ")} before it can go on-chain.`);
     const name = draft.name as string;
@@ -257,8 +266,8 @@ export const prepareListing = mutation({
       category: args.category,
       links: { website, x: xHandle, email },
       payoutAddress,
-      purpose: draft.purpose ?? "tools",
-      hirePriceUsd: draft.purpose === "hire" ? (draft.hirePriceUsd ?? null) : null,
+      purpose: visibility === "private" ? ("private" as const) : priceUsd !== null ? ("hire" as const) : ("tools" as const),
+      hirePriceUsd: priceUsd,
       iconStorageId: icon.storageId,
       iconContentType: icon.contentType,
       updatedAt: Date.now(),

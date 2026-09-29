@@ -2314,3 +2314,191 @@ select {
   background: var(--paper-strong);
   box-shadow: 0 10px 28px -20px rgba(15, 23, 42, 0.35);
 }
+
+/* ══ Canvas, flow-diagram pass (owner, 2026-09-29: "not as premium as I want") ══
+   Later rules here refine the ones above rather than rewriting them. */
+
+/* Blocks rise into place one after another (animationDelay is set per block). */
+@keyframes agent-block-rise {
+  0% { opacity: 0; transform: translateY(14px) scale(0.94); filter: blur(4px); }
+  60% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .agent-canvas .react-flow__node > div { animation: agent-block-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+}
+
+.agent-block {
+  transition: border-color 240ms ease, box-shadow 320ms cubic-bezier(0.16, 1, 0.3, 1), transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.agent-block:hover { transform: translateY(-2px); }
+/* A hairline of light along the top edge: glass, not paper. */
+.agent-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, #fff 55%, transparent), transparent 38%);
+  opacity: 0.35;
+  mix-blend-mode: soft-light;
+}
+
+/* The Brain: a quiet aura always, a breathing one while it thinks. */
+.agent-block--brain {
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--kind-brain) 14%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--paper-strong), var(--paper));
+  border-color: color-mix(in srgb, var(--kind-brain) 32%, var(--line));
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--kind-brain) 7%, transparent), 0 18px 40px -22px color-mix(in srgb, var(--kind-brain) 60%, transparent);
+}
+@keyframes agent-breathe {
+  50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--flow) 14%, transparent), 0 0 46px -4px color-mix(in srgb, var(--flow) 55%, transparent); }
+}
+.agent-block--brain[data-state="active"] { animation: agent-breathe 1.8s ease-in-out infinite; }
+
+/* The Brain's four ports, named where the lines meet it. */
+.agent-port {
+  position: absolute;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--kind-brain);
+  opacity: 0.75;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.agent-port--when { left: -12px; top: calc(50% - 20px); transform: translateX(-100%); }
+.agent-port--knows { bottom: -22px; left: calc(50% + 12px); }
+.agent-port--does { right: -12px; top: calc(50% - 20px); transform: translateX(100%); }
+
+/* Working: a band of light runs round the border. */
+@property --agent-spin { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes agent-spin { to { --agent-spin: 360deg; } }
+.agent-block[data-state="active"]::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: conic-gradient(from var(--agent-spin), transparent 0 55%, color-mix(in srgb, var(--flow) 40%, transparent) 70%, var(--flow) 82%, transparent 94%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: agent-spin 1.4s linear infinite;
+}
+/* Done: one soft pop, then still. */
+@keyframes agent-done-pop { 40% { transform: scale(1.035); } }
+.agent-block[data-state="done"] { animation: agent-done-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* Risk limits reads as a gate on the trade line. */
+.agent-block--risk {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--kind-risk) 7%, transparent) 0 6px, transparent 6px 12px),
+    linear-gradient(180deg, var(--paper-strong), var(--paper));
+  border-color: color-mix(in srgb, var(--kind-risk) 38%, var(--line));
+}
+
+/* The Market block's expand button. */
+.agent-block__expand {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  transition: color 160ms ease, background 160ms ease, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.agent-block__expand:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 10%, transparent); transform: scale(1.1); }
+
+/* Lines draw themselves in; a live one carries a comet of light. */
+@keyframes agent-edge-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.agent-canvas .agent-edge {
+  stroke-dasharray: 1;
+  stroke-linecap: round;
+  transition: stroke 500ms ease, stroke-width 300ms ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .agent-canvas .agent-edge { animation: agent-edge-draw 900ms cubic-bezier(0.65, 0, 0.35, 1) 180ms both; }
+}
+.agent-edge__glow {
+  stroke: var(--flow);
+  stroke-width: 7;
+  stroke-linecap: round;
+  opacity: 0.16;
+  filter: blur(3px);
+}
+@keyframes agent-comet { from { stroke-dashoffset: 1.18; } to { stroke-dashoffset: 0; } }
+.agent-edge__comet {
+  stroke: var(--flow);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 0.18 1;
+  filter: drop-shadow(0 0 4px var(--flow));
+  animation: agent-comet 1.15s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.agent-edge__comet[data-reverse] { animation-direction: reverse; }
+@media (prefers-reduced-motion: reduce) {
+  .agent-edge__comet, .agent-block[data-state="active"]::before, .agent-block--brain[data-state="active"] { animation: none; }
+}
+
+/* ── The chart, expanded over the canvas ── */
+.chart-scrim {
+  pointer-events: none;
+  opacity: 0;
+  background: color-mix(in srgb, var(--canvas) 35%, transparent);
+  -webkit-backdrop-filter: blur(6px) saturate(1.1);
+  backdrop-filter: blur(6px) saturate(1.1);
+  transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chart-scrim[data-open] { pointer-events: auto; opacity: 1; }
+.chart-box { will-change: left, top, width, height; }
+.chart-box[data-expanded] .trading-chart {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  border-radius: 22px;
+  box-shadow: 0 40px 90px -30px rgba(15, 23, 42, 0.5), 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+.trading-chart[data-expanded] .trading-chart__body { flex: 1; min-height: 0; height: auto; }
+.trading-chart__expand {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--muted);
+  transition: color 160ms ease, background 160ms ease;
+}
+.trading-chart__expand:hover { color: var(--ink); background: var(--paper-muted); }
+.trading-chart__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 6px 14px 2px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.trading-chart__stats b { font-weight: 600; color: var(--ink); }
+.trading-chart__tag { fill: var(--accent); }
+.trading-chart__tag--cross { fill: var(--ink); }
+.trading-chart__tag-text { fill: #171813; font-size: 10px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.trading-chart__tag--cross + .trading-chart__tag-text { fill: var(--canvas); }
+.trading-chart__cross { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+/* One animation list per state: the entrance keeps running (matched by name) while the state's own joins it. */
+@media (prefers-reduced-motion: no-preference) {
+  .agent-canvas .react-flow__node > .agent-block[data-state="done"] {
+    animation: agent-block-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) both, agent-done-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .agent-canvas .react-flow__node > .agent-block--brain[data-state="active"] {
+    animation: agent-block-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) both, agent-breathe 1.8s ease-in-out infinite;
+  }
+}

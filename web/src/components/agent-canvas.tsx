@@ -21,7 +21,7 @@ import {
   useStore,
 } from "@xyflow/react";
 import { useMutation } from "convex/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { AgentCanvasInspector } from "@/components/agent-canvas-inspector";
 import { AgentIcon } from "@/components/agent-icon";
@@ -34,11 +34,24 @@ import type { Agent } from "@/types/agent";
 import { toast } from "@/store/use-toast-store";
 
 /**
- * THE AGENT AS A GRAPH (owner, 2026-09-28: "like n8n").
+ * THE AGENT AS A FLOW DIAGRAM (owner, 2026-09-28: "like n8n"; 2026-09-29:
+ * "the brain should have four connectors... a flow diagram, from here to here
+ * to here").
  *
- *   Trigger ──┐
- *   Tools ────┼──> Brain ──> Output
- *   Melon ────┘ (from above)
+ *                      Melon (strategy)
+ *                          │
+ *   Triggers ──when──>  BRAIN  ──does──>  Answer
+ *                          ▲               Risk limits ─> Swap ─> Wallet
+ *                        knows             Hired agent
+ *                          │
+ *               Market · Safety · Tools
+ *
+ * Four ports on the Brain: WHEN it runs (left), its STRATEGY (top), what it
+ * KNOWS (bottom), and what it DOES (right). A trade is a chain the money
+ * really follows: Risk limits is a gate every trade passes through before
+ * Swap, and the Wallet at the end is where it executes. A hired A2A agent is
+ * something the Brain does and pays for, so it sits on the right too - it is
+ * not a source the Brain reads.
  *
  * The MELON is the agent's strategy - its instructions. Named for the organ in
  * a dolphin's forehead that focuses its echolocation: how it senses and
@@ -80,6 +93,12 @@ type BlockData = {
   detached?: boolean;
   /** A tool's publisher, drawn with its own icon rather than a spanner (owner, 2026-09-28). */
   agent?: { category: string; seed: string | null; uri: string | null };
+  /** The toolbox block behind this node, when it is one. */
+  blockType?: AgentBlockData["type"];
+  /** Draw order, for the staggered entrance. */
+  order?: number;
+  /** The Market block's expand button: opens the chart over the canvas. */
+  onExpand?: () => void;
 };
 
 type BlockNode = Node<BlockData, "block">;
@@ -119,7 +138,6 @@ const KIND_GLYPH = {
 
 const NODE_WIDTH = 248;
 const COLUMN_GAP = 130;
-const TOOL_ROW = 100;
 /** Mirrors MAX_DRAFT_TOOLS in convex/lib/agentSpec.ts. */
 const MAX_TOOLS = 8;
 
@@ -132,20 +150,34 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
       data-detached={data.detached || undefined}
       data-selected={selected || undefined}
       data-state={state}
-      style={{ width: NODE_WIDTH }}
+      style={{ width: NODE_WIDTH, animationDelay: `${(data.order ?? 0) * 45}ms` }}
     >
       {kind === "brain" ? (
         <>
           <Handle id="in" position={Position.Left} type="target" />
           <Handle id="strategy" position={Position.Top} type="target" />
+          <Handle id="senses" position={Position.Bottom} type="target" />
+          <span aria-hidden className="agent-port agent-port--when">when</span>
+          <span aria-hidden className="agent-port agent-port--knows">knows</span>
+          <span aria-hidden className="agent-port agent-port--does">does</span>
         </>
       ) : null}
-      {kind === "output" ? <Handle id="in" position={Position.Left} type="target" /> : null}
-      {kind === "hands" ? (
-        <>
-          <Handle id="in" position={Position.Left} type="target" />
-          <Handle id="limits" position={Position.Top} type="target" />
-        </>
+      {kind === "output" || kind === "hands" || kind === "risk" ? <Handle id="in" position={Position.Left} type="target" /> : null}
+      {data.onExpand ? (
+        <button
+          aria-label="Expand the chart"
+          className="agent-block__expand nodrag nopan"
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onExpand?.();
+          }}
+          title="Expand the chart"
+          type="button"
+        >
+          <svg aria-hidden fill="none" height="12" viewBox="0 0 16 16" width="12">
+            <path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
+          </svg>
+        </button>
       ) : null}
 
       <div className="flex items-start gap-2.5">
@@ -178,8 +210,9 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
         </div>
       </div>
 
-      {kind === "trigger" || kind === "tool" || kind === "sense" ? <Handle id="out" position={Position.Right} type="source" /> : null}
-      {kind === "risk" ? <Handle id="out" position={Position.Bottom} type="source" /> : null}
+      {kind === "trigger" ? <Handle id="out" position={Position.Right} type="source" /> : null}
+      {kind === "tool" || kind === "sense" ? <Handle id="out" position={Position.Top} type="source" /> : null}
+      {kind === "risk" || data.blockType === "swap" ? <Handle id="out" position={Position.Right} type="source" /> : null}
       {kind === "melon" ? <Handle id="out" position={Position.Bottom} type="source" /> : null}
       {kind === "brain" ? <Handle id="out" position={Position.Right} type="source" /> : null}
     </div>
@@ -200,10 +233,16 @@ function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosi
 
   return (
     <>
-      <BaseEdge className={`agent-edge ${active ? "agent-edge--active" : data?.used ? "agent-edge--used" : ""}`} id={id} path={path} />
+      <BaseEdge
+        className={`agent-edge ${active ? "agent-edge--active" : data?.used ? "agent-edge--used" : ""}`}
+        id={id}
+        path={path}
+        pathLength={1}
+      />
       {active ? (
         <>
-          <path className="agent-edge__flow" d={path} data-reverse={reverse || undefined} fill="none" />
+          <path className="agent-edge__glow" d={path} fill="none" />
+          <path className="agent-edge__comet" d={path} data-reverse={reverse || undefined} fill="none" pathLength={1} />
           {[0, 0.55].map((delay) => (
             <circle className="agent-edge__pulse" key={delay} r={3.2}>
               <animateMotion
@@ -267,7 +306,7 @@ export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label
   risk: { kind: "risk", label: "Risk limits", glyph: "filter" },
   swap: { kind: "hands", label: "Swap", glyph: "wallet" },
   wallet: { kind: "hands", label: "Wallet", glyph: "wallet" },
-  hire: { kind: "tool", label: "Hired agent", glyph: "agents" },
+  hire: { kind: "hands", label: "Hired agent", glyph: "agents" },
 };
 
 function money(value: number): string {
@@ -303,6 +342,13 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
   }
 }
 
+/* Layout rhythm. */
+const TRIGGER_ROW = 96;
+const SENSE_ROW = 104;
+const SENSES_PER_ROW = 4;
+const ACTION_ROW = 120;
+const CHAIN_GAP = 64;
+
 /** The default layout for a draft. Pure, so it is the same on every render. */
 export function draftGraph(
   draft: AgentDraft,
@@ -310,156 +356,90 @@ export function draftGraph(
 ): { nodes: BlockNode[]; edges: FlowEdge[] } {
   const blocks = draft.blocks ?? [];
   const cut = new Set(draft.detached ?? []);
-  const middle = NODE_WIDTH + COLUMN_GAP;
-  const right = middle * 2;
+  const brainX = NODE_WIDTH + COLUMN_GAP;
+  const actionX = brainX + NODE_WIDTH + COLUMN_GAP;
+  const brainY = 0;
   const nodes: BlockNode[] = [];
-
-  // Left column: everything that feeds the brain, top to bottom.
-  let y = 0;
-  const pushLeft = (node: Omit<BlockNode, "position">) => {
-    nodes.push({ ...node, position: { x: 0, y } } as BlockNode);
-    y += TOOL_ROW;
+  let order = 0;
+  const place = (id: string, x: number, y: number, data: BlockData) => {
+    nodes.push({ id, type: "block", position: { x, y }, data: { ...data, order: order++ } });
   };
-  pushLeft({
-    id: "trigger",
-    type: "block",
-    data: { kind: "trigger", title: "When asked", detail: "Runs when someone sends it a message" },
-  });
-  for (const type of ["schedule", "price", "walletWatch", "market", "safety"] as const) {
-    const block = blocks.find((candidate) => candidate.type === type);
-    if (!block) continue;
-    const look = BLOCK_LOOK[type];
-    const member = `block:${block.id}`;
-    pushLeft({
-      id: `block-${block.id}`,
-      type: "block",
-      data: { kind: look.kind, label: look.label, glyph: look.glyph, member, detached: cut.has(member), ...blockSummary(block) },
-    });
-  }
-  const hire = blocks.find((block) => block.type === "hire");
-  if (hire && hire.type === "hire") {
-    const member = `block:${hire.id}`;
-    const hired = agents.get(hire.config.agentKey);
-    pushLeft({
-      id: `block-${hire.id}`,
-      type: "block",
-      data: {
-        kind: "tool",
-        label: "Hired agent",
-        glyph: "agents",
-        member,
-        detached: cut.has(member),
-        ...blockSummary(hire),
-        agent: hired ? { category: hired.category, seed: hired.iconSeed ?? null, uri: hired.iconUrl ?? null } : undefined,
-      },
-    });
-  }
-  if (draft.tools.length === 0) {
-    pushLeft({
-      id: "tool-empty",
-      type: "block",
-      data: { kind: "tool", title: "No tools yet", detail: "From the free MCP agents on Dolphin", empty: true },
-    });
-  } else {
-    draft.tools.forEach((tool, index) => {
-      const member = `tool:${tool.agentKey}:${tool.toolName}`;
-      pushLeft({
-        id: `tool-${index}`,
-        type: "block",
-        data: {
-          kind: "tool",
-          title: tool.toolName,
-          detail: `via ${tool.agentName}`,
-          member,
-          detached: cut.has(member),
-          agent: agents.get(tool.agentKey)
-            ? {
-                category: agents.get(tool.agentKey)!.category,
-                seed: agents.get(tool.agentKey)!.iconSeed ?? null,
-                uri: agents.get(tool.agentKey)!.iconUrl ?? null,
-              }
-            : undefined,
-        },
-      });
-    });
-    if (draft.tools.length < MAX_TOOLS) {
-      pushLeft({ id: "add-tool", type: "block", data: { kind: "add", title: "Add a tool", detail: "From the free MCP agents on Dolphin" } });
-    }
-  }
-  const brainY = Math.max(140, (y - TOOL_ROW) / 2);
+  const find = <T extends AgentBlockData["type"]>(type: T) =>
+    blocks.find((block): block is Extract<AgentBlockData, { type: T }> => block.type === type);
+  const agentLook = (agentKey: string): BlockData["agent"] => {
+    const agent = agents.get(agentKey);
+    return agent ? { category: agent.category, seed: agent.iconSeed ?? null, uri: agent.iconUrl ?? null } : undefined;
+  };
+  const blockData = (block: AgentBlockData, member = `block:${block.id}`): BlockData => {
+    const look = BLOCK_LOOK[block.type];
+    return { kind: look.kind, label: look.label, glyph: look.glyph, member, detached: cut.has(member), blockType: block.type, ...blockSummary(block) };
+  };
 
+  // BRAIN, with its strategy above it.
   const instructions = draft.instructions?.trim() || null;
-  nodes.push(
-    {
-      id: "melon",
-      type: "block",
-      position: { x: middle, y: brainY - 200 },
-      data: { kind: "melon", title: instructions ? "Strategy" : "Not drafted yet", detail: instructions, empty: !instructions },
-    },
-    {
-      id: "brain",
-      type: "block",
-      position: { x: middle, y: brainY },
-      data: {
-        kind: "brain",
-        title: draft.name?.trim() || "Unnamed agent",
-        detail: draft.brain
-          ? `${draft.brain.model} · your ${brainProviderLabel(draft.brain.provider)} key`
-          : "No model yet · choose your key",
-        empty: !draft.name?.trim() || !draft.brain,
-      },
-    },
-    {
-      id: "output",
-      type: "block",
-      position: { x: right, y: brainY },
-      data: { kind: "output", title: "Answer", detail: "Replies with what its tools returned" },
-    },
-  );
+  place("brain", brainX, brainY, {
+    kind: "brain",
+    title: draft.name?.trim() || "Unnamed agent",
+    detail: draft.brain ? `${draft.brain.model} · your ${brainProviderLabel(draft.brain.provider)} key` : "No model yet · choose your key",
+    empty: !draft.name?.trim() || !draft.brain,
+  });
+  place("melon", brainX, brainY - 190, { kind: "melon", title: instructions ? "Strategy" : "Not drafted yet", detail: instructions, empty: !instructions });
 
-  // Right column above the answer: the hands, and the limits on them.
-  const swap = blocks.find((block) => block.type === "swap");
-  const risk = blocks.find((block) => block.type === "risk");
-  const wallet = blocks.find((block) => block.type === "wallet");
-  const walletLive = Boolean(wallet && !cut.has(`block:${wallet.id}`));
-  if (swap) {
-    const member = `block:${swap.id}`;
-    const summary = blockSummary(swap);
-    nodes.push({
-      id: `block-${swap.id}`,
-      type: "block",
-      position: { x: right, y: brainY - 150 },
-      data: {
-        kind: "hands",
-        label: "Swap",
-        glyph: "wallet",
-        member,
-        detached: cut.has(member),
-        ...summary,
-        // What the swap does depends on where the money is.
-        ...(walletLive ? { title: "Trade", detail: "Executes from the agent's wallet" } : {}),
-      },
-    });
+  // WHEN: what starts a run, down the left.
+  const triggers: { id: string; data: BlockData }[] = [
+    { id: "trigger", data: { kind: "trigger", title: "When asked", detail: "Runs when someone sends it a message" } },
+  ];
+  for (const type of ["schedule", "price", "walletWatch"] as const) {
+    const block = find(type);
+    if (block) triggers.push({ id: `block-${block.id}`, data: blockData(block) });
   }
-  if (wallet) {
-    const member = `block:${wallet.id}`;
-    nodes.push({
-      id: `block-${wallet.id}`,
-      type: "block",
-      position: { x: right, y: brainY + 150 },
-      data: { kind: "hands", label: "Wallet", glyph: "wallet", member, detached: cut.has(member), ...blockSummary(wallet) },
-    });
-  }
-  if (risk) {
-    nodes.push({
-      id: `block-${risk.id}`,
-      type: "block",
-      position: { x: right, y: brainY - (swap ? 300 : 150) },
-      data: { kind: "risk", label: "Risk limits", glyph: "filter", member: "limits", detached: cut.has("limits"), ...blockSummary(risk) },
-    });
-  }
+  triggers.forEach((trigger, index) => place(trigger.id, 0, brainY + (index - (triggers.length - 1) / 2) * TRIGGER_ROW, trigger.data));
 
-  const edge = (source: string, target: string, targetHandle = "in", member?: string): FlowEdge => ({
+  // KNOWS: what the Brain can read, in rows beneath it.
+  const senses: { id: string; data: BlockData }[] = [];
+  for (const type of ["market", "safety"] as const) {
+    const block = find(type);
+    if (block) senses.push({ id: `block-${block.id}`, data: blockData(block) });
+  }
+  draft.tools.forEach((tool, index) => {
+    const member = `tool:${tool.agentKey}:${tool.toolName}`;
+    senses.push({
+      id: `tool-${index}`,
+      data: { kind: "tool", title: tool.toolName, detail: `via ${tool.agentName}`, member, detached: cut.has(member), agent: agentLook(tool.agentKey) },
+    });
+  });
+  if (draft.tools.length === 0) {
+    senses.push({ id: "tool-empty", data: { kind: "tool", title: "No tools yet", detail: "From the free MCP agents on Dolphin", empty: true } });
+  } else if (draft.tools.length < MAX_TOOLS) {
+    senses.push({ id: "add-tool", data: { kind: "add", title: "Add a tool", detail: "From the free MCP agents on Dolphin" } });
+  }
+  senses.forEach((sense, index) => {
+    const row = Math.floor(index / SENSES_PER_ROW);
+    const inRow = Math.min(SENSES_PER_ROW, senses.length - row * SENSES_PER_ROW);
+    const column = index % SENSES_PER_ROW;
+    place(sense.id, brainX + (column - (inRow - 1) / 2) * (NODE_WIDTH + 28), brainY + 200 + row * SENSE_ROW, sense.data);
+  });
+
+  // DOES: the answer; the trade chain (gate -> swap -> wallet); a hired agent.
+  const risk = find("risk");
+  const swap = find("swap");
+  const wallet = find("wallet");
+  const hire = find("hire");
+  const chain: AgentBlockData[] = [];
+  for (const block of [risk, swap, wallet]) if (block) chain.push(block);
+  const rows: string[] = ["output", ...(chain.length ? ["chain"] : []), ...(hire ? ["hire"] : [])];
+  const rowY = (name: string) => brainY + (rows.indexOf(name) - (rows.length - 1) / 2) * ACTION_ROW;
+  place("output", actionX, rowY("output"), { kind: "output", title: "Answer", detail: "Replies with what its tools returned" });
+  chain.forEach((block, index) => {
+    const data = blockData(block, block.type === "risk" ? "limits" : `block:${block.id}`);
+    // What a swap does depends on where the money is.
+    if (block.type === "swap" && wallet && !cut.has(`block:${wallet.id}`)) Object.assign(data, { title: "Trade", detail: "Executes from the agent's wallet" });
+    if (block.type === "risk") Object.assign(data, { detail: `${data.detail} · every trade passes through` });
+    place(`block-${block.id}`, actionX + index * (NODE_WIDTH + CHAIN_GAP), rowY("chain"), data);
+  });
+  if (hire) place(`block-${hire.id}`, actionX, rowY("hire"), { ...blockData(hire), agent: agentLook(hire.config.agentKey) });
+
+  const edge = (source: string, target: string, targetHandle: string, member?: string): FlowEdge => ({
     id: `${source}->${target}`,
     source,
     sourceHandle: "out",
@@ -468,16 +448,24 @@ export function draftGraph(
     type: "flow",
     data: member ? { member } : {},
   });
+  const live = (member: string | undefined) => !member || !cut.has(member);
   const edges: FlowEdge[] = [
-    ...nodes
-      .filter((node) => ["trigger", "tool", "sense"].includes(node.data.kind) && node.id !== "tool-empty" && !node.data.detached)
-      .map((node) => edge(node.id, "brain", "in", node.data.member)),
     edge("melon", "brain", "strategy"),
-    edge("brain", "output"),
+    ...triggers.filter((t) => live(t.data.member)).map((t) => edge(t.id, "brain", "in", t.data.member)),
+    ...senses.filter((x) => x.id !== "tool-empty" && x.id !== "add-tool" && live(x.data.member)).map((x) => edge(x.id, "brain", "senses", x.data.member)),
+    edge("brain", "output", "in"),
   ];
-  if (swap && !cut.has(`block:${swap.id}`)) edges.push(edge("brain", `block-${swap.id}`, "in", `block:${swap.id}`));
-  if (swap && risk && !cut.has("limits")) edges.push(edge(`block-${risk.id}`, `block-${swap.id}`, "limits", "limits"));
-  if (wallet && walletLive) edges.push(edge("brain", `block-${wallet.id}`, "in", `block:${wallet.id}`));
+  // The trade chain, link by link. Cutting any link stops trades where it is cut.
+  if (chain.length) {
+    const head = chain[0];
+    const headMember = head.type === "risk" ? (swap ? `block:${swap.id}` : "limits") : `block:${head.id}`;
+    if (live(headMember)) edges.push(edge("brain", `block-${head.id}`, "in", headMember));
+    for (let i = 1; i < chain.length; i++) {
+      const link = chain[i].type === "swap" ? "limits" : `block:${chain[i].id}`;
+      if (live(link)) edges.push(edge(`block-${chain[i - 1].id}`, `block-${chain[i].id}`, "in", link));
+    }
+  }
+  if (hire && live(`block:${hire.id}`)) edges.push(edge("brain", `block-${hire.id}`, "in", `block:${hire.id}`));
 
   return { nodes, edges };
 }
@@ -519,10 +507,29 @@ function applyRun(
     const id = `block-${block.id}`;
     const running = calls.some((call) => call.state === "running");
     const failed = calls.some((call) => call.state === "error");
-    nodeState.set(id, running ? "active" : failed ? "error" : "done");
-    // The brain reaches out to a sense; it hands a trade to the swap.
-    const edgeId = block.type === "swap" ? `brain->${id}` : `${id}->brain`;
-    edgeState.set(edgeId, running ? { active: true, reverse: block.type !== "swap" } : { used: true });
+    const blockState: BlockState = running ? "active" : failed ? "error" : "done";
+    nodeState.set(id, blockState);
+    const lit = running ? { active: true } : { used: true };
+    if (block.type === "swap") {
+      // A trade runs the chain: Brain -> Risk gate -> Swap -> the agent's wallet.
+      const gate = (draft.blocks ?? []).find((candidate) => candidate.type === "risk");
+      const purse = (draft.blocks ?? []).find((candidate) => candidate.type === "wallet");
+      const head = gate ? `block-${gate.id}` : id;
+      edgeState.set(`brain->${head}`, lit);
+      if (gate) {
+        nodeState.set(head, running ? "active" : "done");
+        edgeState.set(`${head}->${id}`, lit);
+      }
+      if (purse && !failed) {
+        nodeState.set(`block-${purse.id}`, blockState);
+        edgeState.set(`${id}->block-${purse.id}`, lit);
+      }
+    } else if (block.type === "hire") {
+      edgeState.set(`brain->${id}`, lit);
+    } else {
+      // The Brain reaches down for what it knows.
+      edgeState.set(`${id}->brain`, running ? { active: true, reverse: true } : { used: true });
+    }
   }
   // A trigger run lights the trigger that started it.
   if (working || run.phase === "done") {
@@ -800,6 +807,49 @@ export function AgentCanvas({
   const selected =
     selectedId && (selectedId.startsWith("new-") || base.nodes.some((node) => node.id === selectedId)) ? selectedId : null;
   const market = (draft.blocks ?? []).find((block) => block.type === "market");
+
+  /*
+   * THE CHART, EXPANDED (owner, 2026-09-29: "it expands and fills the canvas
+   * ... grow into the screen... with a curve, not linearly, and the same going
+   * back"). The card's box is measured before and after the change and the
+   * difference animated with the Web Animations API - left, top, width and
+   * height, so the chart re-lays itself out as it grows instead of being
+   * stretched. Offsets, not getBoundingClientRect: the page is CSS-zoomed and
+   * offsets stay in the same units as the styles being animated.
+   */
+  const chartBox = useRef<HTMLDivElement>(null);
+  const chartFrom = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [chartExpanded, setChartExpanded] = useState(false);
+  const toggleChart = useCallback(() => {
+    const element = chartBox.current;
+    if (element) {
+      element.getAnimations().forEach((animation) => animation.cancel());
+      chartFrom.current = { left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight };
+    }
+    setChartExpanded((value) => !value);
+  }, []);
+  useLayoutEffect(() => {
+    const element = chartBox.current;
+    const from = chartFrom.current;
+    chartFrom.current = null;
+    if (!element || !from || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const to = { left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight };
+    const px = (box: typeof to) => ({ left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
+    element.animate([px(from), px(to)], {
+      duration: chartExpanded ? 620 : 520,
+      // Out: a long, soft settle. Back: eases in and lands softly.
+      easing: chartExpanded ? "cubic-bezier(0.16, 1, 0.3, 1)" : "cubic-bezier(0.65, 0, 0.35, 1)",
+    });
+  }, [chartExpanded]);
+  useEffect(() => {
+    if (!chartExpanded) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") toggleChart();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chartExpanded, toggleChart]);
+
   const nodes = useMemo(
     () =>
       base.nodes.map((node) => ({
@@ -807,8 +857,9 @@ export function AgentCanvas({
         position: positions.value[node.id] ?? node.position,
         selected: node.id === selected,
         ...(measured[node.id] ? { measured: measured[node.id] } : {}),
+        ...(node.data.blockType === "market" && !chartExpanded ? { data: { ...node.data, onExpand: toggleChart } } : {}),
       })),
-    [base.nodes, measured, positions.value, selected],
+    [base.nodes, chartExpanded, measured, positions.value, selected, toggleChart],
   );
 
   const onNodesChange = useCallback(
@@ -875,14 +926,28 @@ export function AgentCanvas({
       const source = base.nodes.find((node) => node.id === connection.source);
       const target = base.nodes.find((node) => node.id === connection.target);
       if (!source || !target) return null;
-      if (target.id === "brain" && connection.targetHandle !== "strategy" && ["trigger", "tool", "sense"].includes(source.data.kind)) {
-        return source.data.member ?? null;
+      const blocks = draft.blocks ?? [];
+      const swap = blocks.find((block) => block.type === "swap");
+      const risk = blocks.find((block) => block.type === "risk");
+      const from = source.data.blockType;
+      const to = target.data.blockType;
+      if (target.id === "brain") {
+        if (connection.targetHandle === "in" && source.data.kind === "trigger") return source.data.member ?? null;
+        if (connection.targetHandle === "senses" && (source.data.kind === "tool" || source.data.kind === "sense")) return source.data.member ?? null;
+        return null;
       }
-      if (target.data.kind === "hands" && source.id === "brain" && connection.targetHandle !== "limits") return target.data.member ?? null;
-      if (target.data.kind === "hands" && source.data.kind === "risk" && connection.targetHandle === "limits") return "limits";
+      if (source.id === "brain") {
+        if (to === "risk") return swap ? `block:${swap.id}` : "limits";
+        if (to === "swap" && !risk) return target.data.member ?? null;
+        if (to === "wallet" && !swap) return target.data.member ?? null;
+        if (to === "hire") return target.data.member ?? null;
+        return null;
+      }
+      if (from === "risk" && to === "swap") return "limits";
+      if (from === "swap" && to === "wallet") return target.data.member ?? null;
       return null;
     },
-    [base.nodes],
+    [base.nodes, draft.blocks],
   );
 
   const isValidConnection = useCallback(
@@ -982,9 +1047,27 @@ export function AgentCanvas({
       </ReactFlow>
 
       {market && market.type === "market" ? (
-        <div className="absolute left-3 top-3 z-10 w-[min(24rem,calc(100%-1.5rem))]">
-          <TradingChart poolAddress={market.config.poolAddress} symbol={market.config.symbol} tokenAddress={market.config.tokenAddress} />
-        </div>
+        <>
+          <div
+            aria-hidden
+            className="chart-scrim absolute inset-0 z-20"
+            data-open={chartExpanded || undefined}
+            onClick={chartExpanded ? toggleChart : undefined}
+          />
+          <div
+            className={`chart-box absolute z-30 ${chartExpanded ? "inset-4" : "left-3 top-3 w-[min(24rem,calc(100%-1.5rem))]"}`}
+            data-expanded={chartExpanded || undefined}
+            ref={chartBox}
+          >
+            <TradingChart
+              expanded={chartExpanded}
+              onToggleExpand={toggleChart}
+              poolAddress={market.config.poolAddress}
+              symbol={market.config.symbol}
+              tokenAddress={market.config.tokenAddress}
+            />
+          </div>
+        </>
       ) : null}
 
       {editKey ? (

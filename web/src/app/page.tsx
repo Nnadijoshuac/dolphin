@@ -79,6 +79,8 @@ function readCategoryParam(value: string | null): AgentCategory | null {
 
 function getSelectedCategorySnapshot(): AgentCategory | null {
   if (typeof window === "undefined") return null;
+  // Mid-navigation the address can still be the previous page's.
+  if (window.location.pathname !== "/") return null;
 
   return readCategoryParam(
     new URLSearchParams(window.location.search).get("category"),
@@ -283,7 +285,17 @@ export default function DiscoverPage() {
    */
   useEffect(() => {
     // Read the media query directly: during hydration isMobile can still be the server's false.
-    if (requestedCategory && !window.matchMedia("(max-width: 767px)").matches) {
+    /*
+     * Only when the address really is the landing page. Arriving here by the
+     * navbar from /search?category=yield, this runs before Next has updated
+     * the address bar, so the old query was read and it sent the person
+     * straight back to search (owner report, 2026-09-29).
+     */
+    if (
+      window.location.pathname === "/" &&
+      requestedCategory &&
+      !window.matchMedia("(max-width: 767px)").matches
+    ) {
       window.location.replace(`/search?category=${requestedCategory}`);
     }
   }, [isMobile, requestedCategory]);

@@ -66,6 +66,16 @@ export function findDuplicates(candidates: readonly DedupeCandidate[]): Set<stri
     }
   }
   const duplicates = new Set<string>();
+  /*
+   * SELF-RETIRED (owner, 2026-09-29: "Tidemark (retired duplicate)... just
+   * take it out"). A record whose OWN name or description says it is retired,
+   * deprecated, a duplicate or not in service is taken at its word and kept out
+   * of browse, like any other duplicate - its page still resolves. It escaped
+   * the rule above because only its owner matched the live Tidemark.
+   */
+  for (const candidate of candidates) {
+    if (selfRetired(candidate)) duplicates.add(candidate.agentKey);
+  }
   for (const group of groups) {
     // Everyone but the highest-ranked member.
     const others = [...group]
@@ -74,4 +84,11 @@ export function findDuplicates(candidates: readonly DedupeCandidate[]): Set<stri
     for (const other of others) duplicates.add(other.agentKey);
   }
   return duplicates;
+}
+
+const RETIRED = /\b(retired|deprecated|decommissioned|not in service|no longer (?:in service|maintained|supported)|do not use|duplicate registration)\b/i;
+
+/** The publisher's own words say this registration is not meant to be used. */
+export function selfRetired(candidate: Pick<DedupeCandidate, "name" | "description">): boolean {
+  return RETIRED.test(candidate.name) || RETIRED.test(candidate.description);
 }

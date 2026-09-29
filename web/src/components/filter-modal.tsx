@@ -87,21 +87,12 @@ export function FilterModal({ isOpen, onClose, protocol, onSelectProtocol, ancho
             : undefined
         }
       >
-        <div className="flex items-center justify-between px-5 pb-3 pt-4">
-          <h2 className="text-[0.95rem] font-semibold text-ink" id="filter-modal-title">
-            Agent type
-          </h2>
-          <button
-            aria-label="Close"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-paper-muted hover:text-ink"
-            onClick={close}
-            type="button"
-          >
-            <CategoryGlyph color="currentColor" name="close" size={14} />
-          </button>
-        </div>
+        {/* A quiet label, not a title: the list is the point (owner, 2026-09-29). Outside click and Escape close it. */}
+        <p className="px-3.5 pb-1 pt-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.1em] text-faint" id="filter-modal-title">
+          Agent type
+        </p>
 
-        <div className="border-t border-line/70 p-1.5" role="radiogroup" aria-label="Agent type">
+        <div className="p-1.5 pt-0.5" role="radiogroup" aria-label="Agent type">
           {OPTIONS.map((option) => {
             const isSelected = protocol === option.value;
             return (

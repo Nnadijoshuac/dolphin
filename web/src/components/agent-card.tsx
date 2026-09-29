@@ -5,7 +5,6 @@ import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { priceLabel } from "@/components/agent-shelf";
-import { CategoryGlyph } from "@/components/category-glyph";
 import { FavoriteButton } from "@/components/favorite-button";
 import { SignalStrip } from "@/components/signal-strip";
 import { categoryLabel } from "@/constants/agents";
@@ -96,13 +95,11 @@ function getMetricPreview(agent: Agent): MetricPreview | null {
  * signed quote (priceLabel), and a hire agent with no published quote says the
  * price comes at checkout - which is what the hire flow actually does.
  */
-function getOffer(agent: Agent): { kind: string; detail: string } {
-  if (agent.protocol === "mcp") return { kind: "Tools", detail: "Call its tools directly" };
+function getOffer(agent: Agent): { kind: string; price: string | null; unit: string } {
+  if (agent.protocol === "mcp") return { kind: "Tools", price: null, unit: "Call its tools directly" };
   const price = priceLabel(agent);
-  return {
-    kind: "Hire",
-    detail: price === "Free" ? "Free per job" : price ? `${price} per job` : "Price quoted at checkout",
-  };
+  if (price === "Free") return { kind: "Hire", price: "Free", unit: "per job" };
+  return price ? { kind: "Hire", price, unit: "per job" } : { kind: "Hire", price: null, unit: "Price quoted at checkout" };
 }
 
 export function AgentCard({
@@ -148,31 +145,39 @@ export function AgentCard({
                 <span className="truncate">{agent.name}</span>
                 {agent.firstParty ? <ByDolphin /> : null}
               </h3>
-              <p className="mt-0.5 truncate text-[0.74rem] text-muted">
-                {label}
-                {displayPublisher ? <span className="text-faint"> · by {displayPublisher}</span> : null}
+              <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[0.74rem] text-muted">
+                <span className="catalog-card__kind" data-kind={agent.protocol}>
+                  {offer.kind}
+                </span>
+                <span className="truncate">{label}</span>
               </p>
             </div>
           </div>
 
-          <p className="mt-3 line-clamp-2 min-h-10 text-[0.84rem] leading-5 text-ink-soft">{agent.tagline}</p>
+          <p className="mt-3.5 line-clamp-2 min-h-10 text-[0.84rem] leading-5 text-ink-soft">{agent.tagline}</p>
+          <SignalStrip className="catalog-card__signals mt-2.5" signals={signals} verifiedAt={agent.verifiedAt} />
 
-          <div className="mt-auto pt-4">
-            {preview && preview.value !== null ? (
-              <p className="mb-2 text-[0.76rem] text-muted">
-                {preview.label} <span className="font-semibold text-ink">{preview.value}</span>
+          <div className="mt-auto flex items-end justify-between gap-3 pt-4">
+            <div className="min-w-0">
+              {preview && preview.value !== null ? (
+                <p className="text-[0.72rem] text-muted">{preview.label}</p>
+              ) : null}
+              <p className="flex items-baseline gap-1.5">
+                {preview && preview.value !== null ? (
+                  <span className="text-[1.02rem] font-semibold tracking-[-0.02em] text-ink">{preview.value}</span>
+                ) : offer.price ? (
+                  <>
+                    <span className="text-[1.02rem] font-semibold tracking-[-0.02em] text-ink">{offer.price}</span>
+                    <span className="text-[0.74rem] text-muted">{offer.unit}</span>
+                  </>
+                ) : (
+                  <span className="text-[0.8rem] font-medium text-ink">{offer.unit}</span>
+                )}
               </p>
-            ) : null}
-            <div className="flex items-center gap-2 border-t border-line/60 pt-3">
-              <span className="catalog-card__kind" data-kind={agent.protocol}>
-                {offer.kind}
-              </span>
-              <span className="truncate text-[0.78rem] font-medium text-ink">{offer.detail}</span>
-              <span aria-hidden="true" className="catalog-card__arrow ml-auto shrink-0">
-                <CategoryGlyph color="currentColor" name="arrow-right" size={15} strokeWidth={2} />
-              </span>
             </div>
-            <SignalStrip className="mt-2" signals={signals} verifiedAt={agent.verifiedAt} />
+            {displayPublisher ? (
+              <span className="shrink-0 truncate text-[0.7rem] text-faint">by {displayPublisher}</span>
+            ) : null}
           </div>
         </article>
       </Link>

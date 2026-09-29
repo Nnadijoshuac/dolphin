@@ -146,7 +146,7 @@ export function SignalStrip({
       className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.69rem] ${className}`}
     >
       {parts.map((part, index) => (
-        <li className="flex items-center gap-2" key={part.key}>
+        <li className="flex items-center gap-2" data-signal={part.key} key={part.key}>
           {index > 0 ? (
             <span aria-hidden="true" className="text-line">
               ·

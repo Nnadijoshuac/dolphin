@@ -20,7 +20,7 @@ import styles from "./agent-shelf.module.css";
  * not free and renders nothing. A quote of exactly zero is the agent's own
  * signed number, and "Free" says it more plainly than "0 U".
  */
-function priceLabel(agent: Agent): string | null {
+export function priceLabel(agent: Agent): string | null {
   const pricing = agent.pricing;
   if (!pricing) return null;
   if (/^0+$/.test(pricing.amountRaw)) return "Free";

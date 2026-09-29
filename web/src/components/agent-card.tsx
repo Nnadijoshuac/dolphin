@@ -4,12 +4,12 @@ import { ByDolphin } from "@/components/by-dolphin";
 import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
+import { priceLabel } from "@/components/agent-shelf";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { FavoriteButton } from "@/components/favorite-button";
 import { SignalStrip } from "@/components/signal-strip";
 import { categoryLabel } from "@/constants/agents";
 import type { AgentSignals } from "@/hooks/use-agents";
-import { useFavorites } from "@/hooks/use-favorites";
 import { useImpression } from "@/hooks/use-impression";
 import { track, type AnalyticsSurface } from "@/lib/analytics";
 import type { Agent, LiveMetric, LiveMetricStatus } from "@/types/agent";
@@ -88,52 +88,22 @@ function getMetricPreview(agent: Agent): MetricPreview | null {
 
 
 /**
- * WHAT THE RIGHT-HAND COLUMN SAYS WHEN THERE IS NO LIVE METRIC.
+ * WHAT YOU GET AND WHAT IT COSTS - the line a catalog card leads with.
  *
- * ---------------------------------------------------------------------------
- * WHY THIS REPLACED THE METRIC AS THE DEFAULT (2026-09-12)
- * ---------------------------------------------------------------------------
- * The column led with the category's headline metric, and that metric is
- * `unavailable` for very nearly every agent in the catalog - no protocol
- * publishes a live APY or P&L per agent. So a browse list rendered a column of
- * "Not available / Publisher-reported metadata", forty-three times. Each cell
- * was honest and the column as a whole read as broken.
- *
- * §5 says never invent a number. It does not say a screen must lead with the
- * one field that is always missing. What Dolphin actually knows about every
- * agent - how it is used, what it costs, whether it can act - was sitting
- * unshown while the one unknowable thing had the prime slot.
- *
- * So: price and protocol lead, a real metric takes over when there IS one, and
- * nothing here is fabricated - the price comes from the agent's own signed
- * quote, and the capability from its own published tool list.
+ * Owner, 2026-09-29: the old rows "don't really say anything". A card now
+ * answers the two questions someone browsing has: can I hire it or call it,
+ * and at what price. Nothing here is invented: the price is the agent's own
+ * signed quote (priceLabel), and a hire agent with no published quote says the
+ * price comes at checkout - which is what the hire flow actually does.
  */
-function getHireSummary(agent: Agent): { label: string; value: string; detail: string } {
-  return agent.protocol === "mcp"
-    ? {
-        label: "Type",
-        value: "MCP server",
-        detail: "Connect it to your AI client and call its tools",
-      }
-    : {
-        label: "Type",
-        value: "A2A agent",
-        detail: "Commissioned and paid over ERC-8183 escrow",
-      };
+function getOffer(agent: Agent): { kind: string; detail: string } {
+  if (agent.protocol === "mcp") return { kind: "Tools", detail: "Call its tools directly" };
+  const price = priceLabel(agent);
+  return {
+    kind: "Hire",
+    detail: price === "Free" ? "Free per job" : price ? `${price} per job` : "Price quoted at checkout",
+  };
 }
-
-function formatCheckedAt(value: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(date);
-}
-
 
 export function AgentCard({
   agent,
@@ -150,18 +120,16 @@ export function AgentCard({
    */
   const label = categoryLabel(agent.category);
   const preview = getMetricPreview(agent);
-  const hire = getHireSummary(agent);
-  const checkedAt = preview ? formatCheckedAt(preview.asOf) : null;
+  const offer = getOffer(agent);
   const displayPublisher = agent.publisher?.startsWith("0x")
     ? `${agent.publisher.slice(0, 6)}…${agent.publisher.slice(-4)}`
-    : agent.publisher || "Publisher not listed";
+    : agent.publisher || null;
   const impressionRef = useImpression<HTMLAnchorElement>(agent.agentKey);
-  const favorites = useFavorites();
 
   return (
-    <div className="relative border-t border-line first:border-t-0">
+    <div className={`catalog-card ${className}`}>
       <Link
-        className={`interactive group block py-5 no-underline sm:py-6 ${favorites.visible ? "pr-12" : ""} ${className}`}
+        className="catalog-card__link"
         href={`/agent/${agent.tokenId}`}
         ref={impressionRef}
         onClick={() =>
@@ -172,80 +140,43 @@ export function AgentCard({
           })
         }
       >
-        <article className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_170px_auto] sm:items-center sm:gap-5">
-          <div className="flex items-start gap-4 sm:contents">
-            <AgentIcon category={agent.category} seed={agent.iconSeed} size={56} uri={agent.iconUrl} />
-
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.69rem] font-semibold uppercase tracking-[0.09em] text-faint">
-                <span>{label}</span>
-                <span aria-hidden="true">·</span>
-                <span>ERC-8004 #{agent.tokenId}</span>
-              </div>
-              <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-ink transition-colors group-hover:text-accent-ink sm:text-xl">
-                {agent.name}
+        <article className="flex h-full flex-col">
+          <div className="flex items-start gap-3 pr-10">
+            <AgentIcon category={agent.category} seed={agent.iconSeed} size={44} uri={agent.iconUrl} />
+            <div className="min-w-0 flex-1">
+              <h3 className="flex min-w-0 items-center text-[0.98rem] font-semibold tracking-[-0.02em] text-ink">
+                <span className="truncate">{agent.name}</span>
                 {agent.firstParty ? <ByDolphin /> : null}
               </h3>
-              <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-6 text-muted">
-                {agent.tagline}
+              <p className="mt-0.5 truncate text-[0.74rem] text-muted">
+                {label}
+                {displayPublisher ? <span className="text-faint"> · by {displayPublisher}</span> : null}
               </p>
-              <p className="mt-2 truncate text-xs text-faint">By {displayPublisher}</p>
-              {/*
-               * The comparison signal, on the surface where comparison happens.
-               * `verifiedAt` is what keeps this from rendering nothing at all for
-               * an agent with no hires yet - see signal-strip.
-               */}
-              <SignalStrip className="mt-2" signals={signals} verifiedAt={agent.verifiedAt} />
             </div>
           </div>
 
-          <div className="border-t border-line pt-4 sm:border-l sm:border-t-0 sm:py-1 sm:pl-5">
-            {/*
-              A live metric wins when one exists, because a real number about
-              THIS agent beats a fact about its protocol. Otherwise the column
-              says what is actually known - see getHireSummary.
-            */}
-            {preview && preview.value !== null ? (
-              <>
-                <div className="flex items-center justify-between gap-3 sm:block">
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                    {preview.label}
-                  </p>
-                  <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
-                    {preview.value}
-                  </p>
-                </div>
-                <p className="mt-1 truncate text-[0.69rem] text-faint" title={preview.source}>
-                  {preview.source}
-                  {checkedAt ? ` · ${checkedAt}` : ""}
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-3 sm:block">
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-faint">
-                    {hire.label}
-                  </p>
-                  <p className="mt-1 text-base font-semibold tracking-[-0.02em] text-ink">
-                    {hire.value}
-                  </p>
-                </div>
-                <p className="mt-1 truncate text-[0.69rem] text-faint" title={hire.detail}>
-                  {hire.detail}
-                </p>
-              </>
-            )}
-          </div>
+          <p className="mt-3 line-clamp-2 min-h-10 text-[0.84rem] leading-5 text-ink-soft">{agent.tagline}</p>
 
-          <span
-            aria-hidden="true"
-            className="hidden text-muted transition-transform group-hover:translate-x-0.5 sm:block"
-          >
-            <CategoryGlyph color="currentColor" name="arrow-right" size={18} strokeWidth={2} />
-          </span>
+          <div className="mt-auto pt-4">
+            {preview && preview.value !== null ? (
+              <p className="mb-2 text-[0.76rem] text-muted">
+                {preview.label} <span className="font-semibold text-ink">{preview.value}</span>
+              </p>
+            ) : null}
+            <div className="flex items-center gap-2 border-t border-line/60 pt-3">
+              <span className="catalog-card__kind" data-kind={agent.protocol}>
+                {offer.kind}
+              </span>
+              <span className="truncate text-[0.78rem] font-medium text-ink">{offer.detail}</span>
+              <span aria-hidden="true" className="catalog-card__arrow ml-auto shrink-0">
+                <CategoryGlyph color="currentColor" name="arrow-right" size={15} strokeWidth={2} />
+              </span>
+            </div>
+            <SignalStrip className="mt-2" signals={signals} verifiedAt={agent.verifiedAt} />
+          </div>
         </article>
       </Link>
-      <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="absolute right-0 top-5 sm:top-6" />
+      <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="catalog-card__fav" />
     </div>
   );
 }

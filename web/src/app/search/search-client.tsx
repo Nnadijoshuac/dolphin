@@ -11,6 +11,7 @@ import {
   useReportBackendStatus,
 } from "@/components/backend-status";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { DolphinLoader } from "@/components/dolphin-loader";
 import { MobileMenuButton } from "@/components/mobile-nav";
 import { FilterModal } from "@/components/filter-modal";
 import { StatePanel } from "@/components/state-panel";
@@ -194,21 +195,70 @@ function SearchContent() {
     router.replace(nextUrl, { scroll: false });
   };
 
+  /*
+   * THE COUNT UNDER THE TITLE - always read, never written in.
+   *
+   * This said "24+ records loaded": the size of the first PAGE fetched,
+   * dressed as a fact about the catalog (owner, 2026-09-29: "misleading").
+   * Now: with no search text, the live total (or the category's) from the
+   * facets document the category pills already read; while searching, the
+   * number of matches once the list is complete - and nothing before that,
+   * because a partial count is not a count.
+   */
+  const countLine = (() => {
+    if (isUnavailable || isLoading) return null;
+    if (normalizedQuery || isKindFiltered) {
+      if (status !== "Exhausted") return null;
+      return `${searchResults.length.toLocaleString()} ${searchResults.length === 1 ? "match" : "matches"}`;
+    }
+    if (facets.isLoading) return null;
+    const total =
+      selectedCategory === "all"
+        ? facets.totalLive
+        : facets.categories.find((category) => category.slug === selectedCategory)?.count ?? 0;
+    if (total <= 0) return null;
+    return `${total.toLocaleString()} ${total === 1 ? "agent" : "agents"}${selectedCategory === "all" ? " on BNB Chain" : ` in ${categoryLabel(selectedCategory)}`}`;
+  })();
+
+  const kindLabel = selectedProtocol === "a2a" ? "Hire" : selectedProtocol === "mcp" ? "Tools" : "All types";
+
+  const chip = (slug: AgentCategory | "all", text: string, count: number | null) => (
+    <button
+      aria-pressed={selectedCategory === slug}
+      className="catalog-chip"
+      key={slug}
+      onClick={() => {
+        setSelectedCategory(slug);
+        syncSearchUrl(query, slug);
+        if (slug !== "all") track("category_selected", { surface: "search", category: slug, count: count ?? 0 });
+      }}
+      type="button"
+    >
+      {text}
+      {count !== null ? <span className="catalog-chip__count">{count.toLocaleString()}</span> : null}
+    </button>
+  );
+
   return (
-    <div className="mobile-search-page site-frame page-shell" style={{ paddingBlockStart: 0 }}>
+    <div className="catalog-page mobile-search-page site-frame page-shell">
       {/*
-        * The phone's only route off this page.
-        *
-        * Search had no header of its own and relied entirely on the bottom tab
-        * bar for navigation; with that gone it was a dead end — you could
-        * search, and then only go forward. Sits above the field rather than
-        * inside it, because the field is a text input and a menu button inside
-        * one reads as a control that acts on the query.
+        * The phone's only route off this page: search has no header of its own
+        * on a phone, and without this it was a dead end.
         */}
       <div className="mobile-only mobile-search-topbar">
         <MobileMenuButton />
       </div>
-      <section aria-label="Agent search" className="mobile-search-controls pt-6 sm:pt-8">
+
+      {/* 1. What this page is, and how much is in it. */}
+      <header className="catalog-head">
+        <h1 className="catalog-title">Agent catalog</h1>
+        <p aria-live="polite" className="catalog-count">
+          {countLine ?? " "}
+        </p>
+      </header>
+
+      {/* 2. Search, with the type filter inside it; 3. the categories under it. */}
+      <section aria-label="Agent search" className="catalog-controls mobile-search-controls">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -220,11 +270,13 @@ function SearchContent() {
           <label className="sr-only" htmlFor="agent-search">
             Search agents
           </label>
-          <div className="mobile-search-field flex items-center gap-4">
-            <CategoryGlyph color="#6c6d64" name="search" size={24} strokeWidth={2} />
+          <div className="catalog-search">
+            <span aria-hidden="true" className="catalog-search__icon">
+              <CategoryGlyph color="currentColor" name="search" size={17} strokeWidth={2} />
+            </span>
             <input
               autoComplete="off"
-              className="min-w-0 flex-1 bg-transparent text-2xl font-medium tracking-[-0.035em] placeholder:text-faint sm:text-4xl"
+              className="catalog-search__input"
               id="agent-search"
               name="q"
               onChange={(event) => setQuery(event.target.value)}
@@ -232,124 +284,51 @@ function SearchContent() {
               onBlur={(event) => {
                 if (!(event.relatedTarget instanceof Element) || !event.relatedTarget.closest(".mobile-search-history")) setIsFocused(false);
               }}
-              placeholder={isMobile ? "Search agents, skills, publishers" : "Try Venus, rebalancing, or yield…"}
+              placeholder={isMobile ? "Search agents" : "Search by name, protocol or skill - try Venus or yield"}
               type="search"
               value={query}
             />
             {query ? (
               <button
                 aria-label="Clear search text"
-                className="mobile-search-clear interactive shrink-0 text-sm font-semibold text-muted underline-offset-4 hover:text-ink hover:underline"
+                className="catalog-search__clear"
                 onClick={() => {
                   setQuery("");
                   syncSearchUrl("", selectedCategory);
                 }}
                 type="button"
               >
-                {isMobile ? <CategoryGlyph name="close" color="currentColor" size={14} /> : "Clear"}
+                <CategoryGlyph color="currentColor" name="close" size={13} />
               </button>
             ) : null}
-
+            <span aria-hidden="true" className="catalog-search__divider" />
             <button
-              aria-label={
-                isKindFiltered
-                  ? `Filter by kind: ${selectedProtocol === "a2a" ? "Hire" : "Tools"}`
-                  : "Filter by kind"
-              }
-              className={`interactive flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all sm:h-11 sm:w-11 ${
-                isKindFiltered
-                  ? "border-accent bg-accent text-ink shadow-sm"
-                  : "border-line bg-paper text-muted hover:border-line-strong hover:text-ink"
-              }`}
+              aria-label={`Agent type: ${kindLabel}`}
+              className="catalog-search__filter"
+              data-active={isKindFiltered || undefined}
               onClick={() => setFilterModalOpen(true)}
-              title={
-                isKindFiltered
-                  ? `Filtering by ${selectedProtocol === "a2a" ? "Hire" : "Tools"}`
-                  : "Filter by kind"
-              }
               type="button"
             >
-              <CategoryGlyph
-                color="currentColor"
-                name="filter"
-                size={18}
-                strokeWidth={2}
-              />
+              <CategoryGlyph color="currentColor" name="filter" size={15} strokeWidth={2} />
+              <span className="catalog-search__filter-label">{kindLabel}</span>
             </button>
           </div>
         </form>
 
-        <div className="mobile-category-rail no-scrollbar mt-7 flex gap-1 overflow-x-auto border-b border-line" role="group" aria-label="Filter by category">
-          <button
-            aria-pressed={selectedCategory === "all"}
-            className={`interactive relative shrink-0 px-4 pb-3 text-sm font-medium ${
-              selectedCategory === "all" ? "text-ink" : "text-muted hover:text-ink"
-            }`}
-            onClick={() => {
-              setSelectedCategory("all");
-              syncSearchUrl(query, "all");
-            }}
-            type="button"
-          >
-            All agents
-            {selectedCategory === "all" ? (
-              <span className="absolute inset-x-3 bottom-0 h-0.5 bg-accent" />
-            ) : null}
-          </button>
-          {/*
-           * FROM THE CATALOG, not from a hardcoded five. convex/facets.ts
-           * counts the live catalog by category on a schedule; a category with
-           * no agents in it never becomes a tab, and a category nobody has
-           * thought of yet becomes one with no code change. See the note in
-           * @/constants/agents for the eight categories this list used to omit.
-           */}
+        {/*
+          * FROM THE CATALOG, not from a hardcoded list. convex/facets.ts counts
+          * the live catalog by category on a schedule; a category with no agents
+          * never becomes a pill, and a new one appears with no code change.
+          */}
+        <div aria-label="Filter by category" className="catalog-chips no-scrollbar" role="group">
+          {chip("all", "All agents", null)}
           {facets.isLoading
-            ? [0, 1, 2].map((item) => (
-                <span
-                  aria-hidden="true"
-                  className="skeleton mx-2 mb-3 h-5 w-20 shrink-0 rounded-md"
-                  key={item}
-                />
+            ? [0, 1, 2, 3].map((item) => (
+                <span aria-hidden="true" className="skeleton h-8 w-24 shrink-0 rounded-full" key={item} />
               ))
-            : facets.categories.map((category) => {
-                const isSelected = selectedCategory === category.slug;
-
-                return (
-                  <button
-                    aria-pressed={isSelected}
-                    className={`interactive relative shrink-0 px-4 pb-3 text-sm font-medium ${
-                      isSelected ? "text-ink" : "text-muted hover:text-ink"
-                    }`}
-                    key={category.slug}
-                    onClick={() => {
-                      setSelectedCategory(category.slug);
-                      syncSearchUrl(query, category.slug);
-                      track("category_selected", {
-                        surface: "search",
-                        category: category.slug,
-                        count: category.count,
-                      });
-                    }}
-                    type="button"
-                  >
-                    {category.label}
-                    <span className="ml-1.5 text-[0.7rem] font-normal tabular-nums text-faint">
-                      {category.count.toLocaleString()}
-                    </span>
-                    {isSelected ? (
-                      <span className="absolute inset-x-3 bottom-0 h-0.5 bg-accent" />
-                    ) : null}
-                  </button>
-                );
-              })}
+            : facets.categories.map((category) => chip(category.slug, category.label, category.count))}
         </div>
       </section>
-
-      {isMobile && isKindFiltered ? (
-        <button className="mobile-active-filter" type="button" onClick={() => setSelectedProtocol("all")} aria-label={`Remove ${selectedProtocol === "a2a" ? "Hire" : "Tools"} filter`}>
-          {selectedProtocol === "a2a" ? "Hire · A2A" : "Tools · MCP"}<CategoryGlyph name="close" color="currentColor" size={10} />
-        </button>
-      ) : null}
 
       {isMobile && isFocused && !normalizedQuery ? (
         <section aria-label="Recent searches" className="mobile-search-history">
@@ -365,83 +344,65 @@ function SearchContent() {
             ))}
           </> : <p className="px-6 pt-14 text-center text-sm text-muted">Search by agent name, capability, or protocol</p>}
         </section>
-      ) : <section aria-labelledby="results-heading" className="mobile-search-results pt-8 sm:pt-12" id="search-results">
-        <div className="mobile-results-header flex flex-col gap-3 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="eyebrow">Results</p>
-            <h2 className="section-title mt-3" id="results-heading">
-              {normalizedQuery ? `Matching “${normalizedQuery}”` : isMobile ? selectedCategory === "all" ? "All agents" : categoryLabel(selectedCategory) : "Agent catalog"}
-            </h2>
-            {isMobile && !normalizedQuery ? <p className="mobile-results-subtitle">{selectedProtocol === "a2a" ? "Hireable tasks · Escrow backed" : selectedProtocol === "mcp" ? "Free direct tools · MCP endpoints" : "Verified live on BNB Chain"}</p> : null}
-          </div>
-          {!isLoading && !isUnavailable && (!isMobile || normalizedQuery) ? (
-            /*
-             * "N records" only when the list is EXHAUSTED - i.e. when N really
-             * is the number of matches. Otherwise "N+ loaded", because this
-             * printed the fetched-so-far count as if it were the total and said
-             * "24 records" with a "Show more results" button beneath it.
-             */
-            <p aria-live="polite" className="text-sm text-muted">
-              {status === "Exhausted"
-                ? `${searchResults.length} ${searchResults.length === 1 ? "record" : "records"}`
-                : `${searchResults.length}+ records loaded`}
-            </p>
-          ) : null}
-        </div>
-
+      ) : <section aria-label="Agents" className="catalog-results" id="search-results">
         {isUnavailable ? (
-          <div className="pt-8">
-            <CatalogUnavailable
-              status={
-                backend as Extract<
-                  typeof backend,
-                  { kind: "unreachable" | "unconfigured" }
-                >
-              }
-              title="Search unavailable"
-            />
-          </div>
+          <CatalogUnavailable
+            status={
+              backend as Extract<
+                typeof backend,
+                { kind: "unreachable" | "unconfigured" }
+              >
+            }
+            title="Search unavailable"
+          />
         ) : isLoading ? (
-          <div className="pt-8">
-            <StatePanel
-              body="Reading the shared Dolphin catalog and applying your filters."
-              state="syncing"
-              title="Searching the catalog"
-            />
+          /* The first read: skeletons in the shape of the cards they become. */
+          <div aria-busy="true" aria-label="Loading agents" className={isMobile ? "mobile-result-list" : "catalog-grid"}>
+            {Array.from({ length: 6 }, (_, index) => (
+              <div aria-hidden="true" className="catalog-card catalog-card--skeleton" key={index}>
+                <div className="flex items-center gap-3">
+                  <span className="skeleton h-11 w-11 rounded-xl" />
+                  <span className="flex-1 space-y-2">
+                    <span className="skeleton block h-3.5 w-2/5 rounded" />
+                    <span className="skeleton block h-3 w-1/4 rounded" />
+                  </span>
+                </div>
+                <span className="skeleton mt-4 block h-3 w-full rounded" />
+                <span className="skeleton mt-2 block h-3 w-3/4 rounded" />
+                <span className="skeleton mt-6 block h-4 w-1/3 rounded" />
+              </div>
+            ))}
           </div>
         ) : searchResults.length === 0 ? (
-          <div className="pt-8">
-            <StatePanel
-              body="Try a broader term, remove the category filter, or search for a protocol such as Venus or PancakeSwap."
-              state="empty"
-              title="No matching agents"
-            />
-          </div>
+          <StatePanel
+            body="Try a broader term, another category, or a protocol such as Venus or PancakeSwap."
+            state="empty"
+            title="No matching agents"
+          />
         ) : (
-          <div className={isMobile ? "mobile-result-list" : undefined}>
-            {searchResults.map((agent) => isMobile ? (
-              <MobileAgentRow agent={agent} key={agent.agentKey} signals={signals.get(agent.agentKey)} onOpen={() => { if (normalizedQuery) addRecentSearch(normalizedQuery); }} />
-            ) : (
-              <AgentCard
-                agent={agent}
-                key={agent.id}
-                signals={signals.get(agent.agentKey)}
-                surface="search"
-              />
-            ))}
+          <>
+            <div className={isMobile ? "mobile-result-list" : "catalog-grid"}>
+              {searchResults.map((agent) => isMobile ? (
+                <MobileAgentRow agent={agent} key={agent.agentKey} signals={signals.get(agent.agentKey)} onOpen={() => { if (normalizedQuery) addRecentSearch(normalizedQuery); }} />
+              ) : (
+                <AgentCard
+                  agent={agent}
+                  key={agent.id}
+                  signals={signals.get(agent.agentKey)}
+                  surface="search"
+                />
+              ))}
+            </div>
+            {/* Plain text, no box (owner, 2026-09-29); the jumping dolphin while it loads. */}
             {status === "CanLoadMore" ? (
-              <button
-                className="mt-6 w-full border border-line py-3 text-sm font-semibold text-ink"
-                onClick={() => loadMore()}
-                type="button"
-              >
-                Show more results
+              <button className="catalog-more" onClick={() => loadMore()} type="button">
+                Show more
               </button>
             ) : null}
             {status === "LoadingMore" ? (
-              <p className="mt-6 text-center text-sm text-faint">Loading more…</p>
+              <DolphinLoader className="catalog-more-loader" label="Loading more agents" state="done" />
             ) : null}
-          </div>
+          </>
         )}
       </section>}
 
@@ -459,12 +420,8 @@ export function SearchClient() {
   return (
     <Suspense
       fallback={
-        <div className="site-frame page-shell">
-          <StatePanel
-            body="Preparing the catalog filters."
-            state="syncing"
-            title="Opening search"
-          />
+        <div className="site-frame page-shell flex justify-center pt-24">
+          <DolphinLoader label="Opening the catalog" state="done" />
         </div>
       }
     >

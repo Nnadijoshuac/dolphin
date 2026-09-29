@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { CategoryGlyph } from "@/components/category-glyph";
 import type { AgentProtocol } from "@/hooks/use-agents";
 
@@ -11,127 +11,100 @@ interface FilterModalProps {
   onSelectProtocol: (protocol: AgentProtocol | "all") => void;
 }
 
+const OPTIONS = [
+  { value: "all" as const, title: "All agents", desc: "Every agent in the catalog", glyph: "agents" as const },
+  { value: "a2a" as const, title: "Hire", desc: "Paid jobs, held in escrow until delivered", glyph: "dollar" as const },
+  { value: "mcp" as const, title: "Tools", desc: "Free tools you call directly over MCP", glyph: "spanner" as const },
+];
+
 /**
- * FilterModal
+ * Choose the agent type: All, Hire or Tools.
  *
- * A serene, floating dialog matching the mobile experience to choose agent kind:
- * All agents, Hire, or Tools.
+ * Owner, 2026-09-29: a standard dialog - the page behind is blurred with NO
+ * tint (the tint read as a white wash in dark mode), plain rows, one check on
+ * the selected row. It fades and scales in, and back out on close.
  */
-export function FilterModal({
-  isOpen,
-  onClose,
-  protocol,
-  onSelectProtocol,
-}: FilterModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
+export function FilterModal({ isOpen, onClose, protocol, onSelectProtocol }: FilterModalProps) {
+  const [leaving, setLeaving] = useState(false);
+
+  const close = () => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) onClose();
+    else setLeaving(true);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) onClose();
+        else setLeaving(true);
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
-  const options = [
-    {
-      value: "all" as const,
-      title: "All agents",
-      desc: "Everything verified across protocols",
-      glyph: "agents" as const,
-    },
-    {
-      value: "a2a" as const,
-      title: "Hire",
-      desc: "Paid tasks · ERC-8183 escrow",
-      glyph: "dollar" as const,
-    },
-    {
-      value: "mcp" as const,
-      title: "Tools",
-      desc: "Free tools · Call directly via MCP",
-      glyph: "spanner" as const,
-    },
-  ];
-
   return (
     <div
+      aria-labelledby="filter-modal-title"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="filter-modal"
+      data-leaving={leaving || undefined}
+      onAnimationEnd={(event) => {
+        // The panel's exit is the last to finish; its end closes the dialog.
+        if (leaving && (event.target as Element).classList.contains("filter-modal__panel")) {
+          setLeaving(false);
+          onClose();
+        }
+      }}
       role="dialog"
     >
-      {/* Backdrop */}
-      <div
-        aria-hidden="true"
-        className="fixed inset-0 bg-ink/40 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
-        onClick={onClose}
-      />
+      <div aria-hidden="true" className="filter-modal__backdrop" onClick={close} />
 
-      {/* Modal Dialog */}
-      <div
-        ref={dialogRef}
-        className="relative z-10 w-full max-w-sm rounded-3xl border border-line bg-paper p-6 shadow-2xl animate-in zoom-in-95 fade-in duration-200"
-      >
-        <div className="flex items-center justify-between border-b border-line pb-4">
-          <div>
-            <h2 className="text-base font-bold text-ink">Filter by Kind</h2>
-            <p className="mt-0.5 text-xs text-muted">Select what type of agent to show</p>
-          </div>
+      <div className="filter-modal__panel">
+        <div className="flex items-center justify-between px-5 pb-3 pt-4">
+          <h2 className="text-[0.95rem] font-semibold text-ink" id="filter-modal-title">
+            Agent type
+          </h2>
           <button
-            aria-label="Close filter modal"
-            className="interactive flex h-8 w-8 items-center justify-center rounded-full border border-line bg-paper-muted text-muted hover:text-ink"
-            onClick={onClose}
+            aria-label="Close"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-paper-muted hover:text-ink"
+            onClick={close}
             type="button"
           >
             <CategoryGlyph color="currentColor" name="close" size={14} />
           </button>
         </div>
 
-        <div className="mt-4 flex flex-col gap-2.5">
-          {options.map((opt) => {
-            const isSelected = protocol === opt.value;
+        <div className="border-t border-line/70 p-1.5" role="radiogroup" aria-label="Agent type">
+          {OPTIONS.map((option) => {
+            const isSelected = protocol === option.value;
             return (
               <button
-                className={`interactive group flex w-full items-center gap-3.5 rounded-2xl border p-3.5 text-left transition-all ${
-                  isSelected
-                    ? "border-accent bg-accent-soft shadow-sm"
-                    : "border-line bg-paper hover:border-line-strong hover:bg-paper-muted"
+                aria-checked={isSelected}
+                className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-2.5 text-left transition-colors ${
+                  isSelected ? "bg-paper-muted" : "hover:bg-paper-muted/70"
                 }`}
-                key={opt.value}
+                key={option.value}
                 onClick={() => {
-                  onSelectProtocol(opt.value);
-                  onClose();
+                  onSelectProtocol(option.value);
+                  close();
                 }}
+                role="radio"
                 type="button"
               >
-                <div
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-                    isSelected
-                      ? "border-accent bg-accent text-ink"
-                      : "border-line bg-paper-muted text-muted group-hover:text-ink"
-                  }`}
-                >
-                  <CategoryGlyph color="currentColor" name={opt.glyph} size={20} />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-ink">{opt.title}</span>
-                    {isSelected ? (
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-ink">
-                        <CategoryGlyph color="currentColor" name="check" size={12} strokeWidth={2.4} />
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-0.5 text-xs leading-4 text-muted">{opt.desc}</p>
-                </div>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-line/80 text-muted">
+                  <CategoryGlyph color="currentColor" name={option.glyph} size={16} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.84rem] font-semibold text-ink">{option.title}</span>
+                  <span className="block text-[0.74rem] text-muted">{option.desc}</span>
+                </span>
+                {isSelected ? (
+                  <CategoryGlyph color="var(--ink)" name="check" size={15} strokeWidth={2.2} />
+                ) : null}
               </button>
             );
           })}

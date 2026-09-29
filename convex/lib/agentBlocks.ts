@@ -36,11 +36,12 @@ import { ConvexError } from "convex/values";
 import { getAddress, isAddress } from "viem";
 
 import type { ToolDefinition } from "./openrouter";
+import { activeQuietEvent, type AuthMode, type QuietEvent } from "./analyticalBlocks";
 import { indicatorReport, SIGNAL_CONDITIONS, type SignalCondition } from "./indicators";
 import { assertSafeUrl } from "./safeFetch";
 import { verifiedTokenBySymbol, verifiedTokens, type TradeToken } from "./tradeTokens";
 
-export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "hire", "memory", "indicators", "signal"] as const;
+export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "hire", "memory", "indicators", "signal", "dataSource", "news", "quietHours"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export type MarketConfig = { tokenAddress: string; symbol: string; name: string; poolAddress: string | null };
@@ -54,6 +55,10 @@ export type Timeframe = "1h" | "4h" | "1d";
 export const TIMEFRAMES: readonly Timeframe[] = ["1h", "4h", "1d"];
 export type IndicatorsConfig = { timeframe: Timeframe };
 export type SignalConfig = { condition: SignalCondition; level: number | null; timeframe: Timeframe };
+export type SourceAuth = { authMode: AuthMode; authParam: string | null; keyName: string | null };
+export type DataSourceConfig = SourceAuth & { label: string; url: string };
+export type NewsConfig = SourceAuth & { url: string; keywords: string[] };
+export type QuietHoursConfig = { events: QuietEvent[]; marginHours: number };
 
 export type AgentBlock =
   | { id: string; type: "market"; config: MarketConfig }
@@ -66,7 +71,10 @@ export type AgentBlock =
   | { id: string; type: "hire"; config: HireConfig }
   | { id: string; type: "memory"; config: MemoryConfig }
   | { id: string; type: "indicators"; config: IndicatorsConfig }
-  | { id: string; type: "signal"; config: SignalConfig };
+  | { id: string; type: "signal"; config: SignalConfig }
+  | { id: string; type: "dataSource"; config: DataSourceConfig }
+  | { id: string; type: "news"; config: NewsConfig }
+  | { id: string; type: "quietHours"; config: QuietHoursConfig };
 
 export const MAX_BLOCKS = 12;
 /** Fastest schedule. Every run spends the builder's own model key. */
@@ -171,6 +179,47 @@ export function validateBlocks(input: unknown): AgentBlock[] {
         const rawLevel = Number(config.level);
         const level = condition === "rsiBelow" || condition === "rsiAbove" ? (rawLevel > 0 && rawLevel < 100 ? rawLevel : condition === "rsiBelow" ? 30 : 70) : null;
         out.push({ id, type, config: { condition, level, timeframe } });
+        break;
+      }
+      case "dataSource":
+      case "news": {
+        const url = typeof config.url === "string" ? config.url.trim() : "";
+        if (!url.startsWith("https://") || url.length > 500) fail(type === "news" ? "The news feed needs an https:// address." : "The data source needs an https:// address.");
+        try {
+          assertSafeUrl(url);
+        } catch {
+          fail("That address is not reachable from the internet.");
+        }
+        const authMode = (["none", "bearer", "header", "query"] as const).includes(config.authMode as AuthMode) ? (config.authMode as AuthMode) : "none";
+        const authParam =
+          (authMode === "header" || authMode === "query") && typeof config.authParam === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(config.authParam)
+            ? config.authParam
+            : null;
+        if ((authMode === "header" || authMode === "query") && !authParam) fail("Say which header or query parameter carries the key.");
+        const keyName = typeof config.keyName === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(config.keyName) ? config.keyName : null;
+        if (authMode !== "none" && !keyName) fail("Choose the key this source needs, from your Keys.");
+        if (type === "dataSource") {
+          const label = typeof config.label === "string" && config.label.trim() ? config.label.trim().slice(0, 40) : "Data source";
+          out.push({ id, type, config: { label, url, authMode, authParam, keyName } });
+        } else {
+          const keywords = (Array.isArray(config.keywords) ? config.keywords : [])
+            .filter((word): word is string => typeof word === "string")
+            .map((word) => word.trim().slice(0, 30))
+            .filter(Boolean)
+            .slice(0, 8);
+          out.push({ id, type, config: { url, keywords, authMode, authParam, keyName } });
+        }
+        break;
+      }
+      case "quietHours": {
+        const events = (Array.isArray(config.events) ? config.events : [])
+          .map((event) => event as { label?: unknown; at?: unknown })
+          .filter((event) => typeof event.at === "string" && Number.isFinite(Date.parse(event.at)))
+          .map((event) => ({ label: typeof event.label === "string" && event.label.trim() ? event.label.trim().slice(0, 60) : "Event", at: new Date(Date.parse(event.at as string)).toISOString() }))
+          .slice(0, 30);
+        if (events.length === 0) fail("Add at least one event to stand aside for, with its date and time.");
+        const marginHours = Math.min(24, Math.max(0.5, Number(config.marginHours) || 2));
+        out.push({ id, type, config: { events, marginHours } });
         break;
       }
       case "memory": {
@@ -559,6 +608,14 @@ export async function runBlockTool(
     if (name === "block_propose_swap") {
       const risk = blocks.find((block) => block.type === "risk");
       if (!risk) return { text: "No Risk block, so no trade can be proposed.", isError: true };
+      // QUIET HOURS, enforced here - not left to the Brain.
+      const quiet = blocks.find((block) => block.type === "quietHours");
+      if (quiet && quiet.type === "quietHours") {
+        const standing = activeQuietEvent(quiet.config.events, quiet.config.marginHours);
+        if (standing) {
+          return { text: `Refused: quiet hours - standing aside within ${quiet.config.marginHours}h of "${standing.label}" (${standing.at}).`, isError: true };
+        }
+      }
       if (tradesToday >= risk.config.maxTradesPerDay) {
         return { text: `Refused: the Risk block allows ${risk.config.maxTradesPerDay} trades a day, and that many were proposed today.`, isError: true };
       }

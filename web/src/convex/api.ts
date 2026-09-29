@@ -865,7 +865,13 @@ export type AgentBlockData =
   | { id: string; type: "hire"; config: { agentKey: string; agentName: string } }
   | { id: string; type: "memory"; config: { url: string; keyName: string | null } }
   | { id: string; type: "indicators"; config: { timeframe: "1h" | "4h" | "1d" } }
-  | { id: string; type: "signal"; config: { condition: SignalCondition; level: number | null; timeframe: "1h" | "4h" | "1d" } };
+  | { id: string; type: "signal"; config: { condition: SignalCondition; level: number | null; timeframe: "1h" | "4h" | "1d" } }
+  | { id: string; type: "dataSource"; config: SourceAuth & { label: string; url: string } }
+  | { id: string; type: "news"; config: SourceAuth & { url: string; keywords: string[] } }
+  | { id: string; type: "quietHours"; config: { events: { label: string; at: string }[]; marginHours: number } };
+
+/** How a builder's data source takes its key (convex/lib/analyticalBlocks.ts). */
+export type SourceAuth = { authMode: "none" | "bearer" | "header" | "query"; authParam: string | null; keyName: string | null };
 
 /** What a Signal waits for. Mirrors SIGNAL_CONDITIONS in convex/lib/indicators.ts. */
 export type SignalCondition = "rsiBelow" | "rsiAbove" | "maCrossUp" | "maCrossDown" | "macdCrossUp" | "macdCrossDown";

@@ -49,6 +49,7 @@ import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { memoryBrief, recall, remember, type MemoryTarget } from "./lib/agentMemory";
 import { mergeBuilderBlocks } from "./lib/builderBlocks";
+import { quietBrief, readDataSource, readNews } from "./lib/analyticalBlocks";
 import { TRADING_PLAYBOOK, TRADING_RUN_RULES } from "./lib/tradingPlaybook";
 import { chatCompletion, customChatUrl, isBrainProvider, type ChatMessage } from "./lib/openrouter";
 import { assertSafeUrl } from "./lib/safeFetch";
@@ -110,6 +111,10 @@ WHAT AN AGENT BUILT HERE IS. Never promise more than this:
   - Hire an agent: one paid A2A agent from Dolphin's catalog. The agent can ask it to do a task and gets its price; the person confirms each payment from their Dolphin Wallet with their passkey. The result is delivered later, on-chain - not into the conversation.
 ${TRADING_PLAYBOOK}
 
+- MORE TOOLBOX BLOCKS the person adds from the canvas (suggest the ones the job needs):
+  - TECHNICAL (price history): Indicators (RSI, MACD, Bollinger, 20/50 averages, volume - computed in code on closed candles, 1h/4h/daily) and a Signal trigger (fires when an RSI level, a moving-average cross or a MACD cross happens on a newly closed candle).
+  - ANALYTICAL (what is happening now): Data source (their own API - any https address plus their key), News (headlines from a feed they choose; paid promotion flagged; headlines only), and Quiet hours (events like a rate decision they list; no trade goes through within the margin around them - enforced in code).
+  - Every trading agent starts in PAPER mode (pretend money, real prices, fees and gas) until the person switches it to Live in the Draft tab. The expanded Price feed chart has a Backtest tab that tests a simple rule (trend, RSI dip, DCA) on real history with fees and slippage - it tests rules, not the Brain.
 - NAMES ON THE CANVAS - use these when you talk to the person: the schedule block is the "Scheduler", the market data block is the "Price feed", and the swap block is the "Market" (where it buys and sells, after Risk limits). Every run source (a message, the Scheduler, a Price trigger, Wallet watch) plugs into one "Trigger", which starts the Brain once per run. The Brain's connected read blocks (Price feed, Safety, Memory) run automatically on every run.
 - Write the instructions so they use what is there: e.g. "When your price trigger fires, read the market snapshot, check safety, and propose a trade only if...". Rules with exact numbers beat vague judgement.
 - It cannot send emails or messages, and cannot trade without the person signing. If asked, say so plainly and offer the closest thing it can do.
@@ -1283,6 +1288,24 @@ export async function runTryTurn(
           })),
         );
       }
+      // ANALYTICAL blocks (lib/analyticalBlocks.ts): the builder's own sources, keys decrypted for this run only.
+      const keyFor = async (keyName: string | null): Promise<string | null> =>
+        keyName && brain ? await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: keyName }) : null;
+      const dataSource = blocks.find((block) => block.type === "dataSource");
+      if (dataSource && dataSource.type === "dataSource") {
+        const read = await readDataSource(dataSource.config, await keyFor(dataSource.config.keyName));
+        await runReadBlock(ctx, { conversationId, messageId: assistantId, blockId: dataSource.id, label: dataSource.config.label, toolName: "block_data_source" }, async () => ({ text: read.summary, isError: read.isError }));
+        readNotes.push(read.forBrain);
+      }
+      const news = blocks.find((block) => block.type === "news");
+      if (news && news.type === "news") {
+        const keywords = news.config.keywords.length ? news.config.keywords : priceFeed && priceFeed.type === "market" ? [priceFeed.config.symbol] : [];
+        const read = await readNews({ ...news.config, keywords }, await keyFor(news.config.keyName));
+        await runReadBlock(ctx, { conversationId, messageId: assistantId, blockId: news.id, label: "News", toolName: "block_news" }, async () => ({ text: read.summary, isError: read.isError }));
+        readNotes.push(read.forBrain);
+      }
+      const quietHours = blocks.find((block) => block.type === "quietHours");
+      if (quietHours && quietHours.type === "quietHours") readNotes.push(quietBrief(quietHours.config.events, quietHours.config.marginHours));
       const readNote = readNotes.length
         ? `\n\nDATA YOUR BLOCKS READ THIS RUN (fetched live just now - use these numbers, quote only these):\n${readNotes.join("\n")}`
         : "";
@@ -1495,6 +1518,9 @@ const BLOCK_LABELS: Record<AgentBlock["type"], string> = {
   memory: "Memory",
   indicators: "Indicators",
   signal: "Signal",
+  dataSource: "Data source",
+  news: "News",
+  quietHours: "Quiet hours",
 };
 
 function blockToolNameFor(type: AgentBlock["type"]): string | null {

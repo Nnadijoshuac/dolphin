@@ -606,6 +606,9 @@ const BLOCK_TITLES: Record<BlockType, string> = {
   memory: "Memory",
   indicators: "Indicators",
   signal: "Signal",
+  dataSource: "Data source",
+  news: "News",
+  quietHours: "Quiet hours",
 };
 
 const BLOCK_ABOUT: Record<BlockType, string> = {
@@ -616,6 +619,9 @@ const BLOCK_ABOUT: Record<BlockType, string> = {
   schedule: "Makes its own signal: it fires the Trigger on a clock while Autopilot is on. Every run uses your own model key.",
   price: "Makes its own signal: it fires the Trigger when the Price feed's token crosses your level - once per crossing, not on every check. This one watches the live price, not closed candles.",
   walletWatch: "Makes its own signal: it fires the Trigger when a watched wallet transacts - a KOL, a whale, a fund. It sees any transaction they send, and exactly which tokens moved for your Price feed token and Dolphin's verified list.",
+  dataSource: "Your own API, read on every run and handed to the Brain as data. Any https address that answers JSON or text; if it needs a key, add it in the Keys tab and choose it here. The key and the data serve only your agent: nothing is cached or shown to anyone else, and the transcript records only that it was read.",
+  news: "Headlines from a feed you choose - RSS, Atom or a JSON news API - filtered to your keywords (the Price feed's token by default). Only the headline, source and time reach the Brain, never article text, and anything the source marks as sponsored or sends through a press-release wire is flagged as paid promotion. You choose the feed and are responsible for its terms.",
+  quietHours: "Stands aside around scheduled events - a rate decision, an inflation release. List them in UTC; no trade goes through within the margin either side of any of them. Checked in code on every trade, whatever the Brain decides.",
   indicators: "Technical indicators for the Price feed's token, computed in code on closed candles only and read on every run: RSI(14), MACD(12,26,9), Bollinger bands (20,2), the 20- and 50-candle averages, volume against its average, and any cross that just happened.",
   signal: "Makes its own signal: it fires the Trigger when a technical condition turns true on a newly closed candle - an RSI level, a moving-average cross or a MACD cross. Checked every 5 minutes; fires once per candle, never on a candle still forming.",
   memory: "Your agent's memory, kept on your own server - Dolphin stores none of it. Before every run it reads what it did last time; after it, a record of the run is saved. It can also note things down itself.",
@@ -697,6 +703,16 @@ function BlockEditor({
     type === "hire" && existing ? { agentKey: String(config.agentKey), agentName: String(config.agentName) } : null,
   );
   const session = useWalletSession();
+  const [sourceLabel, setSourceLabel] = useState(typeof config.label === "string" ? config.label : "");
+  const [sourceUrl, setSourceUrl] = useState(typeof config.url === "string" && (type === "dataSource" || type === "news") ? config.url : "");
+  const [authMode, setAuthMode] = useState<"none" | "bearer" | "header" | "query">((config.authMode as "none") ?? "none");
+  const [authParam, setAuthParam] = useState(typeof config.authParam === "string" ? config.authParam : "");
+  const [sourceKey, setSourceKey] = useState(typeof config.keyName === "string" ? config.keyName : "");
+  const [keywords, setKeywords] = useState(Array.isArray(config.keywords) ? (config.keywords as string[]).join(", ") : "");
+  const [eventsText, setEventsText] = useState(
+    Array.isArray(config.events) ? (config.events as { label: string; at: string }[]).map((event) => `${event.label} | ${event.at.slice(0, 16).replace("T", " ")}`).join("\n") : "",
+  );
+  const [marginHours, setMarginHours] = useState(config.marginHours ? String(config.marginHours) : "2");
   const [timeframe, setTimeframe] = useState<"1h" | "4h" | "1d">((config.timeframe as "1h" | "4h" | "1d") ?? (type === "signal" ? "1h" : "1d"));
   const [condition, setCondition] = useState<SignalCondition>((config.condition as SignalCondition) ?? "rsiBelow");
   const [level, setLevel] = useState(config.level ? String(config.level) : "");
@@ -706,7 +722,7 @@ function BlockEditor({
   const testMemory = useAction(agentMemoryApi.agentMemoryCheck.test);
   const keys = useQuery(
     envVarsApi.envVars.list,
-    type === "memory" && session.sessionToken ? { sessionToken: session.sessionToken } : "skip",
+    (type === "memory" || type === "dataSource" || type === "news") && session.sessionToken ? { sessionToken: session.sessionToken } : "skip",
   );
   // Paid agents a flow can hire: live A2A agents in the catalog.
   const hireResults = useQuery(
@@ -764,6 +780,22 @@ function BlockEditor({
           : null;
       case "hire":
         return hirePick ? { id, type, config: hirePick } : null;
+      case "dataSource":
+      case "news": {
+        if (!sourceUrl.trim().startsWith("https://")) return null;
+        const auth = { authMode, authParam: authMode === "header" || authMode === "query" ? authParam.trim() || null : null, keyName: authMode === "none" ? null : sourceKey || null };
+        return type === "dataSource"
+          ? { id, type, config: { label: sourceLabel.trim() || "Data source", url: sourceUrl.trim(), ...auth } }
+          : { id, type, config: { url: sourceUrl.trim(), keywords: keywords.split(",").map((word) => word.trim()).filter(Boolean), ...auth } };
+      }
+      case "quietHours": {
+        const events = eventsText
+          .split("\n")
+          .map((line) => line.split("|").map((part) => part.trim()))
+          .filter((parts) => parts.length === 2 && Number.isFinite(Date.parse(`${parts[1].replace(" ", "T")}:00Z`)))
+          .map(([label, at]) => ({ label: label || "Event", at: new Date(Date.parse(`${at.replace(" ", "T")}:00Z`)).toISOString() }));
+        return events.length ? { id, type, config: { events, marginHours: Number(marginHours) || 2 } } : null;
+      }
       case "indicators":
         return { id, type, config: { timeframe } };
       case "signal":
@@ -957,6 +989,88 @@ function BlockEditor({
               </ul>
             </>
           )}
+        </div>
+      ) : null}
+
+      {type === "dataSource" || type === "news" ? (
+        <div className="mt-3 space-y-3">
+          {type === "dataSource" ? (
+            <label className="block">
+              <Label>Name</Label>
+              <input className={fieldClass} maxLength={40} onChange={(event) => setSourceLabel(event.target.value)} placeholder="e.g. FX rates" value={sourceLabel} />
+            </label>
+          ) : null}
+          <label className="block">
+            <Label>{type === "news" ? "Feed address" : "Address"}</Label>
+            <input
+              className={`${fieldClass} font-mono`}
+              data-1p-ignore
+              data-lpignore="true"
+              name="dolphin-source-url"
+              onChange={(event) => setSourceUrl(event.target.value)}
+              placeholder={type === "news" ? "https://… (RSS, Atom or a JSON news API)" : "https://api.example.com/…"}
+              spellCheck={false}
+              value={sourceUrl}
+            />
+          </label>
+          {type === "news" ? (
+            <label className="block">
+              <Label>Keywords</Label>
+              <input className={fieldClass} onChange={(event) => setKeywords(event.target.value)} placeholder="Blank: the Price feed's token" value={keywords} />
+            </label>
+          ) : null}
+          <div>
+            <Label>Its key</Label>
+            <ChoiceList
+              ariaLabel="How it takes a key"
+              choices={[
+                { value: "none", label: "No key" },
+                { value: "bearer", label: "Bearer token" },
+                { value: "header", label: "In a header" },
+                { value: "query", label: "In the address (query)" },
+              ]}
+              onChange={(next) => setAuthMode(next as "none")}
+              searchable={false}
+              value={authMode}
+            />
+            {authMode === "header" || authMode === "query" ? (
+              <input className={`${fieldClass} mt-2 font-mono`} onChange={(event) => setAuthParam(event.target.value)} placeholder={authMode === "header" ? "Header name, e.g. X-API-Key" : "Parameter name, e.g. apikey"} value={authParam} />
+            ) : null}
+            {authMode !== "none" ? (
+              <div className="mt-2">
+                <ChoiceList
+                  ariaLabel="Key"
+                  choices={(keys ?? []).map((key) => ({ value: key.name, label: key.name, hint: key.last4 ? `••••${key.last4}` : undefined }))}
+                  mono
+                  onChange={setSourceKey}
+                  placeholder="Choose a key from your Keys…"
+                  searchable={false}
+                  value={sourceKey}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {type === "quietHours" ? (
+        <div className="mt-3 space-y-3">
+          <label className="block">
+            <Label>Events (UTC), one per line</Label>
+            <textarea
+              className={`${fieldClass} resize-none font-mono text-[0.74rem]`}
+              onChange={(event) => setEventsText(event.target.value)}
+              placeholder={"FOMC decision | 2026-10-28 18:00\nUS CPI | 2026-11-12 12:30"}
+              rows={4}
+              spellCheck={false}
+              value={eventsText}
+            />
+          </label>
+          <label className="flex items-center gap-2 text-[0.76rem] text-ink-soft">
+            Stand aside
+            <input className="w-14 rounded-lg border border-line bg-paper-strong px-2 py-1 font-mono text-[0.8rem] text-ink" inputMode="decimal" onChange={(event) => setMarginHours(event.target.value.replace(/[^0-9.]/g, ""))} value={marginHours} />
+            hours either side
+          </label>
         </div>
       ) : null}
 

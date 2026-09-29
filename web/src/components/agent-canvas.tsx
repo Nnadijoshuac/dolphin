@@ -316,6 +316,9 @@ export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label
   memory: { kind: "sense", label: "Memory", glyph: "receive" },
   indicators: { kind: "sense", label: "Indicators", glyph: "filter" },
   signal: { kind: "trigger", label: "Signal", glyph: "sparkle" },
+  dataSource: { kind: "sense", label: "Data source", glyph: "external" },
+  news: { kind: "sense", label: "News", glyph: "share" },
+  quietHours: { kind: "risk", label: "Quiet hours", glyph: "clock" },
 };
 
 function money(value: number): string {
@@ -367,6 +370,16 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
       return { title: `${block.config.timeframe === "1d" ? "Daily" : block.config.timeframe === "4h" ? "4-hour" : "1-hour"} indicators`, detail: "RSI, MACD, Bollinger, averages - closed candles" };
     case "signal":
       return { title: signalTitle(block.config.condition, block.config.level), detail: `On each closed ${block.config.timeframe} candle` };
+    case "dataSource":
+      return { title: block.config.label, detail: block.config.url.replace(/^https:\/\//, "") };
+    case "news": {
+      const host = block.config.url.replace(/^https:\/\//, "").split("/")[0];
+      return { title: "Headlines", detail: `${host}${block.config.keywords.length ? ` · ${block.config.keywords.join(", ")}` : ""}` };
+    }
+    case "quietHours": {
+      const next = block.config.events.map((event) => event.at).filter((at) => Date.parse(at) > Date.now()).sort()[0];
+      return { title: `${block.config.events.length} event${block.config.events.length === 1 ? "" : "s"} · ${block.config.marginHours}h aside`, detail: next ? `Next: ${new Date(next).toUTCString().slice(5, 22)} UTC` : "No upcoming event" };
+    }
     case "memory":
       return { title: "Your memory server", detail: block.config.url.replace(/^https:\/\//, "") };
   }
@@ -430,7 +443,7 @@ export function draftGraph(
 
   // KNOWS: what the Brain can read, in rows beneath it.
   const senses: { id: string; data: BlockData }[] = [];
-  for (const type of ["market", "indicators", "safety", "memory"] as const) {
+  for (const type of ["market", "indicators", "safety", "dataSource", "news", "memory"] as const) {
     const block = find(type);
     if (block) senses.push({ id: `block-${block.id}`, data: blockData(block) });
   }
@@ -455,10 +468,11 @@ export function draftGraph(
 
   // DOES: the answer; the trade chain (gate -> swap -> wallet); a hired agent.
   const risk = find("risk");
+  const quiet = find("quietHours");
   const swap = find("swap");
   const hire = find("hire");
   const chain: AgentBlockData[] = [];
-  for (const block of [risk, swap]) if (block) chain.push(block);
+  for (const block of [risk, quiet, swap]) if (block) chain.push(block);
   const rows: string[] = ["output", ...(chain.length ? ["chain"] : []), ...(hire ? ["hire"] : [])];
   const rowY = (name: string) => brainY + (rows.indexOf(name) - (rows.length - 1) / 2) * ACTION_ROW;
   place("output", actionX, rowY("output"), { kind: "output", title: "Answer", detail: "Replies with what its tools returned" });
@@ -496,7 +510,8 @@ export function draftGraph(
     const headMember = head.type === "risk" ? (swap ? `block:${swap.id}` : "limits") : `block:${head.id}`;
     if (live(headMember)) edges.push(edge("brain", `block-${head.id}`, "in", headMember));
     for (let i = 1; i < chain.length; i++) {
-      const link = chain[i].type === "swap" ? "limits" : `block:${chain[i].id}`;
+      // Cutting the line out of a gate removes that gate: Risk limits (`limits`) or Quiet hours.
+      const link = chain[i - 1].type === "risk" ? "limits" : `block:${chain[i - 1].id}`;
       if (live(link)) edges.push(edge(`block-${chain[i - 1].id}`, `block-${chain[i].id}`, "in", link));
     }
   }
@@ -554,13 +569,14 @@ function applyRun(
     const lit = running ? { active: true } : { used: true };
     if (block.type === "swap") {
       // A trade runs the chain: Brain -> Risk gate -> Market.
-      const gate = (draft.blocks ?? []).find((candidate) => candidate.type === "risk");
-      const head = gate ? `block-${gate.id}` : id;
-      edgeState.set(`brain->${head}`, lit);
-      if (gate) {
-        nodeState.set(head, running ? "active" : "done");
-        edgeState.set(`${head}->${id}`, lit);
-      }
+      // Every gate the trade passes through lights in order: Risk limits, Quiet hours, then the Market.
+      const gates = ["risk", "quietHours"]
+        .map((type) => (draft.blocks ?? []).find((candidate) => candidate.type === type))
+        .filter((gate): gate is AgentBlockData => Boolean(gate))
+        .map((gate) => `block-${gate.id}`);
+      const path = ["brain", ...gates, id];
+      for (let step = 1; step < path.length; step++) edgeState.set(`${path[step - 1]}->${path[step]}`, lit);
+      for (const gate of gates) nodeState.set(gate, running ? "active" : "done");
     } else if (block.type === "hire") {
       edgeState.set(`brain->${id}`, lit);
     } else if (!["schedule", "price", "walletWatch", "signal"].includes(block.type)) {
@@ -676,6 +692,8 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
     // ...and analytical traders (also called fundamental) read what is happening now.
     title: "Analytical",
     items: [
+      { type: "dataSource", label: "Data source", about: "Your own API - any https source, your key", glyph: "external" },
+      { type: "news", label: "News", about: "Headlines from a feed you choose; promos flagged", glyph: "share" },
       { type: "memory", label: "Memory", about: "Remembers past runs - on your own server", glyph: "receive" },
       { type: "tool", label: "Agent tool", about: "A tool from an agent listed on Dolphin", glyph: "agents" },
       { type: "hire", label: "Hire an agent", about: "A paid A2A agent - you confirm each payment", glyph: "bot" },
@@ -685,6 +703,7 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
     title: "Hands",
     items: [
       { type: "risk", label: "Risk limits", about: "Dollars per trade and trades per day", glyph: "filter" },
+      { type: "quietHours", label: "Quiet hours", about: "Stand aside around scheduled events", glyph: "clock", needs: "swap" },
       { type: "swap", label: "Market", about: "Buys and sells on PancakeSwap, after the Risk gate", glyph: "wallet", needs: "risk" },
     ],
   },
@@ -1010,7 +1029,8 @@ export function AgentCanvas({
         if (to === "hire") return target.data.member ?? null;
         return null;
       }
-      if (from === "risk" && to === "swap") return "limits";
+      if (from === "risk" && (to === "swap" || to === "quietHours")) return "limits";
+      if (from === "quietHours" && to === "swap") return source.data.member ?? null;
       return null;
     },
     [base.nodes, draft.blocks],

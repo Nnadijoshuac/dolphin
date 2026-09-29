@@ -44,6 +44,7 @@ import type * as lib_agentBlocks from "../lib/agentBlocks.js";
 import type * as lib_agentMemory from "../lib/agentMemory.js";
 import type * as lib_agentSpec from "../lib/agentSpec.js";
 import type * as lib_agentTransaction from "../lib/agentTransaction.js";
+import type * as lib_analyticalBlocks from "../lib/analyticalBlocks.js";
 import type * as lib_answerHygiene from "../lib/answerHygiene.js";
 import type * as lib_balanceIntent from "../lib/balanceIntent.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
@@ -143,6 +144,7 @@ declare const fullApi: ApiFromModules<{
   "lib/agentMemory": typeof lib_agentMemory;
   "lib/agentSpec": typeof lib_agentSpec;
   "lib/agentTransaction": typeof lib_agentTransaction;
+  "lib/analyticalBlocks": typeof lib_analyticalBlocks;
   "lib/answerHygiene": typeof lib_answerHygiene;
   "lib/balanceIntent": typeof lib_balanceIntent;
   "lib/bscClient": typeof lib_bscClient;

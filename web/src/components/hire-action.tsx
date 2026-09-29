@@ -20,7 +20,7 @@ import { track } from "@/lib/analytics";
 // altana-policy.ts already warns about.
 import { formatBnb } from "@/wallet/altana-policy";
 import { toUserMessage } from "@/wallet/wallet-errors";
-import { defaultTaskDescription, ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
+import { DELIVERY_RELEASE_NOTE, defaultTaskDescription, ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
 import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
@@ -535,6 +535,14 @@ export function HireAction({ agent }: { agent: Agent }) {
             </span>
           </div>
         ) : null}
+        {priceRequiresPayment && !showMyAgents ? (
+          <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
+            <span className="text-xs text-muted">If it does deliver</span>
+            <span className="text-right text-sm font-semibold text-ink">
+              Paid out after {ESCROW_REFUND_DAYS} days
+            </span>
+          </div>
+        ) : null}
         {walletSetupText ? (
           <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
             <span className="text-xs text-muted">One-time wallet setup</span>
@@ -542,6 +550,9 @@ export function HireAction({ agent }: { agent: Agent }) {
           </div>
         ) : null}
       </div>
+      {priceRequiresPayment && !showMyAgents ? (
+        <p className="mt-3 text-xs leading-5 text-muted">{DELIVERY_RELEASE_NOTE}</p>
+      ) : null}
       {walletSetupText ? (
         <p className="mt-3 text-xs leading-5 text-muted">
           Your first purchase also registers this wallet&rsquo;s key on BNB Chain, so your

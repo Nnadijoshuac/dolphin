@@ -6,6 +6,7 @@ import { useState } from "react";
 import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { agentPaymentsApi, api, type AgentQuote, type HireTicket as HireTicketData } from "@/convex/api";
 import { useAltanaWallet } from "@/wallet/altana-provider";
+import { DELIVERY_RELEASE_NOTE } from "@/wallet/erc8183-policy";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { useWallet } from "@/wallet/wallet-provider";
 
@@ -73,8 +74,8 @@ export function HireTicket({ ticket }: { ticket: HireTicketData }) {
       ) : (
         <>
           <p className="mt-2 text-[0.7rem] leading-snug text-muted">
-            Your agent asked for this. Paying funds an escrow from your Dolphin Wallet for this one job; it releases when the agent
-            delivers, or comes back to you if it doesn&apos;t. The price is quoted again before you confirm.
+            Your agent asked for this. Paying funds an escrow from your Dolphin Wallet for this one job, and the price is quoted again
+            before you confirm. If the agent doesn&apos;t deliver, the money comes back to you. {DELIVERY_RELEASE_NOTE}
           </p>
           <button
             className="mt-2.5 h-9 w-full rounded-lg bg-ink !text-[12.5px] font-semibold disabled:opacity-40"

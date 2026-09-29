@@ -83,6 +83,18 @@ export const ESCROW_DISPUTE_WINDOW_SECONDS = 604_800;
 export const ESCROW_REFUND_DAYS = Math.round(ESCROW_DISPUTE_WINDOW_SECONDS / 86_400);
 
 /**
+ * WHAT HAPPENS AFTER DELIVERY, said before paying (mentor review, 2026-09-29:
+ * "state the answer in your hire flow. Buyers deserve to know"). The policy
+ * is optimistic - "silence-approves" (the SDK's own words): once the agent
+ * submits, the payment releases to it when the window passes, and nobody
+ * reviews the work. Dolphin has no Dispute action yet, so the copy must not
+ * promise one.
+ */
+export const DELIVERY_RELEASE_NOTE =
+  `Once the agent delivers, the payment is released to it automatically after ${Math.round(ESCROW_DISPUTE_WINDOW_SECONDS / 86_400)} days. ` +
+  "Nobody reviews the work, and Dolphin does not offer a way to dispute yet.";
+
+/**
  * What Dolphin proposes the user is buying, per category.
  *
  * These are REQUEST texts, not claims about what an agent can do - they say

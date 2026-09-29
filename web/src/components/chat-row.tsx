@@ -17,7 +17,10 @@ import PencilEdit02Icon from "@hugeicons/core-free-icons/PencilEdit02Icon";
 import PinIcon from "@hugeicons/core-free-icons/PinIcon";
 import PinOffIcon from "@hugeicons/core-free-icons/PinOffIcon";
 import { HugeiconsIcon } from "@hugeicons/react";
+
+import { CategoryGlyph } from "@/components/category-glyph";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 
 type MenuState = { top: number; left: number; view: "menu" | "confirm" } | null;
 
@@ -25,7 +28,6 @@ const MENU_WIDTH = 190;
 
 export function ChatRow({
   title,
-  subtitle,
   active,
   pinned,
   onOpen,
@@ -34,7 +36,6 @@ export function ChatRow({
   onDelete,
 }: {
   title: string;
-  subtitle: string;
   active: boolean;
   pinned: boolean;
   onOpen: () => void;
@@ -81,9 +82,9 @@ export function ChatRow({
   const openMenu = () => {
     const rect = dotsRef.current?.getBoundingClientRect();
     if (!rect) return;
-    // Beside the dots, right-aligned to them, kept on screen.
-    const left = Math.max(8, Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8));
-    setMenu({ top: rect.bottom + 6, left, view: "menu" });
+    // Directly under the dots, starting at their left edge, kept on screen (owner: "like Claude").
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - MENU_WIDTH - 8));
+    setMenu({ top: rect.bottom + 4, left, view: "menu" });
   };
 
   const saveRename = () => {
@@ -120,9 +121,9 @@ export function ChatRow({
                 <HugeiconsIcon icon={PinIcon} size={12} strokeWidth={2} />
               </span>
             ) : null}
-            <span className="truncate">{title}</span>
+            {/* No ellipsis: a long title runs to the edge and fades out. */}
+            <span className="chat-row__text">{title}</span>
           </span>
-          <span className="chat-row__time">{subtitle}</span>
         </button>
       )}
 
@@ -136,11 +137,17 @@ export function ChatRow({
           ref={dotsRef}
           type="button"
         >
-          <span aria-hidden="true">⋯</span>
+          <CategoryGlyph color="currentColor" name="more" size={15} />
         </button>
       )}
 
-      {menu ? (
+      {/*
+        Portalled to <body>: the sidebar is animated with a transform, and a
+        transformed ancestor makes position: fixed measure from itself - which
+        is why the menu landed over the row instead of under the dots.
+      */}
+      {menu
+        ? createPortal(
         <div
           className="chat-menu"
           ref={menuRef}
@@ -206,8 +213,10 @@ export function ChatRow({
               </div>
             </div>
           )}
-        </div>
-      ) : null}
+        </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

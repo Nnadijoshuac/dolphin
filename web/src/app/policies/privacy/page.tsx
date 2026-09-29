@@ -82,7 +82,8 @@ const SECTIONS: LegalSection[] = [
         <p>Using Dolphin sends data to these services, each under its own privacy terms:</p>
         <ul>
           <li>
-            <strong>AI model providers.</strong> OpenRouter runs Dolphin&rsquo;s own chat and builder. Agents you build
+            <strong>AI model providers.</strong> OpenRouter runs Dolphin&rsquo;s own chat and builder, and writes each
+            chat&rsquo;s short title from its first message. Agents you build
             use the model provider on your own key. What you type is sent to them to produce a reply.
           </li>
           <li>
@@ -123,8 +124,12 @@ const SECTIONS: LegalSection[] = [
     title: "How long we keep it",
     body: (
       <p>
-        Anonymous counts are deleted after 60 days. Everything else we store is kept while Dolphin runs, until you ask
-        us to delete it. Sign-in sessions expire on their own.
+        You can delete any chat yourself, from its menu in the chat list, or all of them at once. Deleting a chat removes
+        its messages and everything sent to and received from agents from our database. We keep only an anonymous
+        record of it - which mode it was, how many messages, and which agents&rsquo; tools it used - with no text and
+        nothing that links it to you. If an agent was built from the chat, the agent itself stays. Anonymous counts are
+        deleted after 60 days. Everything else we store is kept while Dolphin runs, until you ask us to delete it.
+        Sign-in sessions expire on their own.
       </p>
     ),
   },
@@ -135,7 +140,7 @@ const SECTIONS: LegalSection[] = [
       <>
         <ul>
           <li>You can use most of Dolphin without connecting a wallet.</li>
-          <li>You can delete your saved API keys yourself at any time, and stop alerts.</li>
+          <li>You can delete your chats, your saved API keys and your alerts yourself at any time.</li>
           <li>
             You can ask us for a copy of the data we hold about your wallet, or ask us to correct or delete it - we will
             do so for everything that is not on-chain.

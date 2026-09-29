@@ -3763,3 +3763,20 @@ select {
 .chat-menu__rule { height: 1px; margin: 4px 6px; background: var(--line); }
 .chat-menu__confirm { padding: 8px 8px 6px; animation: chat-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 @media (prefers-reduced-motion: reduce) { .chat-menu, .chat-menu__confirm { animation: none; } }
+
+/* Chat rows, round two (owner, 2026-09-29): smaller, no timestamp, the title
+   fades at the edge instead of "...", vertical dots on hover only, and the
+   menu opens under the dots from their corner. */
+.chat-row__open { padding: 6px 4px 6px 8px; }
+.chat-row__title { flex: 1; overflow: hidden; }
+.chat-row__text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent);
+}
+.chat-row__dots { width: 24px; height: 24px; margin-right: 3px; }
+.chat-row[data-active]:not(:hover):not([data-menu]) .chat-row__dots:not(:focus-visible) { opacity: 0; }
+.chat-menu { transform-origin: top left; }

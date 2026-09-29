@@ -33,7 +33,6 @@ import type { Agent } from "@/types/agent";
  * first.
  */
 const promos = [
-  { image: "health", title: "Brain on BNB", subtitle: "Reads your Venus health factor live from the Comptroller.", label: "Featured agent", category: "health-factor", tokenId: "302257" },
   { image: "rebalancing", title: "Keep an LP range in range", subtitle: "Agents built around PancakeSwap v3 position management.", label: "Rebalancing", category: "rebalancing" },
   { image: "yield", title: "Put idle stablecoins to work", subtitle: "Yield agents that compare lending and LP routes on BSC.", label: "Yield", category: "yield" },
   { image: "security", title: "See your liquidation buffer", subtitle: "Health-factor monitors that answered when Dolphin called them.", label: "Health factor", category: "health-factor" },

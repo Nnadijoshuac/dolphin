@@ -31,6 +31,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
+import { HoldButton } from "@/components/hold-button";
 import { OneLine } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { TrackRecord } from "@/components/track-record";
@@ -410,7 +411,7 @@ function SidePanel({
 }) {
   const session = useWalletSession();
   const cancelHire = useMutation(agentHiresApi.agentHires.cancelHire);
-  const [cancel, setCancel] = useState<"idle" | "confirming" | "cancelling" | { error: string }>("idle");
+  const [cancel, setCancel] = useState<"idle" | "cancelling" | { error: string }>("idle");
 
   const paid = usePriceText({
     amountRaw: job?.budgetRaw,
@@ -466,36 +467,34 @@ function SidePanel({
           <p className="text-[0.8rem] leading-5 text-muted">
             This hire is cancelled. It stays in your history, and you can still review {agent.name}.
           </p>
-        ) : cancel === "confirming" || cancel === "cancelling" ? (
-          <div className="manage-confirm">
-            <p className="text-[0.84rem] font-medium text-ink">Cancel this hire?</p>
-            <p className="mt-1 text-[0.78rem] leading-5 text-muted">
-              It leaves your active list.
-              {job ? " This does not refund a payment - that money is held on-chain, where Dolphin has no control." : ""}
-            </p>
-            <div className="mt-3 flex gap-2">
-              <button
-                className="manage-btn manage-btn--danger flex-1"
-                disabled={cancel === "cancelling"}
-                onClick={() => void runCancel()}
-                type="button"
-              >
-                {cancel === "cancelling" ? "Cancelling..." : "Yes, cancel"}
-              </button>
-              <button
-                className="manage-btn manage-btn--quiet flex-1"
-                disabled={cancel === "cancelling"}
-                onClick={() => setCancel("idle")}
-                type="button"
-              >
-                Keep it
-              </button>
-            </div>
-          </div>
         ) : (
-          <button className="manage-btn manage-btn--danger-quiet w-full" onClick={() => setCancel("confirming")} type="button">
-            Cancel hire
-          </button>
+          /*
+           * HOLD TO CANCEL (owner, 2026-09-29): a press-and-hold replaces the
+           * two-step confirm. Letting go early changes nothing; what it does and
+           * does not do is said above it, before the hand is on it.
+           */
+          <div>
+            <p className="mb-3 text-[0.78rem] leading-5 text-muted">
+              Cancelling removes {agent.name} from your active list.
+              {job ? " It does not refund a payment - that money is held on-chain, where Dolphin has no control." : ""}
+            </p>
+            <HoldButton
+              backgroundColor="var(--paper)"
+              className="manage-hold"
+              disabled={cancel === "cancelling"}
+              doneLabel="Cancelling..."
+              fillColor="#c9362b"
+              fillTextColor="#ffffff"
+              holdTime={1600}
+              onHold={() => void runCancel()}
+              radius={11}
+              resetAfter={1800}
+              size="md"
+              textColor="var(--hold-danger)"
+            >
+              Hold to cancel hire
+            </HoldButton>
+          </div>
         )}
         {typeof cancel === "object" ? (
           <p className="mt-2 text-[0.76rem] leading-5 text-danger" role="alert">

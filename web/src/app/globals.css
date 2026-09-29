@@ -2641,20 +2641,31 @@ select {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 13px;
+  gap: 7px;
+  height: 36px;
+  padding: 0 18px;
   border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
   border-radius: 999px;
   background: var(--paper);
-  font-size: 0.8rem;
+  font-size: 0.84rem;
   font-weight: 500;
+  white-space: nowrap;
   color: var(--ink-soft);
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 .catalog-chip:hover { border-color: var(--line-strong); color: var(--ink); }
 .catalog-chip:active { transform: scale(0.97); }
 .catalog-chip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+/* A fade on the right edge while more pills sit past it. */
+.catalog-chips[data-fade] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 72px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 72px), transparent);
+}
+.catalog-chip--more { border-style: dashed; }
+.catalog-chip__chevron { display: flex; transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+.catalog-chip--more[aria-expanded="true"] .catalog-chip__chevron { transform: rotate(180deg); }
+.catalog-chip--tucked { animation: catalog-chip-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes catalog-chip-in { from { opacity: 0; transform: translateX(-6px); } }
 .catalog-chip__count { font-size: 0.7rem; font-variant-numeric: tabular-nums; color: var(--faint); }
 .catalog-chip[aria-pressed="true"] .catalog-chip__count { color: color-mix(in srgb, var(--paper) 65%, transparent); }
 
@@ -2674,14 +2685,15 @@ select {
 .catalog-card:nth-child(4) { animation-delay: 90ms; }
 .catalog-card:nth-child(5) { animation-delay: 120ms; }
 .catalog-card:nth-child(6) { animation-delay: 150ms; }
-@keyframes catalog-card-in { from { opacity: 0; transform: translateY(8px); } }
+/* Owner, 2026-09-29: no bounce. Cards fade in where they sit, and hover
+   answers with the border and a soft shadow - nothing moves but the arrow. */
+@keyframes catalog-card-in { from { opacity: 0; } }
 .catalog-card:hover {
   border-color: var(--line-strong);
-  box-shadow: 0 10px 28px -18px rgb(0 0 0 / 35%);
-  transform: translateY(-2px);
+  box-shadow: 0 12px 32px -22px rgb(0 0 0 / 35%);
 }
 .catalog-card--skeleton { padding: 18px; animation: none; }
-.catalog-card--skeleton:hover { transform: none; box-shadow: none; border-color: color-mix(in srgb, var(--line) 85%, transparent); }
+.catalog-card--skeleton:hover { box-shadow: none; border-color: color-mix(in srgb, var(--line) 85%, transparent); }
 .catalog-card__link { display: block; height: 100%; padding: 18px; border-radius: inherit; color: inherit; text-decoration: none; }
 .catalog-card__fav { position: absolute; top: 14px; right: 14px; }
 .catalog-card__kind {
@@ -2745,14 +2757,27 @@ select {
   animation: filter-modal-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .filter-modal[data-leaving] .filter-modal__panel { animation: filter-modal-out 160ms ease both; }
+/* Desktop: a menu under the button that opened it, growing from its corner. */
+@media (min-width: 640px) {
+  .filter-modal[data-anchored] .filter-modal__panel {
+    position: fixed;
+    top: var(--anchor-top);
+    right: var(--anchor-right);
+    width: 320px;
+    transform-origin: top right;
+    animation-name: filter-menu-in;
+  }
+  .filter-modal[data-anchored][data-leaving] .filter-modal__panel { animation-name: filter-menu-out; }
+}
+@keyframes filter-menu-in { from { opacity: 0; transform: translateY(-4px) scale(0.97); } }
+@keyframes filter-menu-out { to { opacity: 0; transform: translateY(-4px) scale(0.97); } }
 @keyframes filter-modal-fade { from { opacity: 0; } }
 @keyframes filter-modal-fade-out { to { opacity: 0; } }
 @keyframes filter-modal-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
 @keyframes filter-modal-out { to { opacity: 0; transform: translateY(4px) scale(0.98); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .catalog-card, .filter-modal__backdrop, .filter-modal__panel { animation: none; }
-  .catalog-card:hover { transform: none; }
+  .catalog-card, .catalog-chip--tucked, .filter-modal__backdrop, .filter-modal__panel { animation: none; }
 }
 @media (max-width: 639px) {
   .catalog-head { padding-top: 0.5rem; }

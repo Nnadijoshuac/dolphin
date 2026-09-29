@@ -45,6 +45,9 @@ import type { AgentCategory } from "@/types/agent";
  * this runs, so anything slug-shaped is passed to the backend. A slug with no
  * agents in it returns nothing, and the empty state below already says so.
  */
+/** A category with fewer agents than this is tucked under the "More" pill. */
+const MORE_BELOW = 3;
+
 function readCategoryParam(value: string | null): AgentCategory | "all" {
   if (!value) return "all";
   const trimmed = value.trim().toLowerCase();
@@ -75,6 +78,27 @@ function SearchContent() {
     "all",
   );
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  /* Where the type button is, so the menu opens beside it on desktop. */
+  const [filterAnchor, setFilterAnchor] = useState<DOMRect | null>(null);
+  const [showMore, setShowMore] = useState(false);
+
+  /*
+   * A fade on the pill row's right edge while more pills sit past it - so the
+   * row reads as "there is more" instead of looking complete (owner,
+   * 2026-09-29). Measured on scroll and on resize, never guessed.
+   */
+  const chipsRef = useRef<HTMLDivElement>(null);
+  const [chipsFade, setChipsFade] = useState(false);
+  const updateChipsFade = (row: HTMLElement) =>
+    setChipsFade(row.scrollWidth - row.clientWidth - row.scrollLeft > 4);
+  useEffect(() => {
+    const row = chipsRef.current;
+    if (!row || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => updateChipsFade(row));
+    observer.observe(row);
+    for (const child of Array.from(row.children)) observer.observe(child);
+    return () => observer.disconnect();
+  });
   const isKindFiltered = selectedProtocol !== "all";
 
   const addRecentSearch = useAppStore((state) => state.addRecentSearch);
@@ -222,10 +246,20 @@ function SearchContent() {
 
   const kindLabel = selectedProtocol === "a2a" ? "Hire" : selectedProtocol === "mcp" ? "Tools" : "All types";
 
-  const chip = (slug: AgentCategory | "all", text: string, count: number | null) => (
+  /*
+   * SMALL CATEGORIES GO UNDER "MORE" (owner, 2026-09-29). A drawer holding one
+   * or two agents took as much room as one holding eleven. Under MORE_BELOW
+   * agents a category is tucked behind a "More" pill that opens them in place,
+   * each still named - and it stays open while one of them is selected.
+   */
+  const mainCategories = facets.categories.filter((category) => category.count >= MORE_BELOW);
+  const smallCategories = facets.categories.filter((category) => category.count < MORE_BELOW);
+  const moreOpen = showMore || smallCategories.some((category) => category.slug === selectedCategory);
+
+  const chip = (slug: AgentCategory | "all", text: string, count: number | null, tucked = false) => (
     <button
       aria-pressed={selectedCategory === slug}
-      className="catalog-chip"
+      className={tucked ? "catalog-chip catalog-chip--tucked" : "catalog-chip"}
       key={slug}
       onClick={() => {
         setSelectedCategory(slug);
@@ -306,7 +340,10 @@ function SearchContent() {
               aria-label={`Agent type: ${kindLabel}`}
               className="catalog-search__filter"
               data-active={isKindFiltered || undefined}
-              onClick={() => setFilterModalOpen(true)}
+              onClick={(event) => {
+                setFilterAnchor(event.currentTarget.getBoundingClientRect());
+                setFilterModalOpen(true);
+              }}
               type="button"
             >
               <CategoryGlyph color="currentColor" name="filter" size={15} strokeWidth={2} />
@@ -320,13 +357,35 @@ function SearchContent() {
           * the live catalog by category on a schedule; a category with no agents
           * never becomes a pill, and a new one appears with no code change.
           */}
-        <div aria-label="Filter by category" className="catalog-chips no-scrollbar" role="group">
+        <div
+          aria-label="Filter by category"
+          className="catalog-chips no-scrollbar"
+          data-fade={chipsFade || undefined}
+          onScroll={(event) => updateChipsFade(event.currentTarget)}
+          ref={chipsRef}
+          role="group"
+        >
           {chip("all", "All agents", null)}
           {facets.isLoading
             ? [0, 1, 2, 3].map((item) => (
                 <span aria-hidden="true" className="skeleton h-8 w-24 shrink-0 rounded-full" key={item} />
               ))
-            : facets.categories.map((category) => chip(category.slug, category.label, category.count))}
+            : mainCategories.map((category) => chip(category.slug, category.label, category.count))}
+          {smallCategories.length > 0 ? (
+            <button
+              aria-expanded={moreOpen}
+              className="catalog-chip catalog-chip--more"
+              onClick={() => setShowMore((open) => !open)}
+              type="button"
+            >
+              More
+              <span className="catalog-chip__count">{smallCategories.length}</span>
+              <span aria-hidden="true" className="catalog-chip__chevron">
+                <CategoryGlyph color="currentColor" name="chevron-right" size={12} strokeWidth={2.2} />
+              </span>
+            </button>
+          ) : null}
+          {moreOpen ? smallCategories.map((category) => chip(category.slug, category.label, category.count, true)) : null}
         </div>
       </section>
 
@@ -407,6 +466,7 @@ function SearchContent() {
       </section>}
 
       <FilterModal
+        anchor={filterAnchor}
         isOpen={filterModalOpen}
         onClose={() => setFilterModalOpen(false)}
         onSelectProtocol={setSelectedProtocol}

@@ -2998,3 +2998,78 @@ select {
   transition: color 140ms ease, text-decoration-color 140ms ease;
 }
 .one-line__more:hover { color: var(--ink); text-decoration-color: currentColor; }
+
+/* ── Manage a hire (components/manage-hire.tsx), 2026-09-29 ───────────────
+   Buttons with real contrast: dark on light for the main action, a quiet
+   outline for secondary ones, and red that is readable in both themes. */
+.manage-btn {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+.manage-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+.manage-btn--primary { background: var(--ink); color: var(--paper); }
+.manage-btn--primary:hover:not(:disabled) { opacity: 0.88; }
+.manage-btn--quiet { border-color: var(--line); background: var(--paper); color: var(--ink); }
+.manage-btn--quiet:hover:not(:disabled) { border-color: var(--line-strong); background: var(--paper-muted); }
+.manage-btn--danger { background: #c9362b; color: #fff; }
+.manage-btn--danger:hover:not(:disabled) { background: #b12e24; }
+.manage-btn--danger-quiet { border-color: color-mix(in srgb, #c9362b 35%, var(--line)); background: transparent; color: #c9362b; }
+.manage-btn--danger-quiet:hover { background: color-mix(in srgb, #c9362b 8%, transparent); }
+:root[data-theme="dark"] .manage-btn--danger-quiet { color: #f07167; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .manage-btn--danger-quiet { color: #f07167; } }
+.manage-confirm { animation: filter-modal-fade 200ms ease both; }
+
+.manage-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink); }
+.manage-status__dot { width: 7px; height: 7px; border-radius: 999px; background: #22a55b; }
+.manage-status[data-cancelled] .manage-status__dot { background: var(--faint); }
+
+/* The live tracker: Paid, Working, Delivered, Paid out. */
+.tracker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 18px; }
+.tracker__step { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.tracker__step::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 14px;
+  right: -2px;
+  height: 2px;
+  background: color-mix(in srgb, var(--line) 80%, transparent);
+}
+.tracker__step:last-child::before { display: none; }
+.tracker__step[data-state="done"]::before { background: var(--ink); }
+.tracker__dot {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+}
+.tracker__step[data-state="done"] .tracker__dot { border-color: var(--ink); background: var(--ink); }
+.tracker__step[data-state="now"] .tracker__dot { border-color: #22a55b; background: #22a55b; }
+.tracker__step[data-state="now"] .tracker__dot::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: #22a55b;
+  animation: glance-pulse 2s ease-out infinite;
+}
+.tracker[data-tone="warn"] .tracker__step[data-state="now"] .tracker__dot,
+.tracker[data-tone="warn"] .tracker__step[data-state="now"] .tracker__dot::after { border-color: #d9901a; background: #d9901a; }
+.tracker__label { font-size: 0.78rem; color: var(--muted); }
+.tracker__step[data-state="now"] .tracker__label { font-weight: 600; color: var(--ink); }
+.tracker__step[data-state="done"] .tracker__label { color: var(--ink-soft); }
+@media (prefers-reduced-motion: reduce) { .tracker__step[data-state="now"] .tracker__dot::after { animation: none; } }

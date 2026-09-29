@@ -52,6 +52,8 @@ interface AppState {
   clearRecentSearches: () => void;
   upsertChatHistory: (entry: ChatHistoryEntry) => void;
   removeChatHistory: (conversationKey: string) => void;
+  togglePinChat: (conversationKey: string) => void;
+  renameChat: (conversationKey: string, title: string) => void;
   clearChatHistory: () => void;
 }
 
@@ -59,7 +61,18 @@ export type ChatHistoryEntry = Readonly<{
   conversationKey: string;
   title: string;
   updatedAt: number;
+  /** Pinned chats stay at the top of the list (owner, 2026-09-29). Per device. */
+  pinned?: boolean;
+  /** Renamed by the person: later updates keep this title rather than the first message. */
+  renamed?: boolean;
 }>;
+
+/** Pinned first, then newest; pinned chats are never the ones trimmed off the end. */
+function orderHistory(entries: ChatHistoryEntry[]): ChatHistoryEntry[] {
+  const sorted = [...entries].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.updatedAt - a.updatedAt);
+  const pinned = sorted.filter((entry) => entry.pinned);
+  return [...pinned, ...sorted.filter((entry) => !entry.pinned).slice(0, Math.max(0, 24 - pinned.length))];
+}
 
 function isChatHistoryEntry(value: unknown): value is ChatHistoryEntry {
   if (!value || typeof value !== "object") return false;
@@ -128,19 +141,42 @@ export const useAppStore = create<AppState>()(
         const conversationKey = entry.conversationKey.trim();
         if (!conversationKey) return;
         const title = entry.title.trim() || "New conversation";
-        set((state) => ({
-          chatHistory: [
-            { conversationKey, title, updatedAt: entry.updatedAt },
-            ...state.chatHistory.filter((item) => item.conversationKey !== conversationKey),
-          ]
-            .sort((a, b) => b.updatedAt - a.updatedAt)
-            .slice(0, 24),
-        }));
+        set((state) => {
+          const existing = state.chatHistory.find((item) => item.conversationKey === conversationKey);
+          const pinned = existing?.pinned;
+          const renamed = existing?.renamed;
+          return {
+            chatHistory: orderHistory([
+              {
+                conversationKey,
+                title: renamed && existing ? existing.title : title,
+                updatedAt: entry.updatedAt,
+                ...(pinned ? { pinned } : {}),
+                ...(renamed ? { renamed } : {}),
+              },
+              ...state.chatHistory.filter((item) => item.conversationKey !== conversationKey),
+            ]),
+          };
+        });
       },
       removeChatHistory: (conversationKey) =>
         set((state) => ({
           chatHistory: state.chatHistory.filter(
             (item) => item.conversationKey !== conversationKey,
+          ),
+        })),
+      togglePinChat: (conversationKey) =>
+        set((state) => ({
+          chatHistory: orderHistory(
+            state.chatHistory.map((item) =>
+              item.conversationKey === conversationKey ? { ...item, pinned: !item.pinned } : item,
+            ),
+          ),
+        })),
+      renameChat: (conversationKey, title) =>
+        set((state) => ({
+          chatHistory: state.chatHistory.map((item) =>
+            item.conversationKey === conversationKey && title.trim() ? { ...item, title: title.trim(), renamed: true } : item,
           ),
         })),
       clearChatHistory: () => set({ chatHistory: [] }),

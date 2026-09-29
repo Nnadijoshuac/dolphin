@@ -13,6 +13,8 @@ import { AgentDraftPanel, EMPTY_AGENT_DRAFT } from "@/components/agent-draft-pan
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
+import { HoldButton } from "@/components/hold-button";
+import { ChatRow } from "@/components/chat-row";
 import { ShinyText } from "@/components/shiny-text";
 import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { DolphinToolCalls } from "@/components/dolphin-tool-calls";
@@ -20,7 +22,7 @@ import { PublishAgentDialog } from "@/components/publish-agent-dialog";
 import { SlideOver } from "@/components/slide-over";
 import { HireTicket } from "@/components/hire-ticket";
 import { TradeTicket } from "@/components/trade-ticket";
-import { autopilotApi, builtAgentsApi } from "@/convex/api";
+import { autopilotApi, builtAgentsApi, chatDeletionApi } from "@/convex/api";
 import {
     useDolphinChat,
     useDolphinConversation,
@@ -377,14 +379,20 @@ function ChatHistory({
   onNew,
   onOpen,
   onRemove,
+  onPin,
+  onRename,
 }: {
   activeKey: string | null;
   entries: ChatHistoryEntry[];
+  /** Deletes every chat in the list, from the database too. */
   onClear: () => void;
   onClose?: () => void;
   onNew: () => void;
   onOpen: (conversationKey: string) => void;
+  /** Deletes one chat, from the database too. */
   onRemove: (conversationKey: string) => void;
+  onPin: (conversationKey: string) => void;
+  onRename: (conversationKey: string, title: string) => void;
 }) {
   return (
     <aside
@@ -416,39 +424,28 @@ function ChatHistory({
 
       <div className="sleek-scroll mt-5 min-h-0 flex-1 overflow-y-auto">
         {entries.length === 0 ? (
-          <p className="px-2 text-[12px] leading-relaxed text-muted">
-            Your chats appear here. They are saved on this device only.
-          </p>
+          <p className="px-2 text-[12px] leading-relaxed text-muted">Your chats appear here.</p>
         ) : (
           <div className="space-y-0.5">
             {entries.map((entry) => {
               const active = entry.conversationKey === activeKey;
+              /*
+               * PIN, RENAME, DELETE behind three dots, like Claude's sidebar
+               * (owner, 2026-09-29). Delete removes the chat from Dolphin's
+               * database, not only this list (convex/chatDeletion.ts).
+               */
               return (
-                <div
-                  className={`group flex items-center gap-1 rounded-lg transition-colors ${
-                    active ? "bg-paper-muted" : "hover:bg-paper-muted/70"
-                  }`}
+                <ChatRow
+                  active={active}
                   key={entry.conversationKey}
-                >
-                  <button
-                    className="min-w-0 flex-1 rounded-lg px-2 py-2 text-left"
-                    onClick={() => onOpen(entry.conversationKey)}
-                    type="button"
-                  >
-                    <span className="block truncate text-[13px] text-ink">{entry.title}</span>
-                    <span className="block text-[11px] text-muted">
-                      {historyTime(entry.updatedAt)}
-                    </span>
-                  </button>
-                  <button
-                    aria-label={`Remove ${entry.title} from history`}
-                    className="mr-1 grid size-7 shrink-0 place-items-center rounded-md text-faint transition-opacity hover:bg-paper hover:text-ink focus-visible:opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
-                    onClick={() => onRemove(entry.conversationKey)}
-                    type="button"
-                  >
-                    <span aria-hidden>×</span>
-                  </button>
-                </div>
+                  onDelete={() => onRemove(entry.conversationKey)}
+                  onOpen={() => onOpen(entry.conversationKey)}
+                  onPin={() => onPin(entry.conversationKey)}
+                  onRename={(title) => onRename(entry.conversationKey, title)}
+                  pinned={Boolean(entry.pinned)}
+                  subtitle={historyTime(entry.updatedAt)}
+                  title={entry.title}
+                />
               );
             })}
           </div>
@@ -456,13 +453,24 @@ function ChatHistory({
       </div>
 
       {entries.length > 0 ? (
-        <button
-          className="mt-3 self-start px-2 py-2 text-xs font-medium text-muted hover:text-ink"
-          onClick={onClear}
-          type="button"
-        >
-          Clear local history
-        </button>
+        <div className="mt-3 px-1">
+          {/* Every chat, from the database too - so it takes a deliberate hold. */}
+          <HoldButton
+            backgroundColor="var(--paper)"
+            className="history-delete-all"
+            doneLabel="Deleting..."
+            fillColor="#d64545"
+            fillTextColor="#ffffff"
+            holdTime={1400}
+            onHold={onClear}
+            radius={9}
+            resetAfter={1500}
+            size="sm"
+            textColor="var(--muted)"
+          >
+            Hold to delete all chats
+          </HoldButton>
+        </div>
       ) : null}
     </aside>
   );
@@ -577,6 +585,9 @@ export function DolphinClient({
   const upsertHistory = useAppStore((state) => state.upsertChatHistory);
   const removeHistory = useAppStore((state) => state.removeChatHistory);
   const clearHistory = useAppStore((state) => state.clearChatHistory);
+  const togglePin = useAppStore((state) => state.togglePinChat);
+  const renameChat = useAppStore((state) => state.renameChat);
+  const deleteConversations = useMutation(chatDeletionApi.chatDeletion.deleteConversations);
 
   /*
    * SCROLL. Opening a conversation - including coming back to one - lands
@@ -650,13 +661,43 @@ export function DolphinClient({
     [openConversation],
   );
 
+  /*
+   * DELETE MEANS DELETE (owner, 2026-09-29). This used to drop the chat from
+   * this device's list and leave every message on Dolphin's servers. Now the
+   * list entry goes at once and the server deletes the messages and tool
+   * calls, keeping only an anonymous summary (convex/chatDeletion.ts). If the
+   * server refuses, the entry comes back and the person is told.
+   */
   const removeSavedConversation = useCallback(
     (conversationKeyToRemove: string) => {
+      const entry = history.find((item) => item.conversationKey === conversationKeyToRemove);
       removeHistory(conversationKeyToRemove);
       if (conversationKeyToRemove === conversationKey) reset();
+      deleteConversations({ conversationKeys: [conversationKeyToRemove] }).then(
+        () => toast.success("Chat deleted."),
+        () => {
+          if (entry) upsertHistory(entry);
+          toast.error("That chat could not be deleted. Try again.");
+        },
+      );
     },
-    [conversationKey, removeHistory, reset],
+    [conversationKey, deleteConversations, history, removeHistory, reset, upsertHistory],
   );
+
+  const deleteAllConversations = useCallback(() => {
+    const keys = history.map((item) => item.conversationKey);
+    if (keys.length === 0) return;
+    const saved = history;
+    clearHistory();
+    reset();
+    deleteConversations({ conversationKeys: keys }).then(
+      () => toast.success(keys.length === 1 ? "Chat deleted." : `${keys.length} chats deleted.`),
+      () => {
+        saved.forEach((item) => upsertHistory(item));
+        toast.error("Your chats could not be deleted. Try again.");
+      },
+    );
+  }, [clearHistory, deleteConversations, history, reset, upsertHistory]);
 
   const isEmpty = turns.length === 0;
   const building = activeMode === "build";
@@ -991,9 +1032,11 @@ export function DolphinClient({
           <ChatHistory
             activeKey={conversationKey}
             entries={history}
-            onClear={clearHistory}
+            onClear={deleteAllConversations}
             onNew={startNew}
             onOpen={openSavedConversation}
+            onPin={togglePin}
+            onRename={renameChat}
             onRemove={removeSavedConversation}
           />
         </div>
@@ -1270,10 +1313,12 @@ export function DolphinClient({
         <ChatHistory
           activeKey={conversationKey}
           entries={history}
-          onClear={clearHistory}
+          onClear={deleteAllConversations}
           onClose={closeHistory}
           onNew={startNew}
           onOpen={openSavedConversation}
+          onPin={togglePin}
+          onRename={renameChat}
           onRemove={removeSavedConversation}
         />
       </SlideOver>

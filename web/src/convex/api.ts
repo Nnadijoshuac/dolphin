@@ -863,7 +863,20 @@ export type AgentBlockData =
   | { id: string; type: "price"; config: { direction: "above" | "below"; priceUsd: number } }
   | { id: string; type: "walletWatch"; config: { addresses: string[]; label: string | null } }
   | { id: string; type: "hire"; config: { agentKey: string; agentName: string } }
-  | { id: string; type: "memory"; config: { url: string; keyName: string | null } };
+  | { id: string; type: "memory"; config: { url: string; keyName: string | null } }
+  | { id: string; type: "indicators"; config: { timeframe: "1h" | "4h" | "1d" } }
+  | { id: string; type: "signal"; config: { condition: SignalCondition; level: number | null; timeframe: "1h" | "4h" | "1d" } };
+
+/** What a Signal waits for. Mirrors SIGNAL_CONDITIONS in convex/lib/indicators.ts. */
+export type SignalCondition = "rsiBelow" | "rsiAbove" | "maCrossUp" | "maCrossDown" | "macdCrossUp" | "macdCrossDown";
+export const SIGNAL_OPTIONS: { value: SignalCondition; label: string }[] = [
+  { value: "rsiBelow", label: "RSI falls below a level" },
+  { value: "rsiAbove", label: "RSI rises above a level" },
+  { value: "maCrossUp", label: "20 crosses above 50 (golden cross)" },
+  { value: "maCrossDown", label: "20 crosses below 50 (death cross)" },
+  { value: "macdCrossUp", label: "MACD crosses above its signal" },
+  { value: "macdCrossDown", label: "MACD crosses below its signal" },
+];
 
 export type AgentDraftData = {
   name: string | null;

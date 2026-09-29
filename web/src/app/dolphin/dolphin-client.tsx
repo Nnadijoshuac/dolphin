@@ -709,7 +709,9 @@ export function DolphinClient({
         ? "price"
         : asked.startsWith("Wallet watch")
           ? "walletWatch"
-          : null;
+          : asked.startsWith("Signal:")
+            ? "signal"
+            : null;
     return { phase, tools, triggeredBy } as CanvasRun;
   }, [trying, turns]);
   const { measure: measurePanels, ...panels } = usePanelLayout(showCanvas ? "canvas" : withDraft ? "draft" : "chat");

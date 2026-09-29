@@ -35,6 +35,7 @@ import {
 import {
   activeBlocks,
   blockToolDefinitions,
+  readIndicators,
   MAX_DETACHED,
   runBlockTool,
   type BlockToolResult,
@@ -1273,6 +1274,15 @@ export async function runTryTurn(
       if (paperMode && draftId && blocks.some((block) => block.type === "swap")) {
         readNotes.push(await ctx.runQuery(internal.paperTrading.brief, { draftId }));
       }
+      const indicatorsBlock = blocks.find((block) => block.type === "indicators");
+      if (indicatorsBlock && indicatorsBlock.type === "indicators" && priceFeed && priceFeed.type === "market") {
+        readNotes.push(
+          await runReadBlock(ctx, { conversationId, messageId: assistantId, blockId: indicatorsBlock.id, label: "Indicators", toolName: "block_indicators" }, async () => ({
+            text: await readIndicators(priceFeed.config, indicatorsBlock.config.timeframe),
+            isError: false,
+          })),
+        );
+      }
       const readNote = readNotes.length
         ? `\n\nDATA YOUR BLOCKS READ THIS RUN (fetched live just now - use these numbers, quote only these):\n${readNotes.join("\n")}`
         : "";
@@ -1483,6 +1493,8 @@ const BLOCK_LABELS: Record<AgentBlock["type"], string> = {
   walletWatch: "Wallet watch",
   hire: "Hired agent",
   memory: "Memory",
+  indicators: "Indicators",
+  signal: "Signal",
 };
 
 function blockToolNameFor(type: AgentBlock["type"]): string | null {

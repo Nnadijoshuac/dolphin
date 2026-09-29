@@ -28,7 +28,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import type { AgentDraft } from "@/components/agent-draft-panel";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { TradingChart } from "@/components/trading-chart";
-import { agentBuilderApi, brainProviderLabel, type AgentBlockData } from "@/convex/api";
+import { agentBuilderApi, brainProviderLabel, type AgentBlockData, type SignalCondition } from "@/convex/api";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import type { Agent } from "@/types/agent";
 import { toast } from "@/store/use-toast-store";
@@ -314,10 +314,29 @@ export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label
   swap: { kind: "hands", label: "Market", glyph: "wallet" },
   hire: { kind: "hands", label: "Hired agent", glyph: "agents" },
   memory: { kind: "sense", label: "Memory", glyph: "receive" },
+  indicators: { kind: "sense", label: "Indicators", glyph: "filter" },
+  signal: { kind: "trigger", label: "Signal", glyph: "sparkle" },
 };
 
 function money(value: number): string {
   return value >= 1 ? `$${value.toLocaleString("en", { maximumFractionDigits: 2 })}` : `$${value.toPrecision(3)}`;
+}
+
+function signalTitle(condition: SignalCondition, level: number | null): string {
+  switch (condition) {
+    case "rsiBelow":
+      return `RSI below ${level ?? 30}`;
+    case "rsiAbove":
+      return `RSI above ${level ?? 70}`;
+    case "maCrossUp":
+      return "Golden cross (20/50)";
+    case "maCrossDown":
+      return "Death cross (20/50)";
+    case "macdCrossUp":
+      return "MACD crosses up";
+    case "macdCrossDown":
+      return "MACD crosses down";
+  }
 }
 
 /** A block's one-line summary on the canvas. */
@@ -344,6 +363,10 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
       return { title: "Buy / sell", detail: "On PancakeSwap, after the Risk gate" };
     case "hire":
       return { title: block.config.agentName, detail: "Paid A2A agent · you confirm each payment" };
+    case "indicators":
+      return { title: `${block.config.timeframe === "1d" ? "Daily" : block.config.timeframe === "4h" ? "4-hour" : "1-hour"} indicators`, detail: "RSI, MACD, Bollinger, averages - closed candles" };
+    case "signal":
+      return { title: signalTitle(block.config.condition, block.config.level), detail: `On each closed ${block.config.timeframe} candle` };
     case "memory":
       return { title: "Your memory server", detail: block.config.url.replace(/^https:\/\//, "") };
   }
@@ -398,7 +421,7 @@ export function draftGraph(
   const triggers: { id: string; data: BlockData }[] = [
     { id: "source-chat", data: { kind: "trigger", title: "When asked", detail: "Someone sends it a message" } },
   ];
-  for (const type of ["schedule", "price", "walletWatch"] as const) {
+  for (const type of ["schedule", "price", "signal", "walletWatch"] as const) {
     const block = find(type);
     if (block) triggers.push({ id: `block-${block.id}`, data: blockData(block) });
   }
@@ -407,7 +430,7 @@ export function draftGraph(
 
   // KNOWS: what the Brain can read, in rows beneath it.
   const senses: { id: string; data: BlockData }[] = [];
-  for (const type of ["market", "safety", "memory"] as const) {
+  for (const type of ["market", "indicators", "safety", "memory"] as const) {
     const block = find(type);
     if (block) senses.push({ id: `block-${block.id}`, data: blockData(block) });
   }
@@ -540,7 +563,7 @@ function applyRun(
       }
     } else if (block.type === "hire") {
       edgeState.set(`brain->${id}`, lit);
-    } else if (!["schedule", "price", "walletWatch"].includes(block.type)) {
+    } else if (!["schedule", "price", "walletWatch", "signal"].includes(block.type)) {
       // The Brain reaches down for what it reads, and the answer comes back up.
       edgeState.set(`brain->${id}`, running ? { active: true, both: true } : { used: true });
     }
@@ -635,15 +658,24 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
     title: "Triggers",
     items: [
       { type: "schedule", label: "Scheduler", about: "Fires on a clock, every 15 minutes to daily", glyph: "clock" },
-      { type: "price", label: "Price", about: "Run when the token crosses a level", glyph: "dollar", needs: "market" },
-      { type: "walletWatch", label: "Wallet watch", about: "Run when a KOL or whale transacts", glyph: "eye" },
+      { type: "price", label: "Price", about: "Fires when the token crosses a level", glyph: "dollar", needs: "market" },
+      { type: "signal", label: "Signal", about: "Fires on RSI levels, MA or MACD crosses", glyph: "sparkle", needs: "market" },
+      { type: "walletWatch", label: "Wallet watch", about: "Fires when a KOL or whale transacts", glyph: "eye" },
     ],
   },
   {
-    title: "Senses",
+    // The owner's trader mentor: technical traders read price history.
+    title: "Technical",
     items: [
       { type: "market", label: "Price feed", about: "A token's live price, trend and chart", glyph: "layers" },
+      { type: "indicators", label: "Indicators", about: "RSI, MACD, Bollinger, averages, volume", glyph: "filter", needs: "market" },
       { type: "safety", label: "Safety", about: "Honeypot, taxes and owner-power checks", glyph: "shield" },
+    ],
+  },
+  {
+    // ...and analytical traders (also called fundamental) read what is happening now.
+    title: "Analytical",
+    items: [
       { type: "memory", label: "Memory", about: "Remembers past runs - on your own server", glyph: "receive" },
       { type: "tool", label: "Agent tool", about: "A tool from an agent listed on Dolphin", glyph: "agents" },
       { type: "hire", label: "Hire an agent", about: "A paid A2A agent - you confirm each payment", glyph: "bot" },

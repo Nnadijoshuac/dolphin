@@ -36,10 +36,11 @@ import { ConvexError } from "convex/values";
 import { getAddress, isAddress } from "viem";
 
 import type { ToolDefinition } from "./openrouter";
+import { indicatorReport, SIGNAL_CONDITIONS, type SignalCondition } from "./indicators";
 import { assertSafeUrl } from "./safeFetch";
 import { verifiedTokenBySymbol, verifiedTokens, type TradeToken } from "./tradeTokens";
 
-export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "hire", "memory"] as const;
+export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "hire", "memory", "indicators", "signal"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export type MarketConfig = { tokenAddress: string; symbol: string; name: string; poolAddress: string | null };
@@ -49,6 +50,10 @@ export type PriceConfig = { direction: "above" | "below"; priceUsd: number };
 export type WalletWatchConfig = { addresses: string[]; label: string | null };
 export type HireConfig = { agentKey: string; agentName: string };
 export type MemoryConfig = { url: string; keyName: string | null };
+export type Timeframe = "1h" | "4h" | "1d";
+export const TIMEFRAMES: readonly Timeframe[] = ["1h", "4h", "1d"];
+export type IndicatorsConfig = { timeframe: Timeframe };
+export type SignalConfig = { condition: SignalCondition; level: number | null; timeframe: Timeframe };
 
 export type AgentBlock =
   | { id: string; type: "market"; config: MarketConfig }
@@ -59,13 +64,15 @@ export type AgentBlock =
   | { id: string; type: "price"; config: PriceConfig }
   | { id: string; type: "walletWatch"; config: WalletWatchConfig }
   | { id: string; type: "hire"; config: HireConfig }
-  | { id: string; type: "memory"; config: MemoryConfig };
+  | { id: string; type: "memory"; config: MemoryConfig }
+  | { id: string; type: "indicators"; config: IndicatorsConfig }
+  | { id: string; type: "signal"; config: SignalConfig };
 
 export const MAX_BLOCKS = 12;
 /** Fastest schedule. Every run spends the builder's own model key. */
 export const SCHEDULE_CHOICES = [15, 30, 60, 240, 1440] as const;
 export const MAX_WATCHED_WALLETS = 10;
-export const TRIGGER_TYPES: readonly BlockType[] = ["schedule", "price", "walletWatch"];
+export const TRIGGER_TYPES: readonly BlockType[] = ["schedule", "price", "walletWatch", "signal"];
 
 const FETCH_TIMEOUT_MS = 8_000;
 
@@ -152,6 +159,20 @@ export function validateBlocks(input: unknown): AgentBlock[] {
         out.push({ id, type, config: { agentKey, agentName } });
         break;
       }
+      case "indicators": {
+        const timeframe = (TIMEFRAMES as readonly string[]).includes(String(config.timeframe)) ? (config.timeframe as Timeframe) : "1d";
+        out.push({ id, type, config: { timeframe } });
+        break;
+      }
+      case "signal": {
+        const condition = String(config.condition) as SignalCondition;
+        if (!SIGNAL_CONDITIONS.includes(condition)) fail("Choose what the Signal waits for.");
+        const timeframe = (TIMEFRAMES as readonly string[]).includes(String(config.timeframe)) ? (config.timeframe as Timeframe) : "1h";
+        const rawLevel = Number(config.level);
+        const level = condition === "rsiBelow" || condition === "rsiAbove" ? (rawLevel > 0 && rawLevel < 100 ? rawLevel : condition === "rsiBelow" ? 30 : 70) : null;
+        out.push({ id, type, config: { condition, level, timeframe } });
+        break;
+      }
       case "memory": {
         const url = typeof config.url === "string" ? config.url.trim().replace(/\/+$/, "") : "";
         if (!url.startsWith("https://") || url.length > 300) fail("The memory server needs an https:// address.");
@@ -172,6 +193,8 @@ export function validateBlocks(input: unknown): AgentBlock[] {
   }
 
   if (seenTypes.has("price") && !seenTypes.has("market")) fail("A price trigger needs a Market block for its token.");
+  if (seenTypes.has("indicators") && !seenTypes.has("market")) fail("Indicators need a Price feed block for their token.");
+  if (seenTypes.has("signal") && !seenTypes.has("market")) fail("A Signal needs a Price feed block for its token.");
   if (seenTypes.has("swap") && !seenTypes.has("risk")) fail("A Swap block needs a Risk block to set its limits.");
   return out;
 }
@@ -251,19 +274,20 @@ export async function bscPairFor(tokenAddress: string): Promise<PairSnapshot | n
  * `token` a pool's candles can come back in the other token's terms (the
  * web chart already asks this way; this did not until 2026-09-29).
  */
-async function poolCandles(
+export async function poolCandles(
   poolAddress: string,
   tokenAddress: string,
-  timeframe: "hour" | "day",
+  timeframe: "hour" | "4h" | "day",
   limit: number,
-): Promise<Array<[number, number, number, number, number]>> {
+): Promise<Array<[number, number, number, number, number, number]>> {
+  const path = timeframe === "4h" ? "hour?aggregate=4&" : `${timeframe}?`;
   const data = (await getJson(
-    `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${poolAddress}/ohlcv/${timeframe}?limit=${limit}&currency=usd&token=${tokenAddress}`,
+    `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${poolAddress}/ohlcv/${path}limit=${limit}&currency=usd&token=${tokenAddress}`,
   )) as { data?: { attributes?: { ohlcv_list?: number[][] } } };
-  const period = timeframe === "day" ? 86_400 : 3_600;
+  const period = timeframe === "day" ? 86_400 : timeframe === "4h" ? 14_400 : 3_600;
   const now = Date.now() / 1000;
   return (data.data?.attributes?.ohlcv_list ?? [])
-    .map((row) => [row[0], row[1], row[2], row[3], row[4]] as [number, number, number, number, number])
+    .map((row) => [row[0], row[1], row[2], row[3], row[4], row[5] ?? 0] as [number, number, number, number, number, number])
     .sort((a, b) => a[0] - b[0])
     /*
      * CLOSED CANDLES ONLY (mentor review, 2026-09-29: "computing indicators on
@@ -319,7 +343,7 @@ function round(value: number | null, digits = 2): string {
 }
 
 /** The trend block of the snapshot: what the playbook's trend-following rule reads. */
-function trendReport(daily: ReadonlyArray<[number, number, number, number, number]>, price: number | null): string {
+function trendReport(daily: ReadonlyArray<readonly number[]>, price: number | null): string {
   const closes = daily.map((candle) => candle[4]);
   if (closes.length < 20) return `Daily trend: not enough history (${closes.length} daily candles).`;
   // Indicators compare CLOSED candles only; the live price is reported separately.
@@ -574,4 +598,15 @@ function tokenAddressFor(token: TradeToken): string {
 /** The ticket's token shape (tradeTokenValidator in schema.ts). */
 function ticketToken(token: TradeToken) {
   return { address: token.address, symbol: token.symbol, decimals: token.decimals, verified: token.verified };
+}
+
+
+/** The Indicators block's report: closed candles of its timeframe, computed in code. */
+export async function readIndicators(market: MarketConfig, timeframe: Timeframe): Promise<string> {
+  const pool = market.poolAddress ?? (await bscPairFor(market.tokenAddress))?.pairAddress;
+  if (!pool) return `Indicators: ${market.symbol} has no BNB Chain pool with trading right now.`;
+  const frame = timeframe === "1d" ? "day" : timeframe === "4h" ? "4h" : "hour";
+  const candles = await poolCandles(pool, market.tokenAddress, frame, 200);
+  const label = timeframe === "1d" ? "daily" : timeframe === "4h" ? "4-hour" : "1-hour";
+  return `${market.symbol} ${indicatorReport(candles, label)}`;
 }

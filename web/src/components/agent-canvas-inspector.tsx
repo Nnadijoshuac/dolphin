@@ -9,6 +9,8 @@ import { ChoiceList, type Choice } from "@/components/choice-list";
 import {
   agentBuilderApi,
   agentMemoryApi,
+  SIGNAL_OPTIONS,
+  type SignalCondition,
   api,
   brainModelsApi,
   BRAIN_PROVIDER_OPTIONS,
@@ -602,6 +604,8 @@ const BLOCK_TITLES: Record<BlockType, string> = {
   walletWatch: "Wallet watch",
   hire: "Hire an agent",
   memory: "Memory",
+  indicators: "Indicators",
+  signal: "Signal",
 };
 
 const BLOCK_ABOUT: Record<BlockType, string> = {
@@ -612,6 +616,8 @@ const BLOCK_ABOUT: Record<BlockType, string> = {
   schedule: "Makes its own signal: it fires the Trigger on a clock while Autopilot is on. Every run uses your own model key.",
   price: "Makes its own signal: it fires the Trigger when the Price feed's token crosses your level - once per crossing, not on every check. This one watches the live price, not closed candles.",
   walletWatch: "Makes its own signal: it fires the Trigger when a watched wallet transacts - a KOL, a whale, a fund. It sees any transaction they send, and exactly which tokens moved for your Price feed token and Dolphin's verified list.",
+  indicators: "Technical indicators for the Price feed's token, computed in code on closed candles only and read on every run: RSI(14), MACD(12,26,9), Bollinger bands (20,2), the 20- and 50-candle averages, volume against its average, and any cross that just happened.",
+  signal: "Makes its own signal: it fires the Trigger when a technical condition turns true on a newly closed candle - an RSI level, a moving-average cross or a MACD cross. Checked every 5 minutes; fires once per candle, never on a candle still forming.",
   memory: "Your agent's memory, kept on your own server - Dolphin stores none of it. Before every run it reads what it did last time; after it, a record of the run is saved. It can also note things down itself.",
   hire: "A paid agent from Dolphin's catalog that yours can call on. When it asks for work, the agent quotes a price and you confirm each payment from your Dolphin Wallet with your passkey. It delivers on-chain afterwards.",
 };
@@ -691,6 +697,9 @@ function BlockEditor({
     type === "hire" && existing ? { agentKey: String(config.agentKey), agentName: String(config.agentName) } : null,
   );
   const session = useWalletSession();
+  const [timeframe, setTimeframe] = useState<"1h" | "4h" | "1d">((config.timeframe as "1h" | "4h" | "1d") ?? (type === "signal" ? "1h" : "1d"));
+  const [condition, setCondition] = useState<SignalCondition>((config.condition as SignalCondition) ?? "rsiBelow");
+  const [level, setLevel] = useState(config.level ? String(config.level) : "");
   const [memoryUrl, setMemoryUrl] = useState(typeof config.url === "string" ? config.url : "");
   const [memoryKey, setMemoryKey] = useState<string>(typeof config.keyName === "string" ? config.keyName : "");
   const [memoryCheck, setMemoryCheck] = useState<{ ok: boolean; text: string } | "checking" | null>(null);
@@ -755,6 +764,18 @@ function BlockEditor({
           : null;
       case "hire":
         return hirePick ? { id, type, config: hirePick } : null;
+      case "indicators":
+        return { id, type, config: { timeframe } };
+      case "signal":
+        return {
+          id,
+          type,
+          config: {
+            condition,
+            timeframe,
+            level: condition === "rsiBelow" || condition === "rsiAbove" ? Number(level) || (condition === "rsiBelow" ? 30 : 70) : null,
+          },
+        };
       case "memory":
         return memoryUrl.trim().startsWith("https://") ? { id, type, config: { url: memoryUrl.trim(), keyName: memoryKey || null } } : null;
       case "safety":
@@ -936,6 +957,44 @@ function BlockEditor({
               </ul>
             </>
           )}
+        </div>
+      ) : null}
+
+      {type === "indicators" || type === "signal" ? (
+        <div className="mt-3 space-y-3">
+          {type === "signal" ? (
+            <div>
+              <Label>Fires when</Label>
+              <ChoiceList ariaLabel="Fires when" choices={SIGNAL_OPTIONS} onChange={(next) => setCondition(next as SignalCondition)} searchable={false} value={condition} />
+              {condition === "rsiBelow" || condition === "rsiAbove" ? (
+                <label className="mt-2 flex items-center gap-2 text-[0.74rem] text-ink-soft">
+                  Level
+                  <input
+                    className="w-16 rounded-lg border border-line bg-paper-strong px-2 py-1 font-mono text-[0.8rem] text-ink"
+                    inputMode="decimal"
+                    onChange={(event) => setLevel(event.target.value.replace(/[^0-9.]/g, ""))}
+                    placeholder={condition === "rsiBelow" ? "30" : "70"}
+                    value={level}
+                  />
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+          <div>
+            <Label>Candles</Label>
+            <ChoiceList
+              ariaLabel="Candles"
+              choices={[
+                { value: "1h", label: "1-hour" },
+                { value: "4h", label: "4-hour" },
+                { value: "1d", label: "Daily" },
+              ]}
+              onChange={(next) => setTimeframe(next as "1h" | "4h" | "1d")}
+              searchable={false}
+              value={timeframe}
+            />
+          </div>
+          <p className="text-[0.7rem] leading-snug text-muted">Closed candles only: the candle still forming never counts.</p>
         </div>
       ) : null}
 

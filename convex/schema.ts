@@ -818,7 +818,7 @@ export default defineSchema({
   agentTriggers: defineTable({
     draftId: v.id("agentDrafts"),
     blockId: v.string(),
-    type: v.union(v.literal("schedule"), v.literal("price"), v.literal("walletWatch")),
+    type: v.union(v.literal("schedule"), v.literal("price"), v.literal("walletWatch"), v.literal("signal")),
     config: v.any(),
     /** Unix ms. */
     nextRunAt: v.number(),

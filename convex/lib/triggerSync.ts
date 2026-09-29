@@ -39,7 +39,7 @@ export async function syncTriggers(
     await ctx.db.insert("agentTriggers", {
       draftId,
       blockId: block.id,
-      type: block.type as "schedule" | "price" | "walletWatch",
+      type: block.type as "schedule" | "price" | "walletWatch" | "signal",
       config: block.config,
       nextRunAt: Date.now() + FIRST_CHECK_DELAY_MS,
       state: null,

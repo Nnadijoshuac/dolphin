@@ -23,6 +23,7 @@
  * I/O: an idle deployment costs one empty index range a minute (by_next_run).
  */
 
+import { conditionMet, describeCondition, type SignalCondition } from "./lib/indicators";
 import { ConvexError, v } from "convex/values";
 import { createPublicClient, getAddress, http, parseAbi, parseAbiItem, type Address } from "viem";
 import { bsc } from "viem/chains";
@@ -30,7 +31,7 @@ import { bsc } from "viem/chains";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation } from "./_generated/server";
-import { activeBlocks, bscPairFor, TRIGGER_TYPES, type AgentBlock, type MarketConfig } from "./lib/agentBlocks";
+import { activeBlocks, bscPairFor, poolCandles, TRIGGER_TYPES, type AgentBlock, type MarketConfig } from "./lib/agentBlocks";
 import { verifiedTokens } from "./lib/tradeTokens";
 import { bscPublicClient } from "./lib/bscClient";
 import { syncTriggers } from "./lib/triggerSync";
@@ -39,6 +40,8 @@ import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 export const MAX_RUNS_PER_DAY = 48;
 const PRICE_CHECK_MS = 2 * 60_000;
 const WALLET_CHECK_MS = 60_000;
+/** A Signal is judged on closed candles; checking every 5 minutes catches each close. */
+const SIGNAL_CHECK_MS = 5 * 60_000;
 /** At ~0.45 s a block, about 11 minutes. A wider gap after downtime is skipped, not replayed. */
 const MAX_BLOCK_RANGE = 1_500n;
 const TICK_BATCH = 20;
@@ -210,6 +213,29 @@ export const tick = internalAction({
               message = `Price trigger: ${trigger.market!.symbol} crossed ${config.direction} $${fmt(config.priceUsd)} and is now $${fmt(pair.priceUsd)}.`;
             }
             state = { side };
+          }
+        } else if (trigger.type === "signal") {
+          /*
+           * SIGNAL (2026-09-29): fires once when its condition turns true on a
+           * NEWLY CLOSED candle - never on a candle still forming, and never
+           * twice for the same candle.
+           */
+          nextRunAt = now + SIGNAL_CHECK_MS;
+          const config = trigger.config as { condition: SignalCondition; level: number | null; timeframe: "1h" | "4h" | "1d" };
+          if (trigger.market) {
+            const pool = trigger.market.poolAddress ?? (await bscPairFor(trigger.market.tokenAddress))?.pairAddress;
+            const frame = config.timeframe === "1d" ? "day" : config.timeframe === "4h" ? "4h" : "hour";
+            const candles = pool ? await poolCandles(pool, trigger.market.tokenAddress, frame, 120) : [];
+            const lastClosed = candles.at(-1)?.[0] ?? null;
+            const previous = (trigger.state ?? {}) as { lastCandle?: number };
+            if (lastClosed !== null && lastClosed !== previous.lastCandle) {
+              const closes = candles.map((candle) => candle[4]);
+              // The first look only records where it stands, so arming never fires on history.
+              if (previous.lastCandle !== undefined && conditionMet(closes, config.condition, config.level)) {
+                message = `Signal: ${trigger.market.symbol} - ${describeCondition(config.condition, config.level)} on the ${config.timeframe} candle that closed ${new Date(lastClosed * 1000).toISOString().slice(0, 16).replace("T", " ")} UTC (close $${fmt(closes[closes.length - 1])}).`;
+              }
+              state = { lastCandle: lastClosed };
+            }
           }
         } else if (trigger.type === "walletWatch") {
           nextRunAt = now + WALLET_CHECK_MS;

@@ -275,6 +275,26 @@ export const walletAuthApi = anyApi as unknown as {
  * mutation looks that row up itself, so passing an id nothing paid for is an
  * error rather than a hire. Neither refusal may be worked around on the client.
  */
+/** convex/myAgents.ts - the agents a wallet built, with what each is doing. Session-gated. */
+export type MyBuiltAgent = {
+  conversationKey: string | null;
+  name: string;
+  description: string | null;
+  updatedAt: number;
+  paperMode: boolean;
+  published: { hash: string; visibility: "public" | "private"; priceUsd: number | null; network: "bsc" | "bsc-testnet" } | null;
+  trading: { status: "active" | "stopped" | "expired"; expiresAt: number } | null;
+  nextRunAt: number | null;
+  practiceTrades: number;
+  practiceTradesCapped: boolean;
+  lastTradeAt: string | null;
+};
+export const myAgentsApi = anyApi as unknown as {
+  myAgents: {
+    built: Query<{ sessionToken: string }, MyBuiltAgent[]>;
+  };
+};
+
 export const agentHiresApi = anyApi as unknown as {
   agentHires: {
     hireReadOnlyAgent: Mutation<

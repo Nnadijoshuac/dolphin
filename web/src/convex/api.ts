@@ -90,6 +90,8 @@ export const api = anyApi as unknown as {
     >;
     /** convex/agents.ts -> get. Accepts an agentKey or a bare tokenId. */
     get: Query<{ reference: string }, Agent | null>;
+    /** convex/agents.ts -> byOwner. Other live agents from one wallet, capped at 24. */
+    byOwner: Query<{ ownerAddress: string; excludeKey?: string }, Agent[]>;
     /** convex/agents.ts -> getMany. Bounded point lookups, for known keys. */
     getMany: Query<{ references: string[] }, Agent[]>;
     /** convex/agents.ts -> signals. Batched; never one query per rendered row. */

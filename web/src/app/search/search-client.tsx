@@ -87,6 +87,45 @@ function SearchContent() {
    * row reads as "there is more" instead of looking complete (owner,
    * 2026-09-29). Measured on scroll and on resize, never guessed.
    */
+  /*
+   * SEARCH COMES BACK ON SCROLL-UP (owner, 2026-09-29): nobody should scroll
+   * to the top to change category. Once the controls have scrolled under the
+   * header they tuck away while you read down and slide back the moment you
+   * scroll up. The title and count stay behind - only search and categories.
+   * `rest` = in their normal place; the sentinel sits right above them.
+   */
+  const controlsRef = useRef<HTMLElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [pin, setPin] = useState<"rest" | "shown" | "tucked">("rest");
+  useEffect(() => {
+    let last = window.scrollY;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const controls = controlsRef.current;
+        const sentinel = sentinelRef.current;
+        if (!controls || !sentinel) return;
+        const y = window.scrollY;
+        const delta = y - last;
+        last = y;
+        const stickyTop = parseFloat(getComputedStyle(controls).top) || 0;
+        if (sentinel.getBoundingClientRect().top >= stickyTop) {
+          setPin("rest");
+          return;
+        }
+        if (Math.abs(delta) < 4) return;
+        setPin(delta > 0 ? "tucked" : "shown");
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const chipsRef = useRef<HTMLDivElement>(null);
   const [chipsFade, setChipsFade] = useState(false);
   const updateChipsFade = (row: HTMLElement) =>
@@ -292,7 +331,8 @@ function SearchContent() {
       </header>
 
       {/* 2. Search, with the type filter inside it; 3. the categories under it. */}
-      <section aria-label="Agent search" className="catalog-controls mobile-search-controls">
+      <div aria-hidden="true" ref={sentinelRef} />
+      <section aria-label="Agent search" className="catalog-controls mobile-search-controls" data-pin={pin} ref={controlsRef}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -459,7 +499,7 @@ function SearchContent() {
               </button>
             ) : null}
             {status === "LoadingMore" ? (
-              <DolphinLoader className="catalog-more-loader" label="Loading more agents" state="done" />
+              <DolphinLoader className="catalog-more-loader" label="Loading more agents" showLabel={false} state="done" />
             ) : null}
           </>
         )}
@@ -481,7 +521,7 @@ export function SearchClient() {
     <Suspense
       fallback={
         <div className="site-frame page-shell flex justify-center pt-24">
-          <DolphinLoader label="Opening the catalog" state="done" />
+          <DolphinLoader label="Opening the catalog" showLabel={false} state="done" />
         </div>
       }
     >

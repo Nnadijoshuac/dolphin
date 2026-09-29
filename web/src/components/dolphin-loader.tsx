@@ -18,10 +18,13 @@ export function DolphinLoader({
   label,
   state = "working",
   className = "",
+  showLabel = true,
 }: {
   label: string;
   state?: "working" | "done";
   className?: string;
+  /** False: the animation alone, the label kept for screen readers only. */
+  showLabel?: boolean;
 }) {
   return (
     <div className={`flex items-center gap-2.5 ${className}`} role="status">
@@ -37,7 +40,7 @@ export function DolphinLoader({
           state,
         })}
       </span>
-      <span className="text-[0.85rem] text-muted">{label}</span>
+      <span className={showLabel ? "text-[0.85rem] text-muted" : "sr-only"}>{label}</span>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
+import { AtAGlance, HowItWorks, OneLine, PublisherAgents, SimilarAgents, plainSkillName } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AgentTransactionPanel } from "@/components/agent-transaction-panel";
 import { AgentTrialPanel } from "@/components/agent-trial-panel";
@@ -13,7 +14,6 @@ import { HireAction } from "@/components/hire-action";
 import { McpUseAction } from "@/components/mcp-use-action";
 import { MobileAgentDetail } from "@/components/mobile-agent-detail";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
-import { useNow } from "@/hooks/use-now";
 import { PerformancePanel } from "@/components/performance-panel";
 import { TrackRecord } from "@/components/track-record";
 import { useAgentCategoryStats } from "@/hooks/use-category-stats";
@@ -154,7 +154,7 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
   if (shown.length === 0) return null;
   return (
     <section className="detail-card">
-      <h2 className="detail-card__title">Live on-chain</h2>
+      <h2 className="detail-card__title">Live numbers</h2>
       <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {shown.map((item) => (
           <div className="min-w-0 rounded-xl bg-paper-muted/60 px-4 py-3" key={item.label}>
@@ -177,41 +177,13 @@ function LiveStatsView({ stats }: { stats: AgentLiveStats }) {
  * line: an agent Dolphin had delisted after five failed probes rendered
  * exactly like a healthy one, hire button and all.
  */
-/** "Answering · checked 7h ago" - relative, in the header's one meta line. */
-function AnsweringBadge({ agent }: { agent: Agent }) {
-  const now = useNow();
-  if (agent.status !== "live") return null;
-  const lastChecked = agent.verification?.lastProbeAt ?? agent.verifiedAt;
-  const ago = relativeAgo(lastChecked, now);
-  return (
-    <span className="inline-flex items-center gap-1.5" title={lastChecked ? `Last checked ${formatDate(lastChecked)} UTC` : undefined}>
-      {/* The same live green as the catalog cards' "Answered" dot. */}
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#22a55b]" />
-      <span className="font-medium text-ink-soft">Answering</span>
-      {ago ? <span className="text-faint">· checked {ago}</span> : null}
-    </span>
-  );
-}
-
-function relativeAgo(value: string | null | undefined, now: number): string | null {
-  if (!value || now === 0) return null;
-  const at = new Date(value).getTime();
-  if (Number.isNaN(at) || at > now) return null;
-  const minutes = Math.round((now - at) / 60_000);
-  if (minutes < 2) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
 function AvailabilityNotice({ agent }: { agent: Agent }) {
   const check = agent.verification;
   const lastChecked = check?.lastProbeAt ?? agent.verifiedAt;
   const lastAnswered = check?.lastOkAt ?? null;
 
   if (agent.status === "live") {
-    // Said inline in the header's meta line (AnsweringBadge), not as a notice.
+    // Said in the header's glance strip (Status: Online), not as a notice.
     return null;
   }
 
@@ -306,7 +278,7 @@ function TechnicalDetailsAccordion({
       >
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="detail-card__title">Registry details</h2>
+            <h2 className="detail-card__title">Technical details</h2>
             {isRegistryVerified ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-semibold text-success border border-success/30">
                 Verified
@@ -323,18 +295,15 @@ function TechnicalDetailsAccordion({
         </span>
       </button>
 
-      {isOpen ? (
-        <div className="space-y-6 border-t border-line/70 px-6 pb-6 pt-4">
-          <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 text-xs">
+      {/* Opens and closes with a height animation rather than snapping (owner, 2026-09-29). */}
+      <div className="reveal" data-open={isOpen || undefined} inert={!isOpen}>
+        <div className="reveal__inner">
+        <div className="space-y-6 border-t border-line/70 px-6 pb-6 pt-5">
+          <dl className="grid gap-2.5 text-xs sm:grid-cols-2">
             {facts.map(([label, value]) => (
-              <div
-                className="flex flex-col justify-center border-b border-line/60 pb-3"
-                key={label}
-              >
-                <dt className="text-muted font-medium">{label}</dt>
-                <dd className="mt-1 font-mono font-semibold text-ink break-all">
-                  {value}
-                </dd>
+              <div className="rounded-xl bg-paper-muted/60 px-4 py-3" key={label}>
+                <dt className="text-[0.72rem] text-muted">{label}</dt>
+                <dd className="mt-1 break-all font-mono text-[0.76rem] text-ink">{value}</dd>
               </div>
             ))}
           </dl>
@@ -349,9 +318,9 @@ function TechnicalDetailsAccordion({
           </a>
 
           {agent.sourceLabels.length > 0 ? (
-            <div className="border-t border-line/60 pt-4">
-              <p className="text-xs font-semibold text-muted mb-2">Sources attached to this record:</p>
-              <ul className="space-y-1.5">
+            <div>
+              <p className="mb-2 text-[0.72rem] text-muted">Where this record comes from</p>
+              <ul className="space-y-1 rounded-xl border border-line/70 px-4 py-2">
                 {agent.sourceLabels.map((source) => (
                   <li
                     className="flex items-center justify-between text-xs py-1 border-b border-line/40 last:border-b-0"
@@ -376,11 +345,12 @@ function TechnicalDetailsAccordion({
             </div>
           ) : null}
 
-          <p className="text-[11px] leading-relaxed text-muted bg-paper-muted p-3.5 rounded-xl border border-line/80">
-            Token identity #{agent.tokenId} is verified directly against the ERC-8004 registry on BNB Smart Chain. Dolphin never asks for private keys or seed phrases.
+          <p className="text-[0.72rem] leading-relaxed text-muted">
+            Dolphin never asks for private keys or seed phrases.
           </p>
         </div>
-      ) : null}
+        </div>
+      </div>
     </section>
   );
 }
@@ -433,7 +403,8 @@ export function AgentDetail({ agent }: { agent: Agent }) {
 
       {/* ── Hero Header ── */}
       <header className="pb-2 pt-6 sm:pt-8">
-        <div className="flex flex-col sm:flex-row sm:items-start gap-5">
+        {/* The icon is centred on the whole text block (owner, 2026-09-29). */}
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
           <div className="shrink-0">
             <AgentIcon category={agent.category} seed={agent.iconSeed} size={72} uri={agent.iconUrl} />
           </div>
@@ -460,32 +431,27 @@ export function AgentDetail({ agent }: { agent: Agent }) {
            */}
           <div className="min-w-0 flex-1">
             {/* Agent Name */}
-            <div className="flex items-start justify-between gap-4">
-              <h1 className="text-3xl font-semibold tracking-[-0.035em] text-ink sm:text-[2.4rem]">
-                {agent.name}
+            <div className="flex items-center justify-between gap-4">
+              <OneLine as="h1" className="min-w-0 text-3xl font-semibold tracking-[-0.035em] text-ink sm:text-[2.4rem]" text={agent.name}>
                 {agent.firstParty ? <ByDolphin /> : null}
-              </h1>
-              <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="mt-1" />
+              </OneLine>
+              <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} />
             </div>
 
             {/* Tagline */}
             {agent.tagline ? (
-              <p className="mt-2 max-w-3xl text-[1.02rem] leading-relaxed text-ink-soft">
-                {agent.tagline}
-              </p>
+              <OneLine className="mt-2 max-w-3xl text-[1.02rem] leading-relaxed text-ink-soft" text={agent.tagline} />
             ) : null}
 
             {/* Metadata Footer */}
-            {/* One quiet line. Token id and chain live in Registry details. */}
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.8rem] text-muted">
-              <span>
-                by <span className="font-medium text-ink">{publisherDisplay}</span>
-              </span>
-              <AnsweringBadge agent={agent} />
-            </div>
+            {/* One quiet line. Status is in the glance strip; token and chain in Technical details. */}
+            <p className="mt-3 text-[0.8rem] text-muted">
+              by <span className="font-medium text-ink">{publisherDisplay}</span>
+            </p>
           </div>
         </div>
         <AvailabilityNotice agent={agent} />
+        <AtAGlance agent={agent} />
       </header>
 
       {/* ── Main Layout: Content & Action Sidebar ── */}
@@ -537,6 +503,9 @@ export function AgentDetail({ agent }: { agent: Agent }) {
 
         {/* Left Column: Core Agent Information */}
         <div className="order-2 min-w-0 space-y-5 lg:order-1">
+          {/* 0. The whole product in four plain steps. */}
+          <HowItWorks agent={agent} />
+
           {/*
             1. ABOUT - only what the header has not already said (owner cleanup,
             2026-09-29): many agents publish the same sentence as tagline and
@@ -558,8 +527,9 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                       <li
                         className="rounded-full border border-line/80 px-3 py-1.5 text-[0.8rem] text-ink"
                         key={`${skill.name}-${skill.evidence}`}
+                        title={skill.name}
                       >
-                        {skill.name}
+                        {plainSkillName(skill.name)}
                       </li>
                     ))}
                   </ul>
@@ -584,10 +554,16 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             </>
           ) : null}
 
-          {/* 4. Details & Technical Record (Collapsible Accordion) */}
+          {/* 4. Only when the wallet has published others (renders nothing otherwise). */}
+          <PublisherAgents agent={agent} />
+
+          {/* 5. Details & Technical Record (Collapsible Accordion) */}
           <TechnicalDetailsAccordion agent={agent} isRegistryVerified={isRegistryVerified} />
         </div>
       </div>
+
+      {/* Before the footer: somewhere to go next. Renders nothing when the category has no one else. */}
+      <SimilarAgents agent={agent} />
     </div>
   );
 }

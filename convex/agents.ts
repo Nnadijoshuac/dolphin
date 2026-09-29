@@ -39,6 +39,7 @@
 
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
+import { getAddress, isAddress } from "viem";
 
 import { query } from "./_generated/server";
 import { toPublicAgent } from "./lib/publicAgent";
@@ -209,6 +210,39 @@ export const search = query({
  * It also accepts a bare tokenId, because every deep link that exists today is
  * one. See `coerceAgentKey` for why that is a read-path convenience only.
  */
+/**
+ * Other listed agents from the same wallet, for "Other agents from this
+ * wallet" on an agent's page (owner, 2026-09-29). One `by_owner` range read,
+ * capped: a publisher with hundreds of registrations costs 25 rows, never all.
+ * `ownerAddress` is compared exactly as stored - the client passes back the
+ * `publisherAddress` this same row produced.
+ */
+export const byOwner = query({
+  args: { ownerAddress: v.string(), excludeKey: v.optional(v.string()) },
+  handler: async (ctx, { ownerAddress, excludeKey }) => {
+    /*
+     * CASE: rows store the owner as the indexer wrote it (lowercase for the
+     * ones measured 2026-09-29), while the page shows it checksummed - an
+     * exact match on the checksummed form found nothing. Each spelling is its
+     * own index range, so this is at most three capped reads.
+     */
+    const spellings = new Set([ownerAddress, ownerAddress.toLowerCase()]);
+    if (isAddress(ownerAddress, { strict: false })) spellings.add(getAddress(ownerAddress));
+    const seen = new Map<string, Awaited<ReturnType<typeof ctx.db.get<"agents">>>>();
+    for (const spelling of spellings) {
+      const rows = await ctx.db
+        .query("agents")
+        .withIndex("by_owner", (q) => q.eq("ownerAddress", spelling))
+        .take(25);
+      for (const row of rows) seen.set(row.agentKey, row);
+    }
+    return [...seen.values()]
+      .filter((row): row is NonNullable<typeof row> => row !== null && row.status === "live" && row.agentKey !== excludeKey)
+      .slice(0, 24)
+      .map(toPublicAgent);
+  },
+});
+
 export const get = query({
   args: { reference: v.string() },
   handler: async (ctx, { reference }) => {

@@ -83,6 +83,7 @@ import type * as lib_usageRank from "../lib/usageRank.js";
 import type * as lib_walletActionLogs from "../lib/walletActionLogs.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as lib_walletHoldings from "../lib/walletHoldings.js";
+import type * as liveness from "../liveness.js";
 import type * as model_agent from "../model/agent.js";
 import type * as protocols_aave from "../protocols/aave.js";
 import type * as protocols_pancakeswap from "../protocols/pancakeswap.js";
@@ -180,6 +181,7 @@ declare const fullApi: ApiFromModules<{
   "lib/walletActionLogs": typeof lib_walletActionLogs;
   "lib/walletAuth": typeof lib_walletAuth;
   "lib/walletHoldings": typeof lib_walletHoldings;
+  liveness: typeof liveness;
   "model/agent": typeof model_agent;
   "protocols/aave": typeof protocols_aave;
   "protocols/pancakeswap": typeof protocols_pancakeswap;

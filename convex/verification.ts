@@ -27,6 +27,7 @@
  * write has to mean something a person would see actually changed.
  */
 
+import { recordLivenessChange } from "./liveness";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
@@ -461,6 +462,17 @@ export const applyVerification = internalMutation({
         ...verificationFields,
       });
     }
+    // History (convex/liveness.ts): only when "live" is gained or lost.
+    await recordLivenessChange(ctx, {
+      agentKey: args.agentKey,
+      from: verification?.state ?? "new",
+      to: args.state,
+      failureClass: args.failureClass,
+      detail: args.detail,
+      probedEndpoint: args.probedEndpoint,
+      protocol: args.protocol,
+      at: now,
+    });
 
     /* ------------------------------------------------------------------
      * THE CATALOG
@@ -676,6 +688,16 @@ export const applyScreenRejection = internalMutation({
         ...fields,
         attempts: verification.attempts + 1,
         consecutiveFailures: verification.consecutiveFailures + 1,
+      });
+      await recordLivenessChange(ctx, {
+        agentKey,
+        from: verification.state,
+        to: "invalid",
+        failureClass: null,
+        detail: fields.detail,
+        probedEndpoint: null,
+        protocol: null,
+        at: now,
       });
     }
 

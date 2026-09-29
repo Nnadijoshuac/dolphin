@@ -699,6 +699,43 @@ export default defineSchema({
    * kept out of ranking.
    */
   /**
+   * LIVENESS HISTORY (mentor review, 2026-09-29: "a probe records a moment.
+   * Nobody can go back and probe what an agent did in October 2026. Every week
+   * you run it, the lead grows"). Until now only each agent's LATEST state was
+   * kept (agentVerification), so the history was being thrown away.
+   *
+   * Written sparingly, for the I/O budget: an event only when an agent GAINS
+   * or LOSES "live" (not per probe), and one snapshot a day. Never deleted.
+   */
+  livenessEvents: defineTable({
+    agentKey: v.string(),
+    /** The state before; "new" for an agent's first result. */
+    from: v.string(),
+    to: v.string(),
+    failureClass: v.union(v.string(), v.null()),
+    detail: v.string(),
+    probedEndpoint: v.union(v.string(), v.null()),
+    protocol: v.union(v.literal("a2a"), v.literal("mcp"), v.null()),
+    at: v.string(),
+  })
+    .index("by_agent", ["agentKey", "at"])
+    .index("by_time", ["at"]),
+
+  /** One row a day: who was live, and a hash of that list so a day's record can be checked later. */
+  livenessDaily: defineTable({
+    /** YYYY-MM-DD, UTC. */
+    day: v.string(),
+    live: v.number(),
+    /** Sorted agentKeys that were live at snapshot time. */
+    liveKeys: v.array(v.string()),
+    /** sha256 of liveKeys joined by "\n". */
+    liveKeysSha256: v.string(),
+    gained: v.number(),
+    lost: v.number(),
+    takenAt: v.string(),
+  }).index("by_day", ["day"]),
+
+  /**
    * AGENT WALLETS: an agent's OWN wallet (owner, 2026-09-29: "that agent is
    * going to have its own wallet that you can send money to... the agent can
    * freely spend from it without needing you to confirm"). One per draft.

@@ -68,6 +68,12 @@ crons.interval(
  */
 crons.interval("autopilot (armed agent triggers)", { minutes: 1 }, internal.autopilot.tick, {});
 
+/*
+ * LIVENESS HISTORY (2026-09-29): one snapshot of the live set a day, with a
+ * hash of it. Reads only the live rows; see convex/liveness.ts.
+ */
+crons.daily("liveness snapshot", { hourUTC: 0, minuteUTC: 10 }, internal.liveness.snapshotDay, {});
+
 crons.interval(
   "verification (fan out one probe per due agent)",
   { minutes: 10 },

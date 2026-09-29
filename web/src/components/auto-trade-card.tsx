@@ -150,9 +150,10 @@ export function AutoTradeCard({
           </p>
           {riskDailyUsd ? (
             <p className="mt-1.5 rounded-lg bg-paper-muted/70 px-2.5 py-1.5 text-[0.68rem] leading-snug text-muted">
-              Worst case, if Dolphin&apos;s servers were ever breached: up to ${(riskDailyUsd * durationDays).toLocaleString()} of
-              each token this key may trade, and ${riskDailyUsd.toLocaleString()} of BNB a day, until it expires or you revoke it.
-              Your passkey approves two things: those capped allowances, then the key.
+              Worst case, if someone stole this key: up to ${(riskDailyUsd * durationDays).toLocaleString()} of each token it may
+              trade, taken all at once rather than a day at a time, plus ${riskDailyUsd.toLocaleString()} of BNB a day - until it
+              expires or you revoke it. A shorter key means a smaller worst case. Your passkey approves two things: those capped
+              allowances, then the key.
             </p>
           ) : null}
           <div className="mt-2 flex items-center gap-1.5">

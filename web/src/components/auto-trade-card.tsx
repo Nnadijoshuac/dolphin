@@ -91,16 +91,16 @@ export function AutoTradeCard({
     }
   };
 
-  const revoke = async (keyId: string, sessionPublicKey: string) => {
+  const revoke = async (keyId: string, sessionPublicKey: string, approvalTokens: readonly string[]) => {
     setBusy("revoke");
     try {
       const sessionToken = await token();
       if (!sessionToken) return;
       // Stop first, so Dolphin's copy is gone even if the on-chain step is cancelled.
       await stop({ sessionToken, conversationKey });
-      await altana.revokeAgentTradeKey(sessionPublicKey);
+      await altana.revokeAgentTradeKey(sessionPublicKey, approvalTokens);
       await markRevoked({ sessionToken, keyId });
-      toast.success("Revoked on-chain. That key is dead everywhere.");
+      toast.success("Revoked on-chain, and its allowances set back to zero. That key is dead everywhere.");
     } catch (cause) {
       toast.error(errorText(cause, "Could not revoke the key."));
     } finally {
@@ -134,7 +134,7 @@ export function AutoTradeCard({
             <button
               className="h-8 rounded-lg border border-line !text-[12px] font-semibold text-ink hover:bg-paper-muted disabled:opacity-40"
               disabled={busy !== null}
-              onClick={() => void revoke(state.keyId, state.sessionPublicKey)}
+              onClick={() => void revoke(state.keyId, state.sessionPublicKey, state.approvalTokens ?? [])}
               type="button"
             >
               {busy === "revoke" ? "Revoking…" : "Revoke on-chain"}
@@ -148,6 +148,13 @@ export function AutoTradeCard({
             Off - every trade comes to you as a ticket to sign. Allow it to trade on its own within your Risk limits
             {riskDailyUsd ? ` (up to $${riskDailyUsd.toLocaleString()} a day)` : ""}, only on PancakeSwap and Dolphin&apos;s verified tokens.
           </p>
+          {riskDailyUsd ? (
+            <p className="mt-1.5 rounded-lg bg-paper-muted/70 px-2.5 py-1.5 text-[0.68rem] leading-snug text-muted">
+              Worst case, if Dolphin&apos;s servers were ever breached: up to ${(riskDailyUsd * durationDays).toLocaleString()} of
+              each token this key may trade, and ${riskDailyUsd.toLocaleString()} of BNB a day, until it expires or you revoke it.
+              Your passkey approves two things: those capped allowances, then the key.
+            </p>
+          ) : null}
           <div className="mt-2 flex items-center gap-1.5">
             <div className="panel-tabs grid flex-1 grid-cols-3 rounded-full p-[2px]" role="radiogroup" aria-label="How long">
               {DURATIONS.map((days) => (
@@ -182,7 +189,7 @@ export function AutoTradeCard({
         <button
           className="mt-2 !text-[0.7rem] font-semibold text-danger hover:underline disabled:opacity-40"
           disabled={busy !== null}
-          onClick={() => void revoke(unrevoked[0].keyId, unrevoked[0].sessionPublicKey)}
+          onClick={() => void revoke(unrevoked[0].keyId, unrevoked[0].sessionPublicKey, unrevoked[0].approvalTokens ?? [])}
           type="button"
         >
           A stopped key is still valid on-chain until {until(unrevoked[0].expiry)} - revoke it

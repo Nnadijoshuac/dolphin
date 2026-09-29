@@ -1,5 +1,6 @@
 import {
   concatHex,
+  decodeFunctionData,
   encodeFunctionData,
   erc20Abi,
   getAddress,
@@ -312,20 +313,78 @@ export function buildTradeCalls({
  * wallet before signing, so a bug upstream cannot turn the Sign button into
  * something else: only the two PancakeSwap routers, and an approval of the
  * token being sold to one of them.
+ *
+ * HARDENED 2026-09-29 (mentor review): the chain can pin a call's target and
+ * function but not its arguments, so THIS is where the arguments are checked.
+ * Every swap is decoded: its recipient must be `wallet` (or, for a V3 sale for
+ * BNB, the router, which then unwraps to `wallet`), and its minimum output must
+ * be above zero - a zero minimum lets a trade be sandwiched for everything.
  */
-export function assertTradeCallsAllowed(calls: readonly TradeCall[], tokenIn: TradeSide): void {
+export function assertTradeCallsAllowed(calls: readonly TradeCall[], tokenIn: TradeSide, wallet?: Address): void {
   const routers = new Set<string>([PANCAKE_V2_ROUTER, PANCAKE_V3_SWAP_ROUTER]);
   if (calls.length === 0 || calls.length > 2) throw new Error("A trade is one swap, plus one approval at most.");
+  const owner = wallet ? getAddress(wallet) : null;
+  const refuse = (why: string): never => {
+    throw new Error(`${why} Nothing was signed.`);
+  };
   for (const call of calls) {
     const target = getAddress(call.to);
-    if (routers.has(target)) continue;
+    if (routers.has(target)) {
+      if (owner) assertSwapArguments(target, call.data, owner, refuse);
+      continue;
+    }
     const isApproval =
       tokenIn.address !== null &&
       target === getAddress(tokenIn.address) &&
       call.data.startsWith("0x095ea7b3") &&
       !call.value;
-    if (!isApproval) throw new Error("This trade tried to call a contract other than PancakeSwap. Nothing was signed.");
+    if (!isApproval) refuse("This trade tried to call a contract other than PancakeSwap.");
     const spender = getAddress(`0x${call.data.slice(34, 74)}`);
-    if (!routers.has(spender)) throw new Error("This trade tried to approve something other than PancakeSwap. Nothing was signed.");
+    if (!routers.has(spender)) refuse("This trade tried to approve something other than PancakeSwap.");
+  }
+}
+
+function assertSwapArguments(router: Address, data: Hex, owner: Address, refuse: (why: string) => never): void {
+  if (router === PANCAKE_V2_ROUTER) {
+    let decoded;
+    try {
+      decoded = decodeFunctionData({ abi: V2_ROUTER_ABI, data });
+    } catch {
+      return refuse("This trade called a PancakeSwap v2 function Dolphin does not use.");
+    }
+    if (decoded.functionName === "getAmountsOut") return refuse("That is not a swap.");
+    const args = decoded.args as readonly unknown[];
+    const to = decoded.functionName === "swapExactETHForTokensSupportingFeeOnTransferTokens" ? args[2] : args[3];
+    const minOut = decoded.functionName === "swapExactETHForTokensSupportingFeeOnTransferTokens" ? args[0] : args[1];
+    if (getAddress(to as string) !== owner) refuse("This trade would send its proceeds to another address.");
+    if ((minOut as bigint) <= BigInt(0)) refuse("This trade had no minimum output.");
+    return;
+  }
+  let outer;
+  try {
+    outer = decodeFunctionData({ abi: V3_ROUTER_ABI, data });
+  } catch {
+    return refuse("This trade called a PancakeSwap v3 function Dolphin does not use.");
+  }
+  const inner = outer.functionName === "multicall" ? (outer.args[0] as readonly Hex[]) : [data];
+  for (const piece of inner) {
+    let decoded;
+    try {
+      decoded = decodeFunctionData({ abi: V3_ROUTER_ABI, data: piece });
+    } catch {
+      return refuse("This trade carried a PancakeSwap v3 call Dolphin does not use.");
+    }
+    if (decoded.functionName === "exactInput") {
+      const params = decoded.args[0] as { recipient: string; amountOutMinimum: bigint };
+      const recipient = getAddress(params.recipient);
+      if (recipient !== owner && recipient !== PANCAKE_V3_SWAP_ROUTER) refuse("This trade would send its proceeds to another address.");
+      if (params.amountOutMinimum <= BigInt(0)) refuse("This trade had no minimum output.");
+    } else if (decoded.functionName === "unwrapWETH9") {
+      const [minimum, recipient] = decoded.args as readonly [bigint, string];
+      if (getAddress(recipient) !== owner) refuse("This trade would send its BNB to another address.");
+      if (minimum <= BigInt(0)) refuse("This trade had no minimum output.");
+    } else if (decoded.functionName !== "refundETH") {
+      refuse("This trade carried a PancakeSwap v3 call Dolphin does not use.");
+    }
   }
 }

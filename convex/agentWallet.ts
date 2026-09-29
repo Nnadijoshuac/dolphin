@@ -206,7 +206,7 @@ export const executeTrade = internalAction({
     const route = (await quoteTrade({ publicClient: bscPublicClient as never, tokenIn, tokenOut, amountInRaw }))[0];
     if (!route) return { attempted: true, executed: false, text: "Not traded: PancakeSwap had no route for that swap right now." };
     const calls = buildTradeCalls({ route, tokenIn, tokenOut, recipient: address });
-    assertTradeCallsAllowed(calls, tokenIn);
+    assertTradeCallsAllowed(calls, tokenIn, address);
 
     const client = clientFor(await unseal(wallet));
     const hashes: Hex[] = [];

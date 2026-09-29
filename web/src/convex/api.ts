@@ -881,6 +881,8 @@ export type AgentDraftData = {
 
 /** One agent trade key as the panel sees it. Never key material. */
 export type TradeKeySummary = {
+  /** Allowances the grant set; a revoke zeroes them. */
+  approvalTokens: string[];
   keyId: string;
   expiry: number;
   durationDays: number;
@@ -917,7 +919,16 @@ export const autotradeApi = anyApi as unknown as {
   autotrade: {
     prepare: Action<
       { sessionToken: string; conversationKey: string; altanaWalletAddress: string; durationDays: number },
-      { keyId: string; sessionPublicKey: string; sessionAddress: string; permissionsJson: string; expiry: number; dailyUsd: number }
+      {
+        keyId: string;
+        sessionPublicKey: string;
+        sessionAddress: string;
+        permissionsJson: string;
+        expiry: number;
+        dailyUsd: number;
+        approvals: { token: string; spender: string; amount: string; symbol: string }[];
+        worstCaseUsdPerToken: number;
+      }
     >;
     confirmGrant: Mutation<{ sessionToken: string; keyId: string; transactionHash: string | null }, null>;
     stop: Mutation<

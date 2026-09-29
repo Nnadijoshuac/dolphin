@@ -11,7 +11,7 @@ import {
   type Session,
   type Signer,
 } from "@altananetwork/sdk";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, encodeFunctionData, erc20Abi, http } from "viem";
 import { useQuery as useTanstackQuery, useQueryClient } from "@tanstack/react-query";
 import { useAction, useMutation, useQuery as useConvexQuery } from "convex/react";
 import {
@@ -313,9 +313,11 @@ export type AltanaWalletValue = Readonly<{
     sessionAddress: string;
     permissionsJson: string;
     expiry: number;
+    /** Capped allowances to the V2 router, set by the passkey - the key itself cannot approve. */
+    approvals: { token: string; spender: string; amount: string }[];
   }) => Promise<string | null>;
-  /** Revokes an agent's trade key on-chain, with the passkey. Kills it everywhere. */
-  revokeAgentTradeKey: (sessionPublicKey: string) => Promise<void>;
+  /** Revokes an agent's trade key on-chain and zeroes the allowances its grant set, with the passkey. */
+  revokeAgentTradeKey: (sessionPublicKey: string, approvalTokens?: readonly string[]) => Promise<void>;
 
   /**
    * Reads one ERC-20 balance from this wallet. Takes the token address rather
@@ -699,7 +701,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
   );
 
   const grantAgentTradeKey = useCallback(
-    async (input: { sessionPublicKey: string; sessionAddress: string; permissionsJson: string; expiry: number }) => {
+    async (input: {
+      sessionPublicKey: string;
+      sessionAddress: string;
+      permissionsJson: string;
+      expiry: number;
+      approvals: { token: string; spender: string; amount: string }[];
+    }) => {
       const wallet = getAltanaSnapshot();
       if (!wallet) throw new Error("Create a Dolphin Wallet before letting an agent trade from it.");
       const stored = JSON.parse(input.permissionsJson) as {
@@ -730,9 +738,33 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           throw new Error("This trade key signs only on Dolphin's backend.");
         },
       };
+      // Only ever the V2 router, only capped - checked here too, before the passkey signs.
+      const V2_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E".toLowerCase();
+      if (input.approvals.some((approval) => approval.spender.toLowerCase() !== V2_ROUTER || BigInt(approval.amount) <= BigInt(0))) {
+        throw new Error("Refusing an allowance to anything but PancakeSwap's V2 router.");
+      }
       setIsBusy(true);
       setError(null);
       try {
+        /*
+         * First the capped allowances, with the passkey: the key cannot approve
+         * anything itself (convex/autotrade.ts, hardened 2026-09-29). An
+         * allowance to the router alone moves nothing - only a call from this
+         * wallet can spend it.
+         */
+        if (input.approvals.length > 0) {
+          const approved = await altanaClient().execute({
+            wallet: { address: wallet.address },
+            signer: adminSigner(),
+            calls: input.approvals.map((approval) => ({
+              to: approval.token as Address,
+              data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [approval.spender as Address, BigInt(approval.amount)] }),
+            })),
+            chainId: ALTANA_NETWORK.chainId,
+          });
+          if (approved.status === "FAILED") throw new Error("The allowances were not set, so no trade key was granted.");
+          recordAction({ wallet: wallet.address, transactionHash: approved.transactionHash, kind: "agent", purpose: "agent", agentName: "Trade key allowances" });
+        }
         const granted = await altanaClient().grantSession({
           wallet: { address: wallet.address },
           signer: adminSigner(),
@@ -751,11 +783,11 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner],
+    [adminSigner, recordAction],
   );
 
   const revokeAgentTradeKey = useCallback(
-    async (sessionPublicKey: string) => {
+    async (sessionPublicKey: string, approvalTokens: readonly string[] = []) => {
       const wallet = getAltanaSnapshot();
       if (!wallet) throw new Error("No Dolphin Wallet on this device.");
       setIsBusy(true);
@@ -767,6 +799,23 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           session: sessionPublicKey as Hex,
           chainId: ALTANA_NETWORK.chainId,
         });
+        // And the allowances its grant set, back to zero.
+        if (approvalTokens.length > 0) {
+          const zeroed = await altanaClient().execute({
+            wallet: { address: wallet.address },
+            signer: adminSigner(),
+            calls: approvalTokens.map((token) => ({
+              to: token as Address,
+              data: encodeFunctionData({
+                abi: erc20Abi,
+                functionName: "approve",
+                args: ["0x10ED43C718714eb63d5aA57B78B54704E256024E" as Address, BigInt(0)],
+              }),
+            })),
+            chainId: ALTANA_NETWORK.chainId,
+          });
+          recordAction({ wallet: wallet.address, transactionHash: zeroed.transactionHash, kind: "agent", purpose: "agent", agentName: "Trade key allowances cleared" });
+        }
       } catch (cause) {
         setError(toUserMessage(cause, "Your wallet could not revoke that key. Try again."));
         throw cause;
@@ -774,7 +823,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         setIsBusy(false);
       }
     },
-    [adminSigner],
+    [adminSigner, recordAction],
   );
 
   const revokeSession = useCallback(

@@ -10,9 +10,24 @@
  * From then on the Altana account contract itself enforces what the key may
  * do - Dolphin could not exceed it even by mistake:
  *
- *   - calls: PancakeSwap's V2 and V3 routers, and approve() on Dolphin's
- *     verified tokens. Never an empty list: Altana reads a missing `calls` as
- *     "any contract".
+ *   - calls: EXACTLY three functions on PancakeSwap's V2 router - the
+ *     fee-on-transfer-safe swaps for token->token, BNB->token and token->BNB.
+ *     Never an empty list: Altana reads a missing `calls` as "any contract".
+ *
+ * HARDENED 2026-09-29 (the mentor review, Agent/SESSION-LOG-2026-09-28-...):
+ * Altana constrains a call's target and function, NEVER its arguments. The
+ * first version allowed ANY function on both routers and approve() to ANY
+ * spender - so whoever held the key could approve an attacker, which outlives
+ * the session. Now:
+ *   - the session cannot call approve() at all. The owner's passkey sets ONE
+ *     capped allowance per token, to the V2 router only, when granting
+ *     (`approvals`, below): daily limit x days. Revoking zeroes them.
+ *   - V2 only: V3's multicall would let a key smuggle any inner call.
+ * What is still open, and said to the owner before they grant: a swap's
+ * recipient is an argument, so a stolen key could swap to another address -
+ * bounded by those allowances and the BNB cap. Closing it needs the swap guard
+ * contract (contracts/DolphinSwapGuard.sol), which is written and tested but
+ * not deployed or audited.
  *   - spend: a daily cap on every one of those tokens and on native BNB, equal
  *     to the Risk block's dollars-per-trade x trades-per-day at the time of the
  *     grant. A token with no live price is left out entirely rather than left
@@ -40,7 +55,6 @@ import { bscPairFor, type AgentBlock } from "./lib/agentBlocks";
 import { bscPublicClient } from "./lib/bscClient";
 import {
   PANCAKE_V2_ROUTER,
-  PANCAKE_V3_SWAP_ROUTER,
   WBNB_BSC,
   assertTradeCallsAllowed,
   buildTradeCalls,
@@ -50,6 +64,7 @@ import {
 } from "./lib/pancakeswapTrade";
 import { open, seal } from "./lib/secretBox";
 import { verifiedTokens } from "./lib/tradeTokens";
+import { tradeKeyPolicy } from "./lib/tradeKeyPolicy";
 import { requireWalletAddress } from "./lib/walletAuth";
 
 export const TRADE_KEY_DURATIONS = [1, 7, 30] as const;
@@ -58,7 +73,11 @@ const STABLE_SYMBOLS = new Set(["USDT", "USDC", "U"]);
 type StoredPermissions = {
   calls: { to: string; signature?: string }[];
   spend: { limit: string; period: "day"; token?: string }[];
+  /** Set by the owner's passkey at grant time, not by the session (it cannot approve). */
+  approvals?: { token: string; spender: string; amount: string; symbol: string }[];
 };
+
+
 
 function toSessionPermissions(json: string): Session["permissions"] {
   const stored = JSON.parse(json) as StoredPermissions;
@@ -108,7 +127,18 @@ export const prepare = action({
   handler: async (
     ctx,
     args,
-  ): Promise<{ keyId: Id<"agentTradeKeys">; sessionPublicKey: string; sessionAddress: string; permissionsJson: string; expiry: number; dailyUsd: number }> => {
+  ): Promise<{
+    keyId: Id<"agentTradeKeys">;
+    sessionPublicKey: string;
+    sessionAddress: string;
+    permissionsJson: string;
+    expiry: number;
+    dailyUsd: number;
+    /** What the owner's passkey approves alongside the grant: capped, V2 router only. */
+    approvals: { token: string; spender: string; amount: string; symbol: string }[];
+    /** Said before granting: the most a stolen key could move per token, and in BNB per day. */
+    worstCaseUsdPerToken: number;
+  }> => {
     const owned: { draftId: Id<"agentDrafts">; walletAddress: string; name: string; blocks: AgentBlock[] } = await ctx.runQuery(
       internal.autotrade.ownedDraft,
       {
@@ -126,29 +156,27 @@ export const prepare = action({
     }
     const dailyUsd: number = risk.type === "risk" ? risk.config.maxTradeUsd * risk.config.maxTradesPerDay : 0;
 
-    // Daily caps. Every token the key may approve gets one; unpriceable tokens are left out.
-    const calls: StoredPermissions["calls"] = [{ to: PANCAKE_V2_ROUTER }, { to: PANCAKE_V3_SWAP_ROUTER }];
-    const spend: StoredPermissions["spend"] = [];
     const bnb = await bscPairFor(WBNB_BSC).catch(() => null);
     if (!bnb?.priceUsd) throw new ConvexError("BNB's live price could not be read, so no safe cap can be set. Try again shortly.");
-    spend.push({ limit: parseUnits((dailyUsd / bnb.priceUsd).toFixed(18), 18).toString(), period: "day" });
+    const prices = new Map<string, number | null>();
     for (const token of verifiedTokens()) {
       if (!token.address || getAddress(token.address) === WBNB_BSC) continue;
-      const priceUsd = STABLE_SYMBOLS.has(token.symbol) ? 1 : ((await bscPairFor(token.address).catch(() => null))?.priceUsd ?? null);
-      if (!priceUsd) continue;
-      const units = (dailyUsd / priceUsd).toFixed(Math.min(token.decimals, 18));
-      calls.push({ to: getAddress(token.address), signature: "approve(address,uint256)" });
-      spend.push({ limit: parseUnits(units, token.decimals).toString(), period: "day", token: getAddress(token.address) });
+      prices.set(token.symbol, STABLE_SYMBOLS.has(token.symbol) ? 1 : ((await bscPairFor(token.address).catch(() => null))?.priceUsd ?? null));
     }
-    // WBNB is both the V3 path token and a sellable asset: capped like BNB.
-    calls.push({ to: WBNB_BSC, signature: "approve(address,uint256)" });
-    spend.push({ limit: parseUnits((dailyUsd / bnb.priceUsd).toFixed(18), 18).toString(), period: "day", token: WBNB_BSC });
+    // The whole policy is one pure, tested function (lib/tradeKeyPolicy.ts).
+    const { calls, spend, approvals } = tradeKeyPolicy({
+      dailyUsd,
+      durationDays: args.durationDays,
+      bnbPriceUsd: bnb.priceUsd,
+      tokens: verifiedTokens(),
+      priceOf: (token) => prices.get(token.symbol) ?? null,
+    });
 
     const privateKey = generatePrivateKey();
     const account = privateKeyToAccount(privateKey);
     const box = await seal(privateKey);
     const expiry = Math.floor(Date.now() / 1000) + args.durationDays * 86_400;
-    const permissionsJson = JSON.stringify({ calls, spend } satisfies StoredPermissions);
+    const permissionsJson = JSON.stringify({ calls, spend, approvals } satisfies StoredPermissions);
 
     const keyId: Id<"agentTradeKeys"> = await ctx.runMutation(internal.autotrade.insertPending, {
       draftId: owned.draftId,
@@ -169,6 +197,8 @@ export const prepare = action({
       permissionsJson,
       expiry,
       dailyUsd,
+      approvals,
+      worstCaseUsdPerToken: dailyUsd * args.durationDays,
     };
   },
 });
@@ -316,10 +346,19 @@ function summary(key: {
   durationDays: number;
   sessionPublicKey: string;
   altanaWalletAddress: string;
+  permissionsJson: string;
   grantedAt: string | null;
   revokedAt: string | null;
 }) {
+  let approvalTokens: string[] = [];
+  try {
+    approvalTokens = ((JSON.parse(key.permissionsJson) as StoredPermissions).approvals ?? []).map((approval) => approval.token);
+  } catch {
+    approvalTokens = [];
+  }
   return {
+    /** Allowances this key's grant set; a revoke zeroes them. */
+    approvalTokens,
     keyId: key._id,
     expiry: key.expiry,
     durationDays: key.durationDays,
@@ -390,11 +429,30 @@ export const executeTrade = internalAction({
       };
     }
 
-    const routes = await quoteTrade({ publicClient: bscPublicClient as never, tokenIn, tokenOut, amountInRaw });
+    // The key may only call V2's swaps: pick the best V2 route.
+    const routes = (await quoteTrade({ publicClient: bscPublicClient as never, tokenIn, tokenOut, amountInRaw })).filter((candidate) => candidate.venue === "v2");
     const route = routes[0];
-    if (!route) return { attempted: true, executed: false, text: "Not traded: PancakeSwap had no route for that swap right now." };
-    const calls = buildTradeCalls({ route, tokenIn, tokenOut, recipient: wallet });
-    assertTradeCallsAllowed(calls, tokenIn);
+    if (!route) return { attempted: true, executed: false, text: "Not traded: PancakeSwap v2 had no route for that swap right now." };
+    const built = buildTradeCalls({ route, tokenIn, tokenOut, recipient: wallet });
+    assertTradeCallsAllowed(built, tokenIn, wallet);
+    // The owner's passkey set the allowance at grant time; the key cannot approve. Only the swap is sent.
+    const calls = built.filter((call) => getAddress(call.to) === PANCAKE_V2_ROUTER);
+    if (calls.length !== 1) return { attempted: true, executed: false, text: "Not traded: the swap did not fit the trade key." };
+    if (tokenIn.address) {
+      const allowance = await bscPublicClient.readContract({
+        address: getAddress(tokenIn.address) as Address,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [wallet, PANCAKE_V2_ROUTER],
+      });
+      if (allowance < amountInRaw) {
+        return {
+          attempted: true,
+          executed: false,
+          text: `Not traded: the ${tokenIn.symbol} allowance you granted with this key is used up. Grant a new key to keep trading.`,
+        };
+      }
+    }
 
     const privateKey = (await open({ ciphertext: key.ciphertext, iv: key.iv })) as Hex;
     const signer = signerFromPrivateKey(privateKey);

@@ -75,6 +75,7 @@ import type * as lib_statsCategory from "../lib/statsCategory.js";
 import type * as lib_statsHistory from "../lib/statsHistory.js";
 import type * as lib_toolCapability from "../lib/toolCapability.js";
 import type * as lib_tradeIntent from "../lib/tradeIntent.js";
+import type * as lib_tradeKeyPolicy from "../lib/tradeKeyPolicy.js";
 import type * as lib_tradeTokens from "../lib/tradeTokens.js";
 import type * as lib_tradingPlaybook from "../lib/tradingPlaybook.js";
 import type * as lib_triggerSync from "../lib/triggerSync.js";
@@ -171,6 +172,7 @@ declare const fullApi: ApiFromModules<{
   "lib/statsHistory": typeof lib_statsHistory;
   "lib/toolCapability": typeof lib_toolCapability;
   "lib/tradeIntent": typeof lib_tradeIntent;
+  "lib/tradeKeyPolicy": typeof lib_tradeKeyPolicy;
   "lib/tradeTokens": typeof lib_tradeTokens;
   "lib/tradingPlaybook": typeof lib_tradingPlaybook;
   "lib/triggerSync": typeof lib_triggerSync;

@@ -18,6 +18,7 @@ import { ReceiveSheet } from "@/components/receive-sheet";
 import { StatePanel } from "@/components/state-panel";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { autotradeApi, myAgentsApi, type AgentSessionRow } from "@/convex/api";
+import { HoldButton } from "@/components/hold-button";
 import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
 import { OptionalFeature } from "@/components/optional-feature";
 import { toast } from "@/store/use-toast-store";
@@ -978,40 +979,33 @@ function AgentSpendingSection() {
 
 function DeviceAccessSection() {
   const wallet = useAltanaWallet();
-  const [confirming, setConfirming] = useState(false);
 
+  /*
+   * HOLD TO REMOVE (owner, 2026-09-29: anything irreversible gets the same
+   * deliberate hold as Cancel hire). Removing forgets this device's passkey
+   * reference; without a recovery it can lock the person out of the wallet.
+   */
   return (
     <section aria-label="Device access" className="wallet-danger">
       <div>
         <p className="wallet-danger__title">Remove from this device</p>
         <p className="wallet-danger__sub">Local record only. On-chain access is unchanged.</p>
       </div>
-      {confirming ? (
-        <div className="wallet-danger__confirm">
-          <button
-            className="wallet-btn wallet-btn--ghost"
-            onClick={() => setConfirming(false)}
-            type="button"
-          >
-            Keep
-          </button>
-          <button
-            className="wallet-btn wallet-btn--danger"
-            onClick={() => { wallet.forgetWallet(); setConfirming(false); }}
-            type="button"
-          >
-            Remove
-          </button>
-        </div>
-      ) : (
-        <button
-          className="wallet-danger__trigger"
-          onClick={() => setConfirming(true)}
-          type="button"
-        >
-          Remove
-        </button>
-      )}
+      <HoldButton
+        backgroundColor="var(--paper)"
+        className="manage-hold"
+        doneLabel="Removed"
+        fillColor="#c9362b"
+        fillTextColor="#ffffff"
+        holdTime={1600}
+        onHold={() => wallet.forgetWallet()}
+        radius={11}
+        resetAfter={0}
+        size="sm"
+        textColor="var(--hold-danger)"
+      >
+        Hold to remove
+      </HoldButton>
     </section>
   );
 }

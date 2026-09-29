@@ -3791,7 +3791,9 @@ select {
   align-items: start;
 }
 .wallet-v2__main { grid-area: main; display: flex; min-width: 0; flex-direction: column; gap: 20px; }
-.wallet-v2__side { grid-area: side; display: flex; min-width: 0; flex-direction: column; gap: 14px; }
+/* Sticky again (owner, 2026-09-29), now that nothing sits below the grid: it
+   follows the page and stops level with the last card in the main column. */
+.wallet-v2__side { grid-area: side; display: flex; min-width: 0; flex-direction: column; gap: 14px; position: sticky; top: 92px; align-self: start; }
 .wallet-v2__foot { grid-area: foot; min-width: 0; }
 .wallet-v2__side .wcard { min-height: 0; gap: 10px; }
 .wallet-v2__side .wcard__foot { margin-top: 8px; }
@@ -3828,6 +3830,7 @@ select {
 
 @media (max-width: 1023px) {
   .wallet-v2 { grid-template-columns: 1fr; grid-template-areas: "main" "side"; }
+  .wallet-v2__side { position: static; }
 }
 @media (prefers-reduced-motion: reduce) { .spenders__dot::after { animation: none; } }
 /* Activity and alerts as cards, like the rest of the wallet (2026-09-29). */
@@ -3854,7 +3857,15 @@ select {
 /* Wallet, round three: alerts sit in the main column; the empty activity is
    short, not a tall blank card; the hero's first action is the primary one. */
 .wallet-v2 .wallet-activity-empty { padding-block: 18px 8px; }
-.wallet-v2 .wallet-hero__actions > :first-child { background: var(--accent); border-color: var(--accent-hover); color: #17180f; }
-.wallet-v2 .wallet-hero__actions > :first-child:hover:not(:disabled) { background: var(--accent-hover); }
-.wallet-v2 .wallet-hero__actions > :first-child:disabled { background: var(--paper-muted); border-color: var(--line); color: var(--faint); }
 .wallet-v2__side .wallet-danger { padding: 14px 18px; border: 1px solid color-mix(in srgb, var(--line) 85%, transparent); border-radius: 14px; background: var(--paper); }
+
+/* Option pills (review form: Did it do what it said? / Would you hire it
+   again?). The selected one used `bg-ink text-paper`, and something in the
+   cascade kept the text ink-on-ink - the choice vanished the moment it was
+   made (owner, reported more than once). Stated explicitly here. */
+.choice-pill.choice-pill--on,
+.choice-pill.choice-pill--on:hover {
+  border-color: var(--ink) !important;
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+}

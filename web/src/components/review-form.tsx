@@ -192,9 +192,9 @@ function BackendReviewForm({
           {OUTCOMES.map((option) => (
             <button
               aria-pressed={outcome === option.value}
-              className={`interactive min-h-10 rounded-xl border px-4 text-sm font-medium ${
+              className={`choice-pill interactive min-h-10 rounded-xl border px-4 text-sm font-medium ${
                 outcome === option.value
-                  ? "border-ink bg-ink text-paper"
+                  ? "choice-pill--on"
                   : "border-line bg-paper text-muted hover:text-ink"
               }`}
               key={option.value}
@@ -228,9 +228,9 @@ function BackendReviewForm({
           ].map((option) => (
             <button
               aria-pressed={wouldHireAgain === option.value}
-              className={`interactive min-h-10 rounded-xl border px-4 text-sm font-medium ${
+              className={`choice-pill interactive min-h-10 rounded-xl border px-4 text-sm font-medium ${
                 wouldHireAgain === option.value
-                  ? "border-ink bg-ink text-paper"
+                  ? "choice-pill--on"
                   : "border-line bg-paper text-muted hover:text-ink"
               }`}
               key={option.label}

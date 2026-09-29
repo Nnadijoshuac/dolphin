@@ -1,5 +1,6 @@
 "use client";
 
+import { ByDolphin } from "@/components/by-dolphin";
 import Link from "next/link";
 import { AgentIcon } from "@/components/agent-icon";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -81,7 +82,10 @@ export function MobileAgentRow({ agent, signals, surface = "search", onOpen }: {
       >
         <AgentIcon category={agent.category} seed={agent.iconSeed} size={56} uri={agent.iconUrl} />
         <div className="mobile-agent-row__copy">
-          <h3>{agent.name}</h3>
+          <h3>
+            {agent.name}
+            {agent.firstParty ? <ByDolphin /> : null}
+          </h3>
           <p>{categoryLabel(agent.category)} · {agent.tagline}</p>
           <p className="mobile-agent-row__signals">{summary(signals, agent.verifiedAt, now)}</p>
         </div>

@@ -27,6 +27,7 @@
  * cached opinion - which is wrong in both directions, see convex/sources).
  */
 
+import { isFirstParty } from "./firstParty";
 import type { Doc } from "../_generated/dataModel";
 import { readExecutionCapability } from "./toolCapability";
 import { hasLiveStats, statsCategoryFor } from "./statsCategory";
@@ -209,6 +210,8 @@ export function toPublicAgent(row: Doc<"agents">) {
     publisher: row.publisher ?? row.ownerAddress,
     publisherAddress: row.ownerAddress,
     agentWallet: row.agentWallet,
+    /** Operated by Dolphin itself (lib/firstParty.ts). Labelled everywhere; never boosted. */
+    firstParty: isFirstParty(row.ownerAddress, row.agentWallet),
     registeredAt: row.registeredAt,
 
     /** An open string now. A screen must not index a fixed record with it. */

@@ -1,5 +1,6 @@
 "use client";
 
+import { ByDolphin } from "@/components/by-dolphin";
 import Link from "next/link";
 
 import { AgentIcon } from "@/components/agent-icon";
@@ -183,6 +184,7 @@ export function AgentCard({
               </div>
               <h3 className="mt-1 text-lg font-semibold tracking-[-0.03em] text-ink transition-colors group-hover:text-accent-ink sm:text-xl">
                 {agent.name}
+                {agent.firstParty ? <ByDolphin /> : null}
               </h3>
               <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-6 text-muted">
                 {agent.tagline}

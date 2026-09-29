@@ -52,6 +52,7 @@ const accountLinks = [
   { href: "/my-agents", label: "My agents" },
   { href: "/wallet", label: "Wallet & permissions" },
   { href: "/search", label: "Search the catalog" },
+  { href: "/policies/conflicts", label: "Conflicts of interest" },
 ] as const;
 
 export function SiteFooter() {

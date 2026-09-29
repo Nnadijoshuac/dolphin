@@ -321,6 +321,12 @@ export interface Agent {
   /** Hand-vetted. Boosts ordering; never exempts an agent from verification. */
   curated: boolean;
   /**
+   * Operated by Dolphin itself - labelled "By Dolphin" wherever it appears,
+   * held to the same probe and rules, never boosted (/policies/conflicts).
+   * Optional: absent from records cached before it existed.
+   */
+  firstParty?: boolean;
+  /**
    * Dolphin's own verdict. "live" means we called this agent's endpoint and it
    * offered work for sale; "degraded" means it has failed recently but not
    * enough times to be delisted; "unavailable" means it is delisted and only

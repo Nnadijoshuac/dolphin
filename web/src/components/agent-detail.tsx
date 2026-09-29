@@ -1,5 +1,6 @@
 "use client";
 
+import { ByDolphin } from "@/components/by-dolphin";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -521,6 +522,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
             <div className="flex items-start justify-between gap-4">
               <h1 className="text-3xl font-bold tracking-tight text-ink sm:text-4xl">
                 {agent.name}
+                {agent.firstParty ? <ByDolphin /> : null}
               </h1>
               <FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="mt-1" />
             </div>

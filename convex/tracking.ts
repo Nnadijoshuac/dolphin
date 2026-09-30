@@ -149,7 +149,7 @@ async function agentsOwnedBy(ctx: QueryCtx, owner: string) {
   }));
 }
 
-function isTeamWallet(wallet: string): boolean {
+export function isTeamWallet(wallet: string): boolean {
   return parseTeamWallets(process.env.DOLPHIN_TEAM_WALLETS).includes(wallet.toLowerCase());
 }
 
@@ -182,45 +182,52 @@ export const agentsByOwner = internalQuery({
 /** One call per wallet: the quest's two conditions, with the evidence for each. */
 export const quest = internalQuery({
   args: { wallet: v.string() },
-  handler: async (ctx, { wallet }) => {
-    const address = checksum(wallet);
-    if (!address) return null;
-    const records = await hiresFor(ctx, address);
-    const owned = await agentsOwnedBy(ctx, address);
-
-    const categories = Object.fromEntries(
-      QUEST_CATEGORIES.map((category) => {
-        const inCategory = records.filter((r) => r.questCategory === category);
-        return [
-          category,
-          {
-            hired: inCategory.length > 0,
-            paidHire: inCategory.some((r) => r.paid),
-            evidence: inCategory.map((r) => ({
-              agentKey: r.agentKey,
-              agentName: r.agentName,
-              hiredAt: r.hiredAt,
-              paid: r.paid,
-              jobId: r.job?.jobId ?? null,
-              transactionHash: r.job?.transactionHash ?? null,
-            })),
-          },
-        ];
-      }),
-    ) as Record<(typeof QUEST_CATEGORIES)[number], { hired: boolean; paidHire: boolean; evidence: unknown[] }>;
-
-    const hiredAll = QUEST_CATEGORIES.every((c) => categories[c].hired);
-    const paidAll = QUEST_CATEGORIES.every((c) => categories[c].paidHire);
-    const listedAgents = owned.filter((a) => a.listed);
-    return {
-      wallet: address,
-      teamWallet: isTeamWallet(address),
-      hiredAllFourCategories: hiredAll,
-      paidHireInAllFourCategories: paidAll,
-      ownsListedAgent: listedAgents.length > 0,
-      complete: hiredAll && listedAgents.length > 0,
-      categories,
-      ownedAgents: owned,
-    };
-  },
+  handler: async (ctx, { wallet }) => questFor(ctx, wallet),
 });
+
+/**
+ * One wallet's quest progress - the exact logic behind /api/v1/quest, shared so
+ * the operator dashboard counts completions with the same rules BNB Chain's
+ * tracker sees (not a copy that could drift).
+ */
+export async function questFor(ctx: QueryCtx, wallet: string) {
+  const address = checksum(wallet);
+  if (!address) return null;
+  const records = await hiresFor(ctx, address);
+  const owned = await agentsOwnedBy(ctx, address);
+
+  const categories = Object.fromEntries(
+    QUEST_CATEGORIES.map((category) => {
+      const inCategory = records.filter((r) => r.questCategory === category);
+      return [
+        category,
+        {
+          hired: inCategory.length > 0,
+          paidHire: inCategory.some((r) => r.paid),
+          evidence: inCategory.map((r) => ({
+            agentKey: r.agentKey,
+            agentName: r.agentName,
+            hiredAt: r.hiredAt,
+            paid: r.paid,
+            jobId: r.job?.jobId ?? null,
+            transactionHash: r.job?.transactionHash ?? null,
+          })),
+        },
+      ];
+    }),
+  ) as Record<(typeof QUEST_CATEGORIES)[number], { hired: boolean; paidHire: boolean; evidence: unknown[] }>;
+
+  const hiredAll = QUEST_CATEGORIES.every((c) => categories[c].hired);
+  const paidAll = QUEST_CATEGORIES.every((c) => categories[c].paidHire);
+  const listedAgents = owned.filter((a) => a.listed);
+  return {
+    wallet: address,
+    teamWallet: isTeamWallet(address),
+    hiredAllFourCategories: hiredAll,
+    paidHireInAllFourCategories: paidAll,
+    ownsListedAgent: listedAgents.length > 0,
+    complete: hiredAll && listedAgents.length > 0,
+    categories,
+    ownedAgents: owned,
+  };
+}

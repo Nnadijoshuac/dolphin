@@ -73,7 +73,7 @@ const MODE_HINT: Readonly<Record<ChatMode, string>> = {
  * Dolphin can always answer about itself. Nothing about grid or trading
  * performance: those categories return unavailableStats by construction.
  */
-const STARTER_PROMPTS = [
+export const STARTER_PROMPTS = [
   "Which agents can execute a transaction?",
   "What is my Venus health factor?",
   "Compare the yield agents",
@@ -85,7 +85,7 @@ const STARTER_PROMPTS = [
  * read-only MCP agents already listed, so none asks for something the builder
  * would have to refuse.
  */
-const BUILD_STARTERS = [
+export const BUILD_STARTERS = [
   /*
    * "Check", not "Watch": a built agent answers when asked and cannot watch
    * anything in the background, and the builder says so if asked.

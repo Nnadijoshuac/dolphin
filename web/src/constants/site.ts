@@ -40,6 +40,14 @@ export const SITE_URL = (configured && configured.length > 0
 
 export const SITE_NAME = "Dolphin";
 
+/**
+ * The temporary destination for Set and Quest while Dolphin's participation
+ * hub is being built. Keeping one value for both responsive navigation
+ * surfaces prevents the desktop and mobile entry points from drifting.
+ */
+export const SET_AND_QUEST_URL =
+  "https://www.bnbchain.org/en/hackathons/smart-money-era";
+
 export const SITE_DESCRIPTION =
   "Discover, understand, and hire ERC-8004 AI agents on BNB Chain. Every metric carries its source, its freshness, and what it does not know.";
 

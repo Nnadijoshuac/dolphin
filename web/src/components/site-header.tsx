@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 import { BnbBadge, BnbLogo, BrandMark } from "@/components/brand-mark";
 import { NETWORK_LABEL } from "@/constants/agents";
+import { SET_AND_QUEST_URL } from "@/constants/site";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 import { useWallet } from "@/wallet/wallet-provider";
 
@@ -84,6 +85,13 @@ export function SiteHeader() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <a
+              className="interactive hidden min-h-10 shrink-0 items-center gap-2 rounded-xl border border-accent bg-accent px-3.5 text-xs font-semibold text-ink no-underline shadow-[inset_0_1px_0_rgb(255_255_255_/_0.32)] hover:bg-accent-hover md:inline-flex"
+              href={SET_AND_QUEST_URL}
+            >
+              Set and Quest
+            </a>
+
             {/* The network, in full. Set and Earn counts "not stated on the page" against a
                 marketplace, and "BNB Chain" alone does not say mainnet or testnet. */}
             <div className="hidden items-center gap-2 border-r border-line pr-4 text-xs font-medium text-muted lg:flex">

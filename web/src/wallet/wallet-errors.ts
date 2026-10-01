@@ -299,6 +299,21 @@ export function isCancellationMessage(message: string): boolean {
   return message === PASSKEY_CANCELLED_MESSAGE || message === WALLET_DISMISSED_MESSAGE;
 }
 
+/** "Not enough BNB", with the shortfall when the relay's echoed quote names one. */
+function bnbDeficitMessage(cause: unknown): string {
+  const text = String((cause as { message?: unknown }).message ?? "");
+  const hex = /"deficit":"(0x[0-9a-fA-F]+)"/.exec(text)?.[1];
+  const head = "Not enough BNB in your Dolphin Wallet to cover this and its network fee.";
+  if (!hex) return `${head}
+Add a little more BNB and try again.`;
+  // Twice the shortfall, rounded up: the next attempt is re-priced and gas moves.
+  const wei = BigInt(hex) * BigInt(2);
+  const bnb = Number(wei) / 1e18;
+  const shown = bnb < 0.00001 ? "0.00001" : bnb.toPrecision(2);
+  return `${head}
+It is short by a tiny amount. Add at least ${shown} BNB and try again.`;
+}
+
 /** viem's catch-all wordings, whose real reason is carried in `details`. */
 const GENERIC_RPC_REFUSAL = /Invalid parameters were provided|An internal error was received|RPC Request failed|Missing or invalid parameters/i;
 
@@ -353,6 +368,12 @@ export function toUserMessage(cause: unknown, fallback: string): string {
      */
     if (GENERIC_RPC_REFUSAL.test(shortMessage)) {
       const details = rpcDetails(cause);
+      /*
+       * The Altana relay's way of saying "not enough BNB": it priced the
+       * intent, found the wallet short, and refuses with invalid-params. The
+       * request body it echoes carries the exact shortfall in wei.
+       */
+      if (details && /asset deficit/i.test(details)) return bnbDeficitMessage(cause);
       const reason = details ? readableLine(details) : null;
       if (reason) return `${readableLine(shortMessage) ?? "The network refused the request."}
 ${reason}`;

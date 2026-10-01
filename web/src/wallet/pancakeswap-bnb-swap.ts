@@ -7,7 +7,7 @@ import {
   type PublicClient,
 } from "viem";
 
-import { assertIntentAffordable, displayBnb } from "./altana-policy";
+import { RELAYED_INTENT_GAS_ALLOWANCE, assertIntentAffordable, displayBnb } from "./altana-policy";
 
 /**
  * PancakeSwap V3 BNB -> payment-token conversion for paid hires.
@@ -328,7 +328,20 @@ export async function preflightBnbConversion({
     publicClient.getGasPrice(),
   ]);
 
-  const maxFeeWei = gasUnits * SMART_ACCOUNT_GAS_HEADROOM * gasPriceWei;
+  /*
+   * TWO RELAYED INTENTS, NOT ONE (measured 2026-10-01, hiring Keel on
+   * production). Converting runs the swap as one intent and then funds the
+   * escrow as a second, and the relay charges gas on each. This counted only
+   * the swap, at twice its bare estimate - but the relay billed the swap alone
+   * at 652,854 gas (txGas), far above a plain swap's estimate, so a wallet this
+   * passed came up 0.0000021 BNB short and the relay refused it as "quote has
+   * asset deficits", which viem surfaced as "Invalid parameters".
+   * So: the swap at no less than the shared relayed-intent allowance, plus a
+   * full allowance for the escrow payment that follows it.
+   */
+  const swapGasUnits = gasUnits * SMART_ACCOUNT_GAS_HEADROOM > RELAYED_INTENT_GAS_ALLOWANCE ? gasUnits * SMART_ACCOUNT_GAS_HEADROOM : RELAYED_INTENT_GAS_ALLOWANCE;
+  const budgetedGasUnits = swapGasUnits + RELAYED_INTENT_GAS_ALLOWANCE;
+  const maxFeeWei = budgetedGasUnits * gasPriceWei;
   const requiredTotalWei = call.value + firstActionSurchargeWei + maxFeeWei;
 
   /*
@@ -342,7 +355,7 @@ export async function preflightBnbConversion({
   await assertIntentAffordable({
     publicClient,
     nativeBalanceWei,
-    gasUnits: gasUnits * SMART_ACCOUNT_GAS_HEADROOM,
+    gasUnits: budgetedGasUnits,
     items: [
       { label: `hire price (${priceLabel}, bought with BNB)`, wei: call.value },
       {

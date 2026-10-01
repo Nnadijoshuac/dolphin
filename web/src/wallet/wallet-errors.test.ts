@@ -23,6 +23,20 @@ import {
 const FALLBACK = "The hire could not be recorded. Try again.";
 
 describe("toUserMessage", () => {
+  it("turns the relay's asset-deficit refusal into a BNB shortfall", () => {
+    const inner = new RpcError(new Error('{"assetDeficits":[{"address":null,"deficit":"0x1e6230ebcf8"}]}'), {
+      code: -32602,
+      shortMessage: "x",
+    });
+    Object.assign(inner, { details: "quote has asset deficits and is expected to fail" });
+    const cause = new InvalidParamsRpcError(inner);
+    Object.assign(cause, { message: `${cause.message} Request body: {"deficit":"0x1e6230ebcf8"}` });
+    const message = toUserMessage(cause, "fallback");
+    expect(message).toContain("Not enough BNB");
+    expect(message).toContain("0.00001 BNB");
+    expect(message).not.toContain("Invalid parameters");
+  });
+
   it("shows the reason a relay gave behind a generic invalid-params refusal", () => {
     const inner = new RpcError(new Error("insufficient funds for fee"), { code: -32602, shortMessage: "x" });
     const cause = new InvalidParamsRpcError(inner);

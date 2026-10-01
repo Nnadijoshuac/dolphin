@@ -1,315 +1,413 @@
 "use client";
 
+/*
+ * SET AND QUEST (rebuilt 2026-10-01 against BNB Chain's published rules).
+ *
+ * A wallet qualifies by finishing two tracks: HIRE 3 different agents, the
+ * hire event onchain, across 2+ shortlisted marketplaces; and BUILD one agent
+ * that is registered and listed, discoverable in a campaign category, live,
+ * hired by 3 wallets that are not yours, and that has made 5 onchain actions
+ * on 3 separate days. convex/setAndQuest.ts measures what Dolphin can see.
+ *
+ * Every check shows one of four states and never a guess: done, in progress
+ * (with the real count), not started, or "after close" for what only BNB
+ * Chain can judge. Hires on other marketplaces are invisible to Dolphin, so
+ * that one box is the wallet owner's own tick, and says so.
+ */
+
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 
-import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
+import { CategoryGlyph } from "@/components/category-glyph";
 import { MobileMenuButton } from "@/components/mobile-nav";
 import { SET_AND_EARN_OFFICIAL_URL } from "@/constants/site";
-import { builtAgentsApi, type BuiltAgentPublic } from "@/convex/api";
-import { useHiredAgents } from "@/hooks/use-hired-agents";
+import { setAndQuestApi, type QuestAgent, type QuestProgress } from "@/convex/api";
 import { convexClient } from "@/providers/convex-provider";
-import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
+import { useWallet } from "@/wallet/wallet-provider";
 
 import styles from "./set-and-quest.module.css";
 
-const CAMPAIGN_CATEGORIES = new Set(["yield", "grid", "grid-trading", "rebalancing", "health-factor"]);
-const DAILY_EVENT = "dolphin:set-and-quest-daily";
-const DAILY_KEY = "dolphin:set-and-quest:last-dive";
+const CLOSES_AT = Date.parse("2026-11-05T12:00:00Z");
+const OPENS_AT = Date.parse("2026-10-01T00:00:00Z");
 
-type Quest = {
-  title: string;
-  detail: string;
-  note: string;
-  current: number | null;
-  target: number;
-  icon: GlyphName;
-  action: string;
-  href: string;
-};
+type State = "done" | "progress" | "todo" | "later";
 
-function utcDay() {
-  return new Date().toISOString().slice(0, 10);
-}
+/* ───────── small stores: a minute clock, and the other-marketplace tick ───────── */
 
-function subscribeDaily(listener: () => void) {
-  window.addEventListener(DAILY_EVENT, listener);
-  window.addEventListener("storage", listener);
+let minute = Date.now();
+const clockListeners = new Set<() => void>();
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+function subscribeClock(fn: () => void) {
+  clockListeners.add(fn);
+  clockTimer ??= setInterval(() => {
+    minute = Date.now();
+    clockListeners.forEach((l) => l());
+  }, 60_000);
   return () => {
-    window.removeEventListener(DAILY_EVENT, listener);
-    window.removeEventListener("storage", listener);
+    clockListeners.delete(fn);
+    if (clockListeners.size === 0 && clockTimer) {
+      clearInterval(clockTimer);
+      clockTimer = null;
+    }
   };
 }
+const useMinute = () => useSyncExternalStore(subscribeClock, () => minute, () => OPENS_AT);
 
-function dailySnapshot() {
-  return window.localStorage.getItem(DAILY_KEY) === utcDay();
+const TICK_EVENT = "dolphin:quest-tick";
+const tickKey = (wallet: string) => `dolphin:quest:other-marketplace:${wallet.toLowerCase()}`;
+function subscribeTick(fn: () => void) {
+  window.addEventListener(TICK_EVENT, fn);
+  window.addEventListener("storage", fn);
+  return () => {
+    window.removeEventListener(TICK_EVENT, fn);
+    window.removeEventListener("storage", fn);
+  };
+}
+function readTick(wallet: string | null) {
+  if (!wallet) return false;
+  try {
+    return window.localStorage.getItem(tickKey(wallet)) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeTick(wallet: string, value: boolean) {
+  try {
+    if (value) window.localStorage.setItem(tickKey(wallet), "1");
+    else window.localStorage.removeItem(tickKey(wallet));
+  } catch {
+    /* private window: the tick lasts until reload */
+  }
+  window.dispatchEvent(new Event(TICK_EVENT));
 }
 
-function RiverMeter({ current, target }: { current: number | null; target: number }) {
-  const safeCurrent = current === null ? 0 : Math.min(Math.max(current, 0), target);
-  const percent = target > 0 ? Math.round((safeCurrent / target) * 100) : 0;
-  const style = { "--river-progress": `${percent}%` } as CSSProperties;
+/* ───────── pieces ───────── */
 
+function StatusIcon({ state }: { state: State }) {
   return (
-    <div className={styles.meterBlock}>
-      <div
-        aria-label={current === null ? "Progress verification not connected" : `${safeCurrent} of ${target} complete`}
-        aria-valuemax={target}
-        aria-valuemin={0}
-        aria-valuenow={current === null ? undefined : safeCurrent}
-        className={styles.river}
-        role="progressbar"
-        style={style}
-      >
-        <span className={styles.water} />
-      </div>
-      <div className={styles.meterLabels}>
-        <span>{current === null ? "Verification not connected" : `${safeCurrent} / ${target}`}</span>
-        <span>{current === null ? "—" : `${percent}%`}</span>
-      </div>
-    </div>
+    <span aria-hidden="true" className={styles.status} data-state={state}>
+      {state === "done" ? <CategoryGlyph color="currentColor" name="check" size={13} strokeWidth={2.6} /> : null}
+    </span>
   );
 }
 
-function QuestCard({ quest }: { quest: Quest }) {
+function Pips({ value, of }: { value: number; of: number }) {
   return (
-    <article className={styles.questCard}>
-      <div className={styles.questTop}>
-        <span aria-hidden="true" className={styles.questIcon}>
-          <CategoryGlyph color="currentColor" name={quest.icon} size={23} strokeWidth={1.9} />
-        </span>
-        <div>
-          <h3>{quest.title}</h3>
-          <p>{quest.detail}</p>
+    <span aria-label={`${Math.min(value, of)} of ${of}`} className={styles.pips} role="img">
+      {Array.from({ length: of }, (_, i) => (
+        <i data-on={i < value} key={i} />
+      ))}
+    </span>
+  );
+}
+
+function Check({ state, title, detail, meter, children }: { state: State; title: string; detail?: ReactNode; meter?: ReactNode; children?: ReactNode }) {
+  const label = state === "done" ? "Done" : state === "progress" ? "In progress" : state === "later" ? "Checked after close" : "Not started";
+  return (
+    <li className={styles.check} data-state={state}>
+      <StatusIcon state={state} />
+      <div className={styles.checkBody}>
+        <div className={styles.checkHead}>
+          <h3>
+            {title}
+            <span className={styles.srOnly}> · {label}</span>
+          </h3>
+          {meter}
         </div>
+        {detail ? <p>{detail}</p> : null}
+        {children}
       </div>
-      <RiverMeter current={quest.current} target={quest.target} />
-      <div className={styles.questFoot}>
-        <p>{quest.note}</p>
-        <Link href={quest.href}>{quest.action}</Link>
-      </div>
-    </article>
+    </li>
   );
 }
 
-function QuestSection({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
+const countState = (value: number, needed: number): State => (value >= needed ? "done" : value > 0 ? "progress" : "todo");
+
+/* ───────── hero ───────── */
+
+function Countdown() {
+  const now = useMinute();
+  const left = CLOSES_AT - now;
+  if (left <= 0) return <span>Campaign closed</span>;
+  const days = Math.floor(left / 86_400_000);
+  const hours = Math.floor((left % 86_400_000) / 3_600_000);
   return (
-    <section className={styles.questSection}>
-      <header className={styles.sectionHead}>
-        <span>{eyebrow}</span>
-        <h2>{title}</h2>
+    <span>
+      <strong>{days}</strong> days <strong>{hours}</strong> h left
+    </span>
+  );
+}
+
+function ProgressCard({ address, progress, connect, otherMarketplace }: { address: string | null; progress: QuestProgress | undefined; connect: () => void; otherMarketplace: boolean }) {
+  if (!address) {
+    return (
+      <aside className={styles.progressCard}>
+        <span className={styles.cardEyebrow}>Your progress</span>
+        <p className={styles.connectLine}>Connect the wallet you registered for the campaign to see exactly where you stand.</p>
+        <button className="manage-btn manage-btn--primary" onClick={connect} type="button">
+          Connect wallet
+        </button>
+      </aside>
+    );
+  }
+  if (progress === undefined) {
+    return (
+      <aside aria-busy="true" className={styles.progressCard}>
+        <span className={styles.cardEyebrow}>Your progress</span>
+        <div className={`${styles.ring} skeleton`} />
+      </aside>
+    );
+  }
+  const hireDone = (progress ? Math.min(progress.hire.onchainAgents, 3) >= 3 : false) ? 1 : 0;
+  const marketsDone = progress?.hire.onDolphin && otherMarketplace ? 1 : 0;
+  const best = progress?.build.agents[0] ?? null;
+  const buildDone = best ? best.passed : 0;
+  const done = hireDone + marketsDone + buildDone;
+  const total = 2 + 6;
+  const pct = Math.round((done / total) * 100);
+
+  return (
+    <aside className={styles.progressCard}>
+      <span className={styles.cardEyebrow}>Your progress</span>
+      <div className={styles.ringRow}>
+        <div className={styles.ring} style={{ "--p": `${pct}%` } as CSSProperties}>
+          <span>
+            <strong>{done}</strong>/{total}
+          </span>
+        </div>
+        <dl className={styles.trackTotals}>
+          <div>
+            <dt>Hire</dt>
+            <dd>{hireDone + marketsDone} of 2</dd>
+          </div>
+          <div>
+            <dt>Build</dt>
+            <dd>{buildDone} of 6</dd>
+          </div>
+        </dl>
+      </div>
+      <p className={styles.cardNote}>
+        {done === total ? "Everything Dolphin can check is done. BNB Chain reviews the rest after the campaign closes." : "Checks Dolphin can see. BNB Chain makes the final call after the campaign closes."}
+      </p>
+    </aside>
+  );
+}
+
+/* ───────── tracks ───────── */
+
+function HireTrack({ address, progress, otherMarketplace }: { address: string | null; progress: QuestProgress | undefined; otherMarketplace: boolean }) {
+  const hire = progress?.hire;
+  const onchain = hire?.onchainAgents ?? 0;
+  const offchain = hire ? hire.hires.filter((h) => !h.onchain) : [];
+  const onchainHires = hire ? hire.hires.filter((h) => h.onchain) : [];
+  const markets = (hire?.onDolphin ? 1 : 0) + (otherMarketplace ? 1 : 0);
+
+  return (
+    <section aria-labelledby="hire-track" className={styles.track}>
+      <header className={styles.trackHead}>
+        <span className={styles.trackNumber}>01</span>
+        <div>
+          <h2 id="hire-track">Hire</h2>
+          <p>Three different agents, across at least two marketplaces.</p>
+        </div>
       </header>
-      {children}
+
+      <ol className={styles.checks}>
+        <Check
+          detail={
+            address
+              ? onchain >= 3
+                ? "Three different agents, each with an onchain hire."
+                : "Each agent must be different, and the hire must happen onchain. A token approval alone doesn't count."
+              : "Each agent must be different, and the hire must happen onchain."
+          }
+          meter={<Pips of={3} value={onchain} />}
+          state={address ? countState(onchain, 3) : "todo"}
+          title="Hire 3 different agents"
+        >
+          {onchainHires.length || offchain.length ? (
+            <ul className={styles.hireList}>
+              {onchainHires.map((h) => (
+                <li key={h.agentKey}>
+                  <span className={styles.hireName}>{h.agentName}</span>
+                  <span className={styles.tagGood}>Onchain</span>
+                </li>
+              ))}
+              {offchain.map((h) => (
+                <li key={`${h.agentKey}-free`}>
+                  <span className={styles.hireName}>{h.agentName}</span>
+                  <span className={styles.tagMuted}>Free hire · doesn&apos;t count</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Check>
+
+        <Check
+          detail="Dolphin is one. Hires on other shortlisted marketplaces happen there, so tick this yourself once you've made one."
+          meter={<Pips of={2} value={markets} />}
+          state={address ? countState(markets, 2) : "todo"}
+          title="Use 2 marketplaces"
+        >
+          <div className={styles.marketRow}>
+            <span className={styles.market} data-on={Boolean(hire?.onDolphin)}>
+              <StatusIcon state={hire?.onDolphin ? "done" : "todo"} />
+              Dolphin
+            </span>
+            <label className={styles.market} data-on={otherMarketplace}>
+              <input
+                checked={otherMarketplace}
+                disabled={!address}
+                onChange={(e) => address && writeTick(address, e.target.checked)}
+                type="checkbox"
+              />
+              Another shortlisted marketplace
+              {otherMarketplace ? <span className={styles.selfTag}>your tick</span> : null}
+            </label>
+          </div>
+        </Check>
+      </ol>
+
+      <div className={styles.trackFoot}>
+        <Link className="manage-btn manage-btn--primary" href="/search">
+          Find agents to hire
+          <CategoryGlyph color="currentColor" name="arrow-right" size={14} strokeWidth={2} />
+        </Link>
+      </div>
     </section>
   );
 }
 
-function DailyDive() {
-  const complete = useSyncExternalStore(subscribeDaily, dailySnapshot, () => false);
-
-  function markComplete() {
-    window.localStorage.setItem(DAILY_KEY, utcDay());
-    window.dispatchEvent(new Event(DAILY_EVENT));
-  }
+function BuildTrack({ address, progress }: { address: string | null; progress: QuestProgress | undefined }) {
+  const build = progress?.build;
+  const agent: QuestAgent | null = build?.agents[0] ?? null;
+  const need = build?.needed ?? { otherHirers: 3, actions: 5, actionDays: 3 };
+  const c = agent?.checks;
 
   return (
-    <article className={`${styles.questCard} ${styles.dailyCard}`}>
-      <div className={styles.questTop}>
-        <span aria-hidden="true" className={styles.questIcon}>
-          <CategoryGlyph color="currentColor" name="clock" size={23} strokeWidth={1.9} />
-        </span>
+    <section aria-labelledby="build-track" className={styles.track}>
+      <header className={styles.trackHead}>
+        <span className={styles.trackNumber}>02</span>
         <div>
-          <span className={styles.optional}>Optional · resets 00:00 UTC</span>
-          <h3>Daily dive</h3>
-          <p>Return once a day and review what your wallet still needs.</p>
+          <h2 id="build-track">Build</h2>
+          <p>One agent of your own that is real, live and used.</p>
         </div>
+      </header>
+
+      {agent ? (
+        <div className={styles.agentStrip}>
+          <span className={styles.agentName}>{agent.name}</span>
+          <span className={styles.tagMuted}>
+            {agent.network === "bsc" ? "BNB Chain" : "BNB testnet"}
+            {agent.tokenId ? ` · #${agent.tokenId}` : ""}
+          </span>
+          {build && build.agents.length > 1 ? <span className={styles.tagMuted}>closest of your {build.agents.length} agents</span> : null}
+        </div>
+      ) : null}
+
+      <ol className={styles.checks}>
+        <Check
+          detail={
+            agent
+              ? c?.listed
+                ? "Registered on the ERC-8004 registry and listed on Dolphin."
+                : "Registered. It isn't listed on Dolphin yet; listing follows its first successful check."
+              : build?.drafting
+                ? "You started publishing an agent. Finish signing the registration."
+                : "Register it on the ERC-8004 registry (chain 56 or 97) from your campaign wallet, and list it."
+          }
+          state={!address ? "todo" : !agent ? (build?.drafting ? "progress" : "todo") : c?.listed ? "done" : "progress"}
+          title="Registered and listed"
+        />
+        <Check
+          detail={
+            agent
+              ? agent.categoryLabel
+                ? `Its card says it's a ${agent.categoryLabel.toLowerCase()} agent.`
+                : `Its category is “${agent.category}”. It has to be yield, grid, rebalancing or health factor.`
+              : "Its card must say what it does, in one of yield, grid, rebalancing or health factor."
+          }
+          state={!agent ? "todo" : c?.campaignCategory ? "done" : "todo"}
+          title="Discoverable in a campaign category"
+        />
+        <Check
+          detail={agent ? (c?.live ? "Answering when called." : "Not answering checks yet. BNB Chain probes at random times.") : "It must answer when invoked, at any time."}
+          state={!agent ? "todo" : c?.live ? "done" : "progress"}
+          title="Live"
+        />
+        <Check
+          detail={`Completed hires from ${need.otherHirers} different wallets that aren't yours and aren't funded by you.`}
+          meter={<Pips of={need.otherHirers} value={agent?.otherHirers ?? 0} />}
+          state={agent ? countState(agent.otherHirers, need.otherHirers) : "todo"}
+          title="Hired by 3 others"
+        />
+        <Check
+          detail={
+            agent
+              ? `${agent.actions} onchain action${agent.actions === 1 ? "" : "s"} on ${agent.actionDays} day${agent.actionDays === 1 ? "" : "s"} so far. It needs ${need.actions} on ${need.actionDays} separate days.`
+              : `At least ${need.actions} onchain actions, on ${need.actionDays} separate days. Hired but never transacting doesn't count.`
+          }
+          meter={<Pips of={need.actions} value={agent?.actions ?? 0} />}
+          state={!agent ? "todo" : c?.executes ? "done" : agent.actions > 0 ? "progress" : "todo"}
+          title="Actually executes"
+        />
+        <Check
+          detail="Its onchain actions must match its category. A yield agent uses lending or vaults; a grid agent trades repeatedly."
+          state="later"
+          title="Does what it says"
+        />
+      </ol>
+
+      <div className={styles.trackFoot}>
+        {agent ? (
+          <Link className="manage-btn manage-btn--primary" href="/my-agents">
+            Manage my agent
+            <CategoryGlyph color="currentColor" name="arrow-right" size={14} strokeWidth={2} />
+          </Link>
+        ) : (
+          <Link className="manage-btn manage-btn--primary" href="/dolphin">
+            Build an agent
+            <CategoryGlyph color="currentColor" name="arrow-right" size={14} strokeWidth={2} />
+          </Link>
+        )}
+        <span className={styles.footNote}>Your agent&apos;s code must be in a public repository.</span>
       </div>
-      <RiverMeter current={complete ? 1 : 0} target={1} />
-      <div className={styles.questFoot}>
-        <p>This builds your routine. It does not count toward official qualification.</p>
-        <button disabled={complete} onClick={markComplete} type="button">
-          {complete ? "Checked in today" : "Log today’s dive"}
-        </button>
-      </div>
-    </article>
+    </section>
   );
 }
 
-function registeredBuildProgress(built: BuiltAgentPublic[] | undefined) {
-  if (built === undefined) return null;
-  const registered = built.filter((agent) => agent.status === "registered");
-  const eligible = registered.filter((agent) => CAMPAIGN_CATEGORIES.has(agent.category));
-  return { registered, eligible };
-}
+/* ───────── rules ───────── */
 
-function questBoard(
-  dolphinHireCount: number | null,
-  registeredCount: number | null,
-  eligibleCount: number,
-  connected: boolean,
-) {
-  const waiting = connected ? "Reading your Dolphin activity…" : "Connect your campaign wallet to read this evidence.";
-  const hireQuests: Quest[] = [
-    {
-      title: "Hire 3 different agents",
-      detail: "Each needs a qualifying onchain hire event from this registered wallet.",
-      note:
-        dolphinHireCount === null
-          ? waiting
-          : `${dolphinHireCount} Dolphin hire record${dolphinHireCount === 1 ? "" : "s"} found. Event qualification is not indexed yet.`,
-      current: null,
-      target: 3,
-      icon: "agents",
-      action: "Find agents",
-      href: "/search",
-    },
-    {
-      title: "Use 2 marketplaces",
-      detail: "Your three qualifying hires must span at least two shortlisted marketplaces.",
-      note: "Dolphin cannot yet read the other marketplaces’ verified hire events.",
-      current: null,
-      target: 2,
-      icon: "layers",
-      action: "Read the rules",
-      href: SET_AND_EARN_OFFICIAL_URL,
-    },
-  ];
+const RULES: { title: string; items: string[] }[] = [
+  {
+    title: "Before you start",
+    items: [
+      "Register your name and campaign wallet on BNB Chain's page.",
+      "Actions from unregistered wallets don't count.",
+      "Your agent must be owned by that same wallet.",
+    ],
+  },
+  {
+    title: "Who can take part",
+    items: ["18 or over.", "One wallet per person. More than one is disqualified, not merged.", "Not in a sanctioned or restricted country, and not on a marketplace team."],
+  },
+  {
+    title: "What gets you disqualified",
+    items: [
+      "Wallets funded from the same source, or trading in circles.",
+      "Hiring your own agent from wallets you control or fund.",
+      "Hires made and undone just to tick a box, or scripted multi-wallet play.",
+    ],
+  },
+];
 
-  const buildQuests: Quest[] = [
-    {
-      title: "Register and list your agent",
-      detail: "Own an ERC-8004 agent on chain 56 or 97 and list it publicly.",
-      note:
-        registeredCount === null
-          ? connected ? "Reading agents owned by this wallet…" : "Connect your campaign wallet to read owned registrations."
-          : registeredCount === 0
-            ? "No confirmed Dolphin-built registration found for this wallet."
-            : eligibleCount > 0
-              ? "Eligible-category registration found. Public listing still needs campaign review."
-              : "A registration was found, but its declared category needs review.",
-      current: registeredCount === null ? null : registeredCount > 0 ? 1 : 0,
-      target: 2,
-      icon: "sparkle",
-      action: "Build an agent",
-      href: "/dolphin",
-    },
-    {
-      title: "Stay discoverable and live",
-      detail: "Serve a resolvable agent card and answer random invocation probes.",
-      note: "Endpoint reachability is not connected to this board yet.",
-      current: null,
-      target: 2,
-      icon: "discover",
-      action: "Open My agents",
-      href: "/my-agents",
-    },
-    {
-      title: "Earn 3 independent hires",
-      detail: "Three distinct wallets must complete hires without being yours or funded by you.",
-      note: "Independent completed-hire verification is not connected yet.",
-      current: null,
-      target: 3,
-      icon: "wallet",
-      action: "View your agents",
-      href: "/my-agents",
-    },
-    {
-      title: "Execute 5 onchain actions",
-      detail: "Your agent must act onchain in a way that matches its declared category.",
-      note: "Category-aware action indexing is not connected yet.",
-      current: null,
-      target: 5,
-      icon: "check",
-      action: "Review activity",
-      href: "/my-agents",
-    },
-    {
-      title: "Be active on 3 separate days",
-      detail: "The five actions must be spread across at least three calendar days.",
-      note: "Distinct execution-day verification is not connected yet.",
-      current: null,
-      target: 3,
-      icon: "clock",
-      action: "Review activity",
-      href: "/my-agents",
-    },
-  ];
-
-  return { hireQuests, buildQuests };
-}
-
-function QuestBoardSections({ hireQuests, buildQuests }: { hireQuests: Quest[]; buildQuests: Quest[] }) {
-  return (
-    <>
-      <QuestSection eyebrow="Track one" title="Hire across the ecosystem">
-        <div className={styles.questGrid}>
-          {hireQuests.map((quest) => <QuestCard key={quest.title} quest={quest} />)}
-        </div>
-      </QuestSection>
-
-      <QuestSection eyebrow="Track two" title="Build something that works">
-        <div className={styles.questGrid}>
-          {buildQuests.map((quest) => <QuestCard key={quest.title} quest={quest} />)}
-        </div>
-      </QuestSection>
-    </>
-  );
-}
-
-function WalletQuestBoard({ address }: { address: string | null }) {
-  const hires = useHiredAgents(address);
-  const built = useQuery(
-    builtAgentsApi.builtAgents.forOwner,
-    address ? { ownerAddress: address } : "skip",
-  );
-  const buildProgress = registeredBuildProgress(built);
-  const registeredCount = address ? buildProgress?.registered.length ?? null : null;
-  const eligibleCount = address ? buildProgress?.eligible.length ?? 0 : 0;
-  const dolphinHireCount = address ? hires?.length ?? null : null;
-  const quests = questBoard(dolphinHireCount, registeredCount, eligibleCount, Boolean(address));
-
-  return (
-    <>
-      {address ? (
-        <div className={styles.walletRibbon}>
-          <span>Tracking wallet</span>
-          <strong>{`${address.slice(0, 6)}…${address.slice(-4)}`}</strong>
-          <em>Live Dolphin evidence only</em>
-        </div>
-      ) : (
-        <section className={styles.connectPanel}>
-          <span aria-hidden="true"><CategoryGlyph color="currentColor" name="wallet" size={28} /></span>
-          <div>
-            <h2>Connect your campaign wallet</h2>
-            <p>The quests stay visible. Connecting lets Dolphin fill them with evidence it can verify.</p>
-          </div>
-          <WalletConnectButton connectLabel="Connect wallet" />
-        </section>
-      )}
-      <QuestBoardSections {...quests} />
-    </>
-  );
-}
-
-function UnavailableQuestBoard() {
-  const quests = questBoard(null, null, 0, false);
-  return (
-    <>
-      <section className={styles.connectPanel}>
-        <span aria-hidden="true"><CategoryGlyph color="currentColor" name="info" size={28} /></span>
-        <div>
-          <h2>Progress is unavailable</h2>
-          <p>This deployment is not connected to Dolphin’s backend, so no evidence can be read.</p>
-        </div>
-      </section>
-      <QuestBoardSections {...quests} />
-    </>
-  );
-}
+/* ───────── page ───────── */
 
 export function SetAndQuestClient() {
   const wallet = useWallet();
+  const address = wallet.isConnected && wallet.address ? wallet.address : null;
+  const connect = () => void wallet.connect();
 
   return (
     <div className={styles.page}>
@@ -317,51 +415,70 @@ export function SetAndQuestClient() {
         <Link href="/">Dolphin</Link>
         <MobileMenuButton className={styles.menuButton} />
       </header>
-
-      <div aria-hidden="true" className={styles.currentOne} />
-      <div aria-hidden="true" className={styles.currentTwo} />
-
-      <div className={styles.shell}>
-        <section className={styles.hero}>
-          <div className={styles.heroCopy}>
-            <span className={styles.kicker}>BNB Chain · Set and Earn</span>
-            <h1>Set the course.<br /><em>Complete the quest.</em></h1>
-            <p>
-              Hire three agents across two marketplaces. Build one that stays live, gets hired,
-              and acts onchain. Your wallet leaves the evidence.
-            </p>
-            <div className={styles.heroActions}>
-              {!wallet.isConnected ? <WalletConnectButton connectLabel="Connect campaign wallet" /> : null}
-              <a href={SET_AND_EARN_OFFICIAL_URL}>Official rules</a>
-            </div>
-          </div>
-          <div aria-label="Campaign window" className={styles.campaignSeal}>
-            <span>Quest window</span>
-            <strong>01 OCT</strong>
-            <i />
-            <strong>05 NOV</strong>
-            <small>Ends 12:00 UTC</small>
-          </div>
-        </section>
-
-        {convexClient ? (
-          <WalletQuestBoard address={wallet.isConnected && wallet.address ? wallet.address : null} />
-        ) : (
-          <UnavailableQuestBoard />
-        )}
-
-        <QuestSection eyebrow="Bonus rhythm" title="Come back with the tide">
-          <div className={styles.dailyGrid}><DailyDive /></div>
-        </QuestSection>
-
-        <footer className={styles.disclaimer}>
-          <CategoryGlyph color="currentColor" name="shield" size={18} strokeWidth={1.9} />
-          <p>
-            This board reports evidence Dolphin can verify; it does not decide eligibility.
-            BNB Chain reviews qualification after the campaign and its determination is final.
-          </p>
-        </footer>
-      </div>
+      <main className={styles.shell}>{convexClient ? <Board address={address} connect={connect} /> : <Content address={address} connect={connect} progress={undefined} />}</main>
     </div>
+  );
+}
+
+function Board({ address, connect }: { address: string | null; connect: () => void }) {
+  const progress = useQuery(setAndQuestApi.setAndQuest.progress, address ? { wallet: address } : "skip");
+  return <Content address={address} connect={connect} progress={address ? progress : undefined} />;
+}
+
+function Content({ address, connect, progress }: { address: string | null; connect: () => void; progress: QuestProgress | undefined }) {
+  const otherMarketplace = useSyncExternalStore(subscribeTick, () => readTick(address), () => false);
+
+  return (
+    <>
+      <section className={styles.hero}>
+        <div className={styles.heroCopy}>
+          <span className={styles.eyebrow}>BNB Chain · Set and Earn</span>
+          <h1>
+            Hire three.
+            <br />
+            Build one.
+          </h1>
+          <p>Finish both tracks before 5 November, 12:00 UTC. The first 100 wallets to qualify are rewarded.</p>
+          <div className={styles.heroActions}>
+            <a className="manage-btn manage-btn--primary" href={SET_AND_EARN_OFFICIAL_URL} rel="noreferrer" target="_blank">
+              Register for the campaign
+              <CategoryGlyph color="currentColor" name="external" size={14} strokeWidth={2} />
+            </a>
+            <a className="manage-btn manage-btn--quiet" href={SET_AND_EARN_OFFICIAL_URL} rel="noreferrer" target="_blank">
+              Official rules
+            </a>
+          </div>
+          <div className={styles.countdown}>
+            <CategoryGlyph color="currentColor" name="clock" size={15} strokeWidth={2} />
+            <Countdown />
+          </div>
+        </div>
+        <ProgressCard address={address} connect={connect} otherMarketplace={otherMarketplace} progress={progress} />
+      </section>
+
+      <div className={styles.tracks}>
+        <HireTrack address={address} otherMarketplace={otherMarketplace} progress={progress} />
+        <BuildTrack address={address} progress={progress} />
+      </div>
+
+      <section aria-labelledby="rules-heading" className={styles.rules}>
+        <h2 id="rules-heading">The small print that matters</h2>
+        <div className={styles.ruleGrid}>
+          {RULES.map((group) => (
+            <div className={styles.ruleCard} key={group.title}>
+              <h3>{group.title}</h3>
+              <ul>
+                {group.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <p className={styles.risk}>
+          Agents can manage real funds. Check permissions and spend caps before you hire, deposit only what you can afford to lose, and revoke access when you&apos;re done. BNB Chain&apos;s decision on who qualifies is final.
+        </p>
+      </section>
+    </>
   );
 }

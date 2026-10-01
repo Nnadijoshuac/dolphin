@@ -96,6 +96,7 @@ import type * as protocols_types from "../protocols/types.js";
 import type * as protocols_unavailable from "../protocols/unavailable.js";
 import type * as protocols_venus from "../protocols/venus.js";
 import type * as ranking from "../ranking.js";
+import type * as setAndQuest from "../setAndQuest.js";
 import type * as shelves from "../shelves.js";
 import type * as sources_scan8004 from "../sources/scan8004.js";
 import type * as tracking from "../tracking.js";
@@ -199,6 +200,7 @@ declare const fullApi: ApiFromModules<{
   "protocols/unavailable": typeof protocols_unavailable;
   "protocols/venus": typeof protocols_venus;
   ranking: typeof ranking;
+  setAndQuest: typeof setAndQuest;
   shelves: typeof shelves;
   "sources/scan8004": typeof sources_scan8004;
   tracking: typeof tracking;

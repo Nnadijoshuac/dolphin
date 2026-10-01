@@ -299,6 +299,20 @@ export function isCancellationMessage(message: string): boolean {
   return message === PASSKEY_CANCELLED_MESSAGE || message === WALLET_DISMISSED_MESSAGE;
 }
 
+/** viem's catch-all wordings, whose real reason is carried in `details`. */
+const GENERIC_RPC_REFUSAL = /Invalid parameters were provided|An internal error was received|RPC Request failed|Missing or invalid parameters/i;
+
+/** The server's own message from an RPC error, looked for down the cause chain. */
+function rpcDetails(cause: unknown): string | null {
+  let current: unknown = cause;
+  for (let depth = 0; depth < 6 && typeof current === "object" && current !== null; depth++) {
+    const details = (current as { details?: unknown }).details;
+    if (typeof details === "string" && details.trim()) return details;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
 export function toUserMessage(cause: unknown, fallback: string): string {
   if (typeof cause !== "object" || cause === null) return fallback;
 
@@ -331,6 +345,18 @@ export function toUserMessage(cause: unknown, fallback: string): string {
 
   const shortMessage = (cause as { shortMessage?: unknown }).shortMessage;
   if (typeof shortMessage === "string") {
+    /*
+     * A GENERIC RPC REFUSAL HIDES ITS REASON IN `details` (2026-10-01). Hiring
+     * Keel on production showed only viem's "Invalid parameters were provided
+     * to the RPC method" - the relay's own sentence saying WHAT was invalid was
+     * in `details` and never reached the screen. Show the reason with it.
+     */
+    if (GENERIC_RPC_REFUSAL.test(shortMessage)) {
+      const details = rpcDetails(cause);
+      const reason = details ? readableLine(details) : null;
+      if (reason) return `${readableLine(shortMessage) ?? "The network refused the request."}
+${reason}`;
+    }
     return readableLine(shortMessage) ?? fallback;
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BaseError, ContractFunctionExecutionError, UserRejectedRequestError } from "viem";
+import { BaseError, ContractFunctionExecutionError, InvalidParamsRpcError, RpcError, UserRejectedRequestError } from "viem";
 
 import {
   PASSKEY_CANCELLED_MESSAGE,
@@ -23,6 +23,14 @@ import {
 const FALLBACK = "The hire could not be recorded. Try again.";
 
 describe("toUserMessage", () => {
+  it("shows the reason a relay gave behind a generic invalid-params refusal", () => {
+    const inner = new RpcError(new Error("insufficient funds for fee"), { code: -32602, shortMessage: "x" });
+    const cause = new InvalidParamsRpcError(inner);
+    const message = toUserMessage(cause, "fallback");
+    expect(message).toContain("Invalid parameters were provided");
+    expect(message).toContain("insufficient funds for fee");
+  });
+
   it("passes Dolphin's own deliberate refusals through unchanged", () => {
     // hireReadOnlyAgent's real copy. These are written for the user and are
     // the whole reason this function does not simply always return a fallback.

@@ -2,7 +2,6 @@
 
 import { useAction, useMutation, useQuery as useConvexQuery } from "convex/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -98,8 +97,11 @@ const HIRE_STAGE_FALLBACK: Readonly<Record<HireStage, string>> = {
     "The hire could not be recorded. Try again.",
 };
 
+/** Paid hires pay from the Dolphin Wallet, which lives in this browser behind a passkey. */
+const NO_DOLPHIN_WALLET =
+  "This agent is paid from your Dolphin Wallet, and there isn't one on this device yet. Set it up, add a little BNB, then press Hire again.";
+
 export function HireAction({ agent }: { agent: Agent }) {
-  const router = useRouter();
   const wallet = useWallet();
   const session = useWalletSession();
   const altana = useAltanaWallet();
@@ -318,10 +320,7 @@ export function HireAction({ agent }: { agent: Agent }) {
 
   async function payForHire(hirerWalletAddress: string): Promise<PaidJob> {
     if (altana.status !== "connected") {
-      if (altana.status === "no-wallet") {
-        router.push("/wallet");
-        throw new Error("Set up your Dolphin Wallet, fund it with BNB, then come back and press Hire.");
-      }
+      if (altana.status === "no-wallet") throw new Error(NO_DOLPHIN_WALLET);
       throw new Error(
         altana.unsupportedReason ??
           "Your Dolphin Wallet is still loading. Try again once it appears.",
@@ -391,6 +390,19 @@ export function HireAction({ agent }: { agent: Agent }) {
      * that had not run. The stage is tracked here rather than inferred in the
      * catch because only the try block knows how far it got.
      */
+    /*
+     * No Dolphin Wallet on this device: say so on the card, before asking for
+     * a wallet connection or a signature that could not lead to a hire.
+     * (Owner, 2026-10-01: Hire used to jump to /wallet with no explanation -
+     * the message was thrown in the same tick as the navigation, so it was
+     * never seen.)
+     */
+    if (priceRequiresPayment && jobId === null && altana.status === "no-wallet") {
+      setState({ kind: "error", message: NO_DOLPHIN_WALLET, stage: "payment" });
+      track("hire_failed", { agentKey: agent.agentKey, reason: "payment_outstanding", stage: "payment" });
+      return;
+    }
+
     let stage: HireStage = "identity";
     setState({ kind: "hiring", label: "Hiring…" });
     track("hire_started", {
@@ -614,7 +626,7 @@ export function HireAction({ agent }: { agent: Agent }) {
             className="interactive mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-ink no-underline hover:underline"
             href="/wallet"
           >
-            Open your Dolphin Wallet
+            {altana.status === "no-wallet" ? "Set up your Dolphin Wallet" : "Open your Dolphin Wallet"}
             <CategoryGlyph color="currentColor" name="arrow-right" size={14} strokeWidth={2} />
           </Link>
         ) : null}

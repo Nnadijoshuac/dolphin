@@ -295,6 +295,49 @@ export const myAgentsApi = anyApi as unknown as {
   };
 };
 
+/** convex/setAndQuest.ts - one wallet's progress against the Set and Earn rules. */
+export type QuestHire = {
+  agentKey: string;
+  agentName: string;
+  category: string | null;
+  onchain: boolean;
+  paidFrom: string | null;
+  jobStatus: string | null;
+  transactionHash: string | null;
+  hiredAt: string;
+};
+
+export type QuestAgent = {
+  name: string;
+  hash: string;
+  agentKey: string;
+  tokenId: string | null;
+  chainId: number;
+  network: "bsc" | "bsc-testnet";
+  category: string;
+  categoryLabel: string | null;
+  registeredAt: string | null;
+  listingStatus: string | null;
+  lastLiveAt: string | null;
+  otherHirers: number;
+  actions: number;
+  actionDays: number;
+  checks: { registered: boolean; listed: boolean; campaignCategory: boolean; live: boolean; hiredByOthers: boolean; executes: boolean };
+  passed: number;
+};
+
+export type QuestProgress = {
+  wallet: string;
+  hire: { hires: QuestHire[]; onchainAgents: number; needed: number; onDolphin: boolean };
+  build: { agents: QuestAgent[]; needed: { otherHirers: number; actions: number; actionDays: number }; drafting: boolean };
+} | null;
+
+export const setAndQuestApi = anyApi as unknown as {
+  setAndQuest: {
+    progress: Query<{ wallet: string }, QuestProgress>;
+  };
+};
+
 /** convex/chatDeletion.ts - deletes chats from the database; keeps only an anonymous summary. */
 export const chatDeletionApi = anyApi as unknown as {
   chatDeletion: {

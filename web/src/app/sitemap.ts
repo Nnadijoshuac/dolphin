@@ -55,6 +55,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 0.8,
     },
+    {
+      url: `${SITE_URL}/set-and-quest`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.9,
+    },
   ];
 
   /*

@@ -1,0 +1,126 @@
+.questLink {
+  --quest-gold-top: #ffe7a3;
+  --quest-gold: #e2b75d;
+  --quest-gold-deep: #9a681c;
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 231 163 / 82%);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgb(255 245 203 / 72%) 0%, transparent 42%),
+    linear-gradient(135deg, var(--quest-gold-top), var(--quest-gold) 52%, #c78b2b);
+  color: #241703;
+  font-weight: 760;
+  letter-spacing: -0.015em;
+  text-decoration: none;
+  box-shadow:
+    inset 0 2px 1px rgb(255 255 255 / 58%),
+    inset 0 -4px 8px rgb(112 66 8 / 24%),
+    0 8px 20px -12px rgb(111 72 10 / 92%);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.questLink::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -80% auto -80% -45%;
+  width: 30%;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 82%), transparent);
+  filter: blur(1px);
+  animation: quest-glint 3.4s ease-in-out infinite;
+}
+
+.questLink::after {
+  content: "";
+  position: absolute;
+  inset: 2px 9% auto;
+  height: 42%;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(255 255 255 / 42%), transparent);
+  pointer-events: none;
+}
+
+.questLink:hover {
+  filter: saturate(1.08) brightness(1.04);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 2px 1px rgb(255 255 255 / 68%),
+    inset 0 -4px 8px rgb(112 66 8 / 24%),
+    0 12px 26px -12px rgb(111 72 10 / 100%);
+}
+
+.questLink:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 3px 7px rgb(112 66 8 / 30%),
+    inset 0 -1px 2px rgb(255 255 255 / 42%);
+}
+
+.compact {
+  min-height: 2.5rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.drawer {
+  width: 100%;
+  min-height: 4.25rem;
+  justify-content: flex-start;
+  padding: 0.65rem 0.8rem;
+  border-radius: 1rem;
+}
+
+.icon {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid rgb(92 55 5 / 16%);
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 24%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 38%);
+}
+
+.compact .icon {
+  width: 1.55rem;
+  height: 1.55rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 0.1rem;
+  text-align: left;
+}
+
+.label { font-size: 0.95rem; line-height: 1.1; }
+.compact .label { font-size: 0.76rem; }
+.hint { font-size: 0.7rem; font-weight: 590; opacity: 0.7; }
+
+@keyframes quest-glint {
+  0%, 58% { left: -45%; opacity: 0; }
+  66% { opacity: 0.92; }
+  84%, 100% { left: 118%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .questLink::before { animation: none; display: none; }
+  .questLink { transition: none; }
+}

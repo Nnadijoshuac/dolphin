@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
-import { SET_AND_QUEST_URL } from "@/constants/site";
+import { SetAndQuestLink } from "@/components/set-and-quest-link";
 import { WalletConnectButton } from "@/wallet/wallet-provider";
 
 /**
@@ -133,23 +133,7 @@ export function MobileNavDrawer() {
           </button>
         </div>
 
-        <a
-          className="interactive flex min-h-16 items-center gap-3 rounded-xl border border-accent bg-accent px-3.5 py-2.5 text-ink no-underline shadow-[inset_0_1px_0_rgb(255_255_255_/_0.32)]"
-          href={SET_AND_QUEST_URL}
-          onClick={() => setOpen(false)}
-        >
-          <span
-            aria-hidden="true"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-[0.7rem] bg-[rgb(255_255_255_/_0.28)]"
-          >
-            <CategoryGlyph color="currentColor" name="sparkle" size={20} strokeWidth={2} />
-          </span>
-          <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="text-[0.95rem] font-bold tracking-[-0.015em]">Set and Quest</span>
-            <span className="text-[0.72rem] font-medium opacity-75">Join the BNB Chain campaign</span>
-          </span>
-          <CategoryGlyph color="currentColor" name="chevron-right" size={15} strokeWidth={2} />
-        </a>
+        <SetAndQuestLink onClick={() => setOpen(false)} variant="drawer" />
 
         <nav aria-label="Primary">
           <ul className="mobile-menu__list">

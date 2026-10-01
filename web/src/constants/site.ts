@@ -40,12 +40,11 @@ export const SITE_URL = (configured && configured.length > 0
 
 export const SITE_NAME = "Dolphin";
 
-/**
- * The temporary destination for Set and Quest while Dolphin's participation
- * hub is being built. Keeping one value for both responsive navigation
- * surfaces prevents the desktop and mobile entry points from drifting.
- */
-export const SET_AND_QUEST_URL =
+/** The in-product campaign hub. Both responsive navigation surfaces use it. */
+export const SET_AND_QUEST_URL = "/set-and-quest";
+
+/** The organizer's page remains the source of truth for registration and rules. */
+export const SET_AND_EARN_OFFICIAL_URL =
   "https://www.bnbchain.org/en/hackathons/smart-money-era";
 
 export const SITE_DESCRIPTION =

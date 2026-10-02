@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { MobileMenuButton } from "@/components/mobile-nav";
 import { SET_AND_EARN_OFFICIAL_URL } from "@/constants/site";
@@ -354,6 +355,7 @@ function BuildTrack({ address, progress }: { address: string | null; progress: Q
         />
         <Check
           detail="Its onchain actions must match its category. A yield agent uses lending or vaults; a grid agent trades repeatedly."
+          meter={<span className={styles.tagMuted}>BNB Chain checks</span>}
           state="later"
           title="Does what it says"
         />
@@ -412,7 +414,10 @@ export function SetAndQuestClient() {
   return (
     <div className={styles.page}>
       <header className={`${styles.mobileHead} mobile-only`}>
-        <Link href="/">Dolphin</Link>
+        <Link aria-label="Dolphin home" className={styles.brand} href="/">
+          <BrandMark size={24} />
+          <span>Dolphin</span>
+        </Link>
         <MobileMenuButton className={styles.menuButton} />
       </header>
       <main className={styles.shell}>{convexClient ? <Board address={address} connect={connect} /> : <Content address={address} connect={connect} progress={undefined} />}</main>
@@ -440,12 +445,10 @@ function Content({ address, connect, progress }: { address: string | null; conne
           </h1>
           <p>Finish both tracks before 5 November, 12:00 UTC. The first 100 wallets to qualify are rewarded.</p>
           <div className={styles.heroActions}>
+            {/* One button: "Official rules" opened the same page as Register. */}
             <a className="manage-btn manage-btn--primary" href={SET_AND_EARN_OFFICIAL_URL} rel="noreferrer" target="_blank">
-              Register for the campaign
+              Register and read the rules
               <CategoryGlyph color="currentColor" name="external" size={14} strokeWidth={2} />
-            </a>
-            <a className="manage-btn manage-btn--quiet" href={SET_AND_EARN_OFFICIAL_URL} rel="noreferrer" target="_blank">
-              Official rules
             </a>
           </div>
           <div className={styles.countdown}>
@@ -465,7 +468,7 @@ function Content({ address, connect, progress }: { address: string | null; conne
         <h2 id="rules-heading">The small print that matters</h2>
         <div className={styles.ruleGrid}>
           {RULES.map((group) => (
-            <div className={styles.ruleCard} key={group.title}>
+            <div className={styles.ruleGroup} key={group.title}>
               <h3>{group.title}</h3>
               <ul>
                 {group.items.map((item) => (

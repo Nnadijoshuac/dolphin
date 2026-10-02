@@ -144,6 +144,13 @@ const keystoreReader = createPublicClient({
   transport: http(ALTANA_NETWORK.publicRpcUrl),
 });
 
+/*
+ * A single PancakeSwap trade through the relay. Billed at 652,854 gas when
+ * measured on 2026-10-01; 900,000 keeps a margin without demanding the 1.5M
+ * ceiling, which turned away trades a wallet could afford.
+ */
+const SINGLE_SWAP_GAS = BigInt(900_000);
+
 let cachedClient: Client | null = null;
 
 function altanaClient(): Client {
@@ -1475,7 +1482,13 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     ],
   );
 
-  const readWithdrawReserveWei = useCallback(async (): Promise<bigint> => {
+  /*
+   * `gasUnits`: what the relayed step is budgeted at. Withdrawals keep the
+   * 1.5M ceiling; a single swap uses SINGLE_SWAP_GAS (2026-10-02: the owner's
+   * 0.00005 BNB trade was refused from a wallet that could pay it, because the
+   * ceiling is twice what the relay charges for a swap).
+   */
+  const readWithdrawReserveWei = useCallback(async (gasUnits: bigint = RELAYED_INTENT_GAS_ALLOWANCE): Promise<bigint> => {
     const wallet = getAltanaSnapshot();
     if (!wallet) throw new Error("No Dolphin Wallet on this device.");
     const [gasPriceWei, surchargeWei] = await Promise.all([
@@ -1487,7 +1500,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         walletAddress: wallet.address as Address,
       }),
     ]);
-    return RELAYED_INTENT_GAS_ALLOWANCE * gasPriceWei + surchargeWei;
+    return gasUnits * gasPriceWei + surchargeWei;
   }, []);
 
   const withdraw = useCallback(
@@ -1589,7 +1602,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           amountInRaw: input.amountInRaw,
         }),
         altanaClient().balances({ wallet: { address: wallet.address }, chainId: ALTANA_NETWORK.chainId }),
-        readWithdrawReserveWei(),
+        readWithdrawReserveWei(SINGLE_SWAP_GAS),
       ]);
       const route = routes[0];
       if (!route) throw new Error("PancakeSwap has no pool that can take this trade right now. Nothing was signed.");

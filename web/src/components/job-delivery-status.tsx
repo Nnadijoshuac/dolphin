@@ -7,6 +7,7 @@ import { agentRouteId } from "@/constants/agents";
 import { useState } from "react";
 
 import { agentPaymentsApi, type AgentJobRow } from "@/convex/api";
+import { stripToolNames } from "@/lib/answer-text";
 import { useJobDelivery } from "@/hooks/use-job-delivery";
 import { useDeliverable } from "@/hooks/use-deliverable";
 import { useNow } from "@/hooks/use-now";
@@ -40,7 +41,7 @@ import { toUserMessage } from "@/wallet/wallet-errors";
 
 /** A four-line preview has no room for Markdown, so its markers are dropped rather than printed ("**SAFE**" -> "SAFE"). */
 function plainPreview(markdown: string): string {
-  return markdown
+  return stripToolNames(markdown)
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
     .replace(/`([^`]+)`/g, "$1")

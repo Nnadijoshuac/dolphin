@@ -147,7 +147,13 @@ function Tracker({ state, refunded = false }: { state: DeliveryState | undefined
           data-state={step < index || (tone === "done" && step === index) ? "done" : step === index ? "now" : "next"}
           key={label}
         >
-          <span aria-hidden="true" className="tracker__dot" />
+          <span aria-hidden="true" className="tracker__dot">
+            {step < index || (tone === "done" && step === index) ? (
+              <svg className="tracker__check" fill="none" viewBox="0 0 12 12">
+                <path d="M2.5 6.2 5 8.5l4.5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              </svg>
+            ) : null}
+          </span>
           <span className="tracker__label">{label}</span>
         </li>
       ))}

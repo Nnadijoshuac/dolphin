@@ -37,13 +37,17 @@ import { usdCents } from "@/wallet/token-usd";
 const BNB_CHAIN_ID = 56;
 
 /*
- * What one relayed step really costs. The relay billed the BNB->U swap at
- * 652,854 gas on 2026-10-01; 750,000 sits just above it so the fee actually
- * charged lands at or under the figure on screen.
+ * What one relayed step really costs: the relay's fee (BNB sent to its fee
+ * collector) divided by the transaction's gas price. Measured on real hires:
+ *   swap BNB->U   652,854 (2026-10-01), 632,374 (2026-10-02, job 56880)
+ *   escrow pay  1,501,636 (2026-10-02 07:06), 1,571,180 (job 56880)
+ * Each sits just above what was billed, so the fee charged lands at or under
+ * the figure on screen. The payment step was 2,200,000 until 2026-10-02,
+ * which showed the token checker at 0.14 U when the hire really cost 0.114 U
+ * (0.03 U + 0.0001102 BNB); every paid agent's total was inflated the same way.
  */
-export const TYPICAL_RELAYED_STEP_GAS = BigInt(750_000);
-/** The escrow payment step, as the relay bills it: ~2.1M gas measured 2026-10-02. */
-export const TYPICAL_PAYMENT_STEP_GAS = BigInt(2_200_000);
+export const TYPICAL_RELAYED_STEP_GAS = BigInt(700_000);
+export const TYPICAL_PAYMENT_STEP_GAS = BigInt(1_650_000);
 
 export type HireTotal = {
   /** "0.11 U", "Free", or null while still reading. */

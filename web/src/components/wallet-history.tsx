@@ -84,7 +84,9 @@ function rowAmounts(entry: WalletHistoryEntry): { lines: string[]; tiny: boolean
 
 function Row({ entry, hidden }: { entry: WalletHistoryEntry; hidden: boolean }) {
   const moves = rowAmounts(entry);
-  const fee = BigInt(entry.feeWei) > BigInt(0) ? `fee ${amount(entry.feeWei, 18)} BNB` : null;
+  // The relay's fee is money that left the wallet, so it is an amount line, not a footnote
+  // (owner, 2026-10-02: a hire read "-0.03 U" while the price said more).
+  const fee = BigInt(entry.feeWei) > BigInt(0) ? `−${amount(entry.feeWei, 18)} BNB fee` : null;
   return (
     <a className="wallet-activity-row interactive" href={`https://bscscan.com/tx/${entry.hash}`} rel="noreferrer" target="_blank">
       <span
@@ -95,13 +97,22 @@ function Row({ entry, hidden }: { entry: WalletHistoryEntry; hidden: boolean }) 
       </span>
       <div>
         <h3>{entry.title}</h3>
-        <p>{[day(entry.at), fee].filter(Boolean).join(" · ")}</p>
+        <p>{day(entry.at)}</p>
       </div>
-      {moves.lines.length ? (
+      {moves.lines.length || fee ? (
         <strong
           className={`wallet-activity-amounts${moves.tiny ? " text-muted" : entry.movements.every((m) => m.direction === "in") ? " text-success" : ""}`}
         >
-          {hidden ? "...." : moves.lines.map((line) => <span key={line}>{line}</span>)}
+          {hidden ? (
+            "...."
+          ) : (
+            <>
+              {moves.lines.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+              {fee ? <span className="text-[0.72rem] font-medium text-muted">{fee}</span> : null}
+            </>
+          )}
         </strong>
       ) : null}
     </a>

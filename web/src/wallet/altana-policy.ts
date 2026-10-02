@@ -300,6 +300,12 @@ export const RELAYED_INTENT_GAS_ALLOWANCE = BigInt(1_500_000);
  * relay's 0.05 gwei - against ~0.6M for a swap. The 1.5M allowance was below
  * what a payment actually costs, so a wallet it passed could still be refused
  * by the relay. A payment is now budgeted at 2.5M.
+ *
+ * CORRECTED 2026-10-02 (evening): those two figures were whole hires, swap and
+ * payment together (0.0000323947 + 0.0000750818 + 0.0000001306 BNB = the
+ * 0.00010763 above). Read per transaction, the payment step alone bills
+ * ~1.50-1.57M gas. 2.5M stays as a refusal ceiling; the displayed price uses
+ * the measured figures (hooks/use-hire-total.ts).
  */
 export const ESCROW_PAYMENT_GAS = BigInt(2_500_000);
 

@@ -28,9 +28,21 @@ import { useAgentList, useAgentSignals } from "@/hooks/use-agents";
 import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
 import { ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
+import { usePriceText } from "@/hooks/use-price-text";
 import type { Agent } from "@/types/agent";
 
 /** A tool name written for code, said in words. Names that already have spaces are left alone. */
+/**
+ * Skills a buyer can act on. An A2A seller also publishes the plumbing of being
+ * paid - "Negotiate an ERC-8183 job", "Notify the seller a job is funded" -
+ * which Dolphin itself calls during a hire. Listed beside what the agent
+ * actually does, it reads as a feature and means nothing to the person hiring.
+ */
+const PAYMENT_PLUMBING = /(negotiat|erc[\s-]?8183|escrow|job is funded|funded job|notify the seller|submit(ted)? (a |the )?deliverable|deliver(y)? (a |the )?job)/i;
+export function buyerSkills<T extends { name: string }>(skills: readonly T[]): T[] {
+  return skills.filter((skill) => !PAYMENT_PLUMBING.test(skill.name));
+}
+
 export function plainSkillName(name: string): string {
   if (/\s/.test(name.trim())) return name;
   const words = name
@@ -63,7 +75,15 @@ export function AtAGlance({ agent }: { agent: Agent }) {
   const now = useNow();
   const signals = useAgentSignals(convexClient ? [agent] : []).get(agent.agentKey);
   const isTools = agent.protocol === "mcp";
-  const price = isTools ? null : priceLabel(agent);
+  const tokenPrice = isTools ? null : priceLabel(agent);
+  // Dollars, like every other price on this page; the token amount only when no rate can be read.
+  const usd = usePriceText({
+    amountRaw: agent.pricing?.amountRaw ?? null,
+    token: agent.pricing?.token ?? null,
+    decimals: agent.pricing?.tokenDecimals ?? null,
+    symbol: agent.pricing?.tokenSymbol ?? null,
+  });
+  const price = tokenPrice === "Free" || tokenPrice === null ? tokenPrice : usd.status === "usd" ? usd.text : tokenPrice;
   const checked = ago(agent.verification?.lastProbeAt ?? agent.verifiedAt, now);
   const online = agent.status === "live";
 
@@ -71,7 +91,7 @@ export function AtAGlance({ agent }: { agent: Agent }) {
     {
       label: "Cost",
       value: isTools ? "Free" : price === "Free" ? "Free" : price ? price : "Quoted when you hire",
-      sub: isTools ? "No fees to use it" : price && price !== "Free" ? "per job" : null,
+      sub: isTools ? "No fees to use it" : price && price !== "Free" ? "per job, plus network fees" : null,
     },
     {
       label: "Type",

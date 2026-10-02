@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
-import { AtAGlance, HowItWorks, OneLine, PublisherAgents, SimilarAgents, plainSkillName } from "@/components/agent-detail-extras";
+import { AtAGlance, HowItWorks, OneLine, PublisherAgents, SimilarAgents, buyerSkills, plainSkillName } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AgentTransactionPanel } from "@/components/agent-transaction-panel";
 import { AgentTrialPanel } from "@/components/agent-trial-panel";
@@ -519,11 +519,11 @@ export function AgentDetail({ agent }: { agent: Agent }) {
                   <p className="mt-2 whitespace-pre-line text-[0.9rem] leading-7 text-ink-soft">{agent.description}</p>
                 </>
               ) : null}
-              {agent.skills.length > 0 ? (
+              {buyerSkills(agent.skills).length > 0 ? (
                 <div className={showDescription ? "mt-6" : undefined}>
                   <h2 className="detail-card__title">What it can do</h2>
                   <ul className="mt-3 flex flex-wrap gap-2">
-                    {agent.skills.map((skill) => (
+                    {buyerSkills(agent.skills).map((skill) => (
                       <li
                         className="rounded-full border border-line/80 px-3 py-1.5 text-[0.8rem] text-ink"
                         key={`${skill.name}-${skill.evidence}`}

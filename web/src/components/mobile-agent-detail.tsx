@@ -7,6 +7,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { FavoriteButton } from "@/components/favorite-button";
 import { AgentTrialPanel } from "@/components/agent-trial-panel";
 import { HireAction } from "@/components/hire-action";
+import { buyerSkills, plainSkillName } from "@/components/agent-detail-extras";
 import { McpUseAction } from "@/components/mcp-use-action";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 import { TrackRecord } from "@/components/track-record";
@@ -96,14 +97,15 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
     <MobileStackHeader title={agent.name} share />
     <div className="mobile-agent-detail">
       <header className="mobile-detail-identity"><AgentIcon category={agent.category} seed={agent.iconSeed} size={72} uri={agent.iconUrl} /><div><h1>{agent.name}</h1><p>{publisher || "Unlisted publisher"} <span>· #{agent.tokenId}</span></p></div><FavoriteButton agentKey={agent.agentKey} agentName={agent.name} className="ml-auto" /></header>
-      {agent.tagline && <p className="mobile-detail-tagline">{agent.tagline}</p>}
+      {/* The tagline is usually the description's first sentence; showing both said it twice. */}
+      {agent.tagline && !agent.description.trim().startsWith(agent.tagline.trim()) && <p className="mobile-detail-tagline">{agent.tagline}</p>}
       <section className="mobile-detail-action">
-        <div><p>{agent.protocol === "mcp" ? "MCP server" : "Hire price"}</p><h2>{priceText}</h2></div>
+        <div><p>{agent.protocol === "mcp" ? "MCP server" : "Agent's price"}</p><h2>{priceText}</h2></div>
         <button className="mobile-pearl" type="button" onClick={() => setOpen(true)}>{agent.protocol === "mcp" ? "Use" : "Hire this agent"}</button>
-        <p>{agent.protocol === "mcp" ? "Connect to your AI client" : "Review the price and payment before hiring"}</p>
+        <p>{agent.protocol === "mcp" ? "Connect to your AI client" : "You see the full total, fees included, before you pay."}</p>
       </section>
       <section className="mobile-detail-section"><h2>Overview</h2><p className="mobile-detail-description">{expanded ? agent.description : agent.description.slice(0, 220)}{agent.description.length > 220 && <> {expanded ? "" : "… "}<button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : "Show more"}</button></>}</p>
-        {agent.skills.length > 0 && <div className="mobile-detail-skills">{agent.skills.map(skill => <span key={`${skill.name}-${skill.evidence}`}>{skill.name}</span>)}</div>}
+        {buyerSkills(agent.skills).length > 0 && <div className="mobile-detail-skills">{buyerSkills(agent.skills).map(skill => <span key={`${skill.name}-${skill.evidence}`}>{plainSkillName(skill.name)}</span>)}</div>}
       </section>
       {/*
         * RUN IT, ON A PHONE. (2026-09-12)
@@ -125,7 +127,7 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
     {open && createPortal(<div className="mobile-sheet-backdrop" onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}><div ref={dialog} role="dialog" aria-modal="true" className="mobile-action-sheet" aria-labelledby="mobile-action-title">
       <header><h2 id="mobile-action-title">{agent.protocol === "mcp" ? "Use" : "Hire"} {agent.name}</h2><button className="mobile-circle" type="button" aria-label="Close" onClick={() => setOpen(false)}><CategoryGlyph name="close" size={18} /></button></header>
       {/* Same rule as the desktop page: a delisted agent is not offered for hire. */}
-      {agent.status === "unavailable" ? null : agent.protocol === "mcp" ? <McpUseAction agent={agent} /> : <HireAction agent={agent} />}
+      {agent.status === "unavailable" ? null : agent.protocol === "mcp" ? <McpUseAction agent={agent} /> : <HireAction agent={agent} bare />}
     </div></div>, document.body)}
   </>;
 }

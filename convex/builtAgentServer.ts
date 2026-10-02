@@ -3,7 +3,7 @@ import type { Doc } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { TRY_CONSULT_PROMPT, tryAnswerPrompt } from "./agentBuilder";
 import { apiBase, NETWORKS, siteBase } from "./builtAgents";
-import { digestToolResult, stripRawPayloads } from "./lib/answerHygiene";
+import { digestToolResult, stripRawPayloads, stripToolNames } from "./lib/answerHygiene";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { McpError, callMcpTool, listMcpTools, openMcpSession, MCP_PROTOCOL_VERSION } from "./lib/mcpClient";
@@ -450,7 +450,8 @@ export async function ask(ctx: ActionCtx, listing: Listing, question: string, wa
         let content: string;
         if (call.function.name.startsWith("block_") && blockTools.some((tool) => tool.function.name === call.function.name)) {
           const result = await runBlockTool(blocks, call.function.name, call.function.arguments || "{}", 0);
-          content = `[${call.function.name}]\n${result.text.slice(0, 6_000)}`;
+          // Labelled in words: the model copies whatever label it is shown (job 56882, "(block_token_safety)").
+          content = `[${call.function.name.replace(/^block_/, "").replace(/_/g, " ")} result]\n${result.text.slice(0, 6_000)}`;
         } else if (!binding) {
           content = `No such tool: ${call.function.name}.`;
         } else {
@@ -482,7 +483,7 @@ export async function ask(ctx: ActionCtx, listing: Listing, question: string, wa
         (unreachable.length ? `\n\nTOOLS YOU COULD NOT USE THIS TURN:\n${unreachable.join("\n")}` : ""),
     };
     const final = await chatCompletion({ messages, ...(endpoint ? { endpoint } : {}) });
-    const answer = stripRawPayloads(final.content).trim();
+    const answer = stripToolNames(stripRawPayloads(final.content)).trim();
     if (!answer || looksLikeLeakedReasoning(answer)) {
       return { content: [{ type: "text", text: "This agent could not write an answer just now. Ask again." }], isError: true };
     }

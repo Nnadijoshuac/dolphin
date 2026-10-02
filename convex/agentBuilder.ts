@@ -43,7 +43,7 @@ import {
   validateBlocks,
   type AgentBlock,
 } from "./lib/agentBlocks";
-import { stripRawPayloads } from "./lib/answerHygiene";
+import { stripRawPayloads, stripToolNames } from "./lib/answerHygiene";
 import { syncTriggers } from "./lib/triggerSync";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
@@ -185,7 +185,7 @@ ${
       ? "- This run was started by one of your triggers, and the message says what happened. Check the data, decide whether it calls for action under your instructions, and report what you found and did in two or three sentences."
       : "- You answer when asked. You do not run on a schedule, watch anything, or notify anyone."
   }
-- Say which agent a fact came from, in a sentence ("according to X").
+- Say which agent a fact came from, in a sentence ("according to X"), by the agent's name. Never write a tool or function name (block_token_safety, analyse, report): not in brackets, not as a source, not anywhere.
 - No JSON, no code blocks, no field names, no error codes. Say what a result means.
 - If a tool could not be reached, say so in one sentence and carry on with what you know.
 - Be brief.${abilities.canPropose || abilities.canTrade ? `
@@ -1490,7 +1490,7 @@ export async function runTryTurn(
         endpoint,
         ...(allTools.length > 0 ? { tools: allTools, toolChoice: "none" as const } : {}),
       });
-      const content = stripRawPayloads(final.content).trim();
+      const content = stripToolNames(stripRawPayloads(final.content)).trim();
 
       if (content.length === 0 || looksLikeLeakedReasoning(content)) {
         /*

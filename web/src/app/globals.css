@@ -1239,25 +1239,37 @@ select {
 }
 .wcard--agent .wcard__eyebrow { color: var(--accent-ink); }
 
-/* Both wallets as rows INSIDE the total's card, on the phone (owner,
-   2026-10-02: "show the total, the Dolphin balance and the main balance in
-   one card"). The same cards, stripped of their own box. overflow is visible
-   so the asset dropdown is not clipped by the row. */
-.wallet-hero__wallets { display: flex; flex-direction: column; margin-top: 14px; border-top: 1px solid var(--line); }
+/* Both wallets SIDE BY SIDE inside the total's card, on the phone (owner,
+   2026-10-02: "the Dolphin wallet and connected wallet on the same line,
+   just under the total balance"). The same cards as tiles: each keeps its
+   own buttons, so Add funds and Withdraw stay on the Dolphin Wallet. The
+   avatar and the one-line description go - the eyebrow names the wallet.
+   overflow is visible so the asset dropdown is not clipped by its tile. */
+.wallet-hero__wallets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .wcard--inset {
   min-height: 0;
-  gap: 8px;
-  padding: 14px 0 12px;
-  border: 0;
-  border-radius: 0;
-  background: none;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  background-image: none;
   box-shadow: none;
   overflow: visible;
 }
 .wcard--inset::before { display: none; }
-.wcard--inset + .wcard--inset { border-top: 1px solid var(--line); }
-.wcard--inset .wcard__foot { margin-top: 4px; }
-.wcard--inset .wcard__amount { margin-top: 2px; }
+.wcard--inset .wcard__avatar,
+.wcard--inset .wcard__sub { display: none; }
+.wcard--inset .wcard__head { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
+.wcard--inset .wcard__head-text { min-width: 0; flex: 1 1 100%; }
+.wcard--inset .wcard__eyebrow { font-size: 0.6rem; }
+.wcard--inset .wcard__title { font-size: 0.95rem; }
+.wcard--inset .wcard__amount { margin-top: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
+.wcard--inset .wcard__foot { margin-top: auto; padding-top: 4px; }
+.wcard--inset .wcard__actions { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.wcard--inset .wcard__actions .wallet-btn,
+.wcard--inset .wcard__foot .wallet-btn { width: 100%; }
+.wcard--inset .asset-menu__list { left: 0; right: auto; }
 
 /* The address chip. A truncated address is not an address, it is a label for
    one — so it is not a thing to copy, it is a thing to open. */

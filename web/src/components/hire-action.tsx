@@ -22,7 +22,8 @@ import { formatBnb, RELAYED_INTENT_GAS_ALLOWANCE } from "@/wallet/altana-policy"
 import { useBnbPrice } from "@/hooks/use-bnb-price";
 import { useTokenUsd } from "@/hooks/use-token-usd";
 import { useDolphinUBalance } from "@/components/wallet-withdraw";
-import { formatUsdCents, weiToUsdCents, type BnbPrice } from "@/wallet/bnb-price";
+import { formatUsdCents, formatUsdFromWei, type BnbPrice } from "@/wallet/bnb-price";
+import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { usdCents } from "@/wallet/token-usd";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { defaultTaskDescription, ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
@@ -612,25 +613,6 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
          * but only then. Both of Dolphin's own paid hires ended that way, and
          * nothing on this card said so before the money moved.
          */}
-        {priceRequiresPayment && !showMyAgents ? (
-          <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
-            <span className="text-xs text-muted">Paid from</span>
-            <span className="text-right text-sm font-semibold text-ink">
-              Your Dolphin Wallet
-              {altana.status === "connected" && altana.balanceWei !== null && !altana.balanceError ? (
-                <span className="block text-xs font-normal text-muted">
-                  holds {formatBnb(altana.balanceWei)} BNB
-                </span>
-              ) : null}
-            </span>
-          </div>
-        ) : null}
-        {walletSetupText ? (
-          <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
-            <span className="text-xs text-muted">One-time wallet setup</span>
-            <span className="text-sm font-semibold text-ink">{walletSetupText}</span>
-          </div>
-        ) : null}
       </div>
       {priceRequiresPayment && !showMyAgents ? (
         <p className="mt-3 text-xs leading-5 text-muted">
@@ -796,15 +778,19 @@ function centsToWei(cents: bigint, price: BnbPrice): bigint {
 }
 
 /**
- * WHAT THIS HIRE WILL REALLY TAKE OUT OF THE WALLET (owner, 2026-10-01: "show
- * 0.07, not 0.05, so the person can act on it"). The agent's price, the network
- * fees on the relayed steps (two when BNB has to be converted first: the swap
- * and the escrow payment), and the one-time setup on a wallet's first payment.
+ * THE PRICE, IN THE TOKEN THE AGENT CHARGES, AND ONE SENTENCE ABOUT PAYING IT
+ * (owner, 2026-10-02). The agent asks for 0.05 U; a wallet holding U pays
+ * exactly that, so that is the headline. What changes between people is how
+ * they pay it, and that is the one line beneath:
  *
- * Every figure is read live - the U and BNB rates, the gas price, the wallet's
- * balances - and the fees use the same allowance the pre-check enforces, so
- * "about $X" here and the refusal there agree. When the wallet is short it
- * says by how much, in dollars, and where to add it.
+ *   - holds enough U   -> "Paid from the U in your Dolphin Wallet."
+ *   - holds BNB        -> "Your Dolphin Wallet swaps about X BNB for it."
+ *   - not enough       -> "Your Dolphin Wallet needs X BNB more ... Add funds"
+ *
+ * Network fees, the swap and the one-time setup are real and are kept - under
+ * "See details", for whoever wants them. Every figure is read live (balances,
+ * gas price, rates); the fee uses the same allowance the pre-check enforces,
+ * so "needs X more" here and the refusal there agree.
  */
 function HireCost({
   priceRaw,
@@ -825,57 +811,70 @@ function HireCost({
   const gas = useGasPrice({ chainId: BNB_CHAIN_ID });
   const uBalance = useDolphinUBalance();
 
-  const row = (label: string, value: string, strong = false) => (
-    <div className={`flex items-baseline justify-between gap-4 py-2.5 ${strong ? "border-t border-line" : ""}`} key={label}>
-      <span className={`text-xs ${strong ? "font-semibold text-ink" : "text-muted"}`}>{label}</span>
-      <span className={`text-right text-sm ${strong ? "font-semibold text-ink" : "text-ink"}`}>{value}</span>
+  const connected = altana.status === "connected";
+  const heldU = uBalance.data?.raw ?? null;
+  const heldWei = connected && altana.balanceWei !== null && !altana.balanceError ? altana.balanceWei : null;
+  const converting = heldU === null || heldU < priceRaw;
+
+  const feeWei = gas.data !== undefined ? RELAYED_INTENT_GAS_ALLOWANCE * gas.data * BigInt(converting ? 2 : 1) : null;
+  const setupWei = needsWalletSetup ? altana.registrationFeeWei ?? null : BigInt(0);
+  // The BNB that buys the missing U, 5% over for the swap's price movement.
+  const swapWei =
+    !converting
+      ? BigInt(0)
+      : uRate.status === "ready" && bnb.status === "ready" && decimals !== null
+        ? centsToWei((usdCents(priceRaw - (heldU ?? BigInt(0)), decimals, uRate.rate) * BigInt(105)) / BigInt(100) + BigInt(1), bnb.price)
+        : null;
+  const neededWei = feeWei !== null && setupWei !== null && swapWei !== null ? feeWei + setupWei + swapWei : null;
+  const shortWei = neededWei !== null && heldWei !== null && heldWei < neededWei ? ((neededWei - heldWei) * BigInt(110)) / BigInt(100) : null;
+
+  const line = !connected
+    ? "Paid from your Dolphin Wallet."
+    : shortWei !== null
+      ? null
+      : !converting
+        ? "Paid from the U in your Dolphin Wallet."
+        : swapWei !== null && swapWei > BigInt(0)
+          ? `Your Dolphin Wallet swaps about ${formatBnb(swapWei)} BNB for it.`
+          : "Your Dolphin Wallet swaps a little BNB for it.";
+
+  const usd = (wei: bigint | null) =>
+    wei !== null && bnb.status === "ready" ? ` (${formatUsdFromWei(wei, bnb.price)})` : "";
+  const detail = (label: string, value: string) => (
+    <div className="flex items-baseline justify-between gap-4 py-1.5" key={label}>
+      <span className="text-xs text-muted">{label}</span>
+      <span className="text-right text-xs text-ink">{value}</span>
     </div>
   );
 
-  const ready = uRate.status === "ready" && bnb.status === "ready" && gas.data !== undefined && decimals !== null;
-  if (!ready) {
-    return (
-      <div className="py-1">
-        {row("Agent's price", priceText)}
-        {row("Total", uRate.status === "unavailable" || bnb.status === "unavailable" ? "Shown when prices load" : "Working it out…", true)}
-      </div>
-    );
-  }
-
-  const price = bnb.price;
-  const agentCents = usdCents(priceRaw, decimals, uRate.rate);
-  const heldU = uBalance.data?.raw ?? BigInt(0);
-  const converting = heldU < priceRaw;
-  const feeWei = RELAYED_INTENT_GAS_ALLOWANCE * gas.data * BigInt(converting ? 2 : 1);
-  const setupWei = needsWalletSetup ? altana.registrationFeeWei ?? BigInt(0) : BigInt(0);
-  const feeCents = weiToUsdCents(feeWei, price);
-  const setupCents = weiToUsdCents(setupWei, price);
-  const totalCents = agentCents + feeCents + setupCents;
-  const show = (cents: bigint) => (cents === BigInt(0) ? "<$0.01" : formatUsdCents(cents));
-
-  // BNB the wallet needs: the fees and setup, plus the price itself when it
-  // has to be bought (5% over, for the swap's price movement).
-  const shortfallU = converting ? priceRaw - heldU : BigInt(0);
-  const buyCents = converting ? (usdCents(shortfallU, decimals, uRate.rate) * BigInt(105)) / BigInt(100) + BigInt(1) : BigInt(0);
-  const neededWei = feeWei + setupWei + (converting ? centsToWei(buyCents, price) : BigInt(0));
-  const heldWei = altana.status === "connected" && altana.balanceWei !== null && !altana.balanceError ? altana.balanceWei : null;
-  const shortWei = heldWei !== null && heldWei < neededWei ? ((neededWei - heldWei) * BigInt(110)) / BigInt(100) : null;
-
   return (
-    <div className="py-1">
-      {row("Agent's price", show(agentCents))}
-      {row("Network fees, at most", show(feeCents))}
-      {setupWei > BigInt(0) ? row("One-time wallet setup", show(setupCents)) : null}
-      {row("Total, at most", show(totalCents), true)}
+    <div className="py-3">
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-xs text-muted">Price</span>
+        <span className="text-lg font-semibold text-ink">{priceText}</span>
+      </div>
+      {line ? <p className="mt-1 text-xs leading-5 text-muted">{line}</p> : null}
       {shortWei !== null ? (
-        <div className="mb-2 mt-1 rounded-xl bg-accent-soft px-3 py-2.5 text-xs leading-5 text-accent-ink">
-          Your Dolphin Wallet needs <strong>{show(weiToUsdCents(shortWei, price))}</strong> more
-          ({formatBnb(shortWei)} BNB) to complete this hire.{" "}
+        <p className="mt-2 rounded-xl bg-accent-soft px-3 py-2.5 text-xs leading-5 text-accent-ink">
+          Your Dolphin Wallet needs <strong>{formatBnb(shortWei)} BNB</strong> more to complete this hire.{" "}
           <Link className="font-semibold text-accent-ink underline" href="/wallet">
             Add funds
           </Link>
-        </div>
+        </p>
       ) : null}
+      <details className="mt-2 text-xs">
+        <summary className="cursor-pointer text-muted hover:text-ink">See details</summary>
+        <div className="mt-1">
+          {detail("Agent's price", `${priceText}${uRate.status === "ready" && decimals !== null ? ` (${formatUsdCents(usdCents(priceRaw, decimals, uRate.rate))})` : ""}`)}
+          {converting ? detail("Swap BNB for U", swapWei !== null ? `about ${formatBnb(swapWei)} BNB${usd(swapWei)}` : "worked out when you hire") : null}
+          {detail("Network fees, up to", feeWei !== null ? `${formatBnb(feeWei)} BNB${usd(feeWei)}` : "…")}
+          {needsWalletSetup ? detail("One-time wallet setup", setupWei !== null ? `${formatBnb(setupWei)} BNB${usd(setupWei)}` : "…") : null}
+          {detail("Held in your Dolphin Wallet", heldWei !== null ? `${formatBnb(heldWei)} BNB${heldU !== null && heldU > BigInt(0) && decimals !== null ? ` · ${formatTokenAmount(heldU, decimals)} U` : ""}` : "not set up")}
+          <p className="mt-1.5 leading-5 text-muted">
+            Network fees are a ceiling; what isn&apos;t used stays in your wallet.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

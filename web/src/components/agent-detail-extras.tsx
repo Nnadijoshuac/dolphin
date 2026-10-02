@@ -28,7 +28,6 @@ import { useAgentList, useAgentSignals } from "@/hooks/use-agents";
 import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
 import { ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
-import { usePriceText } from "@/hooks/use-price-text";
 import type { Agent } from "@/types/agent";
 
 /** A tool name written for code, said in words. Names that already have spaces are left alone. */
@@ -75,15 +74,8 @@ export function AtAGlance({ agent }: { agent: Agent }) {
   const now = useNow();
   const signals = useAgentSignals(convexClient ? [agent] : []).get(agent.agentKey);
   const isTools = agent.protocol === "mcp";
-  const tokenPrice = isTools ? null : priceLabel(agent);
-  // Dollars, like every other price on this page; the token amount only when no rate can be read.
-  const usd = usePriceText({
-    amountRaw: agent.pricing?.amountRaw ?? null,
-    token: agent.pricing?.token ?? null,
-    decimals: agent.pricing?.tokenDecimals ?? null,
-    symbol: agent.pricing?.tokenSymbol ?? null,
-  });
-  const price = tokenPrice === "Free" || tokenPrice === null ? tokenPrice : usd.status === "usd" ? usd.text : tokenPrice;
+  // In the token the agent charges, like every price on Dolphin (owner, 2026-10-02).
+  const price = isTools ? null : priceLabel(agent);
   const checked = ago(agent.verification?.lastProbeAt ?? agent.verifiedAt, now);
   const online = agent.status === "live";
 
@@ -91,7 +83,7 @@ export function AtAGlance({ agent }: { agent: Agent }) {
     {
       label: "Cost",
       value: isTools ? "Free" : price === "Free" ? "Free" : price ? price : "Quoted when you hire",
-      sub: isTools ? "No fees to use it" : price && price !== "Free" ? "per job, plus network fees" : null,
+      sub: isTools ? "No fees to use it" : price && price !== "Free" ? "per job" : null,
     },
     {
       label: "Type",

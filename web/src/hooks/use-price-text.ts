@@ -71,18 +71,23 @@ export function usePriceText(input: {
     return { status: "unknown" };
   }
 
+  /*
+   * IN THE TOKEN THE AGENT CHARGES (owner, 2026-10-02). Prices were turned into
+   * dollars on 2026-09-12; the owner reversed it: the agent asks for 0.05 U and
+   * takes 0.05 U from a wallet that holds U, so "$0.05" made people think about
+   * a conversion that, for them, never happens. Dollars are used only when the
+   * token has no symbol to name it by.
+   */
+  const symbol = input.symbol?.trim();
+  if (symbol) {
+    const tiny = raw > BigInt(0) && raw * BigInt(10000) < BigInt(10) ** BigInt(decimals);
+    return { status: "token", text: tiny ? `<0.0001 ${symbol}` : `${formatTokenAmount(raw, decimals)} ${symbol}` };
+  }
   if (usd.status === "ready") {
     return { status: "usd", text: formatUsd(raw, decimals, usd.rate) };
   }
   if (usd.status === "loading") return { status: "loading" };
-
-  const symbol = input.symbol?.trim();
-  return {
-    status: "token",
-    text: symbol
-      ? `${formatTokenAmount(raw, decimals)} ${symbol}`
-      : formatTokenAmount(raw, decimals),
-  };
+  return { status: "token", text: formatTokenAmount(raw, decimals) };
 }
 
 /**

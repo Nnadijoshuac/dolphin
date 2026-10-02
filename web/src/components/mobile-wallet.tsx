@@ -194,25 +194,47 @@ export function MobileWallet() {
       </header>
 
       <section aria-label="Wallet overview" className="pw-head">
-        <AccountPicker
-          dolphinAddress={dolphinAddress}
-          identityAddress={identityAddress}
-          onClose={() => setMenuOpen(false)}
-          onPick={(next) => {
-            pick(next);
-            setMenuOpen(false);
-          }}
-          onToggle={() => setMenuOpen(!menuOpen)}
-          open={menuOpen}
-          view={view}
-        />
+        {/* The account on the left, BNB/USD and the eye on the right (owner, 2026-10-02). */}
+        <div className="pw-top">
+          <AccountPicker
+            dolphinAddress={dolphinAddress}
+            identityAddress={identityAddress}
+            onClose={() => setMenuOpen(false)}
+            onPick={(next) => {
+              pick(next);
+              setMenuOpen(false);
+            }}
+            onToggle={() => setMenuOpen(!menuOpen)}
+            open={menuOpen}
+            view={view}
+          />
+          <div className="pw-controls">
+            <CurrencySwitch currency={currency} onChange={setCurrency} price={price} />
+            {hasAccount ? (
+              <button
+                aria-label={hidden ? "Show balances" : "Hide balances"}
+                aria-pressed={hidden}
+                className="wallet-eye"
+                onClick={toggleHidden}
+                type="button"
+              >
+                <CategoryGlyph color="currentColor" name={hidden ? "eye-off" : "eye"} size={18} strokeWidth={1.8} />
+              </button>
+            ) : null}
+          </div>
+        </div>
 
         {hasAccount ? (
           typeof headline === "object" ? (
-            <p aria-live="polite" className="pw-amount">
-              {headline.figure}
-              {headline.unit ? <span>{headline.unit}</span> : null}
-            </p>
+            <>
+              <p aria-live="polite" className="pw-amount">
+                {headline.figure}
+                {headline.unit ? <span>{headline.unit}</span> : null}
+              </p>
+              <p className="pw-caption">
+                {view === "total" ? `Across ${viewAddresses.length} ${viewAddresses.length === 1 ? "wallet" : "wallets"}` : "On BNB Smart Chain"}
+              </p>
+            </>
           ) : (
             <p aria-live="polite" className="pw-amount pw-amount--muted">
               {headline === "reading" ? "Reading…" : "Unavailable"}
@@ -224,20 +246,6 @@ export function MobileWallet() {
           </p>
         )}
 
-        <div className="pw-controls">
-          <CurrencySwitch currency={currency} onChange={setCurrency} price={price} />
-          {hasAccount ? (
-            <button
-              aria-label={hidden ? "Show balances" : "Hide balances"}
-              aria-pressed={hidden}
-              className="wallet-eye"
-              onClick={toggleHidden}
-              type="button"
-            >
-              <CategoryGlyph color="currentColor" name={hidden ? "eye-off" : "eye"} size={18} strokeWidth={1.8} />
-            </button>
-          ) : null}
-        </div>
 
         {/* What this account needs before it can hold anything. */}
         {hasAccount ? null : view === "connected" || (view === "total" && !dolphinAddress && dolphin.status === "unsupported") ? (

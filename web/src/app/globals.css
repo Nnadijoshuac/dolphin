@@ -3941,12 +3941,14 @@ select {
 .pw-picker__item-sub { font-size: 0.74rem; color: var(--muted); }
 .pw-picker__item-sub.pw-mono { font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.7rem; }
 
-.pw-amount { margin-top: 14px; font-size: clamp(34px, 11vw, 46px); line-height: 1.1; font-weight: 700; letter-spacing: 0.01em; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pw-amount { margin-top: 22px; font-size: clamp(34px, 11vw, 46px); line-height: 1.1; font-weight: 700; letter-spacing: 0.01em; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .pw-amount > span { margin-left: 8px; font-size: 16px; font-weight: 600; color: var(--muted); }
 .pw-amount--muted { font-size: 26px; font-weight: 640; color: var(--faint); }
-.pw-controls { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.pw-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.pw-controls { display: flex; flex-shrink: 0; align-items: center; gap: 8px; padding-top: 4px; }
 
-.pw-keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 26px; }
+.pw-caption { margin-top: 6px; font-size: 0.8rem; color: var(--muted); }
+.pw-keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 40px; }
 .pw-keys > * { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); text-decoration: none; background: none; }
 .pw-keys > * > span {
   display: grid; place-items: center; width: 60px; height: 60px;
@@ -3962,10 +3964,10 @@ select {
 .pw-note { margin-top: 12px; font-size: 0.8rem; line-height: 1.5; color: var(--muted); }
 .pw-disconnect { margin-top: 18px; }
 
-.pw-tabs { display: flex; gap: 8px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
-.pw-tab { min-height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.86rem; font-weight: 600; color: var(--muted); background: var(--paper); }
+.pw-tabs { display: flex; gap: 8px; margin: 36px -16px 0; padding: 20px 16px 0; border-top: 1px solid var(--line); }
+.pw-tab { min-height: 36px; padding: 0 15px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.86rem; font-weight: 600; color: var(--muted); background: var(--paper); }
 .pw-tab[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
-.pw-panel { margin-top: 10px; min-height: 160px; }
+.pw-panel { margin-top: 8px; min-height: 160px; }
 .pw-empty { padding: 28px 8px; text-align: center; font-size: 0.82rem; color: var(--muted); }
 .pw .wallet-activity--bare { margin-top: 0; padding: 0; border: 0; background: none; }
 .pw .wallet-activity-row > strong { max-width: 52%; font-size: 0.74rem; }

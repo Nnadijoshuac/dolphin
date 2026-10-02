@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useBalance } from "wagmi";
 
-import { AgentActivity } from "@/components/agent-activity";
+import { WalletHistory } from "@/components/wallet-history";
 import { useWalletErrorToasts } from "@/hooks/use-wallet-error-toasts";
 import { WithdrawDialog } from "@/components/wallet-withdraw";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -318,7 +318,8 @@ export function MobileWallet() {
         </Link>
       </div>
 
-      <AgentActivity hidden={hidden} maxRows={4} mobile />
+      {/* Every movement of the Dolphin Wallet, from the chain (2026-10-02). */}
+      <WalletHistory hidden={hidden} />
 
       {/*
         * Liquidation alerts, on the phone too.

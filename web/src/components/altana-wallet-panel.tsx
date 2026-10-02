@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBalance } from "wagmi";
 
 import { WalletHistory } from "@/components/wallet-history";
@@ -656,6 +656,88 @@ function IdentityWalletCard({
   );
 }
 
+type CardFigure = { figure: string; unit: string | null };
+
+/**
+ * WHICH ASSET THE DOLPHIN WALLET CARD SHOWS (owner, 2026-10-02: "make it a
+ * drop down... chevron down"). The old badge flipped BNB/U on tap with nothing
+ * saying it could; the chevron says it, and the open menu shows both balances,
+ * which is what the Holdings box used to repeat.
+ */
+function AssetMenu({
+  asset,
+  onPick,
+  options,
+}: {
+  asset: WalletAsset;
+  onPick: (asset: WalletAsset) => void;
+  options: { asset: WalletAsset; amount: CardFigure | null; loading: boolean }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: PointerEvent) => {
+      if (box.current && !box.current.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  return (
+    <div className="asset-menu" ref={box}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={`Showing ${asset}. Choose an asset`}
+        className="asset-menu__trigger interactive"
+        onClick={() => setOpen(!open)}
+        type="button"
+      >
+        <AssetLogo asset={asset} size={16} />
+        <span>{asset}</span>
+        <span aria-hidden="true" className={`asset-menu__chevron${open ? " asset-menu__chevron--open" : ""}`}>
+          <CategoryGlyph color="currentColor" name="chevron-right" size={12} strokeWidth={2} />
+        </span>
+      </button>
+      {open ? (
+        <ul aria-label="Assets" className="asset-menu__list" role="listbox">
+          {options.map((option) => (
+            <li aria-selected={option.asset === asset} key={option.asset} role="option">
+              <button
+                className="asset-menu__item"
+                onClick={() => {
+                  onPick(option.asset);
+                  setOpen(false);
+                }}
+                type="button"
+              >
+                <AssetLogo asset={option.asset} size={20} />
+                <span className="asset-menu__name">{option.asset}</span>
+                <span className="asset-menu__amount">
+                  {option.amount
+                    ? `${option.amount.figure}${option.amount.unit ? ` ${option.amount.unit}` : ""}`
+                    : option.loading
+                      ? "…"
+                      : "Unavailable"}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function AgentWalletCard({
   onReceive,
   price,
@@ -719,20 +801,22 @@ function AgentWalletCard({
   const readable = !wallet.balanceError && wallet.balanceWei !== null;
 
   /*
-   * The card shows ONE asset at a time, chosen with the token's own logo in
-   * the badge (owner, 2026-09-26). BNB follows the BNB/USD setting as before;
+   * The card shows ONE asset at a time, picked from the dropdown in its
+   * corner (owner, 2026-09-26; a dropdown since 2026-10-02, which lists both
+   * balances, so the separate Holdings box went). BNB follows the BNB/USD setting as before;
    * U shows in U, or in dollars when USD is chosen and a U rate is readable.
    * An unreadable U balance reads "Unavailable", never 0 (AGENTS.md §5).
    */
   const u = uBalance.data ?? null;
   const uRate = uRates.get(U_TOKEN.toLowerCase()) ?? null;
-  const uAmount: { figure: string; unit: string | null } | null = u
+  const uAmount: CardFigure | null = u
     ? hidden
       ? { figure: HIDDEN, unit: null }
       : currency === "USD" && uRate
         ? { figure: formatUsd(u.raw, u.decimals, uRate), unit: null }
         : { figure: formatTokenAmount(u.raw, u.decimals), unit: u.symbol }
     : null;
+  const bnbAmount = readable ? renderAmount(wallet.balanceWei!, currency, price, hidden) : null;
 
   return (
     <div aria-label="Agent payments wallet" className="wcard wcard--agent">
@@ -750,22 +834,18 @@ function AgentWalletCard({
           <p className="wcard__eyebrow">Dolphin Wallet</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
-        <button
-          aria-label={`Showing ${asset}. Switch to ${asset === "BNB" ? "U" : "BNB"}`}
-          className="wcard__badge wcard__badge--asset interactive"
-          onClick={() => setAsset(asset === "BNB" ? "U" : "BNB")}
-          title={`Showing ${asset} · tap for ${asset === "BNB" ? "U" : "BNB"}`}
-          type="button"
-        >
-          <AssetLogo asset={asset} size={18} />
-        </button>
+        <AssetMenu
+          asset={asset}
+          onPick={setAsset}
+          options={[
+            { asset: "BNB", amount: bnbAmount, loading: wallet.isReadingBalance },
+            { asset: "U", amount: uAmount, loading: uBalance.isLoading },
+          ]}
+        />
       </div>
 
       {asset === "BNB" ? (
-        <CardAmount
-          amount={readable ? renderAmount(wallet.balanceWei!, currency, price, hidden) : null}
-          loading={wallet.isReadingBalance}
-        />
+        <CardAmount amount={bnbAmount} loading={wallet.isReadingBalance} />
       ) : (
         <CardAmount amount={uAmount} loading={uBalance.isLoading} />
       )}
@@ -802,94 +882,6 @@ function AgentWalletCard({
        * destination. The chip is the one that belongs to this account.
        */}
     </div>
-  );
-}
-
-/* ─────────────── holdings (2026-09-29) ─────────────── */
-
-/**
- * WHAT YOU HOLD, TOKEN BY TOKEN - the first thing a wallet page answers
- * (owner: "what is that thing they are looking for?"). The hero had one total
- * and a caption saying "1 account"; nobody could see which token sat in which
- * wallet. Every row is a read: an unreadable balance says so, never 0.
- */
-function HoldingsSection({ price }: { price: BnbPriceState }) {
-  const identity = useWallet();
-  const dolphin = useAltanaWallet();
-  const hidden = useAppStore((s) => s.hideBalances);
-  const identityAddress = identity.isConnected ? identity.address : null;
-  const identityBalance = useBalance({
-    address: identityAddress as `0x${string}` | undefined,
-    chainId: ALTANA_CHAIN_ID,
-    query: { enabled: Boolean(identityAddress) },
-  });
-  const uBalance = useDolphinUBalance();
-  const uRates = usePaymentRates([{ token: U_TOKEN, decimals: uBalance.data?.decimals ?? 18 }]);
-  const uRate = uRates.get(U_TOKEN.toLowerCase()) ?? null;
-
-  type Row = { key: string; asset: WalletAsset; where: string; amount: string | null; usd: string | null; loading: boolean };
-  const rows: Row[] = [];
-  if (dolphin.status === "connected" && dolphin.address) {
-    const wei = !dolphin.balanceError ? dolphin.balanceWei : null;
-    rows.push({
-      key: "dolphin-bnb",
-      asset: "BNB",
-      where: "Dolphin Wallet",
-      amount: wei !== null ? `${formatBnb(wei)} BNB` : null,
-      usd: wei !== null && price.status === "ready" ? formatUsdFromWei(wei, price.price) : null,
-      loading: dolphin.isReadingBalance,
-    });
-    const u = uBalance.data ?? null;
-    rows.push({
-      key: "dolphin-u",
-      asset: "U",
-      where: "Dolphin Wallet",
-      amount: u ? `${formatTokenAmount(u.raw, u.decimals)} ${u.symbol}` : null,
-      usd: u && uRate ? formatUsd(u.raw, u.decimals, uRate) : null,
-      loading: uBalance.isLoading,
-    });
-  }
-  if (identityAddress) {
-    const wei = identityBalance.data?.value ?? null;
-    rows.push({
-      key: "identity-bnb",
-      asset: "BNB",
-      where: "Connected wallet",
-      amount: wei !== null ? `${formatBnb(wei)} BNB` : null,
-      usd: wei !== null && price.status === "ready" ? formatUsdFromWei(wei, price.price) : null,
-      loading: identityBalance.isLoading,
-    });
-  }
-
-  return (
-    <section aria-labelledby="holdings-heading" className="wallet-block">
-      <h2 className="wallet-block__title" id="holdings-heading">
-        Holdings
-      </h2>
-      {rows.length === 0 ? (
-        <p className="wallet-block__empty">Connect a wallet to see what you hold.</p>
-      ) : (
-        <ul className="holdings">
-          {rows.map((row) => (
-            <li className="holdings__row" key={row.key}>
-              <span className="holdings__logo">
-                <AssetLogo asset={row.asset} size={28} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="holdings__name">{row.asset}</span>
-                <span className="holdings__where">{row.where}</span>
-              </span>
-              <span className="holdings__value">
-                <span className="holdings__amount">
-                  {hidden ? HIDDEN : row.amount ?? (row.loading ? "Reading..." : "Unavailable")}
-                </span>
-                {row.usd && !hidden ? <span className="holdings__usd">{row.usd}</span> : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 
@@ -1162,7 +1154,6 @@ export function AltanaWalletPanel() {
           price={price}
           receiveTarget={heroTarget}
         />
-        <HoldingsSection price={price} />
         {/* Every movement of the Dolphin Wallet, from the chain (2026-10-02). Agent activity stays on My Agents. */}
         <WalletHistory hidden={hidden} />
         <OptionalFeature label="Liquidation alerts">

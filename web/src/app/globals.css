@@ -1271,23 +1271,6 @@ select {
   box-shadow: inset 0 1px 2px var(--sink-top);
 }
 
-/* The Agent payments badge is a CONTROL (2026-09-26): the token logo it shows
-   is the asset the card displays, and tapping it switches BNB <-> U. A logo
-   carries its own disc, so the sunk grey circle goes; a ring on hover and
-   focus says it can be pressed. */
-.wcard__badge--asset {
-  width: 1.75rem;
-  height: 1.75rem;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-  transition: box-shadow 150ms ease;
-}
-.wcard__badge--asset:hover,
-.wcard__badge--asset:focus-visible {
-  box-shadow: 0 0 0 2px var(--line-strong);
-}
-
 /* Card balances: smaller than the hero's, same open tracking, same tabular
    figures. The hero answers "how much"; these are the breakdown. */
 /* margin-top is FIXED, not auto, and that is a bug fix rather than a taste
@@ -3852,15 +3835,34 @@ select {
 .wallet-block__empty { margin-top: 8px; font-size: 0.86rem; line-height: 1.55; color: var(--muted); }
 .wallet-block__note { margin-top: 10px; font-size: 0.74rem; line-height: 1.5; color: var(--faint); }
 
-.holdings { margin: 10px 0 0; padding: 0; list-style: none; }
-.holdings__row { display: flex; align-items: center; gap: 12px; padding: 10px 2px; }
-.holdings__row + .holdings__row { border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
-.holdings__logo { display: flex; flex-shrink: 0; }
-.holdings__name { display: block; font-size: 0.92rem; font-weight: 600; color: var(--ink); }
-.holdings__where { display: block; font-size: 0.74rem; color: var(--muted); }
-.holdings__value { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
-.holdings__amount { font-size: 0.92rem; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
-.holdings__usd { font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The Dolphin Wallet card's asset dropdown (2026-10-02). */
+.asset-menu { position: relative; flex-shrink: 0; }
+.asset-menu__trigger {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 1.9rem; padding: 0 8px 0 6px; border-radius: 999px;
+  background: var(--paper-muted); color: var(--ink);
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  transition: box-shadow 150ms ease;
+}
+.asset-menu__trigger:hover,
+.asset-menu__trigger:focus-visible { box-shadow: 0 0 0 2px var(--line-strong); }
+.asset-menu__chevron { display: inline-flex; color: var(--muted); transform: rotate(90deg); transition: transform 150ms ease; }
+.asset-menu__chevron--open { transform: rotate(-90deg); }
+.asset-menu__list {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
+  min-width: 13rem; margin: 0; padding: 4px; list-style: none;
+  border: 1px solid var(--line); border-radius: 14px;
+  background: var(--paper); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+.asset-menu__item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 10px; border-radius: 10px; text-align: left; cursor: pointer;
+}
+.asset-menu__item:hover,
+.asset-menu__item:focus-visible { background: var(--paper-muted); }
+[aria-selected="true"] > .asset-menu__item { background: color-mix(in srgb, var(--paper-muted) 70%, transparent); }
+.asset-menu__name { flex: 1; font-size: 0.86rem; font-weight: 600; color: var(--ink); }
+.asset-menu__amount { font-size: 0.82rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
 .spenders { margin: 10px 0 0; padding: 0; list-style: none; }
 .spenders__row { display: flex; align-items: center; gap: 12px; padding: 10px 0; }

@@ -22,7 +22,7 @@ import { formatBnb, RELAYED_INTENT_GAS_ALLOWANCE } from "@/wallet/altana-policy"
 import { useBnbPrice } from "@/hooks/use-bnb-price";
 import { useTokenUsd } from "@/hooks/use-token-usd";
 import { useDolphinUBalance } from "@/components/wallet-withdraw";
-import { formatUsdCents, formatUsdFromWei, type BnbPrice } from "@/wallet/bnb-price";
+import { formatUsdCents, formatUsdFromWei, weiToUsdCents, type BnbPrice } from "@/wallet/bnb-price";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { usdCents } from "@/wallet/token-usd";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -838,6 +838,24 @@ function HireCost({
           ? `Your Dolphin Wallet swaps about ${formatBnb(swapWei)} BNB for it.`
           : "Your Dolphin Wallet swaps a little BNB for it.";
 
+  /*
+   * THE HEADLINE IS THE TOTAL (owner, 2026-10-02: "you don't tell somebody it
+   * costs 0.05 and they end up paying more"). Agent price + network fees + any
+   * one-time setup, expressed in U. The swap is NOT added: it turns the
+   * person's BNB into the very U being paid, it is not a further cost, and its
+   * exact rate moves - so it lives in the details only.
+   */
+  const extraWei = feeWei !== null && setupWei !== null ? feeWei + setupWei : null;
+  let totalText: string | null = null;
+  if (uRate.status === "ready" && bnb.status === "ready" && decimals !== null && extraWei !== null) {
+    const centsPerToken = usdCents(BigInt(10) ** BigInt(decimals), decimals, uRate.rate);
+    if (centsPerToken > BigInt(0)) {
+      const totalCents = usdCents(priceRaw, decimals, uRate.rate) + weiToUsdCents(extraWei, bnb.price);
+      const tokens = Number(totalCents) / Number(centsPerToken);
+      totalText = `${tokens < 0.01 ? "<0.01" : tokens.toLocaleString("en", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} U`;
+    }
+  }
+
   const usd = (wei: bigint | null) =>
     wei !== null && bnb.status === "ready" ? ` (${formatUsdFromWei(wei, bnb.price)})` : "";
   const detail = (label: string, value: string) => (
@@ -850,8 +868,8 @@ function HireCost({
   return (
     <div className="py-3">
       <div className="flex items-baseline justify-between gap-4">
-        <span className="text-xs text-muted">Price</span>
-        <span className="text-lg font-semibold text-ink">{priceText}</span>
+        <span className="text-xs text-muted">Total</span>
+        <span className="text-lg font-semibold text-ink">{totalText ? `Up to ${totalText}` : "Working it out…"}</span>
       </div>
       {line ? <p className="mt-1 text-xs leading-5 text-muted">{line}</p> : null}
       {shortWei !== null ? (
@@ -866,12 +884,12 @@ function HireCost({
         <summary className="cursor-pointer text-muted hover:text-ink">See details</summary>
         <div className="mt-1">
           {detail("Agent's price", `${priceText}${uRate.status === "ready" && decimals !== null ? ` (${formatUsdCents(usdCents(priceRaw, decimals, uRate.rate))})` : ""}`)}
-          {converting ? detail("Swap BNB for U", swapWei !== null ? `about ${formatBnb(swapWei)} BNB${usd(swapWei)}` : "worked out when you hire") : null}
+          {converting ? detail("Paid by swapping", swapWei !== null ? `about ${formatBnb(swapWei)} BNB for the U${usd(swapWei)}` : "BNB for the U, when you hire") : null}
           {detail("Network fees, up to", feeWei !== null ? `${formatBnb(feeWei)} BNB${usd(feeWei)}` : "…")}
           {needsWalletSetup ? detail("One-time wallet setup", setupWei !== null ? `${formatBnb(setupWei)} BNB${usd(setupWei)}` : "…") : null}
           {detail("Held in your Dolphin Wallet", heldWei !== null ? `${formatBnb(heldWei)} BNB${heldU !== null && heldU > BigInt(0) && decimals !== null ? ` · ${formatTokenAmount(heldU, decimals)} U` : ""}` : "not set up")}
           <p className="mt-1.5 leading-5 text-muted">
-            Network fees are a ceiling; what isn&apos;t used stays in your wallet.
+            The total uses the most the network fees can be; what isn&apos;t used stays in your wallet.
           </p>
         </div>
       </details>

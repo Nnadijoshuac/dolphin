@@ -451,7 +451,8 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "pro
       type: "function",
       function: {
         name: "block_token_safety",
-        description: "Security check of a BNB Chain token contract: honeypot, buy/sell tax, owner powers, holder concentration, LP lock.",
+        description:
+          "Security check of a BNB Chain token contract (GoPlus): honeypot, buy/sell tax in %, owner powers (mint, pause, blacklist, change taxes, upgrade), top-10 holder share with burned and locked supply set apart, and liquidity locked or burned. Fields GoPlus has no data for are reported as unknown.",
         parameters: {
           type: "object",
           properties: { tokenAddress: { type: "string", description: "The token contract address (0x…)." } },
@@ -557,6 +558,104 @@ function money(value: number | null): string {
 }
 
 /**
+ * THE SAFETY REPORT (rewritten 2026-10-02). The first version printed GoPlus's
+ * raw tax ("0.05", read as 0.05% when it means 5%) and said nothing about
+ * holder concentration or liquidity, though its description promised both.
+ *
+ * Concentration sets apart supply that cannot move: measured on CAKE, the top
+ * "holder" is the zero address with 93.6% (burned), so a naive top-10 share
+ * would brand a blue chip a scam. Burn addresses and holders GoPlus marks as
+ * locked are reported separately; exchange-tagged holders are named.
+ */
+const BURN = /^0x0{40}$|^0x0{36}dead$|^0x000000000000000000000000000000000000dead$/i;
+
+function pct(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return null;
+  return `${(value * 100).toFixed(value * 100 < 1 ? 2 : 1)}%`;
+}
+
+export function safetyReport(report: Record<string, any>): string {
+  const flag = (key: string) => report[key] === "1";
+  // GoPlus reports 0 holders for USDT: a gap in its data, not an empty token.
+  const holderCount = Number(report.holder_count) > 0 ? report.holder_count : "unknown";
+  const lines: string[] = [];
+  const name = [report.token_name, report.token_symbol && `(${report.token_symbol})`].filter(Boolean).join(" ");
+  if (name) lines.push(`Token: ${name}.`);
+
+  lines.push(`Buy tax ${pct(report.buy_tax) ?? "unknown"}, sell tax ${pct(report.sell_tax) ?? "unknown"}${flag("transfer_tax") ? ", transfer tax applies" : ""}.`);
+
+  const danger = [
+    flag("is_honeypot") && "HONEYPOT: it cannot be sold",
+    flag("cannot_sell_all") && "cannot sell all of a balance",
+    flag("cannot_buy") && "cannot be bought",
+    flag("honeypot_with_same_creator") && "its creator has made honeypots before",
+    flag("is_mintable") && "owner can mint more",
+    flag("slippage_modifiable") && "owner can change the taxes",
+    flag("personal_slippage_modifiable") && "owner can set a tax for specific wallets",
+    flag("owner_change_balance") && "owner can change balances",
+    flag("hidden_owner") && "hidden owner",
+    flag("can_take_back_ownership") && "ownership can be taken back",
+    flag("is_blacklisted") && "has a blacklist",
+    flag("transfer_pausable") && "transfers can be paused",
+    flag("selfdestruct") && "contract can self-destruct",
+    flag("is_proxy") && "upgradeable (proxy): its code can be changed",
+    flag("external_call") && "calls external contracts on transfer",
+    flag("trading_cooldown") && "has a trading cooldown",
+    flag("anti_whale_modifiable") && "owner can change the max transaction size",
+    report.is_open_source === "0" && "source code not verified",
+  ].filter(Boolean);
+  lines.push(danger.length ? `Owner powers and warnings: ${danger.join("; ")}.` : "Owner powers and warnings: none found.");
+
+  const holders = Array.isArray(report.holders) ? (report.holders as Array<Record<string, any>>) : [];
+  if (holders.length) {
+    let burned = 0;
+    let locked = 0;
+    let free = 0;
+    const named: string[] = [];
+    for (const holder of holders.slice(0, 10)) {
+      const share = Number(holder.percent) || 0;
+      if (BURN.test(String(holder.address ?? ""))) burned += share;
+      else if (String(holder.is_locked) === "1") locked += share;
+      else {
+        free += share;
+        if (holder.tag) named.push(`${holder.tag} ${pct(share)}`);
+      }
+    }
+    lines.push(
+      `Top 10 holders: ${pct(free)} held by wallets that can sell` +
+        (burned ? `, ${pct(burned)} burned` : "") +
+        (locked ? `, ${pct(locked)} locked` : "") +
+        (named.length ? ` (named: ${named.join(", ")})` : "") +
+        `. Holders in total: ${holderCount}.`,
+    );
+  } else {
+    lines.push(`Top-10 holder share: unknown. Holders in total: ${holderCount}.`);
+  }
+  if (report.owner_percent || report.creator_percent) {
+    lines.push(`Owner holds ${pct(report.owner_percent) ?? "unknown"}, creator holds ${pct(report.creator_percent) ?? "unknown"}.`);
+  }
+
+  const lp = Array.isArray(report.lp_holders) ? (report.lp_holders as Array<Record<string, any>>) : [];
+  if (lp.length) {
+    let lpBurned = 0;
+    let lpLocked = 0;
+    for (const holder of lp) {
+      const share = Number(holder.percent) || 0;
+      if (BURN.test(String(holder.address ?? ""))) lpBurned += share;
+      else if (String(holder.is_locked) === "1") lpLocked += share;
+    }
+    lines.push(`Liquidity: ${pct(lpLocked) ?? "0%"} locked, ${pct(lpBurned) ?? "0%"} burned, the rest can be withdrawn.`);
+  } else {
+    lines.push("Liquidity lock: unknown (no LP data from the security service).");
+  }
+  if (flag("is_in_cex")) lines.push("Listed on a centralised exchange.");
+  if (flag("trust_list")) lines.push("On GoPlus's trusted list.");
+  return lines.join(" ");
+}
+
+/**
  * Runs one built-in tool. `tradesToday` is how many swaps this agent has
  * already proposed today, counted by the caller.
  */
@@ -620,23 +719,7 @@ export async function runBlockTool(
       };
       const report = data.result?.[address];
       if (!report) return { text: "The security service has no report for that token.", isError: true };
-      const flag = (key: string) => report[key] === "1";
-      const findings = [
-        flag("is_honeypot") && "HONEYPOT: it cannot be sold",
-        flag("cannot_sell_all") && "cannot sell all",
-        flag("is_mintable") && "owner can mint more",
-        flag("hidden_owner") && "hidden owner",
-        flag("can_take_back_ownership") && "ownership can be taken back",
-        flag("is_blacklisted") && "has a blacklist",
-        flag("transfer_pausable") && "transfers can be paused",
-        report.is_open_source === "0" && "source code not verified",
-      ].filter(Boolean);
-      return {
-        text:
-          `Buy tax ${report.buy_tax ?? "unknown"}, sell tax ${report.sell_tax ?? "unknown"}, holders ${report.holder_count ?? "unknown"}. ` +
-          (findings.length ? `Warnings: ${findings.join("; ")}.` : "No critical flags."),
-        isError: false,
-      };
+      return { text: safetyReport(report), isError: false };
     }
 
     if (name === "block_propose_swap") {

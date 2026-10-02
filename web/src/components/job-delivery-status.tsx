@@ -8,6 +8,7 @@ import { useState } from "react";
 
 import { agentPaymentsApi, type AgentJobRow } from "@/convex/api";
 import { useJobDelivery } from "@/hooks/use-job-delivery";
+import { useDeliverable } from "@/hooks/use-deliverable";
 import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
 import { priceTextOr, usePriceText } from "@/hooks/use-price-text";
@@ -121,6 +122,8 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
     symbol: job?.paymentTokenSymbol,
   });
 
+  const result = useDeliverable(job, delivery.onChain ? hasDeliverable(delivery.onChain) : false);
+
   if (!job) return null;
 
   /*
@@ -188,7 +191,12 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
         </Link>
       </div>
 
-      {copy && <p className="mt-2 text-xs leading-5 text-muted">{copy.body}</p>}
+      {copy && !(delivered && result?.content) ? <p className="mt-2 text-xs leading-5 text-muted">{copy.body}</p> : null}
+      {delivered && result?.content ? (
+        <p className="mt-2 line-clamp-4 whitespace-pre-line rounded-xl border border-line bg-paper px-3 py-2 text-xs leading-5 text-ink">
+          {result.content}
+        </p>
+      ) : null}
       {declined && identity.address && !hireCancelled ? (
         <div className="mt-3">
           <CancelHireHold address={identity.address} agentKey={agentKey} />

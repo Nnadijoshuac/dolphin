@@ -4,6 +4,7 @@ import {
   BNB,
   createClient,
   buildClaimRefundCall,
+  settleErc8183Job,
   erc8183Addresses,
   hireErc8183Agent,
   signerFromPasskey,
@@ -279,6 +280,8 @@ export type AltanaWalletValue = Readonly<{
   registerWallet: () => Promise<void>;
   /** Reclaim a funded escrow whose deadline passed without delivery. */
   claimEscrowRefund: (jobId: string) => Promise<void>;
+  /** Approve a delivered job so escrow pays the seller now, not after the dispute window. */
+  approveDelivery: (jobId: string) => Promise<void>;
   /** Sign a batch an agent built. Returns the tx hash or relay calls id. */
   /** `builtBy` names the agent in Agent activity; the recorded movements come from the chain. */
   executeAgentPlan: (plan: AgentTransactionPlan, builtBy?: { agentKey: string; agentName: string }) => Promise<string>;
@@ -956,6 +959,35 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
    * before `expiredAt`. The guard below is so a user reads a sentence instead
    * of a revert.
    */
+  /*
+   * APPROVE A DELIVERY (owner, 2026-10-02: "why is it stuck at delivered?").
+   * A submitted job pays the seller automatically once the 7-day dispute
+   * window ends; the buyer approving it releases the escrow now instead. Same
+   * call the SDK names "approve" (router.settle). Money moves from escrow to the
+   * seller - none from this wallet except the gas.
+   */
+  const approveDelivery = useCallback(
+    async (jobId: string): Promise<void> => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("No Dolphin Wallet on this device.");
+      const nativeBalance = await altanaClient().balances({ wallet: { address: wallet.address }, chainId: ALTANA_NETWORK.chainId });
+      await assertIntentAffordable({ publicClient: keystoreReader, nativeBalanceWei: nativeBalance.native, items: [] });
+      setIsBusy(true);
+      setError(null);
+      try {
+        const result = await settleErc8183Job({ address: wallet.address }, adminSigner(), { jobId: BigInt(jobId), action: "approve" }, { network: ALTANA_NETWORK });
+        if (result.status === "FAILED") throw new Error(`Approving job ${jobId} was not accepted by the chain. Nothing was paid.`);
+        refreshBalance();
+      } catch (cause) {
+        setError(toUserMessage(cause, "That could not be approved. Try again."));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner, refreshBalance],
+  );
+
   const claimEscrowRefund = useCallback(
     async (jobId: string): Promise<void> => {
       const wallet = getAltanaSnapshot();
@@ -1698,6 +1730,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       registrationFeeWei: registrationFeeQuery.data ?? null,
       registerWallet,
       claimEscrowRefund,
+      approveDelivery,
       executeAgentPlan,
       balanceWei: balanceQuery.data ?? null,
       balanceError:
@@ -1755,6 +1788,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     refreshRecoverability,
     registerWallet,
     claimEscrowRefund,
+    approveDelivery,
     executeAgentPlan,
     registrationFeeQuery.data,
     revokeSession,

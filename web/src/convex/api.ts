@@ -658,6 +658,8 @@ export type AgentJobRow = {
   verifiedAt: string;
   /** What the seller said when told the job was funded (agentPayments.recordSellerReply). */
   sellerReply?: { accepted: boolean; reason: string | null; at: string };
+  /** What the seller delivered, fetched from the URL its submit tx names (agentPayments.fetchDeliverable). */
+  deliverable?: { url: string; content: string | null; contentType: string | null; submitTx: string | null; fetchedAt: string };
   /** When the verified payment was recorded. verifiedAt moves on every re-read. */
   _creationTime: number;
 };
@@ -667,6 +669,10 @@ export const agentPaymentsApi = anyApi as unknown as {
     requestQuote: Action<
       { agentKey: string; taskDescription: string; serviceId?: string },
       AgentQuote
+    >;
+    fetchDeliverable: Action<
+      { jobId: string },
+      { url: string; content: string | null; contentType: string | null } | null
     >;
     notifyJobFunded: Action<
       { agentKey: string; jobId: string },

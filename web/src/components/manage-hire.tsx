@@ -32,6 +32,8 @@ import { useState } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CancelHireHold } from "@/components/cancel-hire-hold";
+import { HoldButton } from "@/components/hold-button";
+import { useDeliverable } from "@/hooks/use-deliverable";
 import { OneLine } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { TrackRecord } from "@/components/track-record";
@@ -293,6 +295,7 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
   const delivered = onChain ? hasDeliverable(onChain) : false;
   const request = requestText(job.taskDescription);
   const [copied, setCopied] = useState(false);
+  const result = useDeliverable(job, delivered);
 
   return (
     <>
@@ -324,11 +327,24 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
         <h2 className="detail-card__title">What it delivered</h2>
         {delivered && onChain ? (
           <>
-            <p className="mt-2 text-[0.9rem] leading-6 text-ink-soft">
-              {agent.name} submitted its result{onChain.submittedAt > 0 ? ` on ${dayTime(onChain.submittedAt * 1000)}` : ""}.
-              The result stays with the agent; this fingerprint, recorded on BNB Chain, proves exactly what it submitted.
+            <p className="mt-2 text-[0.8rem] leading-6 text-muted">
+              From {agent.name}{onChain.submittedAt > 0 ? `, ${dayTime(onChain.submittedAt * 1000)}` : ""}
             </p>
-            <div className="mt-4 flex items-center gap-2 rounded-xl bg-paper-muted/60 px-4 py-3">
+            {result?.content ? (
+              <div className="mt-2 rounded-xl border border-line bg-paper px-4 py-3">
+                <p className="whitespace-pre-line text-[0.9rem] leading-6 text-ink">{result.content}</p>
+                <a className="mt-2 inline-flex items-center gap-1 text-[0.74rem] font-medium text-muted hover:text-ink" href={result.url} rel="noreferrer" target="_blank">
+                  Open the original
+                  <CategoryGlyph color="currentColor" name="external" size={11} />
+                </a>
+              </div>
+            ) : (
+              <p className="mt-2 text-[0.86rem] text-muted">Fetching the result…</p>
+            )}
+            {delivery.state === "delivered" ? <ApproveDelivery agentName={agent.name} job={job} submittedAt={onChain.submittedAt} /> : null}
+            <details className="mt-3 text-[0.74rem] text-muted">
+              <summary className="cursor-pointer">Proof on BNB Chain</summary>
+            <div className="mt-2 flex items-center gap-2 rounded-xl bg-paper-muted/60 px-4 py-3">
               <code className="min-w-0 flex-1 truncate font-mono text-[0.74rem] text-ink" title={onChain.deliverable}>
                 {onChain.deliverable}
               </code>
@@ -345,6 +361,7 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
                 {copied ? "Copied" : "Copy"}
               </button>
             </div>
+            </details>
           </>
         ) : (
           <p className="mt-2 text-[0.9rem] leading-6 text-muted">
@@ -362,6 +379,53 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
         </a>
       </section>
     </>
+  );
+}
+
+/**
+ * APPROVE & PAY NOW (owner, 2026-10-02: "why is it stuck at delivered?"). A
+ * delivered job pays the seller on its own once the dispute window ends; a
+ * person happy with the result can release it now. Hold, like every other
+ * irreversible action.
+ */
+function ApproveDelivery({ job, agentName, submittedAt }: { job: AgentJobRow; agentName: string; submittedAt: number }) {
+  const wallet = useAltanaWallet();
+  const [state, setState] = useState<"idle" | "approving" | "done" | { error: string }>("idle");
+  const autoOn = submittedAt > 0 ? day((submittedAt + ESCROW_DISPUTE_WINDOW_SECONDS) * 1000) : null;
+  if (state === "done") return <p className="mt-3 text-[0.8rem] text-ink">Approved. {agentName} is being paid.</p>;
+  return (
+    <div className="mt-4">
+      <HoldButton
+        backgroundColor="var(--ink)"
+        className="manage-hold"
+        disabled={state === "approving" || wallet.status !== "connected"}
+        doneLabel="Approving..."
+        fillColor="#2f8a55"
+        fillTextColor="#ffffff"
+        holdTime={1400}
+        onHold={() => {
+          setState("approving");
+          wallet.approveDelivery(job.jobId).then(
+            () => setState("done"),
+            (cause: unknown) => setState({ error: toUserMessage(cause, "That could not be approved. Try again.") }),
+          );
+        }}
+        radius={11}
+        resetAfter={1800}
+        size="md"
+        textColor="var(--paper)"
+      >
+        Hold to approve and pay
+      </HoldButton>
+      <p className="mt-2 text-[0.74rem] leading-5 text-muted">
+        Happy with it? Pay {agentName} now.{autoOn ? ` Otherwise it's paid automatically on ${autoOn}.` : ""}
+      </p>
+      {typeof state === "object" ? (
+        <p className="mt-1 text-[0.74rem] text-danger" role="alert">
+          {state.error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

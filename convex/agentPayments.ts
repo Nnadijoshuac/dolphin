@@ -335,6 +335,19 @@ export const requestQuote = action({
   },
 });
 
+/** Keeps the seller's answer to "your job is funded" with the job (schema: sellerReply). */
+export const recordSellerReply = internalMutation({
+  args: { jobId: v.string(), accepted: v.boolean(), reason: v.union(v.string(), v.null()) },
+  handler: async (ctx, { jobId, accepted, reason }) => {
+    const row = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_job", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("jobId", jobId))
+      .unique();
+    if (!row) return;
+    await ctx.db.patch(row._id, { sellerReply: { accepted, reason, at: new Date().toISOString() } });
+  },
+});
+
 /**
  * Tell a seller its job is funded so it starts work. Relay only - by this
  * point the money has already moved, and this call cannot move any more of it.
@@ -362,6 +375,12 @@ export const notifyJobFunded = action({
     // non-"accepted" answer is reported, not thrown - the escrow exists either
     // way and the user needs to see what the seller actually said.
     const accepted = /"status"\s*:\s*"accepted"/.test(detail) || /"accepted"\s*:\s*true/.test(detail);
+    const refused = /"status"\s*:\s*"rejected"/.test(detail) || /"accepted"\s*:\s*false/.test(detail);
+    // Kept with the job so the card can say what happened (schema: sellerReply).
+    if (accepted || refused) {
+      const reason = /"reason"\s*:\s*"([^"]{1,300})"/.exec(detail)?.[1] ?? null;
+      await ctx.runMutation(internal.agentPayments.recordSellerReply, { jobId, accepted, reason });
+    }
     return { accepted, detail };
   },
 });

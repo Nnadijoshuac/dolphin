@@ -967,6 +967,16 @@ export default defineSchema({
     refundedAt: v.optional(v.union(v.string(), v.null())),
     /** When Dolphin last read this job back off the chain. */
     verifiedAt: v.string(),
+    /**
+     * What the seller said when told the job was funded (2026-10-02). A refusal
+     * leaves the job FUNDED with no deliverable - on chain it looks exactly like
+     * a seller still working, and the card said "Agent working" over Keel's
+     * outright refusal of job 56871. The seller's own answer is the only thing
+     * that tells the two apart. Optional: earlier rows were never asked.
+     */
+    sellerReply: v.optional(
+      v.object({ accepted: v.boolean(), reason: v.union(v.string(), v.null()), at: v.string() }),
+    ),
     chainId: v.number(),
   })
     .index("by_job", ["chainId", "jobId"])

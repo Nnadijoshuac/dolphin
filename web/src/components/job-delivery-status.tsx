@@ -107,8 +107,31 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
 
   if (!job) return null;
 
-  const copy = delivery.state ? deliveryCopy(delivery.state) : null;
-  const tone = delivery.state ? STATE_TONE[delivery.state] : "wait";
+  /*
+   * THE SELLER SAID NO (2026-10-02). On chain a refused job and a job being
+   * worked on are identical - FUNDED, nothing submitted - so this card said
+   * "Agent working ... has been told to start" over Keel's outright refusal of
+   * job 56871. What the seller answered when told it was paid is kept with the
+   * job, and a refusal is said as one: the job will not happen, the money is
+   * safe in escrow, and when it comes back. A job description cannot change
+   * after funding, so the refusal is final for this job.
+   */
+  const declined =
+    job.sellerReply && !job.sellerReply.accepted && (delivery.state === "working" || delivery.state === "overdue" || delivery.state === null);
+  const paidText = priceTextOr(
+    paidPrice,
+    `${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol}`,
+  );
+  const copy = declined
+    ? {
+        label: `${job.agentName} declined this job`,
+        // The seller's own reason is usually protocol jargon; what it means for the person is this.
+        body: `${job.agentName} turned the job down, so it won't be done. Your ${paidText} is safe in escrow and comes back to your Dolphin Wallet${delivery.onChain ? ` after ${formatDeadline(delivery.onChain.expiredAt)}` : " once the escrow deadline passes"}.`,
+      }
+    : delivery.state
+      ? deliveryCopy(delivery.state)
+      : null;
+  const tone = declined ? "warn" : delivery.state ? STATE_TONE[delivery.state] : "wait";
   const delivered = delivery.onChain ? hasDeliverable(delivery.onChain) : false;
 
   /*
@@ -222,7 +245,7 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
         View on BscScan ↗
       </a>
 
-      {delivery.state === "overdue" && (
+      {delivery.state === "overdue" && !declined && (
         <p className="mt-3 text-[0.68rem] leading-5 text-faint">
           Dolphin stopped expecting delivery after{" "}
           {Math.round(DELIVERY_TIMEOUT_MS / 60_000)} minutes, which is twice the

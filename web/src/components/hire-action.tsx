@@ -536,7 +536,7 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
       }
       return null;
     }
-    if (priceRequiresPayment && settledPaymentJobId !== null) {
+    if (priceRequiresPayment && settledPaymentJobId !== null && !showMyAgents) {
       return "Escrow is already funded for this agent. Press Hire to attach it to your hire record.";
     }
     return null;
@@ -584,7 +584,8 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
           task={taskText}
           taskEdited={editedTask !== null}
         />
-      ) : (
+      ) : priceRequiresPayment ? null : (
+        // The read-only sentence describes a free hire; on a paid one it was false.
         <p className="mt-4 text-sm leading-6 text-muted">{access.reason}</p>
       )}
 

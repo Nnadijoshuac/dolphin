@@ -656,6 +656,8 @@ export type AgentJobRow = {
   refundTransactionHash?: string | null;
   refundedAt?: string | null;
   verifiedAt: string;
+  /** What the seller said when told the job was funded (agentPayments.recordSellerReply). */
+  sellerReply?: { accepted: boolean; reason: string | null; at: string };
   /** When the verified payment was recorded. verifiedAt moves on every re-read. */
   _creationTime: number;
 };

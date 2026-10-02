@@ -902,6 +902,8 @@ select {
 }
 .wallet-btn--accent:hover:not(:disabled) { background-color: var(--accent-hover); }
 
+.wallet-btn--ink { border-color: var(--ink); background-color: var(--ink); color: var(--paper); }
+.wallet-btn--ink:hover:not(:disabled) { opacity: 0.88; }
 .wallet-btn--ghost { background-color: var(--paper); color: var(--ink); }
 .wallet-btn--ghost:hover:not(:disabled) {
   background-color: var(--paper-strong);
@@ -1338,6 +1340,11 @@ select {
   gap: 0.4rem;
   margin-top: auto;
   padding-top: 1rem;
+}
+.wcard__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
 }
 .wcard__link {
   align-self: center;

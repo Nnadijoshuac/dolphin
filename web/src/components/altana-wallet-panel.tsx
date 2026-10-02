@@ -383,11 +383,9 @@ export function RecoverabilityPanel({ onDeposit }: { onDeposit: () => void }) {
  * wallet that feels solid from one that feels like it is still loading.
  */
 function WalletHero({
-  onReceive,
   price,
   receiveTarget,
 }: {
-  onReceive: () => void;
   price: BnbPriceState;
   receiveTarget: string | null;
 }) {
@@ -532,12 +530,7 @@ function WalletHero({
       <p aria-live="polite" className="wallet-hero__caption">{caption}</p>
 
       <div className="wallet-hero__actions">
-        <QuickAction
-          disabled={receiveTarget === null}
-          glyph="receive"
-          label="Add funds"
-          onClick={onReceive}
-        />
+        {/* Add funds lives on the Dolphin Wallet card now (2026-10-02). */}
         {receiveTarget ? (
           <QuickAction
             glyph="external"
@@ -778,16 +771,26 @@ function AgentWalletCard({
       )}
       <p className="wcard__sub">Pays your hires and trades</p>
 
-      {/* Styled as Disconnect on the card beside it: an account action. */}
+      {/*
+       * ADD FUNDS AND WITHDRAW, ON THE WALLET THEY MOVE MONEY IN AND OUT OF
+       * (owner, 2026-10-02: "how would somebody understand the add on the
+       * total balance is for the Dolphin Wallet?"). Add funds used to sit on
+       * the total at the top of the page, which counts both wallets.
+       */}
       <div className="wcard__foot">
-        <button
-          className="wallet-btn wallet-btn--ghost"
-          disabled={wallet.isBusy}
-          onClick={() => setWithdrawing(true)}
-          type="button"
-        >
-          Withdraw
-        </button>
+        <div className="wcard__actions">
+          <button className="wallet-btn wallet-btn--ink" onClick={() => onReceive(address)} type="button">
+            Add funds
+          </button>
+          <button
+            className="wallet-btn wallet-btn--ghost"
+            disabled={wallet.isBusy}
+            onClick={() => setWithdrawing(true)}
+            type="button"
+          >
+            Withdraw
+          </button>
+        </div>
       </div>
       {withdrawing ? (
         <WithdrawDialog initialAsset={asset} onClose={() => setWithdrawing(false)} />
@@ -1156,7 +1159,6 @@ export function AltanaWalletPanel() {
     <div className="wallet-dashboard wallet-v2">
       <div className="wallet-v2__main">
         <WalletHero
-          onReceive={() => setReceiving(heroTarget)}
           price={price}
           receiveTarget={heroTarget}
         />

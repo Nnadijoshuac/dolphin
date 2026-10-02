@@ -3,6 +3,7 @@
 import { useAction, useMutation, useQuery as useConvexQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
+import { useGasPrice } from "wagmi";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { agentRouteId } from "@/constants/agents";
@@ -17,13 +18,19 @@ import { track } from "@/lib/analytics";
 // Shared with the wallet screen's own recoverability panel on purpose: two
 // cards denominated in BNB that round differently is the mismatch
 // altana-policy.ts already warns about.
-import { formatBnb } from "@/wallet/altana-policy";
+import { formatBnb, RELAYED_INTENT_GAS_ALLOWANCE } from "@/wallet/altana-policy";
+import { useBnbPrice } from "@/hooks/use-bnb-price";
+import { useTokenUsd } from "@/hooks/use-token-usd";
+import { useDolphinUBalance } from "@/components/wallet-withdraw";
+import { formatUsdCents, weiToUsdCents, type BnbPrice } from "@/wallet/bnb-price";
+import { usdCents } from "@/wallet/token-usd";
 import { toUserMessage } from "@/wallet/wallet-errors";
-import { DELIVERY_RELEASE_NOTE, defaultTaskDescription, ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
+import { defaultTaskDescription, ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
 import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
+import { reportToConsole } from "@/lib/console-report";
 
 function shortAddress(value: string | null) {
   if (!value) return "";
@@ -97,11 +104,33 @@ const HIRE_STAGE_FALLBACK: Readonly<Record<HireStage, string>> = {
     "The hire could not be recorded. Try again.",
 };
 
+/**
+ * WHAT THE PERSON GETS BACK, in their words (owner, 2026-10-01: "what would
+ * this person actually need to know?"). One line per category, said before
+ * they pay - the task template beneath it is what the agent is actually sent.
+ */
+const DELIVERABLE: Record<string, string> = {
+  "health-factor": "A health check of a lending position: how close it is to liquidation, and what to repay to be safe.",
+  yield: "A ranking of where the funds would earn most, after costs.",
+  rebalancing: "A costed plan to rebalance the portfolio, including fees and price impact.",
+  "grid-trading": "A grid sized for the position, with the spacing it needs to break even.",
+  trading: "Trade ideas with entry, exit, stop and size, costed against where they would fill.",
+  monitoring: "A report of the wallet's recent onchain activity and anything notable.",
+};
+
+/** Longest request Dolphin will send; the seller signs it back into a 4 KB job description. */
+const MAX_TASK_CHARS = 1200;
+
 /** Paid hires pay from the Dolphin Wallet, which lives in this browser behind a passkey. */
 const NO_DOLPHIN_WALLET =
   "This agent is paid from your Dolphin Wallet, and there isn't one on this device yet. Set it up, add a little BNB, then press Hire again.";
 
-export function HireAction({ agent }: { agent: Agent }) {
+/**
+ * `bare`: inside the phone's hire sheet, which already has its own title and
+ * surface - the card's box and heading there were a box inside a box with two
+ * titles saying the same thing.
+ */
+export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boolean }) {
   const wallet = useWallet();
   const session = useWalletSession();
   const altana = useAltanaWallet();
@@ -125,6 +154,26 @@ export function HireAction({ agent }: { agent: Agent }) {
    * interaction the payment finished in.
    */
   const [paidJobId, setPaidJobId] = useState<string | null>(null);
+
+  /*
+   * WHAT THE AGENT IS ASKED, AND ABOUT WHICH WALLET (owner, 2026-10-01). The
+   * request used to be a fixed template about the Dolphin Wallet - the wallet
+   * that pays, which usually holds no positions at all, so a perfect health
+   * report came back empty. The person now picks the wallet (their own by
+   * default) and can read and change exactly what the agent will be sent.
+   */
+  const [editedTask, setEditedTask] = useState<string | null>(null);
+  // Always the connected wallet: that is where the person's positions are
+  // (owner, 2026-10-01: no wallet picker - fewer choices, not more).
+  const targetAddress = wallet.address ?? null;
+  const templateTask = defaultTaskDescription(agent.category, targetAddress);
+  const taskText = editedTask ?? templateTask;
+  const taskProblem =
+    !taskText.trim()
+        ? "Write what you want the agent to do."
+        : taskText.length > MAX_TASK_CHARS
+          ? `Keep the request under ${MAX_TASK_CHARS} characters.`
+          : null;
 
   const access = assessAuthorizationCapability(agent.category, "read_only_hire");
   const price = agent.priceModel;
@@ -318,7 +367,7 @@ export function HireAction({ agent }: { agent: Agent }) {
     });
   }
 
-  async function payForHire(hirerWalletAddress: string): Promise<PaidJob> {
+  async function payForHire(hirerWalletAddress: string, taskDescription: string): Promise<PaidJob> {
     if (altana.status !== "connected") {
       if (altana.status === "no-wallet") throw new Error(NO_DOLPHIN_WALLET);
       throw new Error(
@@ -330,7 +379,7 @@ export function HireAction({ agent }: { agent: Agent }) {
     setState({ kind: "hiring", label: "Getting price…" });
     const quote = (await requestQuote({
       agentKey: agent.agentKey,
-      taskDescription: defaultTaskDescription(agent.category, altana.address),
+      taskDescription,
     })) as AgentQuote;
 
     setState({ kind: "hiring", label: "Checking funds…" });
@@ -417,7 +466,13 @@ export function HireAction({ agent }: { agent: Agent }) {
       let paymentJobId = jobId;
       if (priceRequiresPayment && paymentJobId === null) {
         stage = "payment";
-        const paid = await payForHire(identity.address);
+        // Logged out, "your wallet" had no address to name until connecting
+        // just now - so an unedited request is rebuilt with the real one.
+        const request =
+          editedTask === null
+            ? defaultTaskDescription(agent.category, identity.address)
+            : taskText.trim();
+        const paid = await payForHire(identity.address, request);
         paymentJobId = paid.jobId;
         setPaidJobId(paid.jobId);
       }
@@ -431,7 +486,7 @@ export function HireAction({ agent }: { agent: Agent }) {
        * starts from that line alone has nothing to go on - there was no console
        * output on this path at all before.
        */
-      console.error(`[hire:${stage}] ${agent.agentKey}`, cause);
+      reportToConsole(`hire:${stage}`, cause);
       setState({
         kind: "error",
         message: toUserMessage(cause, HIRE_STAGE_FALLBACK[stage]),
@@ -475,9 +530,9 @@ export function HireAction({ agent }: { agent: Agent }) {
     }
     if (paymentOutstanding) {
       if (altana.status !== "connected") {
-        return `This agent charges ${priceText}. Hire uses your Dolphin Wallet for escrow, so set it up and fund it with BNB before paying.`;
+        return "Paying needs a Dolphin Wallet with a little BNB in it.";
       }
-      return `This agent charges ${priceText}. Press Hire and Dolphin will quote the agent, convert BNB if needed, fund escrow, then record the hire. The escrow pays the agent when it delivers; if it doesn't, claim a refund from My Agents after ${ESCROW_REFUND_DAYS} days.`;
+      return null;
     }
     if (priceRequiresPayment && settledPaymentJobId !== null) {
       return "Escrow is already funded for this agent. Press Hire to attach it to your hire record.";
@@ -486,8 +541,8 @@ export function HireAction({ agent }: { agent: Agent }) {
   })();
 
   return (
-    <div className="surface-raised p-5 sm:p-6">
-      <div className="flex items-start justify-between gap-4">
+    <div className={bare ? "" : "surface-raised p-5 sm:p-6"}>
+      <div className={bare ? "hidden" : "flex items-start justify-between gap-4"}>
         <div>
           <p className="eyebrow">Hire</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-ink">
@@ -517,21 +572,39 @@ export function HireAction({ agent }: { agent: Agent }) {
        * exactly the price to the ERC-8183 escrow for this job (buildHireCalls:
        * approve(kernel, budget)), and nothing else.
        */}
-      <p className="mt-4 text-sm leading-6 text-muted">
-        {priceRequiresPayment
-          ? `Paying approves exactly ${priceText} to the ERC-8183 escrow for this one job, and nothing more. The agent gets no access to your wallet.`
-          : access.reason}
-      </p>
+      {priceRequiresPayment && !showMyAgents ? (
+        <PaidHireBrief
+          category={agent.category}
+          connectedAddress={wallet.address ?? null}
+          onReset={() => setEditedTask(null)}
+          onTask={setEditedTask}
+          problem={taskProblem}
+          task={taskText}
+          taskEdited={editedTask !== null}
+        />
+      ) : (
+        <p className="mt-4 text-sm leading-6 text-muted">{access.reason}</p>
+      )}
 
       {/* The facts that bear on the decision, and on a first purchase there
           are two of them. */}
       <div className="mt-5 border-y border-line">
-        <div className="flex items-baseline justify-between gap-4 py-3">
-          <span className="text-xs text-muted">Price</span>
-          <span className="text-sm font-semibold text-ink">
-            {priceText}
-          </span>
-        </div>
+        {priceRequiresPayment && !showMyAgents && chargedRaw !== null && tokenAddress ? (
+          <HireCost
+            decimals={agent.pricing?.tokenDecimals || liveToken?.decimals || null}
+            needsWalletSetup={needsWalletSetup}
+            priceRaw={BigInt(chargedRaw)}
+            priceText={priceText}
+            token={tokenAddress}
+          />
+        ) : (
+          <div className="flex items-baseline justify-between gap-4 py-3">
+            <span className="text-xs text-muted">Price</span>
+            <span className="text-sm font-semibold text-ink">
+              {priceText}
+            </span>
+          </div>
+        )}
         {/*
          * WHAT HAPPENS TO THE MONEY IF THE AGENT FAILS, said before the button
          * (2026-09-26). A paid hire's U sits in an ERC-8183 escrow for the
@@ -541,17 +614,14 @@ export function HireAction({ agent }: { agent: Agent }) {
          */}
         {priceRequiresPayment && !showMyAgents ? (
           <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
-            <span className="text-xs text-muted">If it doesn&rsquo;t deliver</span>
+            <span className="text-xs text-muted">Paid from</span>
             <span className="text-right text-sm font-semibold text-ink">
-              Full refund after {ESCROW_REFUND_DAYS} days
-            </span>
-          </div>
-        ) : null}
-        {priceRequiresPayment && !showMyAgents ? (
-          <div className="flex items-baseline justify-between gap-4 border-t border-line py-3">
-            <span className="text-xs text-muted">If it does deliver</span>
-            <span className="text-right text-sm font-semibold text-ink">
-              Paid out after {ESCROW_REFUND_DAYS} days
+              Your Dolphin Wallet
+              {altana.status === "connected" && altana.balanceWei !== null && !altana.balanceError ? (
+                <span className="block text-xs font-normal text-muted">
+                  holds {formatBnb(altana.balanceWei)} BNB
+                </span>
+              ) : null}
             </span>
           </div>
         ) : null}
@@ -563,13 +633,11 @@ export function HireAction({ agent }: { agent: Agent }) {
         ) : null}
       </div>
       {priceRequiresPayment && !showMyAgents ? (
-        <p className="mt-3 text-xs leading-5 text-muted">{DELIVERY_RELEASE_NOTE}</p>
-      ) : null}
-      {walletSetupText ? (
         <p className="mt-3 text-xs leading-5 text-muted">
-          Your first purchase also registers this wallet&rsquo;s key on BNB Chain, so your
-          passkey can rebuild it on another device or after you clear this browser.
-          Charged once and never again &mdash; later hires pay only the price above.
+          Your payment waits in escrow, not with the agent. If it doesn&rsquo;t deliver
+          within {ESCROW_REFUND_DAYS} days you can take it back. The agent never gets
+          access to your wallet.
+          {walletSetupText ? " Your first payment also includes a one-time setup fee, so your passkey can restore this wallet on another device." : ""}
         </p>
       ) : null}
 
@@ -587,7 +655,7 @@ export function HireAction({ agent }: { agent: Agent }) {
         ) : (
           <PearlButton
             aria-busy={busy}
-            disabled={busy || priceModel === null || priceUnreadable}
+            disabled={busy || priceModel === null || priceUnreadable || (paymentOutstanding && taskProblem !== null)}
             onClick={() => void runHire(settledPaymentJobId)}
             type="button"
           >
@@ -657,6 +725,157 @@ export function HireAction({ agent }: { agent: Agent }) {
        * never delivered to an agent and nothing in this app can execute with
        * one, so offering it charged real gas for an unusable permission.
        */}
+    </div>
+  );
+}
+
+/** What the person gets, and - only if they ask - exactly what the agent is sent. */
+function PaidHireBrief({
+  category,
+  connectedAddress,
+  task,
+  taskEdited,
+  onTask,
+  onReset,
+  problem,
+}: {
+  category: string;
+  connectedAddress: string | null;
+  task: string;
+  taskEdited: boolean;
+  onTask: (value: string) => void;
+  onReset: () => void;
+  problem: string | null;
+}) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div className="mt-4">
+      <p className="text-sm leading-6 text-ink">
+        {DELIVERABLE[category] ?? "An answer to your request, from the agent itself."}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-muted">
+        For {connectedAddress ? <span className="font-mono">{shortAddress(connectedAddress)}</span> : "your wallet"}.{" "}
+        <button
+          aria-expanded={editing}
+          className="font-semibold text-ink underline-offset-2 hover:underline"
+          onClick={() => setEditing((open) => !open)}
+          type="button"
+        >
+          {editing ? "Done" : "Change what it's asked"}
+        </button>
+      </p>
+      {editing ? (
+        <div className="mt-3">
+          <textarea
+            aria-label="What the agent will be asked"
+            className="min-h-24 w-full resize-y rounded-xl border border-line bg-paper px-3 py-2.5 text-sm leading-6 text-ink"
+            maxLength={MAX_TASK_CHARS + 200}
+            onChange={(event) => onTask(event.target.value)}
+            value={task}
+          />
+          {taskEdited ? (
+            <button className="mt-1 text-xs font-semibold text-muted underline-offset-2 hover:underline" onClick={onReset} type="button">
+              Reset to the default
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {problem ? <p className="mt-1 text-xs text-danger">{problem}</p> : null}
+    </div>
+  );
+}
+
+const BNB_CHAIN_ID = 56;
+
+/** Cents -> wei at the feed's BNB price, rounded up. */
+function centsToWei(cents: bigint, price: BnbPrice): bigint {
+  const scale = BigInt(10) ** BigInt(price.decimals);
+  const numerator = cents * BigInt(10) ** BigInt(18) * scale;
+  const denominator = price.answer * BigInt(100);
+  return (numerator + denominator - BigInt(1)) / denominator;
+}
+
+/**
+ * WHAT THIS HIRE WILL REALLY TAKE OUT OF THE WALLET (owner, 2026-10-01: "show
+ * 0.07, not 0.05, so the person can act on it"). The agent's price, the network
+ * fees on the relayed steps (two when BNB has to be converted first: the swap
+ * and the escrow payment), and the one-time setup on a wallet's first payment.
+ *
+ * Every figure is read live - the U and BNB rates, the gas price, the wallet's
+ * balances - and the fees use the same allowance the pre-check enforces, so
+ * "about $X" here and the refusal there agree. When the wallet is short it
+ * says by how much, in dollars, and where to add it.
+ */
+function HireCost({
+  priceRaw,
+  decimals,
+  token,
+  priceText,
+  needsWalletSetup,
+}: {
+  priceRaw: bigint;
+  decimals: number | null;
+  token: string;
+  priceText: string;
+  needsWalletSetup: boolean;
+}) {
+  const altana = useAltanaWallet();
+  const uRate = useTokenUsd(token, decimals);
+  const bnb = useBnbPrice();
+  const gas = useGasPrice({ chainId: BNB_CHAIN_ID });
+  const uBalance = useDolphinUBalance();
+
+  const row = (label: string, value: string, strong = false) => (
+    <div className={`flex items-baseline justify-between gap-4 py-2.5 ${strong ? "border-t border-line" : ""}`} key={label}>
+      <span className={`text-xs ${strong ? "font-semibold text-ink" : "text-muted"}`}>{label}</span>
+      <span className={`text-right text-sm ${strong ? "font-semibold text-ink" : "text-ink"}`}>{value}</span>
+    </div>
+  );
+
+  const ready = uRate.status === "ready" && bnb.status === "ready" && gas.data !== undefined && decimals !== null;
+  if (!ready) {
+    return (
+      <div className="py-1">
+        {row("Agent's price", priceText)}
+        {row("Total", uRate.status === "unavailable" || bnb.status === "unavailable" ? "Shown when prices load" : "Working it out…", true)}
+      </div>
+    );
+  }
+
+  const price = bnb.price;
+  const agentCents = usdCents(priceRaw, decimals, uRate.rate);
+  const heldU = uBalance.data?.raw ?? BigInt(0);
+  const converting = heldU < priceRaw;
+  const feeWei = RELAYED_INTENT_GAS_ALLOWANCE * gas.data * BigInt(converting ? 2 : 1);
+  const setupWei = needsWalletSetup ? altana.registrationFeeWei ?? BigInt(0) : BigInt(0);
+  const feeCents = weiToUsdCents(feeWei, price);
+  const setupCents = weiToUsdCents(setupWei, price);
+  const totalCents = agentCents + feeCents + setupCents;
+  const show = (cents: bigint) => (cents === BigInt(0) ? "<$0.01" : formatUsdCents(cents));
+
+  // BNB the wallet needs: the fees and setup, plus the price itself when it
+  // has to be bought (5% over, for the swap's price movement).
+  const shortfallU = converting ? priceRaw - heldU : BigInt(0);
+  const buyCents = converting ? (usdCents(shortfallU, decimals, uRate.rate) * BigInt(105)) / BigInt(100) + BigInt(1) : BigInt(0);
+  const neededWei = feeWei + setupWei + (converting ? centsToWei(buyCents, price) : BigInt(0));
+  const heldWei = altana.status === "connected" && altana.balanceWei !== null && !altana.balanceError ? altana.balanceWei : null;
+  const shortWei = heldWei !== null && heldWei < neededWei ? ((neededWei - heldWei) * BigInt(110)) / BigInt(100) : null;
+
+  return (
+    <div className="py-1">
+      {row("Agent's price", show(agentCents))}
+      {row("Network fees, at most", show(feeCents))}
+      {setupWei > BigInt(0) ? row("One-time wallet setup", show(setupCents)) : null}
+      {row("Total, at most", show(totalCents), true)}
+      {shortWei !== null ? (
+        <div className="mb-2 mt-1 rounded-xl bg-accent-soft px-3 py-2.5 text-xs leading-5 text-accent-ink">
+          Your Dolphin Wallet needs <strong>{show(weiToUsdCents(shortWei, price))}</strong> more
+          ({formatBnb(shortWei)} BNB) to complete this hire.{" "}
+          <Link className="font-semibold text-accent-ink underline" href="/wallet">
+            Add funds
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

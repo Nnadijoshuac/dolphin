@@ -24,6 +24,7 @@ import {
   connectFailureCopy,
   type ConnectFailureKind,
 } from "@/wallet/wallet-errors";
+import { reportToConsole } from "@/lib/console-report";
 
 /**
  * The IDENTITY wallet: the user's own MetaMask / OKX / WalletConnect account.
@@ -459,7 +460,7 @@ export function useWallet(): WalletState {
     try {
       await disconnectAsync();
     } catch (cause) {
-      console.error("[wallet] disconnect failed", cause);
+      reportToConsole("wallet: disconnect failed", cause);
     }
   }, [disconnectAsync]);
 

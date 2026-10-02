@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportToConsole } from "@/lib/console-report";
 
 /**
  * ===========================================================================
@@ -54,11 +55,8 @@ export class OptionalFeature extends Component<
      * free-text error channel to it would be the hole through which arbitrary
      * strings - eventually including user data - reach a third party.
      */
-    console.error(
-      `[OptionalFeature] "${this.props.label}" failed and was hidden.`,
-      error,
-      info.componentStack,
-    );
+    void info;
+    reportToConsole(`${this.props.label} hidden`, error);
   }
 
   render() {

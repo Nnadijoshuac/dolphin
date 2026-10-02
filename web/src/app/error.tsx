@@ -5,6 +5,7 @@ import { useEffect } from "react";
 
 import { CategoryGlyph } from "@/components/category-glyph";
 import { track } from "@/lib/analytics";
+import { reportToConsole } from "@/lib/console-report";
 
 /**
  * The route-level error boundary.
@@ -55,7 +56,7 @@ export default function RouteError({
      * channel and is not transmitted anywhere, so it is the one place the
      * message and stack can safely stay intact.
      */
-    console.error("[dolphin] route render failed", error);
+    reportToConsole("page", error);
   }, [error]);
 
   return (

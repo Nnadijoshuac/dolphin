@@ -82,6 +82,7 @@ import {
   type WithdrawAsset,
 } from "./withdraw-policy";
 import { requireSessionToken, useWalletSession } from "./wallet-session";
+import { reportToConsole } from "@/lib/console-report";
 
 /**
  * Dolphin's Altana wallet - a passkey-backed smart account, separate from the
@@ -468,7 +469,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
         ...(input.agentKey ? { agentKey: input.agentKey } : {}),
         ...(input.agentName ? { agentName: input.agentName } : {}),
       }).catch((cause: unknown) => {
-        console.warn(`[wallet] ${input.kind} succeeded but was not recorded:`, cause);
+        reportToConsole(`wallet: ${input.kind} not recorded`, cause, "warn");
       });
     },
     [recordActionRemote],
@@ -992,7 +993,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
             altanaWalletAddress: wallet.address,
             transactionHash: result.transactionHash,
           }).catch((cause: unknown) => {
-            console.warn("[claimEscrowRefund] refund succeeded but was not recorded:", cause);
+            reportToConsole("wallet: refund not recorded", cause, "warn");
           });
         }
         refreshBalance();

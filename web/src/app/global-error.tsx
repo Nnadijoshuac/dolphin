@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { reportToConsole } from "@/lib/console-report";
 
 /**
  * The last-resort boundary: a crash in the root layout itself.
@@ -29,7 +30,7 @@ export default function GlobalError({
      * failed to mount, and an error handler that can itself throw is worse than
      * no error handler. The console is the only reliable channel at this point.
      */
-    console.error("[dolphin] root layout render failed", error);
+    reportToConsole("app", error);
   }, [error]);
 
   return (

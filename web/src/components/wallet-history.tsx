@@ -34,12 +34,12 @@ function amount(raw: string, decimals: number): string {
   return `0.${fraction.slice(0, zeros + 4).replace(/0+$/, "")}`;
 }
 
-const GLYPH: Record<WalletHistoryEntry["kind"], "receive" | "dollar" | "refresh" | "share" | "shield" | "layers"> = {
-  deposit: "receive",
-  refund: "receive",
+const GLYPH: Record<WalletHistoryEntry["kind"], "arrow-down" | "arrow-up" | "dollar" | "refresh" | "shield" | "layers"> = {
+  deposit: "arrow-down",
+  refund: "arrow-down",
   payment: "dollar",
   swap: "refresh",
-  withdraw: "share",
+  withdraw: "arrow-up",
   setup: "shield",
   fee: "layers",
   other: "layers",
@@ -49,8 +49,41 @@ function day(ms: number): string {
   return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
 }
 
+type Move = WalletHistoryEntry["movements"][number];
+
+/** Below 0.000000001 of a token: real, but too small to print as a number. */
+function isDust(m: Move): boolean {
+  return BigInt(m.amountRaw) * BigInt(1_000_000_000) < BigInt(10) ** BigInt(m.decimals);
+}
+
+/**
+ * The amounts a row shows (owner, 2026-10-02: "-<0.000000001 BNB +<0.000000001 U"
+ * read as broken). Those were real: a job priced at 1 wei of U, and the top-up
+ * of that 1 wei when the next hire came up short. Dust beside a real amount
+ * is dropped; a row that moved only dust shows one plain "under" line.
+ */
+function rowAmounts(entry: WalletHistoryEntry): { lines: string[]; tiny: boolean } {
+  // One line per token: change handed back in the same transaction (the router
+  // returning unspent BNB at setup) is netted, not printed as a second line.
+  const net = new Map<string, Move>();
+  for (const m of entry.movements) {
+    const signed = (m.direction === "in" ? BigInt(1) : BigInt(-1)) * BigInt(m.amountRaw);
+    const prev = net.get(m.symbol);
+    const total = (prev ? (prev.direction === "in" ? BigInt(1) : BigInt(-1)) * BigInt(prev.amountRaw) : BigInt(0)) + signed;
+    net.set(m.symbol, { ...m, direction: total < BigInt(0) ? "out" : "in", amountRaw: (total < BigInt(0) ? -total : total).toString() });
+  }
+  const real = [...net.values()].filter((m) => BigInt(m.amountRaw) > BigInt(0) && !isDust(m));
+  if (real.length) {
+    return { lines: real.map((m) => `${m.direction === "in" ? "+" : "−"}${amount(m.amountRaw, m.decimals)} ${m.symbol}`), tiny: false };
+  }
+  if (!entry.movements.length) return { lines: [], tiny: false };
+  // What the row is about: what came in for a swap or refund, what went out otherwise.
+  const pick = entry.movements.find((m) => m.direction === (entry.kind === "payment" || entry.kind === "withdraw" ? "out" : "in")) ?? entry.movements[0];
+  return { lines: [`under 0.000000001 ${pick.symbol}`], tiny: true };
+}
+
 function Row({ entry, hidden }: { entry: WalletHistoryEntry; hidden: boolean }) {
-  const moves = entry.movements.map((m) => `${m.direction === "in" ? "+" : "−"}${amount(m.amountRaw, m.decimals)} ${m.symbol}`);
+  const moves = rowAmounts(entry);
   const fee = BigInt(entry.feeWei) > BigInt(0) ? `fee ${amount(entry.feeWei, 18)} BNB` : null;
   return (
     <a className="wallet-activity-row interactive" href={`https://bscscan.com/tx/${entry.hash}`} rel="noreferrer" target="_blank">
@@ -64,9 +97,11 @@ function Row({ entry, hidden }: { entry: WalletHistoryEntry; hidden: boolean }) 
         <h3>{entry.title}</h3>
         <p>{[day(entry.at), fee].filter(Boolean).join(" · ")}</p>
       </div>
-      {moves.length ? (
-        <strong className={entry.movements.every((m) => m.direction === "in") ? "text-success" : undefined}>
-          {hidden ? "...." : moves.join(" ")}
+      {moves.lines.length ? (
+        <strong
+          className={`wallet-activity-amounts${moves.tiny ? " text-muted" : entry.movements.every((m) => m.direction === "in") ? " text-success" : ""}`}
+        >
+          {hidden ? "...." : moves.lines.map((line) => <span key={line}>{line}</span>)}
         </strong>
       ) : null}
     </a>

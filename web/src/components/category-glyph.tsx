@@ -1,9 +1,11 @@
 import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
 import AiBrain01Icon from "@hugeicons/core-free-icons/AiBrain01Icon";
 import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
+import ArrowDown02Icon from "@hugeicons/core-free-icons/ArrowDown02Icon";
 import ArrowLeft01Icon from "@hugeicons/core-free-icons/ArrowLeft01Icon";
 import ArrowRight01Icon from "@hugeicons/core-free-icons/ArrowRight01Icon";
 import ArrowRight02Icon from "@hugeicons/core-free-icons/ArrowRight02Icon";
+import ArrowUp02Icon from "@hugeicons/core-free-icons/ArrowUp02Icon";
 import ArrowUpRight01Icon from "@hugeicons/core-free-icons/ArrowUpRight01Icon";
 import Cancel01Icon from "@hugeicons/core-free-icons/Cancel01Icon";
 import Clock01Icon from "@hugeicons/core-free-icons/Clock01Icon";
@@ -120,6 +122,8 @@ export type GlyphName =
   | "chevron-right"
   | "chevron-left"
   | "arrow-right"
+  | "arrow-down"
+  | "arrow-up"
   | "menu"
   | "close"
   | "receive"
@@ -163,6 +167,9 @@ const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
   "chevron-right": ArrowRight01Icon,
   "chevron-left": ArrowLeft01Icon,
   "arrow-right": ArrowRight02Icon,
+  // Money in and out in Wallet history (2026-10-02): an arrow, not the chevron "receive" is.
+  "arrow-down": ArrowDown02Icon,
+  "arrow-up": ArrowUp02Icon,
   menu: Menu01Icon,
   close: Cancel01Icon,
   receive: ArrowDown01Icon,

@@ -12,7 +12,9 @@ import {
   MIN_ICON_SIDE,
   STORED_JPEG_QUALITY,
   STORED_JPEG_SIDE,
-  STORED_PNG_SIDE,
+  backgroundFor,
+  flattenOnto,
+  hasTransparency,
   sniffIconType,
 } from "./lib/iconPolicy";
 
@@ -28,8 +30,9 @@ import {
  *   3. the first bytes say PNG or JPEG (lib/iconPolicy.ts) - not the name
  *   4. it decodes as that image, within the side limits
  *   5. it is REDRAWN: resized, re-encoded from pixels. Metadata, appended
- *      files and anything else in the upload do not survive. Opaque icons
- *      become JPEG, transparent ones PNG.
+ *      files and anything else in the upload do not survive. A see-through
+ *      icon is placed on a background read from its own colours first, so
+ *      every stored icon is an opaque JPEG.
  *
  * Node runtime because jimp, the image library, needs Buffer. It is pure
  * JavaScript (no native binaries), MIT, added 2026-09-26 for this.
@@ -77,29 +80,25 @@ export const process = action({
       throw new ConvexError(`That image is ${width}×${height}. Icons can be at most ${MAX_ICON_SIDE}×${MAX_ICON_SIDE}.`);
     }
 
-    let transparent = false;
+    /*
+     * A see-through icon is placed on a background that fits it (owner,
+     * 2026-10-02: fill, don't reject), read from its own pixels - so every
+     * icon looks finished on Dolphin's light and dark pages alike.
+     */
     const pixels = image.bitmap.data;
-    for (let index = 3; index < pixels.length; index += 4) {
-      if (pixels[index] < 255) {
-        transparent = true;
-        break;
-      }
-    }
+    if (hasTransparency(pixels)) flattenOnto(pixels, backgroundFor(pixels));
 
-    const side = transparent ? STORED_PNG_SIDE : STORED_JPEG_SIDE;
-    image.cover({ w: side, h: side });
-    const contentType = transparent ? "image/png" : "image/jpeg";
-    const output = transparent
-      ? await image.getBuffer("image/png")
-      : await image.getBuffer("image/jpeg", { quality: STORED_JPEG_QUALITY });
+    image.cover({ w: STORED_JPEG_SIDE, h: STORED_JPEG_SIDE });
+    const contentType = "image/jpeg";
+    const output = await image.getBuffer("image/jpeg", { quality: STORED_JPEG_QUALITY });
 
     const iconId = await ctx.storage.store(new Blob([new Uint8Array(output)], { type: contentType }));
     await ctx.runMutation(internal.builtAgents.recordIcon, {
       storageId: iconId,
       ownerAddress: owner,
       contentType,
-      width: side,
-      height: side,
+      width: STORED_JPEG_SIDE,
+      height: STORED_JPEG_SIDE,
       bytes: output.length,
     });
     return { iconId, url: await ctx.storage.getUrl(iconId), contentType };

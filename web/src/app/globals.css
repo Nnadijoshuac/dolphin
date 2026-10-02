@@ -1260,6 +1260,8 @@ select {
 .wcard--inset::before { display: none; }
 .wcard--inset .wcard__avatar,
 .wcard--inset .wcard__sub { display: none; }
+/* Except where it is the only explanation: a browser that cannot hold a passkey wallet. */
+.wcard--inset.wcard--blocked .wcard__sub { display: block; font-size: 0.72rem; }
 .wcard--inset .wcard__head { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
 .wcard--inset .wcard__head-text { min-width: 0; flex: 1 1 100%; }
 .wcard--inset .wcard__eyebrow { font-size: 0.6rem; }
@@ -3890,7 +3892,7 @@ select {
 }
 .asset-menu__item:hover,
 .asset-menu__item:focus-visible { background: var(--paper-muted); }
-[aria-selected="true"] > .asset-menu__item { background: color-mix(in srgb, var(--paper-muted) 70%, transparent); }
+.asset-menu__item[aria-pressed="true"] { background: color-mix(in srgb, var(--paper-muted) 70%, transparent); }
 .asset-menu__name { flex: 1; font-size: 0.86rem; font-weight: 600; color: var(--ink); }
 .asset-menu__amount { font-size: 0.82rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 

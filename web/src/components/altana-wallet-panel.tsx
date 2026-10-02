@@ -684,6 +684,13 @@ function AssetMenu({
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  // Closing removes the focused option, so focus goes back to the trigger
+  // rather than dropping to <body> (review, 2026-10-02).
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) trigger.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -691,7 +698,10 @@ function AssetMenu({
       if (box.current && !box.current.contains(event.target as Node)) setOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        trigger.current?.focus();
+      }
     };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", escape);
@@ -702,13 +712,20 @@ function AssetMenu({
   }, [open]);
 
   return (
-    <div className="asset-menu" ref={box}>
+    <div
+      className="asset-menu"
+      onBlur={(event) => {
+        if (open && !event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+      }}
+      ref={box}
+    >
       <button
+        aria-controls="asset-menu-list"
         aria-expanded={open}
-        aria-haspopup="listbox"
         aria-label={`Showing ${asset}. Choose an asset`}
         className="asset-menu__trigger interactive"
         onClick={() => setOpen(!open)}
+        ref={trigger}
         type="button"
       >
         <AssetLogo asset={asset} size={16} />
@@ -718,14 +735,15 @@ function AssetMenu({
         </span>
       </button>
       {open ? (
-        <ul aria-label="Assets" className="asset-menu__list" role="listbox">
+        <ul aria-label="Assets" className="asset-menu__list" id="asset-menu-list">
           {options.map((option) => (
-            <li aria-selected={option.asset === asset} key={option.asset} role="option">
+            <li key={option.asset}>
               <button
+                aria-pressed={option.asset === asset}
                 className="asset-menu__item"
                 onClick={() => {
                   onPick(option.asset);
-                  setOpen(false);
+                  close(true);
                 }}
                 type="button"
               >
@@ -771,7 +789,7 @@ function AgentWalletCard({
   if (wallet.status !== "connected" || !wallet.address) {
     const blocked = wallet.status === "unsupported";
     return (
-      <div aria-label="Agent payments wallet" className={`wcard wcard--agent wcard--empty${insetClass}`}>
+      <div aria-label="Agent payments wallet" className={`wcard wcard--agent wcard--empty${blocked ? " wcard--blocked" : ""}${insetClass}`}>
         <p className="wcard__eyebrow">Dolphin Wallet</p>
         <p className="wcard__title">{blocked ? "Unavailable here" : "Not set up"}</p>
         <p className="wcard__sub">

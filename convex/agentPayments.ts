@@ -375,7 +375,16 @@ async function fundedNeeds(ctx: ActionCtx, jobId: string): Promise<{ address?: s
   } catch {
     // Not JSON: a plain task, which is what a plain-quote seller is sent.
   }
-  const named = /0x[0-9a-fA-F]{40}/.exec(row.taskDescription)?.[0] ?? row.hirerWalletAddress;
+  // The hirer's own wallet wins whenever the task names it, so a token or
+  // contract also mentioned in an edited task is never sent as "the account".
+  // Otherwise the first WHOLE address: the lookarounds stop a tx hash or
+  // bytes32 from yielding its first 40 hex digits.
+  const hirer = row.hirerWalletAddress;
+  const text = row.taskDescription.toLowerCase();
+  const named =
+    hirer && text.includes(hirer.toLowerCase())
+      ? hirer
+      : (/(?<![0-9a-fA-F])0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/.exec(row.taskDescription)?.[0] ?? hirer);
   return named && isAddress(named) ? { address: getAddress(named) } : {};
 }
 

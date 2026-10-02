@@ -7,7 +7,7 @@ import {
   type PublicClient,
 } from "viem";
 
-import { RELAYED_INTENT_GAS_ALLOWANCE, assertIntentAffordable, displayBnb } from "./altana-policy";
+import { ESCROW_PAYMENT_GAS, RELAYED_INTENT_GAS_ALLOWANCE, assertIntentAffordable, displayBnb } from "./altana-policy";
 
 /**
  * PancakeSwap V3 BNB -> payment-token conversion for paid hires.
@@ -340,7 +340,7 @@ export async function preflightBnbConversion({
    * full allowance for the escrow payment that follows it.
    */
   const swapGasUnits = gasUnits * SMART_ACCOUNT_GAS_HEADROOM > RELAYED_INTENT_GAS_ALLOWANCE ? gasUnits * SMART_ACCOUNT_GAS_HEADROOM : RELAYED_INTENT_GAS_ALLOWANCE;
-  const budgetedGasUnits = swapGasUnits + RELAYED_INTENT_GAS_ALLOWANCE;
+  const budgetedGasUnits = swapGasUnits + ESCROW_PAYMENT_GAS;
   const maxFeeWei = budgetedGasUnits * gasPriceWei;
   const requiredTotalWei = call.value + firstActionSurchargeWei + maxFeeWei;
 

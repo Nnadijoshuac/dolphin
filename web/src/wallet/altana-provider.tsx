@@ -44,6 +44,7 @@ import {
   assertIntentAffordable,
   buildSessionPermissions,
   expiryFromNow,
+  ESCROW_PAYMENT_GAS,
   RELAYED_INTENT_GAS_ALLOWANCE,
   readFirstActionSurcharge,
   sessionPolicyFor,
@@ -1261,6 +1262,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       await assertIntentAffordable({
         publicClient: keystoreReader,
         nativeBalanceWei: nativeBalance.native,
+        gasUnits: ESCROW_PAYMENT_GAS,
         items: [
           {
             label:

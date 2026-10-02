@@ -293,6 +293,16 @@ export function displayBnb(wei: bigint, roundUp = false): string {
  */
 export const RELAYED_INTENT_GAS_ALLOWANCE = BigInt(1_500_000);
 
+/*
+ * THE ESCROW PAYMENT IS THE HEAVY STEP (measured 2026-10-02 from the owner's
+ * Dolphin Wallet history, read through NodeReal): the relay billed the
+ * five-call escrow payment 0.00010763 and 0.00010310 BNB - ~2.1M gas at the
+ * relay's 0.05 gwei - against ~0.6M for a swap. The 1.5M allowance was below
+ * what a payment actually costs, so a wallet it passed could still be refused
+ * by the relay. A payment is now budgeted at 2.5M.
+ */
+export const ESCROW_PAYMENT_GAS = BigInt(2_500_000);
+
 /** One named BNB cost inside an intent, for an itemised refusal. */
 export type IntentCostItem = Readonly<{ label: string; wei: bigint }>;
 

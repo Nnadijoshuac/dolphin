@@ -42,6 +42,8 @@ const BNB_CHAIN_ID = 56;
  * charged lands at or under the figure on screen.
  */
 export const TYPICAL_RELAYED_STEP_GAS = BigInt(750_000);
+/** The escrow payment step, as the relay bills it: ~2.1M gas measured 2026-10-02. */
+export const TYPICAL_PAYMENT_STEP_GAS = BigInt(2_200_000);
 
 export type HireTotal = {
   /** "0.11 U", "Free", or null while still reading. */
@@ -82,7 +84,9 @@ export function useHireTotal(agent: Agent): HireTotal {
 
   const heldU = uBalance.data?.raw ?? null;
   const converting = heldU === null || heldU < priceRaw;
-  const feeWei = gas.data !== undefined ? TYPICAL_RELAYED_STEP_GAS * gas.data * BigInt(converting ? 2 : 1) : null;
+  // The payment itself, plus the swap first when the U has to be bought.
+  const feeWei =
+    gas.data !== undefined ? (TYPICAL_PAYMENT_STEP_GAS + (converting ? TYPICAL_RELAYED_STEP_GAS : BigInt(0))) * gas.data : null;
   const setupWei =
     altana.recoverability === "unregistered" ? altana.registrationFeeWei ?? null : BigInt(0);
 

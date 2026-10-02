@@ -120,11 +120,21 @@ const TASK_TEMPLATES: Readonly<Record<AgentCategory, string>> = {
     "State the trades you would place for {address} on BNB Chain right now, with the entry, the exit, the invalidation level and the size, and cost each one against the venue that would actually fill it.",
 };
 
+/**
+ * For a category with no template of its own. AgentCategory is an OPEN string
+ * (AGENTS.md section 9), and this lookup used to assume the six above: measured
+ * 2026-10-02, five live agents ("general" x4, "payments" x1) made it throw, so
+ * their hire card crashed while rendering and they could not be hired at all.
+ */
+const FALLBACK_TASK =
+  "Do the work you offer for {address} on BNB Chain and report the result in plain words, with the figures you read and where you read them.";
+
 export function defaultTaskDescription(
   category: AgentCategory,
   walletAddress: string | null,
 ): string {
-  return TASK_TEMPLATES[category].replace(
+  const template = Object.prototype.hasOwnProperty.call(TASK_TEMPLATES, category) ? TASK_TEMPLATES[category] : FALLBACK_TASK;
+  return template.replace(
     "{address}",
     walletAddress ?? "the address I will provide",
   );

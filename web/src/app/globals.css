@@ -3027,7 +3027,7 @@ select {
 .manage-status[data-cancelled] .manage-status__dot { background: var(--faint); }
 
 /* The live tracker: Paid, Working, Delivered, Paid out. */
-.tracker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 18px; }
+.tracker { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; margin-top: 18px; }
 .tracker__step { position: relative; display: flex; flex-direction: column; gap: 8px; }
 .tracker__step::before {
   content: "";

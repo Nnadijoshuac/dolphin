@@ -128,7 +128,14 @@ export async function negotiate(ctx: ActionCtx, listing: Listing, data: Record<s
     return reply(quoteRefusal("0x01", "This agent's wallet is not linked to its on-chain identity yet, so a job could not be paid to it."));
   }
 
-  const task = typeof data.task_description === "string" ? data.task_description.trim().slice(0, MAX_TASK_CHARS) : "";
+  const asked = typeof data.task_description === "string" ? data.task_description.trim() : "";
+  // A calling agent may send its inputs as fields as well as (or instead of) prose.
+  const fields = (data.inputs && typeof data.inputs === "object" ? data.inputs : data) as Record<string, unknown>;
+  const address = (value: unknown) => (typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value) ? value : null);
+  const task = [asked, address(fields.wallet) && `Wallet: ${address(fields.wallet)}`, address(fields.token) && `Token: ${address(fields.token)}`]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, MAX_TASK_CHARS);
   if (!task) return reply(quoteRefusal("0x02", "Send task_description: what you want done."));
   const terms = (data.terms && typeof data.terms === "object" ? data.terms : {}) as Record<string, unknown>;
   const input = {

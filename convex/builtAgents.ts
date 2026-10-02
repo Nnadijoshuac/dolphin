@@ -161,6 +161,8 @@ export const prepareListing = mutation({
      */
     protocol: v.optional(v.union(v.literal("mcp"), v.literal("a2a"))),
     priceU: v.optional(v.union(v.string(), v.null())),
+    /** What a buyer gives it. Absent: a token for an agent with a Safety block, a wallet otherwise. */
+    inputs: v.optional(v.array(v.union(v.literal("wallet"), v.literal("token")))),
   },
   handler: async (ctx, args) => {
     const owner = await requireWalletAddress(ctx, args.sessionToken, "Putting an agent on-chain");
@@ -295,6 +297,12 @@ export const prepareListing = mutation({
       protocol,
       priceRaw,
       blocks: activeBlocks((draft.blocks ?? []) as AgentBlock[], draft.detached).filter((block) => PUBLIC_BLOCK_TYPES.includes(block.type)),
+      inputs:
+        args.inputs && args.inputs.length > 0
+          ? [...new Set(args.inputs)]
+          : (draft.blocks ?? []).some((block) => (block as AgentBlock).type === "safety")
+            ? (["token"] as const).slice()
+            : (["wallet"] as const).slice(),
       iconStorageId: icon.storageId,
       iconContentType: icon.contentType,
       updatedAt: Date.now(),
@@ -490,6 +498,21 @@ async function publicView(ctx: { storage: { getUrl: (id: Doc<"builtAgents">["ico
     uriTxUrl: row.uriTxHash ? `${explorer}/tx/${row.uriTxHash}` : null,
   };
 }
+
+/**
+ * What a catalog agent built on Dolphin asks its buyer for, by its agentKey -
+ * the Hire card's fields. Null when the agent was not built here.
+ */
+export const inputsForAgentKey = query({
+  args: { agentKey: v.string() },
+  handler: async (ctx, { agentKey }) => {
+    const row = await ctx.db
+      .query("builtAgents")
+      .withIndex("by_agent_key", (q) => q.eq("agentKey", agentKey.toLowerCase()))
+      .first();
+    return row && row.status === "registered" ? (row.inputs ?? null) : null;
+  },
+});
 
 /** A built agent's public page. Null for an unknown hash. */
 export const publicByHash = query({

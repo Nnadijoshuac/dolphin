@@ -127,6 +127,8 @@ export function PublishAgentDialog({
   const [price, setPrice] = useState("");
   // Owner, 2026-10-02: published as a tool server (MCP) or an agent (A2A), paid per call in U.
   const [protocol, setProtocol] = useState<"mcp" | "a2a">("mcp");
+  // What a buyer gives it - the Hire form's fields and what its card declares to calling agents.
+  const [inputs, setInputs] = useState<Array<"wallet" | "token">>(["wallet"]);
   const [network, setNetwork] = useState<Network>("bsc");
   const [review, setReview] = useState<Review | null>(null);
   const [stage, setStage] = useState<"form" | "reviewing" | "switching" | "signing" | "confirming" | "linking" | "done">("form");
@@ -194,6 +196,7 @@ export function PublishAgentDialog({
         ...(payout.trim() && visibility === "public" ? { payoutAddress: payout.trim() } : {}),
         visibility,
         protocol,
+        inputs,
         ...(visibility === "public" && Number(price) > 0 ? { priceU: price.trim() } : {}),
       });
       /* The fee, read now: this exact call's gas at this moment's price. */
@@ -420,6 +423,30 @@ export function PublishAgentDialog({
                     </button>
                   ))}
                 </div>
+                <p className="mt-3 text-[0.78rem] text-ink-soft">What a buyer gives it</p>
+                <div className="mt-1 flex flex-wrap gap-2" role="group" aria-label="What a buyer gives it">
+                  {([
+                    { value: "wallet", label: "A wallet address" },
+                    { value: "token", label: "A token address" },
+                  ] as const).map((option) => {
+                    const on = inputs.includes(option.value);
+                    return (
+                      <button
+                        aria-pressed={on}
+                        className={`rounded-full border px-3 py-1.5 text-[0.76rem] font-semibold ${on ? "border-ink bg-paper-muted text-ink" : "border-line/80 text-muted"}`}
+                        key={option.value}
+                        onClick={() =>
+                          edited(setInputs)(on ? (inputs.length > 1 ? inputs.filter((value) => value !== option.value) : inputs) : [...inputs, option.value])
+                        }
+                        type="button"
+                      >
+                        {on ? "✓ " : ""}
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-[0.7rem] text-muted">Buyers fill these in on the Hire form; calling agents send them as fields. A free note is always allowed.</p>
                 <label className="mt-3 block text-[0.78rem] text-ink-soft">
                   {protocol === "mcp" ? "Price per tool call (U)" : "Price per task (U)"}
                   <input

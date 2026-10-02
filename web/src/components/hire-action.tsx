@@ -9,7 +9,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { agentRouteId } from "@/constants/agents";
 import { JobDeliveryStatus } from "@/components/job-delivery-status";
 import { PearlButton } from "@/components/pearl-button";
-import { agentHiresApi, agentPaymentsApi, type AgentQuote } from "@/convex/api";
+import { agentHiresApi, agentPaymentsApi, builtAgentsApi, type AgentQuote } from "@/convex/api";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { usePriceText } from "@/hooks/use-price-text";
 import { assessAuthorizationCapability } from "@/services/authorization";
@@ -27,7 +27,7 @@ import { formatUsdCents, formatUsdFromWei, type BnbPrice } from "@/wallet/bnb-pr
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { usdCents } from "@/wallet/token-usd";
 import { toUserMessage } from "@/wallet/wallet-errors";
-import { defaultTaskDescription, ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
+import { composeTask, ESCROW_REFUND_DAYS, fillProblem, inputsForCategory, type HireFill, type HireInput } from "@/wallet/erc8183-policy";
 import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
@@ -164,18 +164,24 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
    * report came back empty. The person now picks the wallet (their own by
    * default) and can read and change exactly what the agent will be sent.
    */
-  const [editedTask, setEditedTask] = useState<string | null>(null);
+  /*
+   * THE HIRE FORM (owner, 2026-10-02: "the basic fillings"). The fields an
+   * agent built on Dolphin declares, or a guess from its category; the wallet
+   * is pre-filled with the connected one and can be changed.
+   */
+  const declaredInputs = useConvexQuery(builtAgentsApi.builtAgents.inputsForAgentKey, { agentKey: agent.agentKey });
+  const inputs: HireInput[] = declaredInputs ?? inputsForCategory(agent.category);
+  const [fillWallet, setFillWallet] = useState<string | null>(null);
+  const [fillToken, setFillToken] = useState("");
+  const [hireNote, setHireNote] = useState("");
   // Always the connected wallet: that is where the person's positions are
   // (owner, 2026-10-01: no wallet picker - fewer choices, not more).
   const targetAddress = wallet.address ?? null;
-  const templateTask = defaultTaskDescription(agent.category, targetAddress);
-  const taskText = editedTask ?? templateTask;
+  const fillFor = (connected: string | null): HireFill => ({ wallet: fillWallet ?? connected ?? "", token: fillToken, note: hireNote });
+  const taskText = composeTask(agent.category, inputs, fillFor(targetAddress));
   const taskProblem =
-    !taskText.trim()
-        ? "Write what you want the agent to do."
-        : taskText.length > MAX_TASK_CHARS
-          ? `Keep the request under ${MAX_TASK_CHARS} characters.`
-          : null;
+    fillProblem(inputs, fillFor(targetAddress)) ??
+    (taskText.length > MAX_TASK_CHARS ? `Keep the request under ${MAX_TASK_CHARS} characters.` : null);
 
   const access = assessAuthorizationCapability(agent.category, "read_only_hire");
   const price = agent.priceModel;
@@ -470,10 +476,9 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
         stage = "payment";
         // Logged out, "your wallet" had no address to name until connecting
         // just now - so an unedited request is rebuilt with the real one.
-        const request =
-          editedTask === null
-            ? defaultTaskDescription(agent.category, identity.address)
-            : taskText.trim();
+        const request = composeTask(agent.category, inputs, fillFor(identity.address));
+        const problem = fillProblem(inputs, fillFor(identity.address));
+        if (problem) throw new Error(problem);
         const paid = await payForHire(identity.address, request);
         paymentJobId = paid.jobId;
         setPaidJobId(paid.jobId);
@@ -575,14 +580,17 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
        * approve(kernel, budget)), and nothing else.
        */}
       {priceRequiresPayment && !showMyAgents ? (
-        <PaidHireBrief
+        <HireForm
           category={agent.category}
           connectedAddress={wallet.address ?? null}
-          onReset={() => setEditedTask(null)}
-          onTask={setEditedTask}
+          inputs={inputs}
+          note={hireNote}
+          onNote={setHireNote}
+          onToken={setFillToken}
+          onWallet={setFillWallet}
           problem={taskProblem}
-          task={taskText}
-          taskEdited={editedTask !== null}
+          token={fillToken}
+          wallet={fillWallet}
         />
       ) : priceRequiresPayment ? null : (
         // The read-only sentence describes a free hire; on a paid one it was false.
@@ -715,57 +723,84 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
 }
 
 /** What the person gets, and - only if they ask - exactly what the agent is sent. */
-function PaidHireBrief({
+function HireForm({
   category,
   connectedAddress,
-  task,
-  taskEdited,
-  onTask,
-  onReset,
+  inputs,
+  wallet,
+  token,
+  note,
+  onWallet,
+  onToken,
+  onNote,
   problem,
 }: {
   category: string;
   connectedAddress: string | null;
-  task: string;
-  taskEdited: boolean;
-  onTask: (value: string) => void;
-  onReset: () => void;
+  inputs: readonly HireInput[];
+  wallet: string | null;
+  token: string;
+  note: string;
+  onWallet: (value: string | null) => void;
+  onToken: (value: string) => void;
+  onNote: (value: string) => void;
   problem: string | null;
 }) {
-  const [editing, setEditing] = useState(false);
+  // Errors wait until the person has typed: a red line on arrival reads as their mistake.
+  const [touched, setTouched] = useState(false);
+  const touch = <T,>(set: (value: T) => void) => (value: T) => {
+    setTouched(true);
+    set(value);
+  };
+  const field = "mt-1 w-full rounded-xl border border-line bg-paper px-3 py-2.5 font-mono text-[0.84rem] text-ink placeholder:font-sans placeholder:text-faint";
+  const shownWallet = wallet ?? connectedAddress ?? "";
   return (
-    <div className="mt-4">
+    <div className="mt-4 space-y-3">
       <p className="text-sm leading-6 text-ink">
-        {DELIVERABLE[category] ?? "An answer to your request, from the agent itself."}
+        {DELIVERABLE[category] ?? (inputs.includes("token") ? "A safety verdict on the token, with the reasons." : "An answer to your request, from the agent itself.")}
       </p>
-      <p className="mt-1 text-xs leading-5 text-muted">
-        For {connectedAddress ? <span className="font-mono">{shortAddress(connectedAddress)}</span> : "your wallet"}.{" "}
-        <button
-          aria-expanded={editing}
-          className="font-semibold text-ink underline-offset-2 hover:underline"
-          onClick={() => setEditing((open) => !open)}
-          type="button"
-        >
-          {editing ? "Done" : "Change what it's asked"}
-        </button>
-      </p>
-      {editing ? (
-        <div className="mt-3">
-          <textarea
-            aria-label="What the agent will be asked"
-            className="min-h-24 w-full resize-y rounded-xl border border-line bg-paper px-3 py-2.5 text-sm leading-6 text-ink"
-            maxLength={MAX_TASK_CHARS + 200}
-            onChange={(event) => onTask(event.target.value)}
-            value={task}
+      {inputs.includes("wallet") ? (
+        <label className="block text-xs font-semibold text-muted">
+          Wallet to check
+          <input
+            autoComplete="off"
+            className={field}
+            onChange={(event) => touch(onWallet)(event.target.value.trim())}
+            placeholder="0x…"
+            spellCheck={false}
+            value={shownWallet}
           />
-          {taskEdited ? (
-            <button className="mt-1 text-xs font-semibold text-muted underline-offset-2 hover:underline" onClick={onReset} type="button">
-              Reset to the default
+          {connectedAddress && wallet !== null && wallet.toLowerCase() !== connectedAddress.toLowerCase() ? (
+            <button className="mt-1 font-semibold text-ink underline-offset-2 hover:underline" onClick={() => onWallet(null)} type="button">
+              Use my connected wallet
             </button>
           ) : null}
-        </div>
+        </label>
       ) : null}
-      {problem ? <p className="mt-1 text-xs text-danger">{problem}</p> : null}
+      {inputs.includes("token") ? (
+        <label className="block text-xs font-semibold text-muted">
+          Token contract address
+          <input
+            autoComplete="off"
+            className={field}
+            onChange={(event) => touch(onToken)(event.target.value.trim())}
+            placeholder="0x… (the address, not the symbol)"
+            spellCheck={false}
+            value={token}
+          />
+        </label>
+      ) : null}
+      <label className="block text-xs font-semibold text-muted">
+        Anything else to tell it <span className="font-normal">(optional)</span>
+        <textarea
+          className="mt-1 min-h-16 w-full resize-y rounded-xl border border-line bg-paper px-3 py-2.5 text-sm leading-6 text-ink placeholder:text-faint"
+          maxLength={600}
+          onChange={(event) => onNote(event.target.value)}
+          placeholder="e.g. I'm planning to buy $50 of it."
+          value={note}
+        />
+      </label>
+      {problem && touched ? <p className="text-xs text-danger">{problem}</p> : null}
     </div>
   );
 }

@@ -1445,6 +1445,8 @@ export const builtAgentsApi = anyApi as unknown as {
         protocol?: "mcp" | "a2a";
         /** Decimal U per call, e.g. "0.01". */
         priceU?: string | null;
+        /** What a buyer gives it; defaults from its blocks. */
+        inputs?: Array<"wallet" | "token">;
       },
       { hash: string; tokenURI: string; registry: string; chainId: number; pageUrl: string }
     >;
@@ -1454,6 +1456,8 @@ export const builtAgentsApi = anyApi as unknown as {
     >;
     unpublish: Mutation<{ sessionToken: string; hash: string }, null>;
     publicByHash: Query<{ hash: string }, BuiltAgentPublic | null>;
+    /** The Hire form's fields for a catalog agent built on Dolphin; null for other agents. */
+    inputsForAgentKey: Query<{ agentKey: string }, Array<"wallet" | "token"> | null>;
     forOwner: Query<{ ownerAddress: string }, BuiltAgentPublic[]>;
     forDraft: Query<{ buildConversationKey: string }, BuiltAgentPublic[]>;
   };

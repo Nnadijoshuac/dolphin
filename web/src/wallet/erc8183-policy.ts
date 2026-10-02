@@ -141,6 +141,54 @@ export function defaultTaskDescription(
 }
 
 /* ---------------------------------------------------------------------------
+ * WHAT A HIRE ASKS THE PERSON FOR (owner, 2026-10-02: "the basic fillings").
+ * ---------------------------------------------------------------------------
+ * A wallet field (pre-filled with the connected wallet, changeable), a token
+ * field (a 0x address: scam tokens copy real symbols, so a symbol is not an
+ * identifier), and a free note. Agents built on Dolphin declare which they
+ * need; other agents get a guess from their category, and the note is always
+ * there for what the guess misses.
+ * ------------------------------------------------------------------------ */
+
+export type HireInput = "wallet" | "token";
+
+export function inputsForCategory(category: AgentCategory): HireInput[] {
+  return category === "security" ? ["token"] : ["wallet"];
+}
+
+export type HireFill = { wallet: string | null; token: string | null; note: string };
+
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+/** What is missing or wrong in the form, worded for the person, or null. */
+export function fillProblem(inputs: readonly HireInput[], fill: HireFill): string | null {
+  if (inputs.includes("wallet") && !ADDRESS.test((fill.wallet ?? "").trim())) return "Enter the wallet address to check (0x…).";
+  if (inputs.includes("token") && !ADDRESS.test((fill.token ?? "").trim())) return "Enter the token's contract address (0x…), not its symbol.";
+  if (fill.note.length > 600) return "Keep the note under 600 characters.";
+  return null;
+}
+
+/**
+ * The request the agent is sent, from the filled form: the category's own
+ * task about the chosen wallet, or a check of the chosen token, plus the
+ * note. Every value is also stated on its own line so an agent can read it.
+ */
+export function composeTask(category: AgentCategory, inputs: readonly HireInput[], fill: HireFill): string {
+  const wallet = (fill.wallet ?? "").trim();
+  const token = (fill.token ?? "").trim();
+  const lines: string[] = [];
+  if (inputs.includes("token") && !inputs.includes("wallet")) {
+    lines.push(`Check the BNB Chain token ${token} before a buy: is it safe to trade, and why.`);
+  } else {
+    lines.push(defaultTaskDescription(category, inputs.includes("wallet") ? wallet : null));
+  }
+  if (inputs.includes("wallet")) lines.push(`Wallet: ${wallet}`);
+  if (inputs.includes("token")) lines.push(`Token: ${token}`);
+  if (fill.note.trim()) lines.push(`Note: ${fill.note.trim()}`);
+  return lines.join("\n");
+}
+
+/* ---------------------------------------------------------------------------
  * DECISION (2026-08-31): who gets offered a payment step, and why it is not
  * "whoever the catalog says has a price".
  * ---------------------------------------------------------------------------

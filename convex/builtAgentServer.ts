@@ -98,6 +98,8 @@ export function registrationFile(listing: Listing, agentWallet: string | null = 
      */
     builtWith: { platform: "Dolphin", url: siteBase(), network: NETWORKS[listing.network].label },
     category: listing.category,
+    // What a caller gives it, for agents that call agents (the Hire form shows the same).
+    inputs: inputDeclarations(listing),
     /*
      * "Others can hire it": the builder's asking price, stated honestly as not
      * yet open - paid delivery needs a signer Dolphin will not hold.
@@ -121,6 +123,23 @@ export function registrationFile(listing: Listing, agentWallet: string | null = 
 }
 
 export const A2A_PROTOCOL_VERSION = "0.3.0";
+
+/** The inputs a built agent takes, declared the same way everywhere a caller looks. */
+export function inputDeclarations(listing: Listing) {
+  const inputs = listing.inputs ?? ["wallet"];
+  return [
+    ...(inputs.includes("wallet") ? [{ name: "wallet", type: "address", description: "The BNB Chain wallet to work on (0x…).", required: true }] : []),
+    ...(inputs.includes("token") ? [{ name: "token", type: "address", description: "The BNB Chain token contract address (0x…), not its symbol.", required: true }] : []),
+    { name: "question", type: "string", description: "Anything else to ask or tell it.", required: false },
+  ];
+}
+
+/** The task text from a caller's structured inputs, stated one per line like the Hire form's. */
+function taskFromInputs(task: string, data: Record<string, unknown>): string {
+  const address = (value: unknown) => (typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value) ? value : null);
+  const extra = [address(data.wallet) && `Wallet: ${address(data.wallet)}`, address(data.token) && `Token: ${address(data.token)}`].filter(Boolean);
+  return [task, ...extra].filter(Boolean).join("\n").trim();
+}
 
 /** Listings made before the protocol field are MCP. */
 export function listingProtocol(listing: Listing): "mcp" | "a2a" {
@@ -214,7 +233,9 @@ export function agentCard(listing: Listing) {
       {
         id: "ask",
         name: listing.name,
-        description: listing.description,
+        description: `${listing.description} Send a data part with ${inputDeclarations(listing)
+          .map((input) => `"${input.name}"`)
+          .join(", ")}, or plain text.`,
         tags: [listing.category],
         inputModes: ["text/plain"],
         outputModes: ["text/plain"],
@@ -236,7 +257,8 @@ function a2aInput(params: Record<string, unknown> | undefined): { text: string; 
     const data = part.data as Record<string, unknown> | undefined;
     if ((part.kind === "data" || part.type === "data") && data && typeof data === "object") {
       if (typeof data.wallet === "string" && /^0x[0-9a-fA-F]{40}$/.test(data.wallet)) wallet = data.wallet;
-      if (!text && typeof data.question === "string") text = data.question;
+      const question = typeof data.question === "string" ? data.question : "";
+      text = taskFromInputs(`${text}${text && question ? "\n" : ""}${question}`, data);
     }
   }
   return { text: text.trim().slice(0, MAX_QUESTION_CHARS), wallet };

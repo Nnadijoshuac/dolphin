@@ -84,6 +84,29 @@ export function isBrainProvider(value: string): value is BrainProvider {
 }
 
 /** A person's own model endpoint, in place of Dolphin's. `baseUrl` is for `custom` only. */
+/**
+ * A model id that cannot belong to the chosen provider, worded for the
+ * builder - or null. Measured 2026-10-02: "nvidia/nemotron-3-ultra-550b-a55b:free"
+ * (an OpenRouter id) was saved under OpenAI, and every run failed with
+ * "invalid model ID". OpenRouter ids are "vendor/model"; ":free" is
+ * OpenRouter's; OpenAI, Anthropic, DeepSeek, Mistral and xAI ids never
+ * contain a slash.
+ */
+export function modelProviderMismatch(provider: string, model: string): string | null {
+  const id = model.trim();
+  const slashless = new Set(["openai", "anthropic", "deepseek", "mistral", "xai"]);
+  if (slashless.has(provider) && (id.includes("/") || id.endsWith(":free"))) {
+    return `"${id}" is an OpenRouter model id, not one ${provider === "openai" ? "OpenAI" : provider} serves. Choose OpenRouter as the provider (with your OpenRouter key), or pick one of this provider's own models.`;
+  }
+  if (provider === "openrouter" && !id.includes("/") && id !== "openrouter/auto") {
+    return `OpenRouter model ids look like "vendor/model" (for example "anthropic/claude-haiku-4.5"). Pick one from the list.`;
+  }
+  if (provider === "anthropic" && !id.startsWith("claude")) {
+    return `"${id}" is not an Anthropic model. Anthropic model ids start with "claude".`;
+  }
+  return null;
+}
+
 export type BrainEndpoint = { provider: BrainProvider; apiKey: string; model: string; baseUrl?: string | null };
 
 /** The chat-completions URL for a custom base: taken as-is if it already ends in the path. */

@@ -398,6 +398,8 @@ const CHAIN_GAP = 64;
 export function draftGraph(
   draft: AgentDraft,
   agents: ReadonlyMap<string, Agent> = new Map(),
+  /** False in a private try-run: nothing can be added there, so no "Add a tool" placeholder (owner, 2026-10-02). */
+  editable = true,
 ): { nodes: BlockNode[]; edges: FlowEdge[] } {
   const blocks = draft.blocks ?? [];
   const cut = new Set(draft.detached ?? []);
@@ -456,7 +458,9 @@ export function draftGraph(
       data: { kind: "tool", title: tool.toolName, detail: `via ${tool.agentName}`, member, detached: cut.has(member), agent: agentLook(tool.agentKey) },
     });
   });
-  if (draft.tools.length === 0) {
+  if (!editable) {
+    // A try-run shows only what the agent has.
+  } else if (draft.tools.length === 0) {
     senses.push({ id: "tool-empty", data: { kind: "tool", title: "No tools yet", detail: "From the free MCP agents on Dolphin", empty: true } });
   } else if (draft.tools.length < MAX_TOOLS) {
     senses.push({ id: "add-tool", data: { kind: "add", title: "Add a tool", detail: "From the free MCP agents on Dolphin" } });
@@ -851,7 +855,7 @@ export function AgentCanvas({
     [draft.tools, draft.blocks],
   );
   const toolAgents = useAgentsByKeys(toolAgentKeys);
-  const base = useMemo(() => applyRun(draft, draftGraph(draft, toolAgents), run), [draft, run, toolAgents]);
+  const base = useMemo(() => applyRun(draft, draftGraph(draft, toolAgents, editKey !== null), run), [draft, run, toolAgents, editKey]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Positions the person dragged, over the default layout. Read lazily on the
   // client only (this component never renders on the server - it sits behind

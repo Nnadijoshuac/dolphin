@@ -7,7 +7,7 @@ import { digestToolResult, stripRawPayloads } from "./lib/answerHygiene";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { McpError, callMcpTool, listMcpTools, openMcpSession, MCP_PROTOCOL_VERSION } from "./lib/mcpClient";
-import { OpenRouterError, chatCompletion, isBrainProvider, type BrainEndpoint, type ChatMessage } from "./lib/openrouter";
+import { OpenRouterError, chatCompletion, isBrainProvider, modelProviderMismatch, type BrainEndpoint, type ChatMessage } from "./lib/openrouter";
 import { isMutating } from "./lib/toolCapability";
 import { PUBLIC_BLOCK_TYPES, blockToolDefinitions, readIndicators, runBlockTool, type AgentBlock } from "./lib/agentBlocks";
 import { U_TOKEN, X402_NETWORK, formatU } from "./lib/x402";
@@ -395,7 +395,7 @@ async function callPassThrough(ctx: ActionCtx, listing: Listing, name: string, a
 async function builderBrain(ctx: ActionCtx, listing: Listing): Promise<BrainEndpoint | null> {
   const runtime = await ctx.runQuery(internal.agentBuilder.runtimeForDraft, { draftId: listing.draftId });
   const brain = runtime.brain;
-  if (!brain || !isBrainProvider(brain.provider)) return null;
+  if (!brain || !isBrainProvider(brain.provider) || modelProviderMismatch(brain.provider, brain.model)) return null;
   const apiKey = await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: brain.keyName });
   return apiKey ? { provider: brain.provider, apiKey, model: brain.model, baseUrl: brain.baseUrl ?? null } : null;
 }

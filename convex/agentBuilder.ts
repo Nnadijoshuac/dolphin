@@ -51,7 +51,7 @@ import { memoryBrief, recall, remember, type MemoryTarget } from "./lib/agentMem
 import { gradesTokens, mergeBuilderBlocks, withVerdictRules } from "./lib/builderBlocks";
 import { quietBrief, readDataSource, readNews } from "./lib/analyticalBlocks";
 import { TRADING_PLAYBOOK, TRADING_RUN_RULES } from "./lib/tradingPlaybook";
-import { chatCompletion, customChatUrl, isBrainProvider, type ChatMessage } from "./lib/openrouter";
+import { chatCompletion, customChatUrl, isBrainProvider, modelProviderMismatch, type ChatMessage } from "./lib/openrouter";
 import { assertSafeUrl } from "./lib/safeFetch";
 import { isMutating } from "./lib/toolCapability";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
@@ -730,6 +730,9 @@ export const updateDraft = mutation({
         .unique();
       if (!key) throw new ConvexError(`You have no key called ${args.brain.keyName}. Add it in the Keys tab first.`);
       if (!isBrainProvider(args.brain.provider)) throw new ConvexError("Choose a provider from the list.");
+      // A model id from another provider would be refused on every run (owner, 2026-10-02: an OpenRouter id saved under OpenAI).
+      const mismatch = modelProviderMismatch(args.brain.provider, model);
+      if (mismatch) throw new ConvexError(mismatch);
       let baseUrl: string | null = null;
       if (args.brain.provider === "custom") {
         try {
@@ -1188,6 +1191,12 @@ export async function runTryTurn(
           errorReason: "This agent's brain names a provider Dolphin does not know. Choose one on the Brain block.",
           errorKind: "input",
         });
+        return { messageId: assistantId };
+      }
+      // A brain saved before the model check existed can still pair the wrong provider and model; say which.
+      const mismatch = modelProviderMismatch(brain.provider, brain.model);
+      if (mismatch) {
+        await ctx.runMutation(internal.dolphin.setMessageStatus, { messageId: assistantId, status: "error", errorReason: `${mismatch} Fix it on the Brain block.`, errorKind: "input" });
         return { messageId: assistantId };
       }
       const endpoint = { provider: brain.provider, apiKey, model: brain.model, baseUrl: brain.baseUrl ?? null };

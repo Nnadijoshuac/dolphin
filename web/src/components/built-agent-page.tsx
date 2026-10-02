@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import { useState } from "react";
 
+import { AgentWalletPanel } from "@/components/agent-wallet-panel";
 import { RepointAgentUri } from "@/components/repoint-agent-uri";
 import { BUILT_AGENT_CATEGORIES, builtAgentsApi } from "@/convex/api";
 
@@ -95,6 +96,7 @@ export function BuiltAgentPage({ hash }: { hash: string }) {
         <p className="mt-6 text-[0.98rem] leading-relaxed text-ink">{agent.description}</p>
 
         <RepointAgentUri agent={agent} />
+        <AgentWalletPanel agent={agent} />
 
         <div className="surface-raised mt-6 p-5">
           <p className="eyebrow">Tools it uses</p>

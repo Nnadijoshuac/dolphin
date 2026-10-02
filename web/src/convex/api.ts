@@ -1472,6 +1472,16 @@ export const builtAgentsApi = anyApi as unknown as {
   };
 };
 
+/** Each built agent's own wallet (convex/x402.ts, 2026-10-02). It holds gas money only. */
+export const x402Api = anyApi as unknown as {
+  x402: {
+    agentWallet: Query<{ hash: string }, { address: string } | null>;
+    createAgentWallet: Action<{ sessionToken: string; hash: string }, { address: string }>;
+    /** Sends the agent wallet's BNB back to the agent's owner - the only destination there is. */
+    withdrawAgentGas: Action<{ sessionToken: string; hash: string }, { transactionHash: string; sentWei: string }>;
+  };
+};
+
 /** Mirrors BUILT_AGENT_CATEGORIES in convex/builtAgents.ts. */
 export const BUILT_AGENT_CATEGORIES = [
   { value: "trading", label: "Trading" },

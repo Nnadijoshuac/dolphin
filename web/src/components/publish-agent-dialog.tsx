@@ -380,7 +380,7 @@ export function PublishAgentDialog({
                 </label>
                 <p className="mt-1 text-[0.7rem] leading-relaxed text-muted">
                   {Number(price) > 0
-                    ? "Callers pay in U before each call, straight to your payout wallet. It answers with your own Brain."
+                    ? "Callers pay in U, straight to your payout wallet. The agent gets its own wallet to collect payments; send it a little BNB for gas from its page. It answers with your own Brain."
                     : "Free to use. Add a price to get paid in U per call."}
                 </p>
               </section>

@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { BnbBadge, BnbLogo, BrandMark } from "@/components/brand-mark";
 import { SetAndQuestLink } from "@/components/set-and-quest-link";
 import { NETWORK_LABEL } from "@/constants/agents";
+import { SET_AND_QUEST_URL } from "@/constants/site";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 import { useWallet } from "@/wallet/wallet-provider";
 
@@ -19,8 +20,11 @@ const navigation = [
   // front door. See Agent/DOLPHIN-AGENT-SCOPE.md §6.
   { path: "/dolphin", label: "Dolphin", icon: "sparkle" as const },
   { path: "/my-agents", label: "My Agents", icon: "agents" as const },
+  { path: SET_AND_QUEST_URL, label: "Set and Quest", icon: "sparkle" as const, quest: true },
   { path: "/wallet", label: "Wallet", icon: "wallet" as const },
 ] as const;
+
+const [networkName, networkEnvironment] = NETWORK_LABEL.split(" · ");
 
 function isActiveRoute(pathname: string, path: string) {
   if (path === "/") {
@@ -52,24 +56,28 @@ export function SiteHeader() {
   return (
     <>
       <header className="desktop-site-header sticky top-0 z-50 border-b border-line bg-canvas/92 backdrop-blur-xl">
-        <div className="site-frame flex h-[72px] items-center justify-between gap-5">
+        <div className="site-frame grid h-[72px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-5">
           <Link
             aria-label="Dolphin home"
-            className="interactive flex shrink-0 items-center gap-2.5 no-underline"
+            className="interactive flex shrink-0 items-center gap-2.5 justify-self-start no-underline"
             href="/"
           >
             <BrandMark size={31} />
             <span className="text-lg font-semibold tracking-[-0.035em]">Dolphin</span>
           </Link>
 
-          <nav aria-label="Primary navigation" className="hidden h-full items-center md:flex">
+          <nav aria-label="Primary navigation" className="hidden h-full items-center justify-self-center md:flex">
             {navigation.map((item) => {
               const isActive = isActiveRoute(pathname, item.path);
+
+              if ("quest" in item) {
+                return <SetAndQuestLink key={item.path} variant="nav" />;
+              }
 
               return (
                 <Link
                   aria-current={isActive ? "page" : undefined}
-                  className={`interactive relative flex h-full items-center px-4 text-sm font-medium no-underline ${
+                  className={`interactive relative flex h-full items-center whitespace-nowrap px-2 text-sm font-medium no-underline xl:px-4 ${
                     isActive ? "text-ink" : "text-muted hover:text-ink"
                   }`}
                   href={item.path}
@@ -77,23 +85,22 @@ export function SiteHeader() {
                 >
                   {item.label}
                   {isActive ? (
-                    <span className="absolute inset-x-4 bottom-0 h-0.5 bg-accent" />
+                    <span className="absolute inset-x-2 bottom-0 h-0.5 bg-accent xl:inset-x-4" />
                   ) : null}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden md:block">
-              <SetAndQuestLink />
-            </div>
-
+          <div className="flex items-center gap-4 justify-self-end">
             {/* The network, in full. Set and Earn counts "not stated on the page" against a
                 marketplace, and "BNB Chain" alone does not say mainnet or testnet. */}
-            <div className="hidden items-center gap-2 border-r border-line pr-4 text-xs font-medium text-muted lg:flex">
+            <div className="hidden items-center gap-2.5 text-muted xl:flex">
               <BnbLogo size={15} />
-              <span>{NETWORK_LABEL}</span>
+              <span className="grid gap-0.5 whitespace-nowrap leading-none">
+                <strong className="text-[0.68rem] font-semibold text-ink-soft">{networkName}</strong>
+                <small className="text-[0.6rem] font-medium text-faint">{networkEnvironment}</small>
+              </span>
             </div>
 
             {wallet.isConnected && wallet.address ? (

@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { SetAndQuestLink } from "@/components/set-and-quest-link";
 import { WalletConnectButton } from "@/wallet/wallet-provider";
 
 /**
- * THE PHONE'S NAVIGATION — a menu button and a drawer.
+ * THE PHONE'S NAVIGATION — a menu button and a full-screen menu.
  *
  * ===========================================================================
  * WHAT THIS REPLACED
@@ -20,18 +21,18 @@ import { WalletConnectButton } from "@/wallet/wallet-provider";
  * ~120px of permanent bottom padding on every page, competed with the phone's
  * own home indicator, and pinned the product to exactly five destinations.
  *
- * A drawer holds as many destinations as the product grows to and costs one
+ * A full-screen menu holds as many destinations as the product grows to and costs one
  * tap. It also has room for a line of explanation per item, which five icons
  * with one word each never did.
  *
  * ===========================================================================
- * WHY THE BUTTON AND THE DRAWER ARE SEPARATE EXPORTS
+ * WHY THE BUTTON AND THE MENU ARE SEPARATE EXPORTS
  * ===========================================================================
  * Every mobile screen already has its own header row — Discover's title line,
  * the wallet's avatar strip, the search field. Adding a second global bar on
  * top of those would stack two pieces of chrome above every page.
  *
- * So the DRAWER mounts once, in AppFrame, and the BUTTON is dropped into the
+ * So the MENU mounts once, in AppFrame, and the BUTTON is dropped into the
  * header each screen already has. They talk over a CustomEvent rather than
  * through a store or a context: the only state is "open", nothing needs to
  * read it, and a provider wrapping the whole tree to carry one boolean would
@@ -79,12 +80,12 @@ export function MobileMenuButton({ className = "mobile-circle" }: { className?: 
 }
 
 /**
- * The drawer. Mounted once.
+ * The menu. Mounted once.
  *
  * Native <dialog> for the same four reasons as everywhere else in this
  * codebase: Escape-to-close, focus containment, an inert background and the
  * top layer, all of which hand-built drawers get wrong. The only thing added
- * is closing on navigation — a drawer that survives the route change it caused
+ * is closing on navigation — a menu that survives the route change it caused
  * leaves the user looking at a new page through a menu they cannot click past,
  * because <dialog> has made that page inert.
  */
@@ -92,11 +93,28 @@ export function MobileNavDrawer() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
+  const closeTimer = useRef<number | null>(null);
+
+  function closeMenu() {
+    const element = dialog.current;
+    if (!element?.open || element.dataset.closing === "true") return;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      element.close();
+      return;
+    }
+
+    element.dataset.closing = "true";
+    closeTimer.current = window.setTimeout(() => element.close(), 360);
+  }
 
   useEffect(() => {
     const onOpen = () => setOpen(true);
     window.addEventListener(OPEN_EVENT, onOpen);
-    return () => window.removeEventListener(OPEN_EVENT, onOpen);
+    return () => {
+      window.removeEventListener(OPEN_EVENT, onOpen);
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -111,33 +129,45 @@ export function MobileNavDrawer() {
       aria-label="Menu"
       className="mobile-menu"
       id="mobile-menu"
-      onCancel={() => setOpen(false)}
+      onCancel={(event) => {
+        event.preventDefault();
+        closeMenu();
+      }}
       onClick={(event) => {
         // The <dialog> element is itself the backdrop's hit target, so a click
         // whose target IS the dialog came from outside the panel within it.
-        if (event.target === dialog.current) setOpen(false);
+        if (event.target === dialog.current) closeMenu();
       }}
-      onClose={() => setOpen(false)}
+      onClose={() => {
+        if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+        closeTimer.current = null;
+        if (dialog.current) delete dialog.current.dataset.closing;
+        setOpen(false);
+      }}
       ref={dialog}
     >
       <div className="mobile-menu__panel">
         <div className="mobile-menu__head">
-          <span className="mobile-menu__title">Menu</span>
+          <Link aria-label="Dolphin home" className="mobile-menu__brand" href="/" onClick={closeMenu}>
+            <BrandMark size={28} />
+            <span>Dolphin</span>
+          </Link>
+          <span className="mobile-menu__title">Explore</span>
           <button
             aria-label="Close menu"
             className="mobile-menu__close"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
             type="button"
           >
             <CategoryGlyph color="currentColor" name="close" size={18} strokeWidth={2} />
           </button>
         </div>
 
-        <SetAndQuestLink onClick={() => setOpen(false)} variant="drawer" />
+        <SetAndQuestLink onClick={closeMenu} variant="drawer" />
 
         <nav aria-label="Primary">
           <ul className="mobile-menu__list">
-            {DESTINATIONS.map((item) => {
+            {DESTINATIONS.map((item, index) => {
               const active = isActiveRoute(pathname, item.path);
               return (
                 <li key={item.path}>
@@ -153,8 +183,9 @@ export function MobileNavDrawer() {
                      * and reacting to its downstream consequence means the
                      * drawer is briefly open over the page it just opened.
                      */
-                    onClick={() => setOpen(false)}
+                    onClick={closeMenu}
                   >
+                    <span className="mobile-menu__number">{String(index + 1).padStart(2, "0")}</span>
                     <span aria-hidden="true" className="mobile-menu__icon">
                       <CategoryGlyph
                         color="currentColor"

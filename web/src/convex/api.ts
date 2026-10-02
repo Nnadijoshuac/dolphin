@@ -338,6 +338,25 @@ export const setAndQuestApi = anyApi as unknown as {
   };
 };
 
+/** convex/walletHistory.ts - the Dolphin Wallet's history, read from the chain. */
+export type WalletHistoryEntry = {
+  hash: string;
+  at: number;
+  kind: "deposit" | "payment" | "refund" | "swap" | "withdraw" | "setup" | "fee" | "other";
+  title: string;
+  movements: { direction: "in" | "out"; symbol: string; decimals: number; amountRaw: string }[];
+  feeWei: string;
+};
+
+export const walletHistoryApi = anyApi as unknown as {
+  walletHistory: {
+    forWallet: Action<
+      { address: string },
+      { status: "ok"; entries: WalletHistoryEntry[]; hiddenTokens: number } | { status: "unavailable"; reason: string }
+    >;
+  };
+};
+
 /** convex/chatDeletion.ts - deletes chats from the database; keeps only an anonymous summary. */
 export const chatDeletionApi = anyApi as unknown as {
   chatDeletion: {

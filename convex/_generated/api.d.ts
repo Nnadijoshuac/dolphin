@@ -104,6 +104,7 @@ import type * as trade from "../trade.js";
 import type * as verification from "../verification.js";
 import type * as walletActions from "../walletActions.js";
 import type * as walletAuth from "../walletAuth.js";
+import type * as walletHistory from "../walletHistory.js";
 
 import type {
   ApiFromModules,
@@ -208,6 +209,7 @@ declare const fullApi: ApiFromModules<{
   verification: typeof verification;
   walletActions: typeof walletActions;
   walletAuth: typeof walletAuth;
+  walletHistory: typeof walletHistory;
 }>;
 
 /**

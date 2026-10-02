@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { useBalance } from "wagmi";
 
-import { AgentActivity } from "@/components/agent-activity";
+import { WalletHistory } from "@/components/wallet-history";
 import {
   AssetLogo,
   U_TOKEN,
@@ -1163,7 +1163,8 @@ export function AltanaWalletPanel() {
           receiveTarget={heroTarget}
         />
         <HoldingsSection price={price} />
-        <AgentActivity hidden={hidden} />
+        {/* Every movement of the Dolphin Wallet, from the chain (2026-10-02). Agent activity stays on My Agents. */}
+        <WalletHistory hidden={hidden} />
         <OptionalFeature label="Liquidation alerts">
           <LiquidationAlertPanel />
         </OptionalFeature>

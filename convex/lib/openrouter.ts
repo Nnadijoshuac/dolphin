@@ -92,14 +92,22 @@ export function customChatUrl(baseUrl: string): string {
   return trimmed.endsWith("/chat/completions") ? trimmed : `${trimmed}/chat/completions`;
 }
 
-/** Verified present in OpenRouter's live model list on 2026-09-08. */
-export const DOLPHIN_PRIMARY_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+/**
+ * The chat's model (owner, 2026-10-02: "if this free model can't do what we
+ * need, change the model"). The 120B Nemotron answered production questions
+ * with nothing usable four times running. Measured the same day against
+ * OpenRouter's free tool-capable list on the questions that failed: the 550B
+ * Nemotron Ultra answered every one (3-4.5 s); Gemma 4 31B and Qwen 3.8 27B
+ * returned 429 on half their calls; Inkling refuses non-agentic callers.
+ */
+export const DOLPHIN_PRIMARY_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 
 /**
- * Tried in order when the primary is exhausted or unavailable. Both carry
- * tools + structured outputs; the router is last for the reason above.
+ * Tried in order when the primary is exhausted or unavailable, and the first
+ * is also the one-off retry when a reply comes back empty or garbled
+ * (dolphin.ts). All carry tools.
  */
-export const DOLPHIN_FALLBACK_MODELS = ["dots-studio/dots-3-note-preview:free"];
+export const DOLPHIN_FALLBACK_MODELS = ["nvidia/nemotron-3-super-120b-a12b:free", "dots-studio/dots-3-note-preview:free"];
 
 /*
  * `openrouter/free` WAS the last entry here and was REMOVED on 2026-09-08,

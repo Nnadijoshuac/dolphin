@@ -24,6 +24,7 @@ import { McpError, callMcpTool } from "./lib/mcpClient";
 import {
   OpenRouterError,
   chatCompletion,
+  DOLPHIN_FALLBACK_MODELS,
   type ChatMessage,
   type ToolCall,
 } from "./lib/openrouter";
@@ -1632,9 +1633,26 @@ Reply in at most two sentences: ${callsMade > 0 ? "you re-checked just now, so s
        * fault - and an empty or garbled reply is reported the same way. The
        * person can ask again; nothing is dressed up as an answer.
        */
-      const final = await chatCompletion({ messages });
-      const content = stripRawPayloads(final.content);
-      const leaked = looksLikeLeakedReasoning(content);
+      let final = await chatCompletion({ messages });
+      let content = stripRawPayloads(final.content);
+      let leaked = looksLikeLeakedReasoning(content);
+      /*
+       * ONE RETRY ON A DIFFERENT MODEL (2026-10-02). On production the primary
+       * free model answered "bnb to 0.05u" and "the is bnb there" with nothing
+       * usable, four times in a row, and every one became "Dolphin failed". An
+       * empty or prompt-leaking reply from one model says little about the
+       * next, so the fallback model gets one go before the turn is failed.
+       */
+      if (content.trim().length === 0 || leaked) {
+        console.warn(`[Dolphin] ${final.model} gave no usable answer; retrying once on ${DOLPHIN_FALLBACK_MODELS[0]}.`);
+        try {
+          final = await chatCompletion({ messages, model: DOLPHIN_FALLBACK_MODELS[0] });
+          content = stripRawPayloads(final.content);
+          leaked = looksLikeLeakedReasoning(content);
+        } catch (cause) {
+          console.warn("[Dolphin] Retry failed:", cause instanceof Error ? cause.message : String(cause));
+        }
+      }
       if (leaked) console.warn("[Dolphin] Synthesis returned reasoning about its prompt; not shown.");
 
       if (content.trim().length === 0 || leaked) {

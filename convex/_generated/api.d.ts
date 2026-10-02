@@ -86,6 +86,7 @@ import type * as lib_triggerSync from "../lib/triggerSync.js";
 import type * as lib_usageRank from "../lib/usageRank.js";
 import type * as lib_walletActionLogs from "../lib/walletActionLogs.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
+import type * as lib_x402 from "../lib/x402.js";
 import type * as liveness from "../liveness.js";
 import type * as model_agent from "../model/agent.js";
 import type * as myAgents from "../myAgents.js";
@@ -105,6 +106,7 @@ import type * as verification from "../verification.js";
 import type * as walletActions from "../walletActions.js";
 import type * as walletAuth from "../walletAuth.js";
 import type * as walletHistory from "../walletHistory.js";
+import type * as x402 from "../x402.js";
 
 import type {
   ApiFromModules,
@@ -191,6 +193,7 @@ declare const fullApi: ApiFromModules<{
   "lib/usageRank": typeof lib_usageRank;
   "lib/walletActionLogs": typeof lib_walletActionLogs;
   "lib/walletAuth": typeof lib_walletAuth;
+  "lib/x402": typeof lib_x402;
   liveness: typeof liveness;
   "model/agent": typeof model_agent;
   myAgents: typeof myAgents;
@@ -210,6 +213,7 @@ declare const fullApi: ApiFromModules<{
   walletActions: typeof walletActions;
   walletAuth: typeof walletAuth;
   walletHistory: typeof walletHistory;
+  x402: typeof x402;
 }>;
 
 /**

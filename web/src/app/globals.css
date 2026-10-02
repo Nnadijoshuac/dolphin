@@ -1239,6 +1239,26 @@ select {
 }
 .wcard--agent .wcard__eyebrow { color: var(--accent-ink); }
 
+/* Both wallets as rows INSIDE the total's card, on the phone (owner,
+   2026-10-02: "show the total, the Dolphin balance and the main balance in
+   one card"). The same cards, stripped of their own box. overflow is visible
+   so the asset dropdown is not clipped by the row. */
+.wallet-hero__wallets { display: flex; flex-direction: column; margin-top: 14px; border-top: 1px solid var(--line); }
+.wcard--inset {
+  min-height: 0;
+  gap: 8px;
+  padding: 14px 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.wcard--inset::before { display: none; }
+.wcard--inset + .wcard--inset { border-top: 1px solid var(--line); }
+.wcard--inset .wcard__foot { margin-top: 4px; }
+.wcard--inset .wcard__amount { margin-top: 2px; }
+
 /* The address chip. A truncated address is not an address, it is a label for
    one — so it is not a thing to copy, it is a thing to open. */
 .wcard__addr {
@@ -1562,6 +1582,7 @@ select {
 .wallet-activity-row p { margin-top: 0.1rem; font-size: 0.73rem; color: var(--muted); }
 .wallet-activity-row > strong {
   flex-shrink: 0;
+  max-width: 48%;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.78rem;
   font-weight: 650;
@@ -1569,6 +1590,12 @@ select {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+
+/* One line per token, right-aligned, so a two-token swap stacks instead of
+   squeezing the title to "B..." on a phone (2026-10-02). */
+.wallet-activity-amounts { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; text-align: right; }
+.wallet-activity-amounts > span { white-space: nowrap; }
+.wallet-activity-amounts.text-muted { font-family: inherit; font-weight: 500; color: var(--muted); }
 
 .wallet-activity-empty {
   display: flex;
@@ -1653,15 +1680,6 @@ select {
 .wallet-danger__confirm { display: flex; gap: 0.5rem; flex-shrink: 0; }
 .wallet-danger__confirm .wallet-btn { width: auto; min-height: 2.25rem; font-size: 0.76rem; padding-inline: 0.875rem; }
 
-/* Identity wallet section — /account only. The wallet screen used to render
-   this too, restating a card it already showed; see wallet-client.tsx. */
-.wallet-identity-section { margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
-.wallet-identity-section__content { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 1.25rem; }
-.wallet-identity-section__label { font-size: 0.78rem; font-weight: 700; color: var(--muted); }
-.wallet-identity-section__sub { margin-top: 0.25rem; max-width: 52ch; font-size: 0.75rem; line-height: 1.55; color: var(--faint); }
-.wallet-identity-section__action { flex-shrink: 0; min-width: 180px; }
-.wallet-identity-disconnect { font-size: 0.75rem; font-weight: 650; color: var(--muted); }
-.wallet-identity-disconnect:hover { color: var(--danger); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ── Toasts (2026-09-26) ─────────────────────────────────────────────────
    Short notices at the bottom of the screen instead of red text inside the

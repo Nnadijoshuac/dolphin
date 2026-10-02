@@ -16,9 +16,9 @@ import { useMobileLayout } from "@/hooks/use-mobile-layout";
  *
  * Ordering a wallet screen is not a routing concern. AltanaWalletPanel now owns
  * the whole account surface and its internal order, so the sections cannot
- * drift apart from the cards they belong to again. IdentityWalletSection still
- * exists and is still used — on /account, where a standalone "manage the
- * connected identity" row is the actual subject of the page.
+ * drift apart from the cards they belong to again. IdentityWalletSection is
+ * gone too (2026-10-02, owner: "it's redundant"): the Connected wallet card
+ * already carries the address and Disconnect.
  */
 export function WalletClient() {
   const isMobile = useMobileLayout();

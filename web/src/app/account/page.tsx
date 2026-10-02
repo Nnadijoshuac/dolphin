@@ -1,5 +1,4 @@
 import { AltanaWalletPanel } from "@/components/altana-wallet-panel";
-import { IdentityWalletSection } from "@/components/identity-wallet-section";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 import Link from "next/link";
 
@@ -10,7 +9,6 @@ export default function AccountPage() {
     <MobileStackHeader title="Account" fallback="/wallet" />
     <div className="site-frame page-shell mobile-account-page">
       <AltanaWalletPanel />
-      <IdentityWalletSection />
       <Link className="mobile-only mt-6 text-sm font-semibold underline" href="/onboarding">How Dolphin works</Link>
       <section id="security" className="mt-8 rounded-2xl border border-line bg-paper p-5">
         <h2 className="text-lg font-semibold">Wallet & security details</h2>

@@ -29,6 +29,7 @@ import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
 import { ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
 import type { Agent } from "@/types/agent";
+import { useHireTotal } from "@/hooks/use-hire-total";
 
 /** A tool name written for code, said in words. Names that already have spaces are left alone. */
 /**
@@ -74,8 +75,10 @@ export function AtAGlance({ agent }: { agent: Agent }) {
   const now = useNow();
   const signals = useAgentSignals(convexClient ? [agent] : []).get(agent.agentKey);
   const isTools = agent.protocol === "mcp";
-  // In the token the agent charges, like every price on Dolphin (owner, 2026-10-02).
-  const price = isTools ? null : priceLabel(agent);
+  // The total a hire costs, the same figure as every card and the hire button.
+  const label = isTools ? null : priceLabel(agent);
+  const total = useHireTotal(agent);
+  const price = label && label !== "Free" ? total.text ?? "…" : label;
   const checked = ago(agent.verification?.lastProbeAt ?? agent.verifiedAt, now);
   const online = agent.status === "live";
 
@@ -125,7 +128,9 @@ export function AtAGlance({ agent }: { agent: Agent }) {
 }
 
 function PublisherRow({ agent }: { agent: Agent }) {
-  const price = agent.protocol === "mcp" ? "Tools" : priceLabel(agent);
+  const label = agent.protocol === "mcp" ? "Tools" : priceLabel(agent);
+  const total = useHireTotal(agent);
+  const price = label && label !== "Free" && label !== "Tools" ? total.text ?? "…" : label;
   return (
     <li>
       <Link className="publisher-row" href={`/agent/${agent.tokenId}`}>
@@ -254,7 +259,9 @@ export function HowItWorks({ agent }: { agent: Agent }) {
   }, []);
 
   const isTools = agent.protocol === "mcp";
-  const price = isTools ? null : priceLabel(agent);
+  const label = isTools ? null : priceLabel(agent);
+  const total = useHireTotal(agent);
+  const price = label && label !== "Free" ? total.text ?? label : label;
   const days = ESCROW_REFUND_DAYS;
   const steps = isTools
     ? [
@@ -268,7 +275,7 @@ export function HowItWorks({ agent }: { agent: Agent }) {
           title: "You pay",
           body:
             price && price !== "Free"
-              ? `${price} is held safely - it does not go to the agent yet.`
+              ? `${label} is held safely - it does not go to the agent yet.`
               : "The price is held safely - it does not go to the agent yet.",
         },
         { title: "It does the job", body: `${agent.name} works on your request and sends back the result.` },

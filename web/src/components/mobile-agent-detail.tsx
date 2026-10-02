@@ -15,6 +15,7 @@ import { useAgentReviews } from "@/hooks/use-agent-reviews";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { convexClient } from "@/providers/convex-provider";
 import { usePriceText } from "@/hooks/use-price-text";
+import { useHireTotal } from "@/hooks/use-hire-total";
 import type { Agent } from "@/types/agent";
 
 function Reviews({ agent }: { agent: Agent }) {
@@ -45,6 +46,8 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
     symbol: agent.pricing?.tokenSymbol || live?.symbol || null,
   });
 
+  // The same total every card and the hire button show (hooks/use-hire-total.ts).
+  const hireTotal = useHireTotal(agent);
   const priceText = (() => {
     if (agent.protocol === "mcp") return "Free to Connect";
     if (rawAmount == null) return "Price not reported yet";
@@ -100,9 +103,9 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
       {/* The tagline is usually the description's first sentence; showing both said it twice. */}
       {agent.tagline && !agent.description.trim().startsWith(agent.tagline.trim()) && <p className="mobile-detail-tagline">{agent.tagline}</p>}
       <section className="mobile-detail-action">
-        <div><p>{agent.protocol === "mcp" ? "MCP server" : "Agent's price"}</p><h2>{priceText}</h2></div>
+        <div><p>{agent.protocol === "mcp" ? "MCP server" : "Price"}</p><h2>{agent.protocol !== "mcp" && hireTotal.text && rawAmount != null && Number(rawAmount) > 0 ? hireTotal.text : priceText}</h2></div>
         <button className="mobile-pearl" type="button" onClick={() => setOpen(true)}>{agent.protocol === "mcp" ? "Use" : "Hire this agent"}</button>
-        <p>{agent.protocol === "mcp" ? "Connect to your AI client" : "You see the full total, fees included, before you pay."}</p>
+        <p>{agent.protocol === "mcp" ? "Connect to your AI client" : "Fees included."}</p>
       </section>
       <section className="mobile-detail-section"><h2>Overview</h2><p className="mobile-detail-description">{expanded ? agent.description : agent.description.slice(0, 220)}{agent.description.length > 220 && <> {expanded ? "" : "… "}<button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? "Show less" : "Show more"}</button></>}</p>
         {buyerSkills(agent.skills).length > 0 && <div className="mobile-detail-skills">{buyerSkills(agent.skills).map(skill => <span key={`${skill.name}-${skill.evidence}`}>{plainSkillName(skill.name)}</span>)}</div>}

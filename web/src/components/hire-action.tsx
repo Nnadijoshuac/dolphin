@@ -21,8 +21,9 @@ import { track } from "@/lib/analytics";
 import { formatBnb, RELAYED_INTENT_GAS_ALLOWANCE } from "@/wallet/altana-policy";
 import { useBnbPrice } from "@/hooks/use-bnb-price";
 import { useTokenUsd } from "@/hooks/use-token-usd";
+import { useHireTotal } from "@/hooks/use-hire-total";
 import { useDolphinUBalance } from "@/components/wallet-withdraw";
-import { formatUsdCents, formatUsdFromWei, weiToUsdCents, type BnbPrice } from "@/wallet/bnb-price";
+import { formatUsdCents, formatUsdFromWei, type BnbPrice } from "@/wallet/bnb-price";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { usdCents } from "@/wallet/token-usd";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -592,6 +593,7 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
       <div className="mt-5 border-y border-line">
         {priceRequiresPayment && !showMyAgents && chargedRaw !== null && tokenAddress ? (
           <HireCost
+            agent={agent}
             decimals={agent.pricing?.tokenDecimals || liveToken?.decimals || null}
             needsWalletSetup={needsWalletSetup}
             priceRaw={BigInt(chargedRaw)}
@@ -769,15 +771,6 @@ function PaidHireBrief({
 
 const BNB_CHAIN_ID = 56;
 
-/*
- * What one relayed step really costs, for the price people are shown. The
- * relay billed the BNB->U swap at 652,854 gas on 2026-10-01; 750,000 sits just
- * above it so the fee actually charged lands at or under the figure on screen.
- * The 1.5M RELAYED_INTENT_GAS_ALLOWANCE stays the bar for "do you hold enough",
- * because a refusal after signing is worse than asking for a little extra.
- */
-const TYPICAL_RELAYED_STEP_GAS = BigInt(750_000);
-
 /** Cents -> wei at the feed's BNB price, rounded up. */
 function centsToWei(cents: bigint, price: BnbPrice): bigint {
   const scale = BigInt(10) ** BigInt(price.decimals);
@@ -802,18 +795,22 @@ function centsToWei(cents: bigint, price: BnbPrice): bigint {
  * so "needs X more" here and the refusal there agree.
  */
 function HireCost({
+  agent,
   priceRaw,
   decimals,
   token,
   priceText,
   needsWalletSetup,
 }: {
+  agent: Agent;
   priceRaw: bigint;
   decimals: number | null;
   token: string;
   priceText: string;
   needsWalletSetup: boolean;
 }) {
+  // The same total every card shows (hooks/use-hire-total.ts).
+  const hireTotal = useHireTotal(agent);
   const altana = useAltanaWallet();
   const uRate = useTokenUsd(token, decimals);
   const bnb = useBnbPrice();
@@ -854,17 +851,8 @@ function HireCost({
    * person's BNB into the very U being paid, it is not a further cost, and its
    * exact rate moves - so it lives in the details only.
    */
-  const typicalFeeWei = gas.data !== undefined ? TYPICAL_RELAYED_STEP_GAS * gas.data * BigInt(converting ? 2 : 1) : null;
-  const extraWei = typicalFeeWei !== null && setupWei !== null ? typicalFeeWei + setupWei : null;
-  let totalText: string | null = null;
-  if (uRate.status === "ready" && bnb.status === "ready" && decimals !== null && extraWei !== null) {
-    const centsPerToken = usdCents(BigInt(10) ** BigInt(decimals), decimals, uRate.rate);
-    if (centsPerToken > BigInt(0)) {
-      const totalCents = usdCents(priceRaw, decimals, uRate.rate) + weiToUsdCents(extraWei, bnb.price);
-      const tokens = Number(totalCents) / Number(centsPerToken);
-      totalText = `${tokens < 0.01 ? "<0.01" : tokens.toLocaleString("en", { maximumFractionDigits: 2, minimumFractionDigits: 2 })} U`;
-    }
-  }
+  const typicalFeeWei = hireTotal.feeWei;
+  const totalText = hireTotal.text;
 
   const usd = (wei: bigint | null) =>
     wei !== null && bnb.status === "ready" ? ` (${formatUsdFromWei(wei, bnb.price)})` : "";

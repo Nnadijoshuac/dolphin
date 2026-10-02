@@ -8,6 +8,7 @@ import { createPublicClient, formatUnits, http, parseAbi, type Address } from "v
 import { bsc, bscTestnet } from "viem/chains";
 import { switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 
+import { CopyAddress, GasExplainer, TopUpFromDolphin } from "@/components/agent-wallet-panel";
 import { BUILT_AGENT_CATEGORIES, builtAgentsApi, x402Api } from "@/convex/api";
 import { BSC_RPC_URL } from "@/constants/agents";
 import { BSC_TESTNET_RPC_URL, useWallet, wagmiConfig } from "@/wallet/wallet-provider";
@@ -343,14 +344,18 @@ export function PublishAgentDialog({
             </div>
             {done.agentWallet ? (
               <div className="rounded-xl border border-line/80 px-4 py-3 text-[0.8rem] leading-relaxed text-ink-soft">
-                <p className="font-semibold text-ink">{done.agentWallet.linked ? "Its wallet is linked" : "Link its wallet next"}</p>
-                <p className="mt-1">
-                  {done.agentWallet.linked
-                    ? "Any marketplace or buyer that finds it on-chain can now hire it and pay it. "
-                    : "It's registered, but escrow buyers still pay your wallet until you link the agent's own. Do it from its page. "}
-                  Send its wallet a little BNB for gas so it can collect:
+                <p className="flex items-center gap-2 font-semibold text-ink">
+                  Last step: give it BNB for gas <GasExplainer escrow />
                 </p>
-                <p className="mt-1 break-all font-mono text-[0.76rem] text-ink">{done.agentWallet.address}</p>
+                <p className="mt-1">
+                  It can&apos;t take paid hires until its wallet holds a little BNB: it pays its own gas to deliver results and send
+                  your earnings to you. Until then hires are turned away and nobody is charged.
+                  {done.agentWallet.linked
+                    ? ""
+                    : " Escrow buyers also still pay your own wallet until you link the agent's; do that from its page."}
+                </p>
+                <CopyAddress address={done.agentWallet.address} />
+                <TopUpFromDolphin to={done.agentWallet.address} />
               </div>
             ) : null}
             <div className="flex flex-col gap-2 text-[0.84rem]">

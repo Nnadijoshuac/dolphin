@@ -8,8 +8,10 @@ import { bsc } from "viem/chains";
 import { switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 
 import { HoldButton } from "@/components/hold-button";
+import { InfoTip } from "@/components/info-tip";
 import { BSC_RPC_URL } from "@/constants/agents";
 import { x402Api, type BuiltAgentPublic } from "@/convex/api";
+import { useAltanaWallet } from "@/wallet/altana-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { useWalletSession } from "@/wallet/wallet-session";
 import { useWallet, wagmiConfig } from "@/wallet/wallet-provider";
@@ -27,10 +29,126 @@ import { useWallet, wagmiConfig } from "@/wallet/wallet-provider";
  * to the builder. Owner only.
  */
 
-/** One payment's gas, generously (120k gas at 0.1 gwei), so the builder sees calls left, not wei. */
+/** One transaction's gas, generously (120k gas at 0.1 gwei), so the builder sees hires left, not wei. */
 const GAS_PER_CALL_WEI = BigInt(12_000_000_000_000); // 0.000012 BNB
+/** An escrow hire is three transactions: deliver, collect after the window, forward to the builder. */
+const TXS_PER_ESCROW_JOB = BigInt(3);
+/** Under this many hires of gas, the builder is warned before hires start failing. */
+const LOW_GAS_JOBS = 5;
+/** What "Top up" sends from the Dolphin Wallet: enough for a few dozen hires. */
+const TOP_UP_WEI = BigInt(500_000_000_000_000); // 0.0005 BNB
 
 const client = createPublicClient({ chain: bsc, transport: http(BSC_RPC_URL) });
+
+export type GasLevel = "ok" | "low" | "empty";
+
+/**
+ * WHETHER A PAID AGENT CAN WORK (owner, 2026-10-02: "if the agent doesn't
+ * have BNB for gas, the agent cannot work"). Public: its wallet address and
+ * balance are on-chain facts, so a visitor sees the same status the owner does.
+ * Level is null while unread, for a free agent, or for one with no wallet yet.
+ */
+export function useAgentGas(agent: BuiltAgentPublic): {
+  address: string | null;
+  wei: bigint | null;
+  jobsLeft: number | null;
+  level: GasLevel | null;
+  refetch: () => void;
+} {
+  const paid = agent.status === "registered" && agent.network === "bsc" && Boolean(agent.priceRaw);
+  const row = useQuery(x402Api.x402.agentWallet, paid ? { hash: agent.hash } : "skip");
+  const address = row?.address ?? null;
+  const balance = useTanstackQuery({
+    queryKey: ["agent-wallet-balance", address],
+    enabled: Boolean(address),
+    queryFn: () => client.getBalance({ address: address as Address }),
+    refetchInterval: 30_000,
+  });
+  const wei = balance.data ?? null;
+  const perJob = agent.protocol === "a2a" ? GAS_PER_CALL_WEI * TXS_PER_ESCROW_JOB : GAS_PER_CALL_WEI;
+  const jobsLeft = wei === null ? null : Number(wei / perJob);
+  const level: GasLevel | null = !paid || jobsLeft === null ? null : jobsLeft === 0 ? "empty" : jobsLeft < LOW_GAS_JOBS ? "low" : "ok";
+  return { address, wei, jobsLeft, level, refetch: () => void balance.refetch() };
+}
+
+export function GasExplainer({ escrow }: { escrow: boolean }) {
+  return (
+    <InfoTip label="Why the agent needs BNB">
+      <strong className="block text-ink">Why it needs BNB</strong>
+      Your agent signs its own transactions on BNB Chain, and each one costs a small gas fee paid in BNB.
+      {escrow
+        ? " For every hire it delivers the result on-chain, collects the payment once the dispute window closes, and sends your earnings to your wallet: three small fees."
+        : " For every paid call it submits the buyer's payment on-chain, and the U lands in your wallet."}{" "}
+      With no BNB it can&apos;t do any of that, so it turns hires down until you top it up. Nobody is charged for a hire it refuses.
+      <span className="mt-1.5 block">It only ever spends BNB on gas, and you can withdraw what&apos;s left at any time.</span>
+    </InfoTip>
+  );
+}
+
+export function CopyAddress({ address, label = "Copy the agent's wallet address" }: { address: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="copy-address">
+      <span className="copy-address__value" title={address}>
+        {address}
+      </span>
+      <button
+        aria-label={label}
+        className="copy-address__button"
+        onClick={() =>
+          void navigator.clipboard?.writeText(address).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          })
+        }
+        type="button"
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+/** "Top up 0.0005 BNB from my Dolphin Wallet": the passkey signs, the BNB lands on the agent. */
+export function TopUpFromDolphin({ to, onSent }: { to: string; onSent?: () => void }) {
+  const dolphin = useAltanaWallet();
+  const [state, setState] = useState<State>("idle");
+  return (
+    <>
+      <div className="topup-row">
+        {dolphin.status === "connected" ? (
+          <button
+            disabled={state === "busy"}
+            onClick={async () => {
+              setState("busy");
+              try {
+                await dolphin.withdraw({ asset: { kind: "native", symbol: "BNB", decimals: 18 }, amountRaw: TOP_UP_WEI, to: getAddress(to) });
+                setState({ done: `Sent ${formatEther(TOP_UP_WEI)} BNB from your Dolphin Wallet. It shows here within a minute.` });
+                onSent?.();
+              } catch (cause) {
+                const text = cause instanceof Error ? cause.message : "";
+                setState({
+                  error: /cancel|abort|not allowed/i.test(text) ? "You cancelled. Nothing was sent." : toUserMessage(cause, "The top-up did not go through. Try again."),
+                });
+              }
+            }}
+            type="button"
+          >
+            {state === "busy" ? "Confirm with your passkey…" : `Top up ${formatEther(TOP_UP_WEI)} BNB from my Dolphin Wallet`}
+          </button>
+        ) : null}
+        <span className="self-center text-[0.74rem] text-muted">
+          {dolphin.status === "connected" ? "Or send" : "Send"} BNB on BNB Chain to the address above.
+        </span>
+      </div>
+      {typeof state === "object" ? (
+        <p className={`mt-2 text-[0.76rem] ${"error" in state ? "text-danger" : "text-ink-soft"}`} role={"error" in state ? "alert" : "status"}>
+          {"error" in state ? state.error : state.done}
+        </p>
+      ) : null}
+    </>
+  );
+}
 
 const REGISTRY_ABI = parseAbi([
   "function getAgentWallet(uint256 agentId) view returns (address)",
@@ -55,6 +173,7 @@ export function AgentWalletPanel({ agent }: { agent: BuiltAgentPublic }) {
   const escrow = agent.protocol === "a2a" && Boolean(agent.priceRaw);
 
   const row = useQuery(x402Api.x402.agentWallet, eligible ? { hash: agent.hash } : "skip");
+  const gas = useAgentGas(agent);
   const jobs = useQuery(x402Api.erc8183Seller.jobsForAgent, eligible && escrow ? { hash: agent.hash } : "skip");
   const create = useAction(x402Api.x402.createAgentWallet);
   const withdraw = useAction(x402Api.x402.withdrawAgentGas);
@@ -62,12 +181,6 @@ export function AgentWalletPanel({ agent }: { agent: BuiltAgentPublic }) {
   const [state, setState] = useState<State>("idle");
 
   const address = row?.address ?? null;
-  const balance = useTanstackQuery({
-    queryKey: ["agent-wallet-balance", address],
-    enabled: Boolean(address),
-    queryFn: () => client.getBalance({ address: address as Address }),
-    refetchInterval: 30_000,
-  });
   /* Who escrow buyers pay: the address the agent's on-chain identity names. Read, not assumed. */
   const named = useTanstackQuery({
     queryKey: ["agent-identity-wallet", agent.registry, agent.tokenId],
@@ -107,13 +220,21 @@ export function AgentWalletPanel({ agent }: { agent: BuiltAgentPublic }) {
     return "Linked. Escrow buyers now pay the agent, and it forwards every payout to you.";
   };
 
-  const wei = balance.data ?? null;
-  const callsLeft = wei === null ? null : Number(wei / GAS_PER_CALL_WEI);
+  const wei = gas.wei;
   const linked = Boolean(address && named.data && getAddress(named.data) === getAddress(address));
 
   return (
     <div className="surface-raised mt-4 p-5">
-      <p className="eyebrow">Your agent&apos;s wallet</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="eyebrow flex items-center gap-2">
+          Your agent&apos;s wallet <GasExplainer escrow={escrow} />
+        </p>
+        {address && gas.level ? (
+          <span className="gas-status" data-level={gas.level}>
+            {gas.level === "empty" ? "Can't take hires" : gas.level === "low" ? "Low on gas" : "Ready for hires"}
+          </span>
+        ) : null}
+      </div>
       {!address ? (
         <>
           <p className="mt-2 text-[0.86rem] leading-relaxed text-ink-soft">
@@ -130,20 +251,23 @@ export function AgentWalletPanel({ agent }: { agent: BuiltAgentPublic }) {
         </>
       ) : (
         <>
-          <div className="mt-2 flex items-baseline justify-between gap-3">
-            <p className="min-w-0 truncate font-mono text-[0.8rem] text-ink">{address}</p>
-            <p className="shrink-0 text-[0.86rem] font-semibold text-ink">
+          <div className="mt-3 flex items-baseline justify-between gap-3">
+            <p className="text-[1.35rem] font-semibold tracking-[-0.02em] text-ink">
               {wei === null ? "…" : `${Number(formatEther(wei)).toLocaleString("en", { maximumFractionDigits: 6 })} BNB`}
             </p>
+            <p className="text-right text-[0.76rem] text-muted">
+              {gas.jobsLeft === null ? "Reading its balance…" : `Gas for about ${gas.jobsLeft.toLocaleString("en")} ${gas.jobsLeft === 1 ? "hire" : "hires"}`}
+            </p>
           </div>
-          <p className="mt-1 text-[0.76rem] leading-relaxed text-muted">
-            {callsLeft === null
-              ? "Reading its balance…"
-              : callsLeft === 0
-                ? "Empty. Send it a little BNB so it can collect payments; until then paid calls are refused and nobody is charged."
-                : `Gas for about ${callsLeft.toLocaleString("en")} paid calls. It only pays gas: every payment reaches your payout wallet.`}
-          </p>
-          <p className="mt-2 text-[0.76rem] leading-relaxed text-muted">To top it up, send BNB on BNB Chain to the address above.</p>
+          {gas.level === "empty" || gas.level === "low" ? (
+            <p className={`mt-2 text-[0.8rem] leading-relaxed ${gas.level === "empty" ? "text-danger" : "text-ink-soft"}`} role="status">
+              {gas.level === "empty"
+                ? "It has no BNB for gas, so it can't take paid hires. Buyers are turned away, and nobody is charged, until you top it up."
+                : "It's running low on gas. Top it up before it runs out, or new hires will be turned away."}
+            </p>
+          ) : null}
+          <CopyAddress address={address} />
+          <TopUpFromDolphin onSent={gas.refetch} to={address} />
 
           {escrow ? (
             <div className="mt-4 border-t border-line/70 pt-4">

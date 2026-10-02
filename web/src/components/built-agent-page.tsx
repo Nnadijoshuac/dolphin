@@ -3,9 +3,9 @@
 import { useQuery } from "convex/react";
 import { useState } from "react";
 
-import { AgentWalletPanel } from "@/components/agent-wallet-panel";
+import { AgentWalletPanel, CopyAddress, GasExplainer, useAgentGas } from "@/components/agent-wallet-panel";
 import { RepointAgentUri } from "@/components/repoint-agent-uri";
-import { BUILT_AGENT_CATEGORIES, builtAgentsApi } from "@/convex/api";
+import { BUILT_AGENT_CATEGORIES, builtAgentsApi, type BuiltAgentPublic } from "@/convex/api";
 
 /**
  * THE PAGE OF AN AGENT BUILT ON DOLPHIN: /agent/<hash>. (2026-09-26)
@@ -15,10 +15,6 @@ import { BUILT_AGENT_CATEGORIES, builtAgentsApi } from "@/convex/api";
  * transaction. Nothing here is a metric - a built agent has no track record
  * yet, so none is shown.
  */
-
-function short(address: string): string {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
 
 function CopyLine({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -65,99 +61,136 @@ export function BuiltAgentPage({ hash }: { hash: string }) {
     );
   }
 
+  return <BuiltAgentView agent={agent} />;
+}
+
+function BuiltAgentView({ agent }: { agent: BuiltAgentPublic }) {
+  const gas = useAgentGas(agent);
   const category = BUILT_AGENT_CATEGORIES.find((option) => option.value === agent.category)?.label ?? agent.category;
-  const status =
+  const live = agent.status === "registered";
+  const escrow = agent.protocol === "a2a" && Boolean(agent.priceRaw);
+  const onChain =
     agent.status === "registered"
-      ? `ERC-8004 agent #${agent.tokenId} on ${agent.networkLabel}`
+      ? `ERC-8004 #${agent.tokenId} · ${agent.networkLabel}${agent.network === "bsc-testnet" ? " (test network)" : ""}`
       : agent.status === "awaiting-signature"
-        ? "Not on-chain yet: waiting for its owner to sign the registration"
-        : "Taken offline by its owner";
+        ? "Not on-chain yet"
+        : "Taken offline";
 
   return (
     <div className="site-frame page-shell">
-      <div className="mx-auto max-w-[44rem] py-8">
-        <div className="flex items-start gap-4">
-          <div className="size-20 shrink-0 overflow-hidden rounded-2xl border border-line/80 bg-paper-muted">
+      <div className="mx-auto max-w-[48rem] py-8">
+        <header className="flex items-start gap-4 sm:gap-5">
+          <div className="size-20 shrink-0 overflow-hidden rounded-[22px] border border-line/80 bg-paper-muted sm:size-24">
             {agent.iconUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- a Convex storage URL, resized server-side
               <img alt={`${agent.name} icon`} className="size-full object-cover" src={agent.iconUrl} />
             ) : null}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="eyebrow">Built on Dolphin · {category}</p>
-            <h1 className="mt-1 text-[1.6rem] font-semibold tracking-[-0.03em] text-ink">{agent.name}</h1>
-            <p className={`mt-1 text-[0.8rem] ${agent.status === "registered" ? "text-ink-soft" : "text-muted"}`}>
-              {status}
-              {agent.network === "bsc-testnet" && agent.status === "registered" ? " (test network)" : ""}
-            </p>
+            <h1 className="mt-1 text-[1.75rem] font-semibold leading-tight tracking-[-0.03em] text-ink sm:text-[2rem]">{agent.name}</h1>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`agent-chip ${live ? "agent-chip--live" : "agent-chip--stop"}`}>{onChain}</span>
+              <span className="agent-chip">{agent.protocol === "a2a" ? "A2A agent" : "MCP tool server"}</span>
+              <span className="agent-chip">
+                {agent.priceDisplay ? `${agent.priceDisplay} per ${agent.protocol === "a2a" ? "hire" : "call"}` : "Free"}
+              </span>
+              {gas.level ? (
+                <span className={`agent-chip ${gas.level === "ok" ? "agent-chip--live" : gas.level === "low" ? "agent-chip--warn" : "agent-chip--stop"}`}>
+                  {gas.level === "empty" ? "Paused: out of gas" : gas.level === "low" ? "Low on gas" : "Taking hires"}
+                  <GasExplainer escrow={escrow} />
+                </span>
+              ) : null}
+            </div>
           </div>
-        </div>
+        </header>
 
-        <p className="mt-6 text-[0.98rem] leading-relaxed text-ink">{agent.description}</p>
+        <p className="mt-6 text-[1rem] leading-relaxed text-ink">{agent.description}</p>
+
+        {gas.level === "empty" ? (
+          <p className="mt-4 rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-[0.84rem] leading-relaxed text-ink-soft" role="status">
+            This agent can&apos;t take paid hires right now: its wallet has no BNB for gas. Hires are turned away, and nobody is charged,
+            until its builder tops it up.
+          </p>
+        ) : null}
 
         <RepointAgentUri agent={agent} />
         <AgentWalletPanel agent={agent} />
 
-        <div className="surface-raised mt-6 p-5">
-          <p className="eyebrow">Tools it uses</p>
-          <ul className="mt-2 space-y-1.5">
-            {agent.tools.map((tool) => (
-              <li className="text-[0.86rem] text-ink" key={`${tool.agentKey}:${tool.toolName}`}>
-                <span className="font-mono">{tool.toolName}</span>
-                <span className="text-muted"> · from {tool.agentName}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-[0.74rem] leading-relaxed text-muted">
-            It only reads. It cannot sign, trade or move funds, and it answers when asked.
-          </p>
-        </div>
-
         {agent.status !== "unpublished" ? (
-          <div className="surface-raised mt-4 p-5">
+          <section className="surface-raised mt-4 p-5">
             <p className="eyebrow">Use it from your own app or agent</p>
-            <div className="mt-1 divide-y divide-line/60">
+            <p className="mt-2 text-[0.84rem] leading-relaxed text-ink-soft">
+              {agent.protocol === "a2a" ? (
+                <>
+                  Send it a task over A2A (<span className="font-mono">message/send</span>) and it answers with the result.
+                </>
+              ) : (
+                <>
+                  Its MCP server offers <span className="font-mono">ask</span> (ask it a question)
+                  {agent.tools.length > 0 ? " and the tools below" : ""}.
+                </>
+              )}{" "}
+              {agent.priceDisplay
+                ? agent.protocol === "a2a"
+                  ? `Each hire costs ${agent.priceDisplay}, held in escrow on BNB Chain until it delivers, or paid with x402.`
+                  : `Each call costs ${agent.priceDisplay}, paid with x402.`
+                : "Free to use."}
+            </p>
+            <div className="mt-2 divide-y divide-line/60">
               <CopyLine label={agent.protocol === "a2a" ? "A2A agent card" : "MCP endpoint"} value={agent.endpointUrl} />
               <CopyLine label="Registration file" value={agent.registrationUrl} />
             </div>
-            <p className="mt-2 text-[0.74rem] leading-relaxed text-muted">
-              {agent.protocol === "a2a" ? (
-                <>Send it a task over A2A (<span className="font-mono">message/send</span>) and it answers with the result.</>
-              ) : (
-                <>Its MCP server offers <span className="font-mono">ask</span> (ask it a question) and the tools above.</>
-              )}{" "}
-              {agent.priceDisplay
-                ? `Each ${agent.protocol === "a2a" ? "task" : "tool call"} costs ${agent.priceDisplay}, paid with x402 to its builder.`
-                : "Free to use."}
-            </p>
-          </div>
+          </section>
         ) : null}
 
-        <div className="mt-4 space-y-1 text-[0.8rem] text-ink-soft">
-          <p>
-            Owner <span className="font-mono">{short(agent.ownerAddress)}</span>
+        <section className="surface-raised mt-4 p-5">
+          <p className="eyebrow">What it can do</p>
+          {agent.tools.length > 0 ? (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {agent.tools.map((tool) => (
+                <li className="agent-chip" key={`${tool.agentKey}:${tool.toolName}`} title={`from ${tool.agentName}`}>
+                  <span className="font-mono">{tool.toolName}</span>
+                  <span className="font-normal text-muted">· {tool.agentName}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="mt-3 text-[0.8rem] leading-relaxed text-muted">
+            It only reads. It cannot sign, trade or move anyone&apos;s funds, and it answers when asked.
           </p>
-          {agent.registerTxUrl ? (
-            <a className="underline" href={agent.registerTxUrl} rel="noopener noreferrer" target="_blank">
-              Registration transaction ↗
-            </a>
-          ) : null}
-          {agent.links.website ? (
-            <p>
-              <a className="underline" href={agent.links.website} rel="noopener noreferrer nofollow" target="_blank">
-                Website ↗
-              </a>
-            </p>
-          ) : null}
-          {agent.links.x ? (
-            <p>
-              <a className="underline" href={`https://x.com/${agent.links.x}`} rel="noopener noreferrer nofollow" target="_blank">
-                @{agent.links.x} on X ↗
-              </a>
-            </p>
-          ) : null}
-          {agent.links.email ? <p>{agent.links.email}</p> : null}
-        </div>
+        </section>
+
+        <section className="mt-6 grid gap-x-8 gap-y-4 border-t border-line/70 pt-5 text-[0.8rem] sm:grid-cols-2">
+          <div className="min-w-0">
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted">Owner</p>
+            <CopyAddress address={agent.ownerAddress} label="Copy the owner's address" />
+          </div>
+          <div className="space-y-1.5 text-ink-soft sm:pt-5">
+            {agent.registerTxUrl ? (
+              <p>
+                <a className="underline" href={agent.registerTxUrl} rel="noopener noreferrer" target="_blank">
+                  Registration transaction ↗
+                </a>
+              </p>
+            ) : null}
+            {agent.links.website ? (
+              <p>
+                <a className="underline" href={agent.links.website} rel="noopener noreferrer nofollow" target="_blank">
+                  Website ↗
+                </a>
+              </p>
+            ) : null}
+            {agent.links.x ? (
+              <p>
+                <a className="underline" href={`https://x.com/${agent.links.x}`} rel="noopener noreferrer nofollow" target="_blank">
+                  @{agent.links.x} on X ↗
+                </a>
+              </p>
+            ) : null}
+            {agent.links.email ? <p>{agent.links.email}</p> : null}
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -72,7 +72,8 @@ export function registrationFile(listing: Listing, agentWallet: string | null = 
           : { name: "MCP", endpoint: `${base}/mcp`, version: MCP_PROTOCOL_VERSION },
       ];
   // ERC-8004's agent-wallet form: where this agent is paid. The builder's own address.
-  const named = agentWallet ?? listing.payoutAddress;
+  // Escrow (A2A) buyers pay the identity's wallet, so it is the agent's own; x402 (MCP) pays the builder directly.
+  const named = (listingProtocol(listing) === "a2a" ? agentWallet : null) ?? listing.payoutAddress;
   if (named) services.push({ name: "agentWallet", endpoint: `eip155:${listing.chainId}:${named}` });
   if (listing.links.email) services.push({ name: "email", endpoint: listing.links.email });
   if (listing.links.website) services.push({ name: "website", endpoint: listing.links.website });

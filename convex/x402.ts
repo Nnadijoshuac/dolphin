@@ -97,6 +97,25 @@ export const createAgentWallet = action({
 });
 
 /**
+ * THE WALLET BEFORE THE MINT (owner, 2026-10-02: the agent should go on-chain
+ * "with all the details in it"). Called by Put on-chain before the owner signs
+ * register(), so the registration file names the agent's own wallet from the
+ * first moment anyone reads it. The on-chain link (setAgentWallet) follows in
+ * the same dialog: the registry refuses agentWallet inside register itself
+ * ("reserved key", simulated 2026-10-02) and needs the minted id.
+ */
+export const prepareAgentWallet = action({
+  args: { sessionToken: v.string(), hash: v.string() },
+  handler: async (ctx, { sessionToken, hash }): Promise<{ address: string }> => {
+    const owner: string = await ctx.runQuery(internal.builtAgents.sessionOwner, { sessionToken });
+    const listing = await ctx.runQuery(internal.builtAgents.byHash, { hash });
+    if (!listing || listing.ownerAddress !== owner) throw new ConvexError("That agent is not yours.");
+    if (listing.network !== "bsc" || !listing.priceRaw) throw new ConvexError("Only a paid agent on BNB Chain needs its own wallet.");
+    return { address: await ensureAgentWallet(ctx, hash) };
+  },
+});
+
+/**
  * GUARDRAIL 3: the agent's gas money goes back to its builder, and only there.
  * Sends everything except the gas this transfer itself costs.
  */

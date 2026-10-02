@@ -1477,6 +1477,8 @@ export const x402Api = anyApi as unknown as {
   x402: {
     agentWallet: Query<{ hash: string }, { address: string } | null>;
     createAgentWallet: Action<{ sessionToken: string; hash: string }, { address: string }>;
+    /** Before register(): a paid agent's own wallet, so its registration file names it from the start. */
+    prepareAgentWallet: Action<{ sessionToken: string; hash: string }, { address: string }>;
     /** Sends the agent wallet's BNB back to the agent's owner - the only destination there is. */
     withdrawAgentGas: Action<{ sessionToken: string; hash: string }, { transactionHash: string; sentWei: string }>;
   };

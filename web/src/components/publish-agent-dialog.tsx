@@ -8,7 +8,7 @@ import { createPublicClient, formatUnits, http, parseAbi, type Address } from "v
 import { bsc, bscTestnet } from "viem/chains";
 import { switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 
-import { BUILT_AGENT_CATEGORIES, builtAgentsApi } from "@/convex/api";
+import { BUILT_AGENT_CATEGORIES, builtAgentsApi, x402Api } from "@/convex/api";
 import { BSC_RPC_URL } from "@/constants/agents";
 import { BSC_TESTNET_RPC_URL, useWallet, wagmiConfig } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
@@ -83,7 +83,16 @@ function bnb(wei: bigint): string {
 
 type Prepared = { hash: string; tokenURI: string; registry: string; chainId: number; pageUrl: string };
 type Review = { prepared: Prepared; feeWei: bigint; balanceWei: bigint; gas: bigint; gasPrice: bigint };
-type Done = { hash: string; tokenId: string; txHash: string; network: Network };
+type Done = {
+  hash: string;
+  tokenId: string;
+  txHash: string;
+  network: Network;
+  /** A paid A2A agent's wallet: "linked" on-chain, or "pending" when the second signature did not happen. */
+  agentWallet: { address: string; linked: boolean } | null;
+};
+
+const SET_AGENT_WALLET_ABI = parseAbi(["function setAgentWallet(uint256 agentId, address newWallet, uint256 deadline, bytes signature)"]);
 
 export function PublishAgentDialog({
   buildConversationKey,
@@ -102,6 +111,8 @@ export function PublishAgentDialog({
   const processIcon = useAction(builtAgentsApi.iconProcessing.process);
   const prepareListing = useMutation(builtAgentsApi.builtAgents.prepareListing);
   const confirmRegistration = useAction(builtAgentsApi.builtAgents.confirmRegistration);
+  const prepareAgentWallet = useAction(x402Api.x402.prepareAgentWallet);
+  const walletLinkProof = useAction(x402Api.erc8183Seller.walletLinkProof);
 
   const [icon, setIcon] = useState<{ id: string; url: string | null } | null>(null);
   const [iconBusy, setIconBusy] = useState(false);
@@ -118,7 +129,7 @@ export function PublishAgentDialog({
   const [protocol, setProtocol] = useState<"mcp" | "a2a">("mcp");
   const [network, setNetwork] = useState<Network>("bsc");
   const [review, setReview] = useState<Review | null>(null);
-  const [stage, setStage] = useState<"form" | "reviewing" | "switching" | "signing" | "confirming" | "done">("form");
+  const [stage, setStage] = useState<"form" | "reviewing" | "switching" | "signing" | "confirming" | "linking" | "done">("form");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Done | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -220,6 +231,13 @@ export function PublishAgentDialog({
           ? "Your wallet didn't switch to BSC Testnet. Some wallets (Binance Wallet among them, it seems) don't support the test network: try MetaMask or Trust Wallet for testnet, or pick BNB Chain."
           : "Your wallet didn't switch to BNB Chain. Open the wallet, check for a waiting request, and try again.",
       );
+      /*
+       * A paid A2A agent goes on-chain with its own wallet (owner, 2026-10-02):
+       * created now, named in the registration file before the mint, and linked
+       * on-chain by the second signature below.
+       */
+      const paidAgent = network === "bsc" && protocol === "a2a" && Number(price) > 0 && visibility === "public";
+      const agentWallet = paidAgent ? (await prepareAgentWallet({ sessionToken: session.sessionToken, hash: review.prepared.hash })).address : null;
       setStage("signing");
       const txHash = await withWalletTimeout(writeContract(wagmiConfig, {
         chainId,
@@ -244,7 +262,29 @@ export function PublishAgentDialog({
         hash: review.prepared.hash,
         transactionHash: txHash,
       });
-      setDone({ hash: review.prepared.hash, tokenId: confirmed.tokenId, txHash, network });
+      let linked = false;
+      if (agentWallet) {
+        // The second signature: point the identity's wallet at the agent's own, so any escrow buyer pays it.
+        setStage("linking");
+        try {
+          const proof = await walletLinkProof({ sessionToken: session.sessionToken, hash: review.prepared.hash });
+          const linkTx = await withWalletTimeout(
+            writeContract(wagmiConfig, {
+              chainId,
+              address: proof.registry as Address,
+              abi: SET_AGENT_WALLET_ABI,
+              functionName: "setAgentWallet",
+              args: [BigInt(proof.tokenId), proof.agentWallet as Address, BigInt(proof.deadline), proof.signature as `0x${string}`],
+            }),
+            "Your wallet didn't answer the second request. You can link the agent's wallet from its page.",
+          );
+          await waitForTransactionReceipt(wagmiConfig, { chainId, hash: linkTx });
+          linked = true;
+        } catch {
+          /* Registered either way; the agent's page offers the link again. */
+        }
+      }
+      setDone({ hash: review.prepared.hash, tokenId: confirmed.tokenId, txHash, network, agentWallet: agentWallet ? { address: agentWallet, linked } : null });
       setStage("done");
     } catch (cause) {
       setError(reasonOf(cause));
@@ -255,7 +295,7 @@ export function PublishAgentDialog({
     }
   }
 
-  const busy = stage === "reviewing" || stage === "switching" || stage === "signing" || stage === "confirming" || iconBusy;
+  const busy = stage === "reviewing" || stage === "switching" || stage === "signing" || stage === "confirming" || stage === "linking" || iconBusy;
   const short = review ? review.balanceWei < review.feeWei : false;
 
   return (
@@ -298,6 +338,18 @@ export function PublishAgentDialog({
                 ERC-8004 agent #{done.tokenId} on {done.network === "bsc" ? "BNB Chain" : "BNB Chain testnet"}, owned by your wallet.
               </p>
             </div>
+            {done.agentWallet ? (
+              <div className="rounded-xl border border-line/80 px-4 py-3 text-[0.8rem] leading-relaxed text-ink-soft">
+                <p className="font-semibold text-ink">{done.agentWallet.linked ? "Its wallet is linked" : "Link its wallet next"}</p>
+                <p className="mt-1">
+                  {done.agentWallet.linked
+                    ? "Any marketplace or buyer that finds it on-chain can now hire it and pay it. "
+                    : "It's registered, but escrow buyers still pay your wallet until you link the agent's own. Do it from its page. "}
+                  Send its wallet a little BNB for gas so it can collect:
+                </p>
+                <p className="mt-1 break-all font-mono text-[0.76rem] text-ink">{done.agentWallet.address}</p>
+              </div>
+            ) : null}
             <div className="flex flex-col gap-2 text-[0.84rem]">
               <Link className="underline" href={`/agent/${done.hash}`}>
                 Open its page
@@ -560,7 +612,9 @@ export function PublishAgentDialog({
                         ? "Confirm the transaction in your wallet…"
                         : stage === "confirming"
                           ? "Confirming on-chain…"
-                          : "Sign and register"}
+                          : stage === "linking"
+                            ? "Second signature: link the agent's wallet…"
+                            : "Sign and register"}
                   </span>
                 </button>
               ) : (

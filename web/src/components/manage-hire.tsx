@@ -8,7 +8,7 @@
  * it - and the old page answered those in scattered paragraphs with buttons
  * that were hard to read. This page answers them in that order:
  *
- *   Right now         a live tracker - Paid, Working, Delivered, Paid out -
+ *   Right now         a live tracker - Paid, Working, Delivered -
  *                     with the current step lit and one plain sentence.
  *   What it delivered the delivery and its on-chain proof, or "nothing yet".
  *   Every job         all purchases from this agent, not only the latest.
@@ -35,6 +35,7 @@ import { CancelHireHold } from "@/components/cancel-hire-hold";
 import { useDeliverable } from "@/hooks/use-deliverable";
 import { OneLine } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { DolphinMessageContent } from "@/components/dolphin-message-content";
 import { TrackRecord } from "@/components/track-record";
 import { categoryLabel } from "@/constants/agents";
 import { agentPaymentsApi, type AgentJobRow } from "@/convex/api";
@@ -44,7 +45,7 @@ import { priceTextOr, usePriceText } from "@/hooks/use-price-text";
 import type { Agent } from "@/types/agent";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { hasDeliverable, type DeliveryState } from "@/wallet/erc8183-job";
-import { ESCROW_DISPUTE_WINDOW_SECONDS, formatTokenAmount } from "@/wallet/erc8183-policy";
+import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { toUserMessage } from "@/wallet/wallet-errors";
 
 export type HireRow = {
@@ -101,7 +102,14 @@ function useJobs(agentKey: string): AgentJobRow[] | undefined {
   ) as AgentJobRow[] | undefined;
 }
 
-const STEPS = ["Paid", "Working", "Delivered", "Paid out"] as const;
+/*
+ * The buyer's road ends at Delivered (owner, 2026-10-02: whether the builder
+ * has been paid out is not the buyer's business - they paid and got their
+ * result). A settled job reads Delivered too.
+ */
+const STEPS = ["Paid", "Working", "Delivered"] as const;
+/** A job created but never funded: the first step says so. */
+const UNPAID_STEPS = ["Not paid", "Working", "Delivered"] as const;
 /** A declined job never works or delivers; its road is paid, declined, refunded. */
 const DECLINED_STEPS = ["Paid", "Declined", "Refund"] as const;
 /** A job the agent missed ends the same way: paid, not delivered, refunded. */
@@ -111,9 +119,8 @@ const MISSED_STEPS = ["Paid", "Not delivered", "Refund"] as const;
 function stepFor(state: DeliveryState | undefined): { index: number; tone: "live" | "warn" | "done" } {
   switch (state) {
     case "settled":
-      return { index: 3, tone: "done" };
     case "delivered":
-      return { index: 2, tone: "live" };
+      return { index: 2, tone: "done" };
     case "overdue":
       return { index: 1, tone: "warn" };
     case "rejected":
@@ -131,7 +138,7 @@ function stepFor(state: DeliveryState | undefined): { index: number; tone: "live
 function Tracker({ state, refunded = false }: { state: DeliveryState | undefined; refunded?: boolean }) {
   const declined = state === "declined" || state === "missed";
   const { index, tone } = declined ? { index: refunded ? 2 : 1, tone: refunded ? ("done" as const) : ("warn" as const) } : stepFor(state);
-  const steps: readonly string[] = state === "missed" ? MISSED_STEPS : declined ? DECLINED_STEPS : STEPS;
+  const steps: readonly string[] = state === "missed" ? MISSED_STEPS : declined ? DECLINED_STEPS : state === "unfunded" ? UNPAID_STEPS : STEPS;
   return (
     <ol className="tracker" data-tone={tone}>
       {steps.map((label, step) => (
@@ -150,7 +157,6 @@ function Tracker({ state, refunded = false }: { state: DeliveryState | undefined
 
 /** The one sentence under the tracker. Plain words; dates are the chain's own. */
 function nowSentence(agent: Agent, state: DeliveryState | undefined, submittedAt: number, expiredAt: number): string {
-  const paidOutOn = submittedAt > 0 ? day((submittedAt + ESCROW_DISPUTE_WINDOW_SECONDS) * 1000) : null;
   switch (state) {
     case undefined:
       return "Checking the job on BNB Chain...";
@@ -163,15 +169,15 @@ function nowSentence(agent: Agent, state: DeliveryState | undefined, submittedAt
     case "overdue":
       return `Nothing yet, and it is taking longer than usual. ${agent.name} can still deliver, or it may have declined the job.${expiredAt > 0 ? ` If nothing arrives by ${day(expiredAt * 1000)}, you can take your money back.` : ""}`;
     case "delivered":
-      return `${agent.name} delivered${submittedAt > 0 ? ` on ${day(submittedAt * 1000)}` : ""}.${paidOutOn ? ` It is paid automatically on ${paidOutOn}.` : ""}`;
+      return `${agent.name} delivered${submittedAt > 0 ? ` on ${day(submittedAt * 1000)}` : ""}.`;
     case "settled":
-      return `Done. ${agent.name} delivered and has been paid.`;
+      return `Done. ${agent.name} delivered.`;
     case "rejected":
       return "This job was rejected, so the agent was not paid.";
     case "expired":
       return "The deadline passed without a delivery.";
     case "unfunded":
-      return "This job was created but never paid for.";
+      return "This job was never paid for, so the agent did not start it.";
   }
 }
 
@@ -336,7 +342,10 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
             </p>
             {result?.content ? (
               <div className="mt-2 rounded-xl border border-line bg-paper px-4 py-3">
-                <p className="whitespace-pre-line text-[0.9rem] leading-6 text-ink">{result.content}</p>
+                {/* Sellers answer in Markdown ("**Verdict: SAFE**"); render it, don't print the asterisks. */}
+                <div className="text-[0.9rem] leading-6 text-ink">
+                  <DolphinMessageContent content={result.content} showCopyButton={false} />
+                </div>
                 <a className="mt-2 inline-flex items-center gap-1 text-[0.74rem] font-medium text-muted hover:text-ink" href={result.url} rel="noreferrer" target="_blank">
                   Open the original
                   <CategoryGlyph color="currentColor" name="external" size={11} />
@@ -345,7 +354,6 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
             ) : (
               <p className="mt-2 text-[0.86rem] text-muted">Fetching the result…</p>
             )}
-            {delivery.state === "delivered" ? <PayoutNote agentName={agent.name} submittedAt={onChain.submittedAt} /> : null}
             <details className="mt-3 text-[0.74rem] text-muted">
               <summary className="cursor-pointer">Proof on BNB Chain</summary>
             <div className="mt-2 flex items-center gap-2 rounded-xl bg-paper-muted/60 px-4 py-3">
@@ -383,23 +391,6 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
         </a>
       </section>
     </>
-  );
-}
-
-/**
- * WHEN THE SELLER IS PAID. There is no "approve and pay now": measured
- * 2026-10-02, the escrow's policy (0x9C01…6dE5) decides a submitted job only
- * when its 7-day dispute window ends - router.settle before then reverts
- * NotDecided(), for the buyer and anyone else. The policy exposes dispute()
- * and reviewer votes, nothing that lets a buyer release early. So this says
- * plainly when payment happens instead of offering a button that cannot work.
- */
-function PayoutNote({ agentName, submittedAt }: { agentName: string; submittedAt: number }) {
-  const on = submittedAt > 0 ? day((submittedAt + ESCROW_DISPUTE_WINDOW_SECONDS) * 1000) : null;
-  return (
-    <p className="mt-3 text-[0.78rem] leading-5 text-muted">
-      {agentName} is paid automatically{on ? ` on ${on}` : " when the 7-day check ends"}.
-    </p>
   );
 }
 

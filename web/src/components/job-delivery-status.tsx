@@ -38,6 +38,16 @@ import { toUserMessage } from "@/wallet/wallet-errors";
  * unaffected and shows no delivery UI at all, because nothing was bought.
  */
 
+/** A four-line preview has no room for Markdown, so its markers are dropped rather than printed ("**SAFE**" -> "SAFE"). */
+function plainPreview(markdown: string): string {
+  return markdown
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "• ");
+}
+
 /** Tone per state, so one state cannot look "good" on one screen and "bad" on another. */
 const STATE_TONE: Record<DeliveryState, "live" | "wait" | "warn"> = {
   working: "wait",
@@ -195,7 +205,7 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
       {copy && !(delivered && result?.content) ? <p className="mt-2 text-xs leading-5 text-muted">{copy.body}</p> : null}
       {delivered && result?.content ? (
         <p className="mt-2 line-clamp-4 whitespace-pre-line rounded-xl border border-line bg-paper px-3 py-2 text-xs leading-5 text-ink">
-          {result.content}
+          {plainPreview(result.content)}
         </p>
       ) : null}
       {declined && identity.address && !hireCancelled ? (

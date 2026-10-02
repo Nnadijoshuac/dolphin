@@ -291,8 +291,8 @@ export function deliveryCopy(state: DeliveryState): {
       };
     case "settled":
       return {
-        label: "Delivered and settled",
-        body: "The agent submitted its deliverable and the escrow has been released. Nothing further is outstanding.",
+        label: "Delivered",
+        body: "The agent delivered its result. Nothing further is outstanding.",
       };
     case "rejected":
       return {

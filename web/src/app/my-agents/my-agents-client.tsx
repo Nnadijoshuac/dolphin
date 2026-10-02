@@ -179,7 +179,7 @@ const JOB_WORDS: Record<DeliveryState, { tone: "live" | "practice" | "idle"; tex
   overdue: { tone: "practice", text: "Taking longer than usual" },
   missed: { tone: "practice", text: "Not delivered - money safe" },
   delivered: { tone: "live", text: "Delivered" },
-  settled: { tone: "idle", text: "Done and paid" },
+  settled: { tone: "idle", text: "Delivered" },
   rejected: { tone: "idle", text: "Job rejected" },
   expired: { tone: "practice", text: "Deadline passed - refund available" },
   unfunded: { tone: "idle", text: "Job not paid for" },

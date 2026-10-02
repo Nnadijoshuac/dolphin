@@ -256,6 +256,11 @@ export function normalizeQuote(
   if (envelope) {
     dialect = "signed-envelope";
     const response = asRecord(envelope.response) ?? {};
+    // A refusal in the SDK's own shape carries its reason; say it rather than "no price".
+    if (response.accepted === false) {
+      const reason = asNonEmptyString(response.reason);
+      throw new QuoteRejected(reason ? `The agent declined to quote: ${reason}` : "The agent declined to quote for this task.");
+    }
     const terms = asRecord(response.terms) ?? {};
     priceRaw = terms.price;
     // This dialect puts the TOKEN ADDRESS in `currency`, where the other

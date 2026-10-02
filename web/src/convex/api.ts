@@ -1480,6 +1480,25 @@ export const x402Api = anyApi as unknown as {
     /** Sends the agent wallet's BNB back to the agent's owner - the only destination there is. */
     withdrawAgentGas: Action<{ sessionToken: string; hash: string }, { transactionHash: string; sentWei: string }>;
   };
+  erc8183Seller: {
+    /** The agent wallet's consent for the owner's registry.setAgentWallet. */
+    walletLinkProof: Action<
+      { sessionToken: string; hash: string },
+      { agentWallet: string; tokenId: string; deadline: string; signature: string; registry: string }
+    >;
+    jobsForAgent: Query<
+      { hash: string },
+      Array<{
+        jobId: string;
+        status: "accepted" | "submitted" | "settled" | "forwarded" | "failed";
+        budgetRaw: string;
+        detail: string | null;
+        submitTx: string | null;
+        forwardTx: string | null;
+        createdAt: number;
+      }>
+    >;
+  };
 };
 
 /** Mirrors BUILT_AGENT_CATEGORIES in convex/builtAgents.ts. */

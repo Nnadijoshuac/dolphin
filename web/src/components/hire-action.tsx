@@ -769,6 +769,15 @@ function PaidHireBrief({
 
 const BNB_CHAIN_ID = 56;
 
+/*
+ * What one relayed step really costs, for the price people are shown. The
+ * relay billed the BNB->U swap at 652,854 gas on 2026-10-01; 750,000 sits just
+ * above it so the fee actually charged lands at or under the figure on screen.
+ * The 1.5M RELAYED_INTENT_GAS_ALLOWANCE stays the bar for "do you hold enough",
+ * because a refusal after signing is worse than asking for a little extra.
+ */
+const TYPICAL_RELAYED_STEP_GAS = BigInt(750_000);
+
 /** Cents -> wei at the feed's BNB price, rounded up. */
 function centsToWei(cents: bigint, price: BnbPrice): bigint {
   const scale = BigInt(10) ** BigInt(price.decimals);
@@ -845,7 +854,8 @@ function HireCost({
    * person's BNB into the very U being paid, it is not a further cost, and its
    * exact rate moves - so it lives in the details only.
    */
-  const extraWei = feeWei !== null && setupWei !== null ? feeWei + setupWei : null;
+  const typicalFeeWei = gas.data !== undefined ? TYPICAL_RELAYED_STEP_GAS * gas.data * BigInt(converting ? 2 : 1) : null;
+  const extraWei = typicalFeeWei !== null && setupWei !== null ? typicalFeeWei + setupWei : null;
   let totalText: string | null = null;
   if (uRate.status === "ready" && bnb.status === "ready" && decimals !== null && extraWei !== null) {
     const centsPerToken = usdCents(BigInt(10) ** BigInt(decimals), decimals, uRate.rate);
@@ -869,7 +879,7 @@ function HireCost({
     <div className="py-3">
       <div className="flex items-baseline justify-between gap-4">
         <span className="text-xs text-muted">Total</span>
-        <span className="text-lg font-semibold text-ink">{totalText ? `Up to ${totalText}` : "Working it out…"}</span>
+        <span className="text-lg font-semibold text-ink">{totalText ?? "Working it out…"}</span>
       </div>
       {line ? <p className="mt-1 text-xs leading-5 text-muted">{line}</p> : null}
       {shortWei !== null ? (
@@ -885,12 +895,9 @@ function HireCost({
         <div className="mt-1">
           {detail("Agent's price", `${priceText}${uRate.status === "ready" && decimals !== null ? ` (${formatUsdCents(usdCents(priceRaw, decimals, uRate.rate))})` : ""}`)}
           {converting ? detail("Paid by swapping", swapWei !== null ? `about ${formatBnb(swapWei)} BNB for the U${usd(swapWei)}` : "BNB for the U, when you hire") : null}
-          {detail("Network fees, up to", feeWei !== null ? `${formatBnb(feeWei)} BNB${usd(feeWei)}` : "…")}
+          {detail("Network fees", typicalFeeWei !== null ? `${formatBnb(typicalFeeWei)} BNB${usd(typicalFeeWei)}` : "…")}
           {needsWalletSetup ? detail("One-time wallet setup", setupWei !== null ? `${formatBnb(setupWei)} BNB${usd(setupWei)}` : "…") : null}
           {detail("Held in your Dolphin Wallet", heldWei !== null ? `${formatBnb(heldWei)} BNB${heldU !== null && heldU > BigInt(0) && decimals !== null ? ` · ${formatTokenAmount(heldU, decimals)} U` : ""}` : "not set up")}
-          <p className="mt-1.5 leading-5 text-muted">
-            The total uses the most the network fees can be; what isn&apos;t used stays in your wallet.
-          </p>
         </div>
       </details>
     </div>

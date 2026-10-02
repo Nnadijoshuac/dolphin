@@ -3027,73 +3027,146 @@ select {
 .manage-status[data-cancelled] .manage-status__dot { background: var(--faint); }
 
 /*
- * The live tracker: Paid, Working, Delivered (owner, 2026-10-03: "line that
- * travels"). While the agent works, a soft light runs along the line toward
- * the next step - motion that says "happening" without claiming a time. When
- * a step completes, its line draws itself across and the dot's check pops in.
+ * The live tracker, in depth (owner, 2026-10-03: "3D... premium... dope").
+ * Glossy orbs at both edges and the middle, recessed rails between them.
+ * Done orbs flip in like coins, one after another, and their checks pop; the
+ * working orb is emerald with a tilted ring orbiting it, and a comet travels
+ * the rail ahead of it. Nothing claims a time: motion means "happening".
  */
-.tracker { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; margin-top: 18px; }
-.tracker__step { position: relative; display: flex; flex-direction: column; gap: 8px; }
-/* The track, and over it the fill: ::before is grey, ::after is the ink that draws in. */
-.tracker__step::before,
-.tracker__step::after {
-  content: "";
+.tracker {
+  --orb: 30px;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  margin-top: 22px;
+  padding-bottom: 30px;
+}
+.tracker__step { position: relative; flex: none; perspective: 320px; }
+.tracker__rail {
+  position: relative;
+  flex: 1 1 auto;
+  height: 7px;
+  margin: calc(var(--orb) / 2 - 3.5px) 10px 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.35)),
+    color-mix(in srgb, var(--line) 85%, transparent);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22), 0 1px 0 rgba(255, 255, 255, 0.35);
+  clip-path: inset(-12px 0 -12px 0 round 999px);
+}
+.tracker__fill {
   position: absolute;
-  top: 7px;
-  left: 18px;
-  right: -2px;
-  height: 2px;
-  border-radius: 2px;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(90deg, color-mix(in srgb, var(--ink) 75%, transparent), var(--ink));
+  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--ink) 60%, transparent);
+  transform: scaleX(0);
+  transform-origin: left center;
 }
-.tracker__step::before { background: color-mix(in srgb, var(--line) 80%, transparent); }
-.tracker__step::after { background: var(--ink); transform: scaleX(0); transform-origin: left center; }
-.tracker__step:last-child::before,
-.tracker__step:last-child::after { display: none; }
-.tracker__step[data-state="done"]::after { transform: scaleX(1); animation: tracker-draw 700ms cubic-bezier(0.65, 0, 0.35, 1) both; }
-/* Working: a light glides along the line toward the next step, on a loop. */
-.tracker[data-tone="live"] .tracker__step[data-state="now"]::after {
-  transform: none;
-  background: linear-gradient(90deg, transparent 0%, #22a55b 50%, transparent 100%) no-repeat;
-  background-size: 38% 100%;
-  animation: tracker-travel 1.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+.tracker__rail[data-state="done"] .tracker__fill {
+  transform: scaleX(1);
+  animation: tracker-draw 800ms cubic-bezier(0.65, 0, 0.35, 1) calc(var(--i) * 260ms + 260ms) both;
 }
-.tracker__dot {
+.tracker__comet { position: absolute; inset: 0; display: none; }
+.tracker__rail[data-state="travel"] { background: linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.3)), rgba(34, 165, 91, 0.16); }
+.tracker__rail[data-state="travel"] .tracker__comet {
+  display: block;
+  inset: 0 auto 0 0;
+  width: 36%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(74, 222, 128, 0) 0%, rgba(74, 222, 128, 0.45) 55%, #4ade80 86%, #ecfff3 100%);
+  box-shadow: 0 0 12px 2px rgba(34, 197, 94, 0.55), 0 0 26px 6px rgba(34, 197, 94, 0.22);
+  animation: tracker-comet 1.9s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* The orbs: a specular highlight over a shaded sphere, set into the page by a soft shadow. */
+.tracker__orb {
+  --orb-hi: #ffffff;
+  --orb-1: color-mix(in srgb, var(--paper) 92%, var(--ink));
+  --orb-2: color-mix(in srgb, var(--paper) 78%, var(--ink));
+  --orb-glow: rgba(0, 0, 0, 0.12);
   position: relative;
   z-index: 1;
   display: grid;
-  width: 16px;
-  height: 16px;
+  width: var(--orb);
+  height: var(--orb);
   place-items: center;
-  border: 2px solid var(--line);
   border-radius: 999px;
-  background: var(--paper);
   color: var(--paper);
+  background:
+    radial-gradient(circle at 32% 26%, color-mix(in srgb, var(--orb-hi) 85%, transparent) 0 9%, transparent 32%),
+    radial-gradient(circle at 50% 62%, var(--orb-1), var(--orb-2) 78%);
+  box-shadow:
+    inset 0 -4px 7px rgba(0, 0, 0, 0.28),
+    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+    0 8px 16px -6px var(--orb-glow),
+    0 2px 4px rgba(0, 0, 0, 0.18);
+  transform-style: preserve-3d;
 }
-.tracker__check { width: 9px; height: 9px; }
-.tracker__step[data-state="done"] .tracker__dot { border-color: var(--ink); background: var(--ink); }
-.tracker__step[data-state="done"] .tracker__check { animation: tracker-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) 520ms both; }
-.tracker__step[data-state="now"] .tracker__dot { border-color: #22a55b; background: #22a55b; }
-.tracker__step[data-state="now"] .tracker__dot::after {
+.tracker__step[data-state="done"] .tracker__orb {
+  --orb-1: color-mix(in srgb, var(--ink) 72%, var(--paper));
+  --orb-2: var(--ink);
+  --orb-glow: color-mix(in srgb, var(--ink) 55%, transparent);
+  animation: tracker-flip 900ms cubic-bezier(0.22, 1.2, 0.36, 1) calc(var(--i) * 260ms) both;
+}
+.tracker__check { width: 13px; height: 13px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+.tracker__step[data-state="done"] .tracker__check { animation: tracker-pop 480ms cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--i) * 260ms + 520ms) both; }
+.tracker__step[data-state="now"] .tracker__orb { --orb-hi: #f0fff5; --orb-1: #5ee08f; --orb-2: #138a48; --orb-glow: rgba(34, 197, 94, 0.6); }
+.tracker[data-tone="warn"] .tracker__step[data-state="now"] .tracker__orb { --orb-hi: #fff8e6; --orb-1: #fbc04a; --orb-2: #b9700c; --orb-glow: rgba(217, 144, 26, 0.55); }
+/* The working orb's tilted ring, orbiting in 3D, and a soft halo breathing behind it. */
+.tracker__step[data-state="now"] .tracker__orb::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  border: 2px solid rgba(74, 222, 128, 0.75);
+  border-right-color: transparent;
+  border-bottom-color: rgba(74, 222, 128, 0.2);
+  border-radius: 999px;
+  transform: rotateX(68deg) rotateZ(0deg);
+  animation: tracker-orbit 2.4s linear infinite;
+}
+.tracker__step[data-state="now"] .tracker__orb::after {
   content: "";
   position: absolute;
   inset: -2px;
-  border-radius: inherit;
-  background: #22a55b;
-  animation: glance-pulse 2s ease-out infinite;
+  z-index: -1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.45), transparent 70%);
+  animation: tracker-breathe 2.4s ease-in-out infinite;
 }
-.tracker[data-tone="warn"] .tracker__step[data-state="now"] .tracker__dot,
-.tracker[data-tone="warn"] .tracker__step[data-state="now"] .tracker__dot::after { border-color: #d9901a; background: #d9901a; }
-.tracker__label { font-size: 0.78rem; color: var(--muted); }
-.tracker__step[data-state="now"] .tracker__label { font-weight: 600; color: var(--ink); }
-.tracker__step[data-state="done"] .tracker__label { color: var(--ink-soft); }
+.tracker[data-tone="warn"] .tracker__step[data-state="now"] .tracker__orb::before { border-color: rgba(217, 144, 26, 0.55); border-right-color: transparent; animation: none; }
+.tracker[data-tone="warn"] .tracker__step[data-state="now"] .tracker__orb::after { background: radial-gradient(circle, rgba(217, 144, 26, 0.35), transparent 70%); animation: none; }
+
+/* Labels hang under their orb: flush left, centred, flush right, so the row reads edge to edge. */
+.tracker__label {
+  position: absolute;
+  top: calc(var(--orb) + 10px);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.tracker__step[data-pos="start"] .tracker__label { left: 0; }
+.tracker__step[data-pos="mid"] .tracker__label { left: 50%; transform: translateX(-50%); }
+.tracker__step[data-pos="end"] .tracker__label { right: 0; }
+.tracker__step[data-state="now"] .tracker__label { font-weight: 650; color: var(--ink); }
+.tracker__step[data-state="done"] .tracker__label { font-weight: 500; color: var(--ink-soft); }
+
 @keyframes tracker-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@keyframes tracker-travel { from { background-position: -60% 0; } to { background-position: 160% 0; } }
-@keyframes tracker-pop { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: scale(1); } }
+@keyframes tracker-comet { from { transform: translateX(-100%); } to { transform: translateX(280%); } }
+@keyframes tracker-flip { from { opacity: 0; transform: rotateY(-180deg) scale(0.55); } 60% { opacity: 1; } to { opacity: 1; transform: rotateY(0) scale(1); } }
+@keyframes tracker-pop { from { opacity: 0; transform: scale(0.2) rotate(-20deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes tracker-orbit { from { transform: rotateX(68deg) rotateZ(0deg); } to { transform: rotateX(68deg) rotateZ(360deg); } }
+@keyframes tracker-breathe { 0%, 100% { opacity: 0.55; transform: scale(1.1); } 50% { opacity: 1; transform: scale(1.9); } }
 @media (prefers-reduced-motion: reduce) {
-  .tracker__step[data-state="now"] .tracker__dot::after,
-  .tracker__step[data-state="done"]::after,
-  .tracker__step[data-state="done"] .tracker__check { animation: none; }
-  .tracker[data-tone="live"] .tracker__step[data-state="now"]::after { animation: none; background-position: 50% 0; }
+  .tracker__rail[data-state="done"] .tracker__fill,
+  .tracker__step[data-state="done"] .tracker__orb,
+  .tracker__step[data-state="done"] .tracker__check,
+  .tracker__step[data-state="now"] .tracker__orb::before,
+  .tracker__step[data-state="now"] .tracker__orb::after,
+  .tracker__rail[data-state="travel"] .tracker__comet { animation: none; }
+  .tracker__rail[data-state="travel"] .tracker__comet { transform: translateX(90%); }
 }
 
 /* Wallet action buttons (agent-transaction-panel, job-delivery-status). These

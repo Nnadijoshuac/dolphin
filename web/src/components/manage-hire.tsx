@@ -36,6 +36,7 @@ import { useDeliverable } from "@/hooks/use-deliverable";
 import { OneLine } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinMessageContent } from "@/components/dolphin-message-content";
+import { stripToolNames } from "@/lib/answer-text";
 import { TrackRecord } from "@/components/track-record";
 import { categoryLabel } from "@/constants/agents";
 import { agentPaymentsApi, type AgentJobRow } from "@/convex/api";
@@ -135,28 +136,50 @@ function stepFor(state: DeliveryState | undefined): { index: number; tone: "live
   }
 }
 
+type StepState = "done" | "now" | "next";
+
+/**
+ * Paid -> Working -> Delivered, edge to edge (owner, 2026-10-03: "span to the
+ * right side... 3D, premium"). Orbs sit at both ends and the middle with rails
+ * between them; a rail is filled once the step after it is reached, and while
+ * the agent works the rail ahead of it carries a travelling comet.
+ */
 function Tracker({ state, refunded = false }: { state: DeliveryState | undefined; refunded?: boolean }) {
   const declined = state === "declined" || state === "missed";
   const { index, tone } = declined ? { index: refunded ? 2 : 1, tone: refunded ? ("done" as const) : ("warn" as const) } : stepFor(state);
   const steps: readonly string[] = state === "missed" ? MISSED_STEPS : declined ? DECLINED_STEPS : state === "unfunded" ? UNPAID_STEPS : STEPS;
+  const stateOf = (step: number): StepState => (step < index || (tone === "done" && step === index) ? "done" : step === index ? "now" : "next");
+  const railOf = (step: number): "done" | "travel" | "next" =>
+    stateOf(step + 1) !== "next" ? "done" : stateOf(step) === "now" && tone === "live" ? "travel" : "next";
   return (
     <ol className="tracker" data-tone={tone}>
-      {steps.map((label, step) => (
-        <li
-          className="tracker__step"
-          data-state={step < index || (tone === "done" && step === index) ? "done" : step === index ? "now" : "next"}
-          key={label}
-        >
-          <span aria-hidden="true" className="tracker__dot">
-            {step < index || (tone === "done" && step === index) ? (
-              <svg className="tracker__check" fill="none" viewBox="0 0 12 12">
-                <path d="M2.5 6.2 5 8.5l4.5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-              </svg>
-            ) : null}
-          </span>
-          <span className="tracker__label">{label}</span>
-        </li>
-      ))}
+      {steps.map((label, step) => {
+        const at = stateOf(step);
+        return [
+          <li
+            className="tracker__step"
+            data-pos={step === 0 ? "start" : step === steps.length - 1 ? "end" : "mid"}
+            data-state={at}
+            key={label}
+            style={{ "--i": step } as React.CSSProperties}
+          >
+            <span aria-hidden="true" className="tracker__orb">
+              {at === "done" ? (
+                <svg className="tracker__check" fill="none" viewBox="0 0 12 12">
+                  <path d="M2.5 6.2 5 8.5l4.5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+                </svg>
+              ) : null}
+            </span>
+            <span className="tracker__label">{label}</span>
+          </li>,
+          step < steps.length - 1 ? (
+            <li aria-hidden="true" className="tracker__rail" data-state={railOf(step)} key={`${label}-rail`} style={{ "--i": step } as React.CSSProperties}>
+              <span className="tracker__fill" />
+              <span className="tracker__comet" />
+            </li>
+          ) : null,
+        ];
+      })}
     </ol>
   );
 }
@@ -350,7 +373,7 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
               <div className="mt-2 rounded-xl border border-line bg-paper px-4 py-3">
                 {/* Sellers answer in Markdown ("**Verdict: SAFE**"); render it, don't print the asterisks. */}
                 <div className="text-[0.9rem] leading-6 text-ink">
-                  <DolphinMessageContent content={result.content} showCopyButton={false} />
+                  <DolphinMessageContent content={stripToolNames(result.content)} showCopyButton={false} />
                 </div>
                 <a className="mt-2 inline-flex items-center gap-1 text-[0.74rem] font-medium text-muted hover:text-ink" href={result.url} rel="noreferrer" target="_blank">
                   Open the original

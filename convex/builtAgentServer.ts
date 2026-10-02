@@ -10,6 +10,9 @@ import { McpError, callMcpTool, listMcpTools, openMcpSession, MCP_PROTOCOL_VERSI
 import { OpenRouterError, chatCompletion, isBrainProvider, type BrainEndpoint, type ChatMessage } from "./lib/openrouter";
 import { isMutating } from "./lib/toolCapability";
 import { U_TOKEN, X402_NETWORK, formatU } from "./lib/x402";
+import { KERNEL, NEGOTIATE_SKILLS, NOTIFY_SKILLS, STATUS_SKILLS } from "./lib/erc8183Seller";
+// A cycle with erc8183Seller.ts (it calls ask); only functions cross it, at call time.
+import { negotiate, notifyFunded } from "./erc8183Seller";
 
 /**
  * WHAT A BUILT AGENT SERVES TO THE WORLD. (2026-09-26, owner's choice "C")
@@ -50,7 +53,12 @@ type Listing = Doc<"builtAgents">;
  * Registration file (ERC-8004 registration-v1)
  * ------------------------------------------------------------------------ */
 
-export function registrationFile(listing: Listing) {
+/**
+ * `agentWallet`: the agent's own wallet (x402.ts), when it has one - escrow
+ * buyers pay the address the identity names, and the agent must be that
+ * address to deliver and collect. x402 still pays the builder directly.
+ */
+export function registrationFile(listing: Listing, agentWallet: string | null = null) {
   const base = `${apiBase()}/api/v1/built/${listing.hash}`;
   // "Just for me": registered to the owner's wallet, with no public door to call and no public page.
   const isPrivate = listing.purpose === "private";
@@ -63,7 +71,8 @@ export function registrationFile(listing: Listing) {
           : { name: "MCP", endpoint: `${base}/mcp`, version: MCP_PROTOCOL_VERSION },
       ];
   // ERC-8004's agent-wallet form: where this agent is paid. The builder's own address.
-  if (listing.payoutAddress) services.push({ name: "agentWallet", endpoint: `eip155:${listing.chainId}:${listing.payoutAddress}` });
+  const named = agentWallet ?? listing.payoutAddress;
+  if (named) services.push({ name: "agentWallet", endpoint: `eip155:${listing.chainId}:${named}` });
   if (listing.links.email) services.push({ name: "email", endpoint: listing.links.email });
   if (listing.links.website) services.push({ name: "website", endpoint: listing.links.website });
   if (listing.links.x) services.push({ name: "x", endpoint: `https://x.com/${listing.links.x}` });
@@ -128,7 +137,28 @@ export function payTo(listing: Listing): string {
  */
 export function isPaidCall(listing: Listing, message: RpcRequest): boolean {
   if (!listing.priceRaw || message.id === undefined) return false;
-  return listingProtocol(listing) === "a2a" ? message.method === "message/send" : message.method === "tools/call";
+  if (listingProtocol(listing) !== "a2a") return message.method === "tools/call";
+  // Escrow skills are paid through the escrow, not x402: never charge them twice.
+  return message.method === "message/send" && sellerSkill(message.params) === null;
+}
+
+/** The escrow skill a message asks for, from its data part, or null for a plain ask. */
+export function sellerSkill(params: Record<string, unknown> | undefined): { skill: string; data: Record<string, unknown> } | null {
+  const message = (params?.message ?? {}) as { parts?: Array<Record<string, unknown>> };
+  for (const part of Array.isArray(message.parts) ? message.parts : []) {
+    let data = (part.kind === "data" || part.type === "data") && part.data && typeof part.data === "object" ? (part.data as Record<string, unknown>) : null;
+    // Some buyers send the same JSON as a text part (convex/lib/erc8183.ts TEXT_PARTS_ONLY).
+    if (!data && (part.kind === "text" || part.type === "text") && typeof part.text === "string" && part.text.trim().startsWith("{")) {
+      try {
+        data = JSON.parse(part.text) as Record<string, unknown>;
+      } catch {
+        data = null;
+      }
+    }
+    const skill = data && typeof data.skill === "string" ? data.skill : null;
+    if (data && skill && (NEGOTIATE_SKILLS.has(skill) || NOTIFY_SKILLS.has(skill) || STATUS_SKILLS.has(skill))) return { skill, data };
+  }
+  return null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -146,10 +176,39 @@ export function agentCard(listing: Listing) {
     version: "1.0.0",
     iconUrl: `${base}/icon`,
     provider: { organization: "Built on Dolphin", url: siteBase() },
-    capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
+    capabilities: {
+      streaming: false,
+      pushNotifications: false,
+      stateTransitionHistory: false,
+      // A plain ask is paid per call with x402 in U (the escrow skills above are paid through the escrow).
+      ...(listing.priceRaw ? { extensions: [{ uri: "https://github.com/google-a2a/a2a-x402/v0.1", description: "Accepts U payments via x402 (exact, EIP-3009) on BNB Chain.", required: false }] } : {}),
+    },
     defaultInputModes: ["text/plain"],
     defaultOutputModes: ["text/plain"],
     skills: [
+      ...(listing.priceRaw
+        ? [
+            {
+              id: "negotiate",
+              name: "Negotiate an ERC-8183 job",
+              description:
+                'Send a data part {"skill":"negotiate","task_description":"...","terms":{"deliverables":"...","quality_standards":"..."}} ' +
+                "and receive a quote signed by this agent's wallet. Anchor it on-chain via createJob + fund on the ERC-8183 kernel " +
+                "(evaluator: the EvaluatorRouter), then send {\"skill\":\"notify_funded\",\"job_id\":<id>}.",
+              tags: ["erc8183", "negotiation", "bnb-chain"],
+              inputModes: ["application/json"],
+              outputModes: ["application/json"],
+            },
+            {
+              id: "notify_funded",
+              name: "Start a funded job",
+              description: 'Send {"skill":"notify_funded","job_id":<id>} after funding. The result is submitted on-chain with its deliverable_url.',
+              tags: ["erc8183"],
+              inputModes: ["application/json"],
+              outputModes: ["application/json"],
+            },
+          ]
+        : []),
       {
         id: "ask",
         name: listing.name,
@@ -189,6 +248,15 @@ export async function handleA2A(ctx: ActionCtx, listing: Listing, message: RpcRe
 
   switch (message.method) {
     case "message/send": {
+      const escrow = sellerSkill(message.params);
+      if (escrow) {
+        const result = NEGOTIATE_SKILLS.has(escrow.skill)
+          ? await negotiate(ctx, listing, escrow.data)
+          : NOTIFY_SKILLS.has(escrow.skill)
+            ? await notifyFunded(ctx, listing, escrow.data)
+            : { kind: "message", role: "agent", messageId: crypto.randomUUID(), parts: [{ kind: "data", data: { status: "see the job on-chain", kernel: KERNEL } }] };
+        return { jsonrpc: "2.0", id, result };
+      }
       const { text, wallet } = a2aInput(message.params);
       if (!text) return error(-32602, "Send a message with a text part.");
       const result = await ask(ctx, listing, text, wallet);
@@ -309,7 +377,7 @@ async function builderBrain(ctx: ActionCtx, listing: Listing): Promise<BrainEndp
 }
 
 /** The built agent answering one question, with nothing stored but the day's count. */
-async function ask(ctx: ActionCtx, listing: Listing, question: string, wallet: string | null) {
+export async function ask(ctx: ActionCtx, listing: Listing, question: string, wallet: string | null) {
   const endpoint = listing.priceRaw ? await builderBrain(ctx, listing) : null;
   // Only Dolphin's own model budget is capped; a builder's brain is theirs to spend.
   if (!endpoint) {

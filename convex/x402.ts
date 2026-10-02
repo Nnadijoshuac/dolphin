@@ -25,7 +25,7 @@ import { bsc } from "viem/chains";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, query, type ActionCtx } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, query, type ActionCtx } from "./_generated/server";
 import { BSC_RPC_URL, bscPublicClient } from "./lib/bscClient";
 import { open, seal } from "./lib/secretBox";
 import { U_TOKEN, type DecodedPayment } from "./lib/x402";
@@ -69,7 +69,7 @@ export async function ensureAgentWallet(ctx: ActionCtx, hash: string): Promise<s
   return await ctx.runMutation(internal.x402.storeWallet, { hash, address: privateKeyToAccount(privateKey).address, ...box });
 }
 
-async function agentAccount(ctx: ActionCtx, hash: string) {
+export async function agentAccount(ctx: ActionCtx, hash: string) {
   const row = await ctx.runQuery(internal.x402.walletRow, { hash });
   if (!row) return null;
   return privateKeyToAccount((await open(row)) as Hex);
@@ -230,4 +230,10 @@ export const setListingPrice = internalMutation({
     await ctx.db.patch(row._id, { priceRaw, ...(protocol ? { protocol } : {}), updatedAt: Date.now() });
     return { hash, priceRaw, protocol: protocol ?? row.protocol ?? "mcp" };
   },
+});
+
+/** Operators: give an existing listing its wallet (internal only). `npx convex run x402:ensureWalletFor '{"hash":"d…"}'` */
+export const ensureWalletFor = internalAction({
+  args: { hash: v.string() },
+  handler: async (ctx, { hash }): Promise<{ address: string }> => ({ address: await ensureAgentWallet(ctx, hash) }),
 });

@@ -68,6 +68,10 @@ crons.interval(
  */
 crons.interval("autopilot (armed agent triggers)", { minutes: 1 }, internal.autopilot.tick, {});
 
+// Built agents selling over ERC-8183: retry deliveries, settle after the dispute
+// window, forward earnings to builders (convex/erc8183Seller.ts). Gas is the agents' own.
+crons.interval("built agents: collect escrow payouts", { minutes: 10 }, internal.erc8183Seller.tick, {});
+
 /*
  * LIVENESS HISTORY (2026-09-29): one snapshot of the live set a day, with a
  * hash of it. Reads only the live rows; see convex/liveness.ts.

@@ -1129,6 +1129,55 @@ export default defineSchema({
     .index("by_hash", ["hash"])
     .index("by_address", ["address"]),
 
+  /**
+   * QUOTES A BUILT AGENT SIGNED as an ERC-8183 seller (convex/erc8183Seller.ts).
+   * A funded job is only worked when its description claims one of these, and
+   * each quote pays for one job.
+   */
+  sellerQuotes: defineTable({
+    hash: v.string(),
+    negotiationHash: v.string(),
+    task: v.string(),
+    priceRaw: v.string(),
+    expiresAt: v.number(),
+    usedByJob: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+  }).index("by_negotiation", ["negotiationHash"]),
+
+  /**
+   * ESCROW JOBS A BUILT AGENT ACCEPTED. accepted -> submitted (result on-chain)
+   * -> settled (escrow paid the agent wallet) -> forwarded (guardrail 2: the U
+   * went on to the builder's payout wallet). refused/failed say why.
+   */
+  sellerJobs: defineTable({
+    hash: v.string(),
+    jobId: v.string(),
+    client: v.string(),
+    budgetRaw: v.string(),
+    negotiationHash: v.string(),
+    task: v.string(),
+    status: v.union(
+      v.literal("accepted"),
+      v.literal("submitted"),
+      v.literal("settled"),
+      v.literal("forwarded"),
+      v.literal("failed"),
+    ),
+    attempts: v.number(),
+    detail: v.union(v.string(), v.null()),
+    /** The DeliverableManifest JSON served at /api/v1/built/<hash>/job-<id>. */
+    manifestJson: v.union(v.string(), v.null()),
+    submitTx: v.union(v.string(), v.null()),
+    submittedAt: v.union(v.number(), v.null()),
+    settleTx: v.union(v.string(), v.null()),
+    forwardTx: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_status", ["status", "updatedAt"])
+    .index("by_hash", ["hash", "createdAt"]),
+
   /** Public `ask` calls per built agent per UTC day - every one spends model calls. */
   builtAgentUsage: defineTable({
     hash: v.string(),

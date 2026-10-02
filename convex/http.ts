@@ -258,7 +258,8 @@ http.route({
     if (!listing) return notFound();
 
     if (path.resource === "registration.json") {
-      return new Response(JSON.stringify(registrationFile(listing), null, 2), {
+      const agentWallet = await ctx.runQuery(internal.x402.walletRow, { hash: listing.hash });
+      return new Response(JSON.stringify(registrationFile(listing, agentWallet?.address ?? null), null, 2), {
         headers: {
           ...BUILT_CORS,
           "content-type": "application/json; charset=utf-8",
@@ -271,6 +272,13 @@ http.route({
       return new Response(JSON.stringify(agentCard(listing), null, 2), {
         headers: { ...BUILT_CORS, "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=60" },
       });
+    }
+    // A delivered escrow job's manifest, re-hashable against the on-chain deliverable.
+    const jobMatch = /^job-(\d{1,20})$/.exec(path.resource);
+    if (jobMatch) {
+      const manifest = await ctx.runQuery(internal.erc8183Seller.manifestFor, { hash: listing.hash, jobId: jobMatch[1] });
+      if (!manifest) return notFound();
+      return new Response(manifest, { headers: { ...BUILT_CORS, "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" } });
     }
     if (path.resource === "icon") {
       const blob = await ctx.storage.get(listing.iconStorageId);

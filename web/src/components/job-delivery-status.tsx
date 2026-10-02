@@ -1,6 +1,9 @@
 "use client";
 
 import { useQuery as useConvexQuery } from "convex/react";
+import Link from "next/link";
+
+import { agentRouteId } from "@/constants/agents";
 import { useState } from "react";
 
 import { agentPaymentsApi, type AgentJobRow } from "@/convex/api";
@@ -172,13 +175,17 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
           <span className="font-mono text-[0.64rem] text-faint">#{job.jobId}</span>
         </div>
 
-        <button
-          className="interactive text-[0.68rem] font-medium text-muted hover:text-ink"
-          onClick={delivery.refresh}
-          type="button"
+        {/*
+         * "Check now" only re-read the chain - it looked like a button that
+         * did nothing (owner, 2026-10-02). The job's own page is where its
+         * progress lives, and it re-reads every 10 seconds by itself.
+         */}
+        <Link
+          className="interactive text-[0.68rem] font-semibold text-ink no-underline hover:underline"
+          href={`/manage/${agentRouteId(agentKey)}`}
         >
-          Check now
-        </button>
+          View job →
+        </Link>
       </div>
 
       {copy && <p className="mt-2 text-xs leading-5 text-muted">{copy.body}</p>}

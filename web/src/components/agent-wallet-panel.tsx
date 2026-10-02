@@ -225,16 +225,7 @@ export function AgentWalletPanel({ agent }: { agent: BuiltAgentPublic }) {
 
   return (
     <div className="surface-raised mt-4 p-5">
-      <div className="flex items-center justify-between gap-3">
-        <p className="eyebrow flex items-center gap-2">
-          Your agent&apos;s wallet <GasExplainer escrow={escrow} />
-        </p>
-        {address && gas.level ? (
-          <span className="gas-status" data-level={gas.level}>
-            {gas.level === "empty" ? "Can't take hires" : gas.level === "low" ? "Low on gas" : "Ready for hires"}
-          </span>
-        ) : null}
-      </div>
+      <p className="eyebrow">Your agent&apos;s wallet</p>
       {!address ? (
         <>
           <p className="mt-2 text-[0.86rem] leading-relaxed text-ink-soft">

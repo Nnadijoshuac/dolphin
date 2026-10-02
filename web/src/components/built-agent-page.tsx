@@ -3,9 +3,12 @@
 import { useQuery } from "convex/react";
 import { useState } from "react";
 
+import { AgentDetailClient } from "@/app/agent/[id]/agent-detail-client";
 import { AgentWalletPanel, CopyAddress, GasExplainer, useAgentGas } from "@/components/agent-wallet-panel";
 import { RepointAgentUri } from "@/components/repoint-agent-uri";
 import { BUILT_AGENT_CATEGORIES, builtAgentsApi, type BuiltAgentPublic } from "@/convex/api";
+import { useAgent } from "@/hooks/use-agents";
+import { useWallet } from "@/wallet/wallet-provider";
 
 /**
  * THE PAGE OF AN AGENT BUILT ON DOLPHIN: /agent/<hash>. (2026-09-26)
@@ -40,10 +43,22 @@ function CopyLine({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * WHO SEES WHAT (owner, 2026-10-02: "this interface is strictly for the wallet
+ * that has these agents"). This page manages the agent - its wallet, gas,
+ * withdrawals - so only its owner gets it. Everyone else gets the same agent
+ * detail page as any catalog agent; before Dolphin has indexed it (minutes to
+ * an hour after publishing), a plain public view with no owner controls.
+ * The registration file names this URL as the agent's web page, so buyers
+ * arriving from a marketplace land here and must get the public page.
+ */
 export function BuiltAgentPage({ hash }: { hash: string }) {
   const agent = useQuery(builtAgentsApi.builtAgents.publicByHash, { hash });
+  const wallet = useWallet();
+  const isOwner = Boolean(agent && wallet.address && wallet.address.toLowerCase() === agent.ownerAddress.toLowerCase());
+  const catalog = useAgent(agent?.agentKey ?? null, { enabled: Boolean(agent?.agentKey) && !isOwner && !wallet.isConnecting });
 
-  if (agent === undefined) {
+  if (agent === undefined || (wallet.isConnecting && !wallet.address)) {
     return (
       <div className="site-frame page-shell">
         <p className="py-24 text-center text-sm text-muted">Loading agent…</p>
@@ -61,10 +76,19 @@ export function BuiltAgentPage({ hash }: { hash: string }) {
     );
   }
 
-  return <BuiltAgentView agent={agent} />;
+  if (isOwner) return <BuiltAgentView agent={agent} owner />;
+  if (catalog.data) return <AgentDetailClient initialAgent={catalog.data} reference={agent.agentKey as string} />;
+  if (agent.agentKey && !catalog.notFound) {
+    return (
+      <div className="site-frame page-shell">
+        <p className="py-24 text-center text-sm text-muted">Loading agent…</p>
+      </div>
+    );
+  }
+  return <BuiltAgentView agent={agent} owner={false} />;
 }
 
-function BuiltAgentView({ agent }: { agent: BuiltAgentPublic }) {
+function BuiltAgentView({ agent, owner }: { agent: BuiltAgentPublic; owner: boolean }) {
   const gas = useAgentGas(agent);
   const category = BUILT_AGENT_CATEGORIES.find((option) => option.value === agent.category)?.label ?? agent.category;
   const live = agent.status === "registered";
@@ -98,7 +122,7 @@ function BuiltAgentView({ agent }: { agent: BuiltAgentPublic }) {
               {gas.level ? (
                 <span className={`agent-chip ${gas.level === "ok" ? "agent-chip--live" : gas.level === "low" ? "agent-chip--warn" : "agent-chip--stop"}`}>
                   {gas.level === "empty" ? "Paused: out of gas" : gas.level === "low" ? "Low on gas" : "Taking hires"}
-                  <GasExplainer escrow={escrow} />
+                  {owner ? <GasExplainer escrow={escrow} /> : null}
                 </span>
               ) : null}
             </div>
@@ -114,8 +138,12 @@ function BuiltAgentView({ agent }: { agent: BuiltAgentPublic }) {
           </p>
         ) : null}
 
-        <RepointAgentUri agent={agent} />
-        <AgentWalletPanel agent={agent} />
+        {owner ? (
+          <>
+            <RepointAgentUri agent={agent} />
+            <AgentWalletPanel agent={agent} />
+          </>
+        ) : null}
 
         {agent.status !== "unpublished" ? (
           <section className="surface-raised mt-4 p-5">

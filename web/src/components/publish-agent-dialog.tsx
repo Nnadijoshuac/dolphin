@@ -8,7 +8,7 @@ import { createPublicClient, formatUnits, http, parseAbi, type Address } from "v
 import { bsc, bscTestnet } from "viem/chains";
 import { switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 
-import { CopyAddress, GasExplainer, TopUpFromDolphin } from "@/components/agent-wallet-panel";
+import { CopyAddress, TopUpFromDolphin } from "@/components/agent-wallet-panel";
 import { BUILT_AGENT_CATEGORIES, builtAgentsApi, x402Api } from "@/convex/api";
 import { BSC_RPC_URL } from "@/constants/agents";
 import { BSC_TESTNET_RPC_URL, useWallet, wagmiConfig } from "@/wallet/wallet-provider";
@@ -344,9 +344,7 @@ export function PublishAgentDialog({
             </div>
             {done.agentWallet ? (
               <div className="rounded-xl border border-line/80 px-4 py-3 text-[0.8rem] leading-relaxed text-ink-soft">
-                <p className="flex items-center gap-2 font-semibold text-ink">
-                  Last step: give it BNB for gas <GasExplainer escrow />
-                </p>
+                <p className="font-semibold text-ink">Last step: give it BNB for gas</p>
                 <p className="mt-1">
                   It can&apos;t take paid hires until its wallet holds a little BNB: it pays its own gas to deliver results and send
                   your earnings to you. Until then hires are turned away and nobody is charged.

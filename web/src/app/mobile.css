@@ -201,32 +201,6 @@
   .mobile-wallet-topbar .mobile-circle { width: 40px; height: 40px; }
   .mobile-wallet-title { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; color: var(--ink); }
 
-  /* align-items: stretch, not the desktop grid's start - in a column that
-     sized every block to its content and the history ran off the screen. */
-  .wallet-v2--phone { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
-  .wallet-v2--phone section[aria-labelledby="alerts-heading"],
-  .wallet-v2--phone .wallet-danger {
-    margin-top: 0;
-    padding: 16px;
-    border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
-    border-radius: 16px;
-    background: var(--paper);
-  }
-  .wallet-v2--phone section[aria-labelledby="alerts-heading"] .wallet-section__header { border-bottom: 0; padding-bottom: 0; }
-  .wallet-v2--phone section[aria-labelledby="alerts-heading"] h2 { margin-top: 0; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.015em; }
-  .wallet-v2--phone > * { min-width: 0; }
-  .wallet-v2--phone .wallet-hero { padding: 18px 18px 16px; }
-  .wallet-v2--phone .wallet-readout { flex-direction: column; align-items: flex-start; gap: 12px; }
-  .wallet-v2--phone .wallet-readout__figure { font-size: clamp(30px, 9vw, 40px); overflow-wrap: anywhere; }
-  .wallet-v2--phone .wallet-activity,
-  .wallet-v2--phone .wallet-block { padding: 16px; }
-  .wallet-v2--phone .wallet-activity { margin-top: 0; }
-  /* Touch targets: every pressable thing at least 44px tall. */
-  .wallet-v2--phone .wallet-btn,
-  .wallet-v2--phone .asset-menu__trigger { min-height: 44px; }
-  .wallet-v2--phone .asset-menu__item { min-height: 48px; }
-  .wallet-v2--phone .wallet-activity-row { gap: 12px; }
-  .wallet-v2--phone .wallet-activity-row > strong { max-width: 52%; font-size: 0.74rem; }
 
   .mobile-dolphin-account { display: block; min-height: 168px; margin-top: 28px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); text-decoration: none; }
   .mobile-dolphin-account header { display: flex; align-items: center; gap: 10px; }

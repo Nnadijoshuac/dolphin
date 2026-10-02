@@ -11,7 +11,7 @@
  * under the line it paid for, never mixed into the amount.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { useAction } from "convex/react";
 import { useState } from "react";
 import { formatUnits } from "viem";
@@ -108,30 +108,68 @@ function Row({ entry, hidden }: { entry: WalletHistoryEntry; hidden: boolean }) 
   );
 }
 
-export function WalletHistory({ hidden = false }: { hidden?: boolean }) {
+/**
+ * `addresses` picks whose history this is (the phone's wallet switcher,
+ * 2026-10-02); left out, it is the Dolphin Wallet's. Several addresses are
+ * merged newest first, and a transaction between them appears once.
+ */
+export function WalletHistory({
+  hidden = false,
+  addresses,
+  bare = false,
+}: {
+  hidden?: boolean;
+  addresses?: readonly string[];
+  /** No heading: the phone puts this under its own History tab. */
+  bare?: boolean;
+}) {
   if (!convexClient) return null;
-  return <WalletHistoryContent hidden={hidden} />;
+  return <WalletHistoryContent addresses={addresses} bare={bare} hidden={hidden} />;
 }
 
-function WalletHistoryContent({ hidden }: { hidden: boolean }) {
+function WalletHistoryContent({
+  hidden,
+  addresses,
+  bare,
+}: {
+  hidden: boolean;
+  addresses: readonly string[] | undefined;
+  bare: boolean;
+}) {
   const wallet = useAltanaWallet();
-  const address = wallet.status === "connected" ? wallet.address : null;
+  const dolphin = wallet.status === "connected" ? wallet.address : null;
+  const targets = addresses ?? (dolphin ? [dolphin] : []);
+  const address = targets[0] ?? null;
   const read = useAction(walletHistoryApi.walletHistory.forWallet);
-  const history = useQuery({
-    queryKey: ["wallet-history", address],
-    enabled: Boolean(address),
-    queryFn: () => read({ address: address! }),
-    staleTime: 60_000,
-    refetchInterval: 120_000,
+  const reads = useQueries({
+    queries: targets.map((target) => ({
+      queryKey: ["wallet-history", target],
+      queryFn: () => read({ address: target }),
+      staleTime: 60_000,
+      refetchInterval: 120_000,
+    })),
   });
   const [shown, setShown] = useState(PAGE);
 
-  const data = history.data;
-  const entries = data && data.status === "ok" ? data.entries : [];
+  const history = {
+    isPending: reads.some((q) => q.isPending),
+    isError: reads.length > 0 && reads.every((q) => q.isError || (q.data && q.data.status !== "ok")),
+  };
+  // Cheap enough to rebuild each render (two lists of at most 200 rows).
+  const byHash = new Map<string, WalletHistoryEntry>();
+  let hiddenTokens = 0;
+  for (const q of reads) {
+    if (q.data?.status !== "ok") continue;
+    hiddenTokens += q.data.hiddenTokens;
+    for (const entry of q.data.entries) if (!byHash.has(entry.hash)) byHash.set(entry.hash, entry);
+  }
+  const merged = { entries: [...byHash.values()].sort((a, b) => b.at - a.at), hiddenTokens };
+  const data = { status: "ok" as const, hiddenTokens: merged.hiddenTokens };
+  const entries = merged.entries;
 
   return (
-    <section className="wallet-activity" id="history">
-      <header>
+    <section className={`wallet-activity${bare ? " wallet-activity--bare" : ""}`} id="history">
+      {bare ? null : <header>
         <div>
           <p className="eyebrow">Dolphin Wallet</p>
           <h2>Wallet history</h2>
@@ -141,17 +179,19 @@ function WalletHistoryContent({ hidden }: { hidden: boolean }) {
             BscScan ↗
           </a>
         ) : null}
-      </header>
+      </header>}
 
       {!address ? (
-        <p className="py-6 text-center text-[0.8rem] text-muted">Set up your Dolphin Wallet to see its history.</p>
+        <p className="py-6 text-center text-[0.8rem] text-muted">
+          {addresses ? "Connect this wallet to see its history." : "Set up your Dolphin Wallet to see its history."}
+        </p>
       ) : history.isPending ? (
         <div aria-busy="true" className="space-y-2 py-3">
           {Array.from({ length: 3 }, (_, i) => (
             <div className="skeleton h-12 rounded-xl" key={i} />
           ))}
         </div>
-      ) : history.isError || (data && data.status !== "ok") ? (
+      ) : history.isError ? (
         <p className="py-6 text-center text-[0.8rem] text-muted">
           History can&apos;t be read right now. Everything is on BscScan in the meantime.
         </p>

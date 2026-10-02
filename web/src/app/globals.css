@@ -1239,39 +1239,6 @@ select {
 }
 .wcard--agent .wcard__eyebrow { color: var(--accent-ink); }
 
-/* Both wallets SIDE BY SIDE inside the total's card, on the phone (owner,
-   2026-10-02: "the Dolphin wallet and connected wallet on the same line,
-   just under the total balance"). The same cards as tiles: each keeps its
-   own buttons, so Add funds and Withdraw stay on the Dolphin Wallet. The
-   avatar and the one-line description go - the eyebrow names the wallet.
-   overflow is visible so the asset dropdown is not clipped by its tile. */
-.wallet-hero__wallets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
-.wcard--inset {
-  min-height: 0;
-  gap: 6px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--paper);
-  background-image: none;
-  box-shadow: none;
-  overflow: visible;
-}
-.wcard--inset::before { display: none; }
-.wcard--inset .wcard__avatar,
-.wcard--inset .wcard__sub { display: none; }
-/* Except where it is the only explanation: a browser that cannot hold a passkey wallet. */
-.wcard--inset.wcard--blocked .wcard__sub { display: block; font-size: 0.72rem; }
-.wcard--inset .wcard__head { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
-.wcard--inset .wcard__head-text { min-width: 0; flex: 1 1 100%; }
-.wcard--inset .wcard__eyebrow { font-size: 0.6rem; }
-.wcard--inset .wcard__title { font-size: 0.95rem; }
-.wcard--inset .wcard__amount { margin-top: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
-.wcard--inset .wcard__foot { margin-top: auto; padding-top: 4px; }
-.wcard--inset .wcard__actions { display: grid; grid-template-columns: 1fr; gap: 6px; }
-.wcard--inset .wcard__actions .wallet-btn,
-.wcard--inset .wcard__foot .wallet-btn { width: 100%; }
-.wcard--inset .asset-menu__list { left: 0; right: auto; }
 
 /* The address chip. A truncated address is not an address, it is a label for
    one — so it is not a thing to copy, it is a thing to open. */
@@ -3945,3 +3912,96 @@ select {
   background: var(--ink) !important;
   color: var(--paper) !important;
 }
+
+/* ── The phone wallet (components/mobile-wallet.tsx), 2026-10-02 ──────────────
+   Owner's design: account picker, value, BNB/USD, round keys, then
+   Wallet history | Tokens tabs. */
+.pw-head { position: relative; padding: 8px 0 4px; }
+.pw-picker { position: relative; display: inline-block; }
+.pw-picker__trigger {
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; width: auto;
+  min-height: 44px; padding: 4px 10px 4px 4px; margin-left: -4px;
+  border-radius: 999px; font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em; color: var(--ink);
+}
+.pw-picker__trigger:active { background: var(--paper-muted); }
+.pw-picker__icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--paper-muted); color: var(--ink); }
+.pw-picker__chevron { display: inline-flex; color: var(--muted); transform: rotate(90deg); transition: transform 150ms ease; }
+.pw-picker__chevron--open { transform: rotate(-90deg); }
+.pw-picker__addr { margin: -4px 0 0 40px; font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.7rem; color: var(--faint); }
+.pw-picker__list {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 30;
+  width: min(18rem, calc(100vw - 32px)); margin: 0; padding: 4px; list-style: none;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--paper);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
+}
+.pw-picker__item { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 52px; padding: 9px 12px; border-radius: 10px; text-align: left; }
+.pw-picker__item:hover, .pw-picker__item:focus-visible { background: var(--paper-muted); }
+.pw-picker__item[aria-pressed="true"] { background: color-mix(in srgb, var(--paper-muted) 75%, transparent); }
+.pw-picker__item-name { font-size: 0.92rem; font-weight: 650; color: var(--ink); }
+.pw-picker__item-sub { font-size: 0.74rem; color: var(--muted); }
+.pw-picker__item-sub.pw-mono { font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.7rem; }
+
+.pw-amount { margin-top: 14px; font-size: clamp(34px, 11vw, 46px); line-height: 1.1; font-weight: 700; letter-spacing: 0.01em; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pw-amount > span { margin-left: 8px; font-size: 16px; font-weight: 600; color: var(--muted); }
+.pw-amount--muted { font-size: 26px; font-weight: 640; color: var(--faint); }
+.pw-controls { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+
+.pw-keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 26px; }
+.pw-keys > * { display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); text-decoration: none; background: none; }
+.pw-keys > * > span {
+  display: grid; place-items: center; width: 60px; height: 60px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background-color: var(--paper); background-image: var(--sheen);
+  box-shadow: inset 0 1px 0 var(--lift-edge), 0 1px 2px var(--lift-contact), 0 6px 14px -6px var(--lift-ambient);
+  transition: box-shadow 140ms ease, transform 90ms ease;
+}
+.pw-keys > *:active > span { transform: translateY(1px); box-shadow: inset 0 2px 5px var(--sink-top); }
+.pw-keys > button:disabled { opacity: 0.5; }
+.pw-setup { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-top: 20px; }
+.pw-setup .wallet-btn { min-height: 48px; }
+.pw-note { margin-top: 12px; font-size: 0.8rem; line-height: 1.5; color: var(--muted); }
+.pw-disconnect { margin-top: 18px; }
+
+.pw-tabs { display: flex; gap: 8px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
+.pw-tab { min-height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.86rem; font-weight: 600; color: var(--muted); background: var(--paper); }
+.pw-tab[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.pw-panel { margin-top: 10px; min-height: 160px; }
+.pw-empty { padding: 28px 8px; text-align: center; font-size: 0.82rem; color: var(--muted); }
+.pw .wallet-activity--bare { margin-top: 0; padding: 0; border: 0; background: none; }
+.pw .wallet-activity-row > strong { max-width: 52%; font-size: 0.74rem; }
+
+.pw-tokens { margin: 0; padding: 0; list-style: none; }
+.pw-token { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.pw-token:last-child { border-bottom: 0; }
+.pw-token__badge { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 999px; background: var(--paper-muted); font-size: 0.9rem; font-weight: 700; color: var(--ink); }
+.pw-token__name { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.pw-token__name > strong { font-size: 0.95rem; font-weight: 650; color: var(--ink); }
+.pw-token__name > span { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pw-token__value { font-size: 0.95rem; font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.pw-sheet {
+  margin: auto auto 0; width: 100%; max-width: 480px; max-height: 88dvh;
+  padding: 0; border: 0; border-radius: 22px 22px 0 0;
+  background: var(--paper); color: var(--ink); overflow: hidden;
+}
+.pw-sheet[open] { animation: pw-sheet-up 220ms cubic-bezier(.2,.8,.2,1); }
+@keyframes pw-sheet-up { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pw-sheet[open] { animation: none; } }
+.pw-sheet::backdrop { background: rgba(0, 0, 0, 0.42); }
+.pw-sheet__body { display: flex; flex-direction: column; gap: 12px; max-height: 88dvh; overflow-y: auto; padding: 10px 16px calc(20px + env(safe-area-inset-bottom)); }
+.pw-sheet__body::before { content: ""; align-self: center; width: 40px; height: 4px; border-radius: 999px; background: var(--line-strong); }
+.pw-sheet__head { display: flex; align-items: center; justify-content: space-between; }
+.pw-sheet__title { font-size: 1.05rem; font-weight: 680; letter-spacing: -0.01em; }
+.pw-sheet__close { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; color: var(--muted); }
+.pw-sheet__close:hover, .pw-sheet__close:focus-visible { background: var(--paper-muted); color: var(--ink); }
+.pw-sheet__item { display: flex; width: 100%; align-items: center; gap: 12px; min-height: 60px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); text-align: left; text-decoration: none; color: var(--ink); }
+.pw-sheet__item:hover, .pw-sheet__item:focus-visible { background: var(--paper-muted); }
+.pw-sheet__item > span:last-child { display: flex; min-width: 0; flex-direction: column; }
+.pw-sheet__item strong { font-size: 0.92rem; font-weight: 650; }
+.pw-sheet__item span span { font-family: var(--font-mono), ui-monospace, monospace; font-size: 0.72rem; color: var(--muted); }
+.pw-sheet__icon { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; background: var(--paper-muted); }
+.pw-sheet section[aria-labelledby="alerts-heading"],
+.pw-sheet .wallet-danger,
+.pw-sheet .wallet-block { margin-top: 0; padding: 16px; border: 1px solid color-mix(in srgb, var(--line) 85%, transparent); border-radius: 14px; background: var(--paper); }
+.pw-sheet section[aria-labelledby="alerts-heading"] .wallet-section__header { border-bottom: 0; padding-bottom: 0; }
+.pw-sheet section[aria-labelledby="alerts-heading"] h2 { margin-top: 0; font-size: 0.95rem; font-weight: 600; }

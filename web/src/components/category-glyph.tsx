@@ -18,6 +18,7 @@ import InformationCircleIcon from "@hugeicons/core-free-icons/InformationCircleI
 import Layers01Icon from "@hugeicons/core-free-icons/Layers01Icon";
 import Menu01Icon from "@hugeicons/core-free-icons/Menu01Icon";
 import MoreVerticalIcon from "@hugeicons/core-free-icons/MoreVerticalIcon";
+import Notification01Icon from "@hugeicons/core-free-icons/Notification01Icon";
 import PanelLeftIcon from "@hugeicons/core-free-icons/PanelLeftIcon";
 import Refresh01Icon from "@hugeicons/core-free-icons/Refresh01Icon";
 import Robot01Icon from "@hugeicons/core-free-icons/Robot01Icon";
@@ -124,6 +125,7 @@ export type GlyphName =
   | "arrow-right"
   | "arrow-down"
   | "arrow-up"
+  | "bell"
   | "menu"
   | "close"
   | "receive"
@@ -170,6 +172,7 @@ const HUGEICONS: Partial<Record<GlyphName, IconSvgElement>> = {
   // Money in and out in Wallet history (2026-10-02): an arrow, not the chevron "receive" is.
   "arrow-down": ArrowDown02Icon,
   "arrow-up": ArrowUp02Icon,
+  bell: Notification01Icon,
   menu: Menu01Icon,
   close: Cancel01Icon,
   receive: ArrowDown01Icon,

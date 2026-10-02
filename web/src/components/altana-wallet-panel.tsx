@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBalance } from "wagmi";
 
 import { WalletHistory } from "@/components/wallet-history";
@@ -148,7 +148,7 @@ function QuickAction({ glyph, label, href, onClick, disabled }: {
  * reason says the feature exists and the price does not. `title` carries the
  * reason the hook actually gave rather than a generic one.
  */
-function CurrencySwitch({
+export function CurrencySwitch({
   currency,
   onChange,
   price,
@@ -385,12 +385,9 @@ export function RecoverabilityPanel({ onDeposit }: { onDeposit: () => void }) {
 function WalletHero({
   price,
   receiveTarget,
-  children,
 }: {
   price: BnbPriceState;
   receiveTarget: string | null;
-  /** The phone puts both wallets inside this card, under the total (2026-10-02). */
-  children?: ReactNode;
 }) {
   const identity = useWallet();
   const dolphin = useAltanaWallet();
@@ -532,9 +529,7 @@ function WalletHero({
           "polite" — a balance settling must not interrupt a screen reader. */}
       <p aria-live="polite" className="wallet-hero__caption">{caption}</p>
 
-      {children ? <div className="wallet-hero__wallets">{children}</div> : null}
-
-      <div className="wallet-hero__actions" hidden={Boolean(children)}>
+      <div className="wallet-hero__actions">
         {/* Add funds lives on the Dolphin Wallet card now (2026-10-02). */}
         {receiveTarget ? (
           <QuickAction
@@ -595,14 +590,10 @@ function CardAmount({
 function IdentityWalletCard({
   onReceive,
   price,
-  inset = false,
 }: {
   onReceive: (address: string) => void;
   price: BnbPriceState;
-  /** A row inside the total's card (the phone), not a card of its own. */
-  inset?: boolean;
 }) {
-  const insetClass = inset ? " wcard--inset" : "";
   const identity = useWallet();
   const currency = useAppStore((s) => s.displayCurrency);
   const hidden = useAppStore((s) => s.hideBalances);
@@ -621,7 +612,7 @@ function IdentityWalletCard({
    */
   if (!identity.isConnected || !identity.address) {
     return (
-      <div aria-label="Identity wallet" className={`wcard wcard--empty${insetClass}`}>
+      <div aria-label="Identity wallet" className="wcard wcard--empty">
         <p className="wcard__eyebrow">Connected wallet</p>
         <p className="wcard__title">Not connected</p>
         <p className="wcard__sub">Signs you in. Dolphin never spends from it.</p>
@@ -635,7 +626,7 @@ function IdentityWalletCard({
   const address = identity.address;
 
   return (
-    <div aria-label="Identity wallet" className={`wcard${insetClass}`}>
+    <div aria-label="Identity wallet" className="wcard">
       <div className="wcard__head">
         <WalletAvatar address={address} className="wcard__avatar" kind="human" size={34} />
         <div className="wcard__head-text">
@@ -768,14 +759,10 @@ function AssetMenu({
 function AgentWalletCard({
   onReceive,
   price,
-  inset = false,
 }: {
   onReceive: (address: string) => void;
   price: BnbPriceState;
-  /** A row inside the total's card (the phone), not a card of its own. */
-  inset?: boolean;
 }) {
-  const insetClass = inset ? " wcard--inset" : "";
   const wallet = useAltanaWallet();
   const currency = useAppStore((s) => s.displayCurrency);
   const hidden = useAppStore((s) => s.hideBalances);
@@ -789,7 +776,7 @@ function AgentWalletCard({
   if (wallet.status !== "connected" || !wallet.address) {
     const blocked = wallet.status === "unsupported";
     return (
-      <div aria-label="Agent payments wallet" className={`wcard wcard--agent wcard--empty${blocked ? " wcard--blocked" : ""}${insetClass}`}>
+      <div aria-label="Agent payments wallet" className="wcard wcard--agent wcard--empty">
         <p className="wcard__eyebrow">Dolphin Wallet</p>
         <p className="wcard__title">{blocked ? "Unavailable here" : "Not set up"}</p>
         <p className="wcard__sub">
@@ -850,7 +837,7 @@ function AgentWalletCard({
   const bnbAmount = readable ? renderAmount(wallet.balanceWei!, currency, price, hidden) : null;
 
   return (
-    <div aria-label="Agent payments wallet" className={`wcard wcard--agent${insetClass}`}>
+    <div aria-label="Agent payments wallet" className="wcard wcard--agent">
       <div className="wcard__head">
         <WalletAvatar address={address} className="wcard__avatar" kind="bot" size={34} />
         <div className="wcard__head-text">
@@ -928,7 +915,7 @@ function AgentWalletCard({
  * Hires are not listed because they cannot spend on their own: every paid hire
  * is approved with the passkey, one job at a time.
  */
-function AgentSpendingSection() {
+export function AgentSpendingSection() {
   const identity = useWallet();
   const session = useWalletSession();
   const built = useQuery(myAgentsApi.myAgents.built, session.sessionToken ? { sessionToken: session.sessionToken } : "skip");
@@ -1003,7 +990,7 @@ function AgentSpendingSection() {
 
 /* ─────────────── device access ─────────────── */
 
-function DeviceAccessSection() {
+export function DeviceAccessSection() {
   const wallet = useAltanaWallet();
 
   /*
@@ -1049,7 +1036,7 @@ function DeviceAccessSection() {
  * party could exercise — and the Grant button that fed it charged real BNB in
  * gas to create them.
  */
-function PermissionsSection() {
+export function PermissionsSection() {
   const wallet = useAltanaWallet();
   const active = (wallet.sessions ?? []).filter((s) => s.status === "active");
   const past = (wallet.sessions ?? []).filter((s) => s.status !== "active");
@@ -1140,7 +1127,7 @@ function PermissionsSection() {
  * VISIBILITY only. createPasskeyWallet is untouched and remains a separate,
  * explicit, user-initiated action.
  */
-export function AltanaWalletPanel({ layout = "desktop" }: { layout?: "desktop" | "phone" } = {}) {
+export function AltanaWalletPanel() {
   const wallet = useAltanaWallet();
   const identity = useWallet();
   const price = useBnbPrice();
@@ -1179,38 +1166,6 @@ export function AltanaWalletPanel({ layout = "desktop" }: { layout?: "desktop" |
       onClose={() => setReceiving(null)}
     />
   ) : null;
-
-  /*
-   * THE PHONE (owner, 2026-10-02: "the mobile wallet page looks not thought
-   * out"). It used to be its own screen with its own cards: an "Agent
-   * payments" card that could not add funds or show U, a key row repeating
-   * the cards, and no way to see or stop what agents may spend. It is now
-   * these same parts in one column: the total with both wallets inside its
-   * card, then what happened, then what may spend.
-   */
-  if (layout === "phone") {
-    return (
-      <div className="wallet-v2 wallet-v2--phone">
-        {/* One card (owner, 2026-10-02): the total, then the Dolphin Wallet
-            and the connected wallet as rows under it, before any history. */}
-        <WalletHero price={price} receiveTarget={heroTarget}>
-          <AgentWalletCard inset onReceive={setReceiving} price={price} />
-          <IdentityWalletCard inset onReceive={setReceiving} price={price} />
-        </WalletHero>
-        {dolphinAddress && wallet.recoverability !== "registered" && (
-          <RecoverabilityPanel onDeposit={() => setReceiving(dolphinAddress)} />
-        )}
-        <WalletHistory hidden={hidden} />
-        <AgentSpendingSection />
-        {FEATURE_SESSION_EXECUTION && <PermissionsSection />}
-        <OptionalFeature label="Liquidation alerts (mobile)">
-          <LiquidationAlertPanel />
-        </OptionalFeature>
-        {dolphinAddress && <DeviceAccessSection />}
-        {receiveSheet}
-      </div>
-    );
-  }
 
   return (
     /*

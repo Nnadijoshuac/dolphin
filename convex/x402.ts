@@ -177,3 +177,19 @@ export async function settlePayment(ctx: ActionCtx, payment: DecodedPayment): Pr
   if (receipt.status !== "success") throw new Error(`Settlement reverted: ${hash}`);
   return hash;
 }
+
+/**
+ * Sets a listing's price and door by hand, for operators (internal only):
+ *   npx convex run x402:setListingPrice '{"hash":"d…","priceRaw":"10000000000000000","protocol":"mcp"}'
+ * A null priceRaw makes it free again.
+ */
+export const setListingPrice = internalMutation({
+  args: { hash: v.string(), priceRaw: v.union(v.string(), v.null()), protocol: v.optional(v.union(v.literal("mcp"), v.literal("a2a"))) },
+  handler: async (ctx, { hash, priceRaw, protocol }) => {
+    const row = await ctx.db.query("builtAgents").withIndex("by_hash", (q) => q.eq("hash", hash)).unique();
+    if (!row) throw new Error(`No listing ${hash}.`);
+    if (priceRaw !== null && !/^\d{1,40}$/.test(priceRaw)) throw new Error("priceRaw must be U base units.");
+    await ctx.db.patch(row._id, { priceRaw, ...(protocol ? { protocol } : {}), updatedAt: Date.now() });
+    return { hash, priceRaw, protocol: protocol ?? row.protocol ?? "mcp" };
+  },
+});

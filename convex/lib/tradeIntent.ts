@@ -71,6 +71,23 @@ const PATTERNS: Array<{ re: RegExp; map: (m: RegExpMatchArray) => TradeIntent }>
     ),
     map: (m) => ({ kind: "swap", amount: m[1], tokenIn: m[2], tokenOut: m[3] }),
   },
+  /*
+   * The amount you want to END UP WITH: "bnb to 0.05u", "swap BNB for 5 U",
+   * "buy 0.05 U with BNB". (2026-10-02: these fell through to the model, which
+   * answered nothing usable and the chat said "Dolphin failed".) Dolphin
+   * trades by what you spend, so this asks for that instead of guessing it.
+   */
+  {
+    re: new RegExp(
+      String.raw`^(?:(?:swap|convert|trade|exchange|change)\s+)?${TOKEN}\s+(?:to|for|into|->|→|=>)\s+${AMOUNT}\s*${TOKEN}$`,
+      "i",
+    ),
+    map: (m) => exactOutQuestion(m[1], m[2], m[3]),
+  },
+  {
+    re: new RegExp(String.raw`^(?:buy|get)\s+${AMOUNT}\s*${TOKEN}\s+(?:with|using|for)\s+${TOKEN}$`, "i"),
+    map: (m) => exactOutQuestion(m[3], m[1], m[2]),
+  },
   // sell 100 CAKE  (no destination)
   {
     re: new RegExp(String.raw`^(?:sell|dump)\s+${AMOUNT}\s*${TOKEN}$`, "i"),
@@ -90,6 +107,19 @@ const PATTERNS: Array<{ re: RegExp; map: (m: RegExpMatchArray) => TradeIntent }>
     }),
   },
 ];
+
+function exactOutQuestion(fromTyped: string, amount: string, toTyped: string): TradeIntent {
+  // Symbols read as symbols ("bnb" -> "BNB"); an address stays as typed.
+  const sym = (t: string) => (/^0x/i.test(bare(t)) ? bare(t) : bare(t).toUpperCase());
+  const from = sym(fromTyped);
+  const to = sym(toTyped);
+  const spend = from === "BNB" ? "0.0001" : "1";
+  return {
+    kind: "incomplete",
+    token: from,
+    question: `Dolphin trades by how much you spend. How much ${from} do you want to swap for ${to}? For example: "swap ${spend} ${from} to ${to}". The ticket shows how much ${to} you get before you sign. You asked for about ${amount} ${to}.`,
+  };
+}
 
 function bare(token: string): string {
   return token.replace(/^\$/, "");

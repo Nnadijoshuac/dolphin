@@ -127,6 +127,15 @@ export async function negotiate(ctx: ActionCtx, listing: Listing, data: Record<s
   if (!(await walletLinked(listing, account.address))) {
     return reply(quoteRefusal("0x01", "This agent's wallet is not linked to its on-chain identity yet, so a job could not be paid to it."));
   }
+  /*
+   * NO GAS, NO QUOTE (2026-10-02). The first paid hire of a built agent (job
+   * 56880) was funded while its wallet held 0 BNB: it did the work, could not
+   * submit it, and the 30-minute delivery window closed. A quote is a promise
+   * to deliver; an agent that cannot pay for delivery does not make one.
+   */
+  if (!(await hasGas(account.address))) {
+    return reply(quoteRefusal("0x01", "This agent is out of gas for delivering on-chain. Its builder needs to top up its wallet; nothing was charged."));
+  }
 
   const asked = typeof data.task_description === "string" ? data.task_description.trim() : "";
   // A calling agent may send its inputs as fields as well as (or instead of) prose.
@@ -188,6 +197,7 @@ export async function notifyFunded(ctx: ActionCtx, listing: Listing, data: Recor
   if (getAddress(job.provider) !== account.address) return refuse("This job names a different provider.");
   if (getAddress(job.evaluator) !== ROUTER) return refuse("Only jobs judged by the ERC-8183 router are accepted; a buyer-judged job can be rejected after delivery.");
   if (job.status !== STATUS.FUNDED) return refuse("The job is not funded.");
+  if (!(await hasGas(account.address))) return refuse("This agent is out of gas for delivering on-chain; its builder needs to top it up. Your payment can be refunded when the job expires.");
   const window = await bscPublicClient.readContract({ address: POLICY, abi: POLICY_ABI, functionName: "disputeWindow" });
   if (BigInt(Math.floor(Date.now() / 1000)) + BigInt(600) > job.expiredAt - window) return refuse("Too late to deliver this job before it expires.");
 
@@ -273,6 +283,23 @@ export const workJob = internalAction({
     const account = listing ? await agentAccount(ctx, listing.hash) : null;
     if (!listing || !account) return;
     const attempt = row.attempts + 1;
+
+    // Past the policy's submit deadline (expiredAt - disputeWindow) a delivery reverts: stop, and say so.
+    const [job, window] = await Promise.all([
+      bscPublicClient.readContract({ address: KERNEL, abi: GET_JOB_ABI, functionName: "getJob", args: [BigInt(jobId)] }),
+      bscPublicClient.readContract({ address: POLICY, abi: POLICY_ABI, functionName: "disputeWindow" }),
+    ]);
+    if (job.status !== STATUS.FUNDED || BigInt(Math.floor(Date.now() / 1000)) > job.expiredAt - window) {
+      await ctx.runMutation(internal.erc8183Seller.patchJob, {
+        id: row._id,
+        patch: {
+          status: "failed",
+          attempts: attempt,
+          detail: job.status !== STATUS.FUNDED ? "The job is no longer open for delivery." : "The delivery deadline passed before it could be submitted. The buyer can reclaim the payment when the job expires.",
+        },
+      });
+      return;
+    }
 
     let manifestJson = row.manifestJson;
     if (!manifestJson) {

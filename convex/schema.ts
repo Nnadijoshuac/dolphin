@@ -1038,6 +1038,14 @@ export default defineSchema({
     payoutAddress: v.optional(v.string()),
     purpose: v.optional(v.union(v.literal("private"), v.literal("tools"), v.literal("hire"))),
     hirePriceUsd: v.optional(v.union(v.number(), v.null())),
+    /**
+     * HOW IT IS CALLED (owner, 2026-10-02). "mcp": a tool server, any tool
+     * call is one paid call. "a2a": an agent, one task in and one result out.
+     * Absent on listings made before this field: those are MCP.
+     */
+    protocol: v.optional(v.union(v.literal("mcp"), v.literal("a2a"))),
+    /** Price per call in U base units (18 decimals), paid with x402. Absent or null: free. */
+    priceRaw: v.optional(v.union(v.string(), v.null())),
     draftId: v.id("agentDrafts"),
     ownerAddress: v.string(),
     network: v.union(v.literal("bsc"), v.literal("bsc-testnet")),
@@ -1070,6 +1078,43 @@ export default defineSchema({
     .index("by_hash", ["hash"])
     .index("by_owner", ["ownerAddress", "createdAt"])
     .index("by_draft", ["draftId", "network"]),
+
+  /**
+   * x402 PAYMENTS TO BUILT AGENTS (2026-10-02, convex/x402.ts). One row per
+   * signed authorization Dolphin accepted, reserved BEFORE the work runs so
+   * the same (payer, nonce) can never pay for two calls - the token refuses a
+   * reused nonce too, this stops the second call before it does any work.
+   * The money goes payer -> builder; Dolphin only submits it and pays gas.
+   */
+  x402Payments: defineTable({
+    hash: v.string(),
+    payer: v.string(),
+    nonce: v.string(),
+    payTo: v.string(),
+    valueRaw: v.string(),
+    /** "mcp:<tool>" or "a2a". */
+    resource: v.string(),
+    status: v.union(v.literal("reserved"), v.literal("settled"), v.literal("released"), v.literal("failed")),
+    txHash: v.union(v.string(), v.null()),
+    detail: v.union(v.string(), v.null()),
+    createdAt: v.number(),
+    settledAt: v.union(v.number(), v.null()),
+  })
+    .index("by_payer_nonce", ["payer", "nonce"])
+    .index("by_hash", ["hash", "createdAt"]),
+
+  /**
+   * THE WALLET THAT PAYS x402 SETTLEMENT GAS. Generated inside Convex
+   * (x402.ensureRelayer), sealed with DOLPHIN_ENV_KEY like agentTradeKeys;
+   * its key is never returned by any function. It holds BNB for gas only and
+   * is never the destination of a payment.
+   */
+  x402Relayer: defineTable({
+    address: v.string(),
+    ciphertext: v.string(),
+    iv: v.string(),
+    createdAt: v.number(),
+  }),
 
   /** Public `ask` calls per built agent per UTC day - every one spends model calls. */
   builtAgentUsage: defineTable({

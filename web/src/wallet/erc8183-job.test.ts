@@ -9,6 +9,8 @@ const fundedNothingSubmitted = {
   submittedAt: 0,
   expiredAt: 1_791_528_087,
 } as unknown as OnChainJob;
+/** A minute after it was funded: expiredAt is funding + 30 min deadline + the 7-day dispute window. */
+const minuteAfterFunding = (1_791_528_087 - 604_800 - 1_800 + 60) * 1000;
 
 describe("deliveryStateFor", () => {
   it("reads a funded job the seller refused as declined, not working", () => {
@@ -19,8 +21,16 @@ describe("deliveryStateFor", () => {
   });
 
   it("still reads working when the seller accepted or was never asked", () => {
-    expect(deliveryStateFor(fundedNothingSubmitted, 60_000, { accepted: true })).toBe("working");
-    expect(deliveryStateFor(fundedNothingSubmitted, 60_000)).toBe("working");
+    expect(deliveryStateFor(fundedNothingSubmitted, 60_000, { accepted: true }, minuteAfterFunding)).toBe("working");
+    expect(deliveryStateFor(fundedNothingSubmitted, 60_000, undefined, minuteAfterFunding)).toBe("working");
+  });
+
+  it("reads a funded job past its delivery deadline as missed, not working (job 56880)", () => {
+    const pastDeadline = (1_791_528_087 - 604_800 + 1) * 1000;
+    const state = deliveryStateFor(fundedNothingSubmitted, 3_600_000, { accepted: true }, pastDeadline);
+    expect(state).toBe("missed");
+    expect(isTerminal(state)).toBe(true);
+    expect(deliveryCopy(state).label).toBe("Not delivered");
   });
 
   it("lets a delivery outrank an earlier refusal", () => {

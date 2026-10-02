@@ -330,6 +330,15 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
   const alreadyHired =
     hiredAgents?.some((record) => record.agentKey === agent.agentKey) ?? false;
   const showMyAgents = alreadyHired || state.kind === "done";
+  /*
+   * ANOTHER JOB FOR AN AGENT YOU ALREADY HIRED (owner, 2026-10-02: the card
+   * only said "Manage this hire", so a paid agent could be bought from once).
+   * A paid hire is one escrow job; the next job is a new payment, never the
+   * old job reused, and it joins the same hire record (agentHires returns the
+   * existing row; Manage lists every job).
+   */
+  const anotherJob = priceRequiresPayment && alreadyHired && state.kind !== "done";
+  const jobForm = priceRequiresPayment && (!showMyAgents || anotherJob);
 
   async function ensureIdentity(): Promise<{ address: string; sessionToken: string } | null> {
     let address = wallet.address;
@@ -517,7 +526,7 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
       return state.label;
     }
     if (priceModel === null || priceUnreadable) return "Price unavailable";
-    return "Hire";
+    return anotherJob ? "Give it a new job" : "Hire";
   })();
 
   /**
@@ -579,7 +588,7 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
        * exactly the price to the ERC-8183 escrow for this job (buildHireCalls:
        * approve(kernel, budget)), and nothing else.
        */}
-      {priceRequiresPayment && !showMyAgents ? (
+      {jobForm ? (
         <HireForm
           category={agent.category}
           connectedAddress={wallet.address ?? null}
@@ -600,7 +609,7 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
       {/* The facts that bear on the decision, and on a first purchase there
           are two of them. */}
       <div className="mt-5 border-y border-line">
-        {priceRequiresPayment && !showMyAgents && chargedRaw !== null && tokenAddress ? (
+        {jobForm && chargedRaw !== null && tokenAddress ? (
           <HireCost
             agent={agent}
             decimals={agent.pricing?.tokenDecimals || liveToken?.decimals || null}
@@ -625,7 +634,7 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
          * nothing on this card said so before the money moved.
          */}
       </div>
-      {priceRequiresPayment && !showMyAgents ? (
+      {jobForm ? (
         <p className="mt-3 text-xs leading-5 text-muted">
           Your payment waits in escrow, not with the agent. If it doesn&rsquo;t deliver
           within {ESCROW_REFUND_DAYS} days you can take it back. The agent never gets
@@ -635,7 +644,25 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
       ) : null}
 
       <div className="mt-5">
-        {showMyAgents ? (
+        {anotherJob ? (
+          <>
+            <PearlButton
+              aria-busy={busy}
+              disabled={busy || priceModel === null || priceUnreadable || taskProblem !== null}
+              onClick={() => void runHire(null)}
+              type="button"
+            >
+              {label}
+            </PearlButton>
+            <Link
+              className="mt-3 flex items-center justify-center gap-1.5 text-sm font-semibold text-ink-soft underline-offset-4 hover:underline"
+              href={`/manage/${agentRouteId(agent.agentKey)}`}
+            >
+              Manage this hire
+              <CategoryGlyph color="currentColor" name="arrow-right" size={14} strokeWidth={2} />
+            </Link>
+          </>
+        ) : showMyAgents ? (
           <Link
             className="interactive flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-paper px-5 text-sm font-semibold text-ink no-underline hover:bg-canvas"
             // The bare token id, like every other agent URL in the product.

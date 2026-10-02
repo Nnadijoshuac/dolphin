@@ -43,6 +43,7 @@ const STATE_TONE: Record<DeliveryState, "live" | "wait" | "warn"> = {
   working: "wait",
   declined: "warn",
   overdue: "warn",
+  missed: "warn",
   delivered: "live",
   settled: "live",
   rejected: "warn",

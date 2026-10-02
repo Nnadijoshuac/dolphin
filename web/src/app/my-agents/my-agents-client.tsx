@@ -177,6 +177,7 @@ const JOB_WORDS: Record<DeliveryState, { tone: "live" | "practice" | "idle"; tex
   working: { tone: "live", text: "Working on your job" },
   declined: { tone: "practice", text: "Job declined - money safe" },
   overdue: { tone: "practice", text: "Taking longer than usual" },
+  missed: { tone: "practice", text: "Not delivered - money safe" },
   delivered: { tone: "live", text: "Delivered" },
   settled: { tone: "idle", text: "Done and paid" },
   rejected: { tone: "idle", text: "Job rejected" },

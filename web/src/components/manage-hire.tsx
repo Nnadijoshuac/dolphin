@@ -104,6 +104,8 @@ function useJobs(agentKey: string): AgentJobRow[] | undefined {
 const STEPS = ["Paid", "Working", "Delivered", "Paid out"] as const;
 /** A declined job never works or delivers; its road is paid, declined, refunded. */
 const DECLINED_STEPS = ["Paid", "Declined", "Refund"] as const;
+/** A job the agent missed ends the same way: paid, not delivered, refunded. */
+const MISSED_STEPS = ["Paid", "Not delivered", "Refund"] as const;
 
 /** Which step is lit, and whether the job ended somewhere off the happy path. */
 function stepFor(state: DeliveryState | undefined): { index: number; tone: "live" | "warn" | "done" } {
@@ -117,6 +119,7 @@ function stepFor(state: DeliveryState | undefined): { index: number; tone: "live
     case "rejected":
     case "expired":
     case "declined":
+    case "missed":
       return { index: 1, tone: "warn" };
     case "unfunded":
       return { index: 0, tone: "warn" };
@@ -126,9 +129,9 @@ function stepFor(state: DeliveryState | undefined): { index: number; tone: "live
 }
 
 function Tracker({ state, refunded = false }: { state: DeliveryState | undefined; refunded?: boolean }) {
-  const declined = state === "declined";
+  const declined = state === "declined" || state === "missed";
   const { index, tone } = declined ? { index: refunded ? 2 : 1, tone: refunded ? ("done" as const) : ("warn" as const) } : stepFor(state);
-  const steps: readonly string[] = declined ? DECLINED_STEPS : STEPS;
+  const steps: readonly string[] = state === "missed" ? MISSED_STEPS : declined ? DECLINED_STEPS : STEPS;
   return (
     <ol className="tracker" data-tone={tone}>
       {steps.map((label, step) => (
@@ -155,6 +158,8 @@ function nowSentence(agent: Agent, state: DeliveryState | undefined, submittedAt
       return `${agent.name} is working on your request. This page updates by itself.`;
     case "declined":
       return `Job declined. Your money is safe${expiredAt > 0 ? `, refund on ${day(expiredAt * 1000)}` : ""}.`;
+    case "missed":
+      return `${agent.name} did not deliver in time, so this job has ended. Your money is safe${expiredAt > 0 ? `; you can take it back on ${day(expiredAt * 1000)}` : ""}.`;
     case "overdue":
       return `Nothing yet, and it is taking longer than usual. ${agent.name} can still deliver, or it may have declined the job.${expiredAt > 0 ? ` If nothing arrives by ${day(expiredAt * 1000)}, you can take your money back.` : ""}`;
     case "delivered":

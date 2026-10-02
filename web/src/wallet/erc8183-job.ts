@@ -1,6 +1,7 @@
 import { getAddress } from "viem";
 
 import { bscPublicClient } from "@/services/chain";
+import { ESCROW_DISPUTE_WINDOW_SECONDS } from "@/wallet/erc8183-policy";
 
 /**
  * Reading an ERC-8183 job back off the chain, so a paid hire can say what
@@ -186,6 +187,13 @@ export type DeliveryState =
   | "declined"
   /** Same, but past DELIVERY_TIMEOUT_MS. Not an error - just honest. */
   | "overdue"
+  /**
+   * FUNDED, nothing delivered, and past the escrow policy's submit deadline
+   * (expiredAt - disputeWindow; a submit after it reverts - convex/erc8183Seller.ts).
+   * The agent can no longer deliver, so this is final: the money comes back
+   * at expiredAt. Job 56880 read "Working" for hours in this state (2026-10-02).
+   */
+  | "missed"
   /** Seller submitted a deliverable. This is what the user is waiting for. */
   | "delivered"
   /** Delivered AND the escrow has been released to the seller. */
@@ -214,6 +222,7 @@ export function deliveryStateFor(
   job: OnChainJob,
   elapsedMs: number,
   sellerReply?: { accepted: boolean } | null,
+  nowMs: number = Date.now(),
 ): DeliveryState {
   if (job.statusName === "COMPLETED") return "settled";
   if (job.statusName === "REJECTED") return "rejected";
@@ -221,6 +230,7 @@ export function deliveryStateFor(
   if (job.statusName === "FUNDED" && sellerReply && !sellerReply.accepted) return "declined";
   if (job.statusName === "EXPIRED") return "expired";
   if (job.statusName === "OPEN") return "unfunded";
+  if (job.statusName === "FUNDED" && job.expiredAt > 0 && nowMs / 1000 > job.expiredAt - ESCROW_DISPUTE_WINDOW_SECONDS) return "missed";
   return elapsedMs >= DELIVERY_TIMEOUT_MS ? "overdue" : "working";
 }
 
@@ -229,6 +239,7 @@ export function isTerminal(state: DeliveryState): boolean {
   return (
     state === "delivered" ||
     state === "declined" ||
+    state === "missed" ||
     state === "settled" ||
     state === "rejected" ||
     state === "expired"
@@ -250,6 +261,11 @@ export function deliveryCopy(state: DeliveryState): {
       return {
         label: "Job declined",
         body: "Your money is safe in escrow. You can take it back on the date below.",
+      };
+    case "missed":
+      return {
+        label: "Not delivered",
+        body: "The agent missed its delivery deadline, so this job has ended and can no longer be delivered. Your money is safe in escrow. You can take it back on the date below.",
       };
     case "overdue":
       return {

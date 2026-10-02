@@ -9,6 +9,7 @@ import { draftGaps } from "./lib/agentSpec";
 import { MAX_ICONS_PER_WALLET_PER_DAY } from "./lib/iconPolicy";
 import { bscPublicClient } from "./lib/bscClient";
 import { screenAgent } from "./lib/screen";
+import { MAX_PRICE_U, MIN_PRICE_U, formatU, parsePriceU, priceInBounds } from "./lib/x402";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 
 /**
@@ -149,8 +150,15 @@ export const prepareListing = mutation({
      * wallet, never listed, no public endpoint.
      */
     visibility: v.optional(v.union(v.literal("public"), v.literal("private"))),
-    /** Price per job in US dollars for a public agent. Absent or blank: free. */
+    /** Price per job in US dollars - the pre-x402 form, still accepted from older clients. */
     priceUsd: v.optional(v.union(v.number(), v.null())),
+    /**
+     * HOW IT IS CALLED AND WHAT A CALL COSTS (owner, 2026-10-02). "mcp": a
+     * tool server; "a2a": an agent that takes a task. priceU is a decimal in
+     * U per call, paid with x402 straight to the payout wallet. Blank: free.
+     */
+    protocol: v.optional(v.union(v.literal("mcp"), v.literal("a2a"))),
+    priceU: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const owner = await requireWalletAddress(ctx, args.sessionToken, "Putting an agent on-chain");
@@ -180,6 +188,20 @@ export const prepareListing = mutation({
     const visibility = args.visibility ?? "public";
     const priceUsd = visibility === "public" && args.priceUsd !== undefined && args.priceUsd !== null ? args.priceUsd : null;
     if (priceUsd !== null && !(priceUsd > 0 && priceUsd <= 10_000)) throw new ConvexError("A price per job must be between $0.01 and $10,000.");
+    const protocol = args.protocol ?? "mcp";
+    const priceText = visibility === "public" ? (args.priceU ?? "").trim() : "";
+    let priceRaw: string | null = null;
+    if (priceText) {
+      const parsed = parsePriceU(priceText);
+      if (parsed === null || !priceInBounds(parsed)) {
+        throw new ConvexError(`A price per call must be between ${MIN_PRICE_U} and ${MAX_PRICE_U} U.`);
+      }
+      // U lives on BNB Chain mainnet, so that is where a paid agent is settled and listed.
+      if (args.network !== "bsc") throw new ConvexError("Paid calls are settled in U on BNB Chain. Publish a paid agent on BNB Chain, or leave the price blank to try it on Testnet.");
+      // A paid call runs on the builder's own model key, never Dolphin's free budget.
+      if (!draft.brain) throw new ConvexError("A paid agent answers with your own model. Add a Brain with your API key first.");
+      priceRaw = parsed.toString();
+    }
     const gaps = draftGaps(draft, (draft.blocks ?? []).length);
     if (gaps.length > 0) throw new ConvexError(`The agent needs ${gaps.join(", ")} before it can go on-chain.`);
     const name = draft.name as string;
@@ -266,8 +288,10 @@ export const prepareListing = mutation({
       category: args.category,
       links: { website, x: xHandle, email },
       payoutAddress,
-      purpose: visibility === "private" ? ("private" as const) : priceUsd !== null ? ("hire" as const) : ("tools" as const),
-      hirePriceUsd: priceUsd,
+      purpose: visibility === "private" ? ("private" as const) : priceUsd !== null && !priceRaw ? ("hire" as const) : ("tools" as const),
+      hirePriceUsd: priceRaw ? null : priceUsd,
+      protocol,
+      priceRaw,
       iconStorageId: icon.storageId,
       iconContentType: icon.contentType,
       updatedAt: Date.now(),
@@ -447,6 +471,14 @@ async function publicView(ctx: { storage: { getUrl: (id: Doc<"builtAgents">["ico
     iconUrl: await ctx.storage.getUrl(row.iconStorageId),
     registrationUrl: registrationUrl(row.hash),
     mcpUrl: `${apiBase()}/api/v1/built/${row.hash}/mcp`,
+    protocol: row.protocol ?? ("mcp" as const),
+    /** Where a caller connects: the MCP server, or the A2A agent card. */
+    endpointUrl:
+      (row.protocol ?? "mcp") === "a2a"
+        ? `${apiBase()}/api/v1/built/${row.hash}/agent-card.json`
+        : `${apiBase()}/api/v1/built/${row.hash}/mcp`,
+    priceRaw: row.priceRaw ?? null,
+    priceDisplay: row.priceRaw ? `${formatU(row.priceRaw)} U` : null,
     pageUrl: `${siteBase()}/agent/${row.hash}`,
     registerTxUrl: row.registerTxHash ? `${explorer}/tx/${row.registerTxHash}` : null,
     uriUpdatedAt: row.uriUpdatedAt ?? null,

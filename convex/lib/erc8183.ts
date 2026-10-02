@@ -1,4 +1,4 @@
-import { getAddress } from "viem";
+import { getAddress, keccak256, toHex } from "viem";
 
 import { BSC_CHAIN_ID } from "./bscClient";
 import { MAX_JSON_BYTES, safeFetch } from "./safeFetch";
@@ -365,10 +365,69 @@ export function normalizeQuote(
      * shape is one sellers accept. Matching on the signature rather than on a
      * known layout is what makes this work for both.
      */
-    signedEnvelope: signedPart ? JSON.stringify(signedPart) : null,
+    signedEnvelope: signedPart ? flatSignedQuote(signedPart) ?? JSON.stringify(signedPart) : null,
     deliverables,
     rawResponse,
   };
+}
+
+/** JSON with keys sorted at every level - the canonical form sellers hash. */
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, sortKeysDeep((value as Record<string, unknown>)[key])]),
+    );
+  }
+  return value;
+}
+
+/**
+ * THE QUOTE IN THE LAYOUT SELLERS VERIFY (measured 2026-10-02).
+ *
+ * Every paid seller in the catalog now answers `negotiate` with a NESTED
+ * envelope ({request, request_hash, response, response_hash, negotiation_hash,
+ * provider_sig, ...}), and Keel refused the job Dolphin funded with it - "no
+ * signed quote anchored in job description" (job 56871). Yet the last 3,000
+ * jobs on the kernel show every DELIVERED job anchored a FLAT, key-sorted quote:
+ * {chain_id, currency, negotiated_at, negotiation_hash, price, provider_sig,
+ * quote_expires_at, task, terms:{deliverables, quality_standards},
+ * verifying_contract, version:1}. The seller verifies that flat form.
+ *
+ * And the nested quote's negotiation_hash IS keccak256 of exactly that flat
+ * form (minus hash and signature), key-sorted, with the checksummed
+ * verifying_contract and the response's two terms - so the seller's own
+ * signature covers the flat layout. Re-laying it out loses nothing and adds
+ * nothing. The hash is recomputed here and the flat form is used only when it
+ * matches; otherwise the envelope is anchored exactly as it arrived.
+ */
+export function flatSignedQuote(signed: unknown): string | null {
+  if (!signed || typeof signed !== "object") return null;
+  const env = signed as Record<string, unknown>;
+  const request = env.request as Record<string, unknown> | undefined;
+  const response = env.response as Record<string, unknown> | undefined;
+  const terms = response?.terms as Record<string, unknown> | undefined;
+  const hash = typeof env.negotiation_hash === "string" ? env.negotiation_hash : null;
+  const signature = typeof env.provider_sig === "string" ? env.provider_sig : null;
+  if (!request || !response || !terms || !hash || !signature) return null;
+  const contract = parseAddress(env.verifying_contract);
+  if (contract === null) return null;
+  const flat = {
+    chain_id: env.chain_id,
+    currency: terms.currency,
+    negotiated_at: response.negotiated_at,
+    price: terms.price,
+    quote_expires_at: response.quote_expires_at,
+    task: request.task_description,
+    terms: { deliverables: terms.deliverables, quality_standards: terms.quality_standards },
+    verifying_contract: contract,
+    version: 1,
+  };
+  const recomputed = keccak256(toHex(JSON.stringify(sortKeysDeep(flat))));
+  if (recomputed.toLowerCase() !== hash.toLowerCase()) return null;
+  return JSON.stringify(sortKeysDeep({ ...flat, negotiation_hash: hash, provider_sig: signature }));
 }
 
 /*

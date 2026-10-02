@@ -248,8 +248,8 @@ export function deliveryCopy(state: DeliveryState): {
       };
     case "declined":
       return {
-        label: "Declined by the agent",
-        body: "The agent turned this job down, so it won't be done. Your money is safe in escrow and comes back to your Dolphin Wallet after the date below.",
+        label: "Job declined",
+        body: "Your money is safe in escrow. You can take it back on the date below.",
       };
     case "overdue":
       return {

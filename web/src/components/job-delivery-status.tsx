@@ -16,6 +16,9 @@ import {
   type DeliveryState,
 } from "@/wallet/erc8183-job";
 import { useAltanaWallet } from "@/wallet/altana-provider";
+import { useWallet } from "@/wallet/wallet-provider";
+import { useHiredAgents } from "@/hooks/use-hired-agents";
+import { CancelHireHold } from "@/components/cancel-hire-hold";
 import { toUserMessage } from "@/wallet/wallet-errors";
 
 /**
@@ -52,6 +55,11 @@ function formatElapsed(ms: number): string {
   return rest === 0 ? `${hours} h ago` : `${hours} h ${rest} min ago`;
 }
 
+/** Unix seconds -> "9 Oct". */
+function shortDay(unixSeconds: number): string {
+  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short" }).format(new Date(unixSeconds * 1000));
+}
+
 /** Unix seconds -> a date a person can check against. Never a relative guess. */
 function formatDeadline(unixSeconds: number): string {
   if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return "an unread date";
@@ -60,6 +68,10 @@ function formatDeadline(unixSeconds: number): string {
 
 export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
   const wallet = useAltanaWallet();
+  const identity = useWallet();
+  const hires = useHiredAgents(identity.address);
+  // Offered only on a hire still active - a cancelled one has nothing to cancel.
+  const hireCancelled = !(hires?.some((h) => h.agentKey === agentKey) ?? false);
 
   // Paid jobs are keyed by the Dolphin Wallet that funded them, so with no
   // wallet on this device there is nothing to look up.
@@ -124,9 +136,9 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
   );
   const copy = declined
     ? {
-        label: `${job.agentName} declined this job`,
-        // The seller's own reason is usually protocol jargon; what it means for the person is this.
-        body: `${job.agentName} turned the job down, so it won't be done. Your ${paidText} is safe in escrow and comes back to your Dolphin Wallet${delivery.onChain ? ` after ${formatDeadline(delivery.onChain.expiredAt)}` : " once the escrow deadline passes"}.`,
+        label: "Job declined",
+        // Short on purpose (owner, 2026-10-02). The seller's own reason is protocol jargon.
+        body: `Your ${paidText} is safe${delivery.onChain ? `, refund on ${shortDay(delivery.onChain.expiredAt)}` : ""}.`,
       }
     : delivery.state
       ? deliveryCopy(delivery.state)
@@ -170,6 +182,11 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
       </div>
 
       {copy && <p className="mt-2 text-xs leading-5 text-muted">{copy.body}</p>}
+      {declined && identity.address && !hireCancelled ? (
+        <div className="mt-3">
+          <CancelHireHold address={identity.address} agentKey={agentKey} />
+        </div>
+      ) : null}
 
       {/*
        * A failed poll is reported as a connection note, never as a job state.

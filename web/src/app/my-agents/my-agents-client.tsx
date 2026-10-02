@@ -175,7 +175,7 @@ function BuiltSection({ address }: { address: string }) {
 
 const JOB_WORDS: Record<DeliveryState, { tone: "live" | "practice" | "idle"; text: string }> = {
   working: { tone: "live", text: "Working on your job" },
-  declined: { tone: "practice", text: "Declined - money safe, refund after the deadline" },
+  declined: { tone: "practice", text: "Job declined - money safe" },
   overdue: { tone: "practice", text: "Taking longer than usual" },
   delivered: { tone: "live", text: "Delivered" },
   settled: { tone: "idle", text: "Done and paid" },

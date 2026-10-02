@@ -15,7 +15,7 @@ describe("deliveryStateFor", () => {
     const state = deliveryStateFor(fundedNothingSubmitted, 60_000, { accepted: false });
     expect(state).toBe("declined");
     expect(isTerminal(state)).toBe(true);
-    expect(deliveryCopy(state).label).toBe("Declined by the agent");
+    expect(deliveryCopy(state).label).toBe("Job declined");
   });
 
   it("still reads working when the seller accepted or was never asked", () => {

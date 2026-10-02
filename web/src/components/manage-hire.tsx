@@ -27,26 +27,24 @@
  */
 
 import Link from "next/link";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { useState } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
-import { HoldButton } from "@/components/hold-button";
+import { CancelHireHold } from "@/components/cancel-hire-hold";
 import { OneLine } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { TrackRecord } from "@/components/track-record";
 import { categoryLabel } from "@/constants/agents";
-import { agentHiresApi, agentPaymentsApi, type AgentJobRow } from "@/convex/api";
+import { agentPaymentsApi, type AgentJobRow } from "@/convex/api";
 import { useJobDelivery } from "@/hooks/use-job-delivery";
 import { useNow } from "@/hooks/use-now";
 import { priceTextOr, usePriceText } from "@/hooks/use-price-text";
-import { track } from "@/lib/analytics";
 import type { Agent } from "@/types/agent";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { hasDeliverable, type DeliveryState } from "@/wallet/erc8183-job";
 import { ESCROW_DISPUTE_WINDOW_SECONDS, formatTokenAmount } from "@/wallet/erc8183-policy";
 import { toUserMessage } from "@/wallet/wallet-errors";
-import { useWalletSession } from "@/wallet/wallet-session";
 
 export type HireRow = {
   agentKey: string;
@@ -103,6 +101,8 @@ function useJobs(agentKey: string): AgentJobRow[] | undefined {
 }
 
 const STEPS = ["Paid", "Working", "Delivered", "Paid out"] as const;
+/** A declined job never works or delivers; its road is paid, declined, refunded. */
+const DECLINED_STEPS = ["Paid", "Declined", "Refund"] as const;
 
 /** Which step is lit, and whether the job ended somewhere off the happy path. */
 function stepFor(state: DeliveryState | undefined): { index: number; tone: "live" | "warn" | "done" } {
@@ -124,11 +124,13 @@ function stepFor(state: DeliveryState | undefined): { index: number; tone: "live
   }
 }
 
-function Tracker({ state }: { state: DeliveryState | undefined }) {
-  const { index, tone } = stepFor(state);
+function Tracker({ state, refunded = false }: { state: DeliveryState | undefined; refunded?: boolean }) {
+  const declined = state === "declined";
+  const { index, tone } = declined ? { index: refunded ? 2 : 1, tone: refunded ? ("done" as const) : ("warn" as const) } : stepFor(state);
+  const steps: readonly string[] = declined ? DECLINED_STEPS : STEPS;
   return (
     <ol className="tracker" data-tone={tone}>
-      {STEPS.map((label, step) => (
+      {steps.map((label, step) => (
         <li
           className="tracker__step"
           data-state={step < index || (tone === "done" && step === index) ? "done" : step === index ? "now" : "next"}
@@ -151,7 +153,7 @@ function nowSentence(agent: Agent, state: DeliveryState | undefined, submittedAt
     case "working":
       return `${agent.name} is working on your request. This page updates by itself.`;
     case "declined":
-      return `${agent.name} turned this job down, so it won't be done. Your money is safe in escrow${expiredAt > 0 ? ` and you can take it back on ${day(expiredAt * 1000)}` : ""}.`;
+      return `Job declined. Your money is safe${expiredAt > 0 ? `, refund on ${day(expiredAt * 1000)}` : ""}.`;
     case "overdue":
       return `Nothing yet, and it is taking longer than usual. ${agent.name} can still deliver, or it may have declined the job.${expiredAt > 0 ? ` If nothing arrives by ${day(expiredAt * 1000)}, you can take your money back.` : ""}`;
     case "delivered":
@@ -301,7 +303,7 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
             Check now
           </button>
         </div>
-        <Tracker state={delivery.state} />
+        <Tracker refunded={Boolean(job.refundedAt)} state={delivery.state} />
         <p className="mt-4 text-[0.92rem] leading-6 text-ink">
           {job.refundedAt
             ? "You took your money back for this job."
@@ -412,10 +414,7 @@ function SidePanel({
   isCancelled: boolean;
   onCancelled: () => void;
 }) {
-  const session = useWalletSession();
-  const cancelHire = useMutation(agentHiresApi.agentHires.cancelHire);
-  const [cancel, setCancel] = useState<"idle" | "cancelling" | { error: string }>("idle");
-
+  const declined = useJobDelivery(job).state === "declined";
   const paid = usePriceText({
     amountRaw: job?.budgetRaw,
     token: job?.paymentToken,
@@ -423,29 +422,8 @@ function SidePanel({
     symbol: job?.paymentTokenSymbol,
   });
 
-  async function runCancel() {
-    setCancel("cancelling");
-    try {
-      // Signs in if needed rather than sending the person elsewhere to do it.
-      let token = session.sessionToken;
-      if (!token) {
-        token = await session.signIn(address);
-        if (!token) {
-          setCancel("idle");
-          return;
-        }
-      }
-      await cancelHire({ agentKey: agent.agentKey, sessionToken: token });
-      track("hire_cancelled", { agentKey: agent.agentKey });
-      onCancelled();
-      setCancel("idle");
-    } catch (cause) {
-      setCancel({ error: toUserMessage(cause, "The hire could not be cancelled. Nothing has changed.") });
-    }
-  }
-
   const rows: [string, string][] = [
-    ["Status", isCancelled ? "Cancelled" : "Active"],
+    ["Status", isCancelled ? "Cancelled" : declined ? "Job declined" : "Active"],
     ["Hired", day(hire.hiredAt)],
     ["Paid", job ? priceTextOr(paid, paidText(job)) : agent.protocol === "mcp" ? "Free" : "Nothing yet"],
   ];
@@ -481,29 +459,9 @@ function SidePanel({
               Cancelling removes {agent.name} from your active list.
               {job ? " It does not refund a payment - that money is held on-chain, where Dolphin has no control." : ""}
             </p>
-            <HoldButton
-              backgroundColor="var(--paper)"
-              className="manage-hold"
-              disabled={cancel === "cancelling"}
-              doneLabel="Cancelling..."
-              fillColor="#c9362b"
-              fillTextColor="#ffffff"
-              holdTime={1600}
-              onHold={() => void runCancel()}
-              radius={11}
-              resetAfter={1800}
-              size="md"
-              textColor="var(--hold-danger)"
-            >
-              Hold to cancel hire
-            </HoldButton>
+            <CancelHireHold address={address} agentKey={agent.agentKey} onCancelled={onCancelled} />
           </div>
         )}
-        {typeof cancel === "object" ? (
-          <p className="mt-2 text-[0.76rem] leading-5 text-danger" role="alert">
-            {cancel.error}
-          </p>
-        ) : null}
       </div>
     </section>
   );

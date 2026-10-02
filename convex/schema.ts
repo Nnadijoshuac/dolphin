@@ -1046,6 +1046,8 @@ export default defineSchema({
     protocol: v.optional(v.union(v.literal("mcp"), v.literal("a2a"))),
     /** Price per call in U base units (18 decimals), paid with x402. Absent or null: free. */
     priceRaw: v.optional(v.union(v.string(), v.null())),
+    /** Its read-only blocks at publish (PUBLIC_BLOCK_TYPES), so a hire gets what the builder tested. */
+    blocks: v.optional(v.array(v.object({ id: v.string(), type: v.string(), config: v.any() }))),
     draftId: v.id("agentDrafts"),
     ownerAddress: v.string(),
     network: v.union(v.literal("bsc"), v.literal("bsc-testnet")),

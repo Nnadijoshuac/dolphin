@@ -5,6 +5,7 @@ import { bscTestnet } from "viem/chains";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { PUBLIC_BLOCK_TYPES, activeBlocks, type AgentBlock } from "./lib/agentBlocks";
 import { draftGaps } from "./lib/agentSpec";
 import { MAX_ICONS_PER_WALLET_PER_DAY } from "./lib/iconPolicy";
 import { bscPublicClient } from "./lib/bscClient";
@@ -293,6 +294,7 @@ export const prepareListing = mutation({
       hirePriceUsd: priceRaw ? null : priceUsd,
       protocol,
       priceRaw,
+      blocks: activeBlocks((draft.blocks ?? []) as AgentBlock[], draft.detached).filter((block) => PUBLIC_BLOCK_TYPES.includes(block.type)),
       iconStorageId: icon.storageId,
       iconContentType: icon.contentType,
       updatedAt: Date.now(),

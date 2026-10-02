@@ -9,6 +9,7 @@ import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { McpError, callMcpTool, listMcpTools, openMcpSession, MCP_PROTOCOL_VERSION } from "./lib/mcpClient";
 import { OpenRouterError, chatCompletion, isBrainProvider, type BrainEndpoint, type ChatMessage } from "./lib/openrouter";
 import { isMutating } from "./lib/toolCapability";
+import { PUBLIC_BLOCK_TYPES, blockToolDefinitions, readIndicators, runBlockTool, type AgentBlock } from "./lib/agentBlocks";
 import { U_TOKEN, X402_NETWORK, formatU } from "./lib/x402";
 import { KERNEL, NEGOTIATE_SKILLS, NOTIFY_SKILLS, STATUS_SKILLS } from "./lib/erc8183Seller";
 // A cycle with erc8183Seller.ts (it calls ask); only functions cross it, at call time.
@@ -390,19 +391,33 @@ export async function ask(ctx: ActionCtx, listing: Listing, question: string, wa
   const sources = await liveSources(ctx, listing);
   const allowedTools = new Set(listing.tools.map((tool) => `${tool.agentKey}\u0000${tool.toolName}`));
   const menu = await buildToolMenu(sources, (agentKey, toolName) => allowedTools.has(`${agentKey}\u0000${toolName}`));
+  // Its read-only blocks, as published (2026-10-02): the agent a buyer hires is the one the builder tested.
+  const blocks = ((listing.blocks ?? []) as AgentBlock[]).filter((block) => PUBLIC_BLOCK_TYPES.includes(block.type));
+  const blockTools = blockToolDefinitions(blocks);
+  const allTools = [...menu.tools, ...blockTools];
+  const market = blocks.find((block) => block.type === "market");
+  const indicators = blocks.find((block) => block.type === "indicators");
+  const reads: string[] = [];
+  if (market && market.type === "market") {
+    reads.push((await runBlockTool(blocks, "block_market_snapshot", "{}", 0)).text);
+    if (indicators && indicators.type === "indicators") {
+      reads.push(await readIndicators(market.config, indicators.config.timeframe).catch(() => "Indicators: unavailable right now."));
+    }
+  }
+  const readNote = reads.length ? `\n\nDATA YOUR BLOCKS READ JUST NOW (live - quote only these numbers):\n${reads.join("\n")}` : "";
   const addressNote = wallet
     ? `\n\nTHE ASKER'S WALLET ADDRESS: ${wallet}. When a tool asks for the user's address, pass this one.`
     : "\n\nNo wallet address was given. If a question needs one, say so.";
 
   const messages: ChatMessage[] = [
-    { role: "system", content: `${TRY_CONSULT_PROMPT}${addressNote}` },
+    { role: "system", content: `${TRY_CONSULT_PROMPT}${addressNote}${readNote}` },
     { role: "user", content: question },
   ];
 
   try {
     let remaining = MAX_TOOL_CALLS;
-    for (let round = 0; round < MAX_TOOL_ROUNDS && remaining > 0 && menu.tools.length > 0; round++) {
-      const turn = await chatCompletion({ messages, tools: menu.tools, toolChoice: "auto", ...(endpoint ? { endpoint } : {}) });
+    for (let round = 0; round < MAX_TOOL_ROUNDS && remaining > 0 && allTools.length > 0; round++) {
+      const turn = await chatCompletion({ messages, tools: allTools, toolChoice: "auto", ...(endpoint ? { endpoint } : {}) });
       if (turn.toolCalls.length === 0) break;
       const batch = turn.toolCalls.slice(0, remaining);
       remaining -= batch.length;
@@ -410,7 +425,10 @@ export async function ask(ctx: ActionCtx, listing: Listing, question: string, wa
       for (const call of batch) {
         const binding = menu.bindings.get(call.function.name);
         let content: string;
-        if (!binding) {
+        if (call.function.name.startsWith("block_") && blockTools.some((tool) => tool.function.name === call.function.name)) {
+          const result = await runBlockTool(blocks, call.function.name, call.function.arguments || "{}", 0);
+          content = `[${call.function.name}]\n${result.text.slice(0, 6_000)}`;
+        } else if (!binding) {
           content = `No such tool: ${call.function.name}.`;
         } else {
           let callArgs: Record<string, unknown> = {};
@@ -437,6 +455,7 @@ export async function ask(ctx: ActionCtx, listing: Listing, question: string, wa
       content:
         tryAnswerPrompt({ name: listing.name, description: listing.description, instructions: listing.instructions, tools: listing.tools }) +
         addressNote +
+        readNote +
         (unreachable.length ? `\n\nTOOLS YOU COULD NOT USE THIS TURN:\n${unreachable.join("\n")}` : ""),
     };
     const final = await chatCompletion({ messages, ...(endpoint ? { endpoint } : {}) });

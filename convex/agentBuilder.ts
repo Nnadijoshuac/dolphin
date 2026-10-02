@@ -1323,6 +1323,7 @@ export async function runTryTurn(
               const block = blocks.find(
                 (candidate) =>
                   call.function.name === blockToolNameFor(candidate.type) ||
+                  (candidate.type === "safety" && call.function.name === "block_token_market") ||
                   (candidate.type === "memory" && (call.function.name === "block_remember" || call.function.name === "block_recall")),
               );
               const started = Date.now();

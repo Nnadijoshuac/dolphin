@@ -426,6 +426,13 @@ function trendReport(daily: ReadonlyArray<readonly number[]>, price: number | nu
 export type BlockToolResult = { text: string; isError: boolean; ticket?: unknown };
 
 /** The built-in tools a draft's blocks give its Brain. Names are `block_*` so they cannot collide with MCP tools. */
+/**
+ * Blocks a PUBLISHED agent runs for strangers (2026-10-02): they only read
+ * public data, need no key of the builder's, and cannot move anything.
+ * Swap, Hire and Memory stay in the owner's own runs.
+ */
+export const PUBLIC_BLOCK_TYPES: readonly BlockType[] = ["market", "safety", "indicators"];
+
 export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "propose" | "execute" = "propose"): ToolDefinition[] {
   const tools: ToolDefinition[] = [];
   const market = blocks.find((block) => block.type === "market");
@@ -445,6 +452,20 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "pro
       function: {
         name: "block_token_safety",
         description: "Security check of a BNB Chain token contract: honeypot, buy/sell tax, owner powers, holder concentration, LP lock.",
+        parameters: {
+          type: "object",
+          properties: { tokenAddress: { type: "string", description: "The token contract address (0x…)." } },
+          required: ["tokenAddress"],
+          additionalProperties: false,
+        },
+      },
+    });
+    // Any token's market, not just the Price feed's one (2026-10-02): a safety verdict reads better beside price and liquidity.
+    tools.push({
+      type: "function",
+      function: {
+        name: "block_token_market",
+        description: "Live market data for any BNB Chain token by address: price, liquidity, 24h volume, 1h and 24h change, and which DEX pool.",
         parameters: {
           type: "object",
           properties: { tokenAddress: { type: "string", description: "The token contract address (0x…)." } },
@@ -572,6 +593,19 @@ export async function runBlockTool(
           `24h volume ${money(pair.volume24hUsd)}, 1h change ${pair.change1hPct ?? "unknown"}%, 24h change ${pair.change24hPct ?? "unknown"}%. ` +
           `Hourly candles (UTC, oldest first): ${candleText}. ` +
           (daily.length ? trendReport(daily, pair.priceUsd) : "Daily trend: unavailable right now."),
+        isError: false,
+      };
+    }
+
+    if (name === "block_token_market") {
+      if (!blocks.some((block) => block.type === "safety")) return { text: "This agent has no Safety block.", isError: true };
+      if (typeof args.tokenAddress !== "string" || !isAddress(args.tokenAddress)) return { text: "tokenAddress must be a 0x address.", isError: true };
+      const pair = await bscPairFor(args.tokenAddress);
+      if (!pair) return { text: "That token has no BNB Chain pool with liquidity right now.", isError: true };
+      return {
+        text:
+          `On ${pair.dex} (pool ${pair.pairAddress}): price ${money(pair.priceUsd)}, liquidity ${money(pair.liquidityUsd)}, ` +
+          `24h volume ${money(pair.volume24hUsd)}, 1h change ${pair.change1hPct ?? "unknown"}%, 24h change ${pair.change24hPct ?? "unknown"}%.`,
         isError: false,
       };
     }

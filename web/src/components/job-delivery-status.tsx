@@ -34,6 +34,7 @@ import { toUserMessage } from "@/wallet/wallet-errors";
 /** Tone per state, so one state cannot look "good" on one screen and "bad" on another. */
 const STATE_TONE: Record<DeliveryState, "live" | "wait" | "warn"> = {
   working: "wait",
+  declined: "warn",
   overdue: "warn",
   delivered: "live",
   settled: "live",
@@ -116,8 +117,7 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
    * safe in escrow, and when it comes back. A job description cannot change
    * after funding, so the refusal is final for this job.
    */
-  const declined =
-    job.sellerReply && !job.sellerReply.accepted && (delivery.state === "working" || delivery.state === "overdue" || delivery.state === null);
+  const declined = delivery.state === "declined";
   const paidText = priceTextOr(
     paidPrice,
     `${formatTokenAmount(job.budgetRaw, job.paymentTokenDecimals)} ${job.paymentTokenSymbol}`,

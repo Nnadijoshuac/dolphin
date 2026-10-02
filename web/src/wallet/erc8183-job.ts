@@ -177,6 +177,13 @@ export const DELIVERY_TIMEOUT_MS = 20 * 60 * 1000;
 export type DeliveryState =
   /** Escrow funded, seller has not submitted, inside the expected window. */
   | "working"
+  /**
+   * The seller REFUSED the funded job when told it was paid (2026-10-02).
+   * On chain identical to "working" - FUNDED, nothing submitted - so it is
+   * known only from the seller's own answer, kept on the job as sellerReply.
+   * Final for this job: a job description cannot change after funding.
+   */
+  | "declined"
   /** Same, but past DELIVERY_TIMEOUT_MS. Not an error - just honest. */
   | "overdue"
   /** Seller submitted a deliverable. This is what the user is waiting for. */
@@ -203,10 +210,15 @@ export function hasDeliverable(job: OnChainJob): boolean {
  * reload or a revisit shows the true age of the job rather than restarting
  * the clock at zero.
  */
-export function deliveryStateFor(job: OnChainJob, elapsedMs: number): DeliveryState {
+export function deliveryStateFor(
+  job: OnChainJob,
+  elapsedMs: number,
+  sellerReply?: { accepted: boolean } | null,
+): DeliveryState {
   if (job.statusName === "COMPLETED") return "settled";
   if (job.statusName === "REJECTED") return "rejected";
   if (hasDeliverable(job)) return "delivered";
+  if (job.statusName === "FUNDED" && sellerReply && !sellerReply.accepted) return "declined";
   if (job.statusName === "EXPIRED") return "expired";
   if (job.statusName === "OPEN") return "unfunded";
   return elapsedMs >= DELIVERY_TIMEOUT_MS ? "overdue" : "working";
@@ -216,6 +228,7 @@ export function deliveryStateFor(job: OnChainJob, elapsedMs: number): DeliverySt
 export function isTerminal(state: DeliveryState): boolean {
   return (
     state === "delivered" ||
+    state === "declined" ||
     state === "settled" ||
     state === "rejected" ||
     state === "expired"
@@ -232,6 +245,11 @@ export function deliveryCopy(state: DeliveryState): {
       return {
         label: "Agent working",
         body: "The escrow is funded and the agent has been told to start. Dolphin is reading the job from BNB Smart Chain every 10 seconds and will show the deliverable the moment it is submitted.",
+      };
+    case "declined":
+      return {
+        label: "Declined by the agent",
+        body: "The agent turned this job down, so it won't be done. Your money is safe in escrow and comes back to your Dolphin Wallet after the date below.",
       };
     case "overdue":
       return {

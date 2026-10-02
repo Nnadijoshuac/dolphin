@@ -58,7 +58,7 @@ export function useJobDelivery(job: AgentJobRow | null | undefined): JobDelivery
      */
     refetchInterval: (q) => {
       const data = q.state.data;
-      if (data && isTerminal(deliveryStateFor(data, elapsedFrom(job)))) return false;
+      if (data && isTerminal(deliveryStateFor(data, elapsedFrom(job), job?.sellerReply))) return false;
       return elapsedFrom(job) >= DELIVERY_TIMEOUT_MS
         ? SLOW_POLL_INTERVAL_MS
         : POLL_INTERVAL_MS;
@@ -100,7 +100,7 @@ export function useJobDelivery(job: AgentJobRow | null | undefined): JobDelivery
       : Math.max(0, query.dataUpdatedAt - startedAtMs);
 
   const onChain = query.data;
-  const state = onChain ? deliveryStateFor(onChain, elapsedMs) : undefined;
+  const state = onChain ? deliveryStateFor(onChain, elapsedMs, job?.sellerReply) : undefined;
 
   return {
     onChain,

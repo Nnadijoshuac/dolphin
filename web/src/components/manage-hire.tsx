@@ -115,6 +115,7 @@ function stepFor(state: DeliveryState | undefined): { index: number; tone: "live
       return { index: 1, tone: "warn" };
     case "rejected":
     case "expired":
+    case "declined":
       return { index: 1, tone: "warn" };
     case "unfunded":
       return { index: 0, tone: "warn" };
@@ -149,6 +150,8 @@ function nowSentence(agent: Agent, state: DeliveryState | undefined, submittedAt
       return "Checking the job on BNB Chain...";
     case "working":
       return `${agent.name} is working on your request. This page updates by itself.`;
+    case "declined":
+      return `${agent.name} turned this job down, so it won't be done. Your money is safe in escrow${expiredAt > 0 ? ` and you can take it back on ${day(expiredAt * 1000)}` : ""}.`;
     case "overdue":
       return `Nothing yet, and it is taking longer than usual. ${agent.name} can still deliver, or it may have declined the job.${expiredAt > 0 ? ` If nothing arrives by ${day(expiredAt * 1000)}, you can take your money back.` : ""}`;
     case "delivered":

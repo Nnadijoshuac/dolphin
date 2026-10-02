@@ -18,7 +18,20 @@ import { parseAbiItem, toEventSelector } from "viem";
 
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
-import { HASH_PATTERN, handleMcp, registrationFile } from "./builtAgentServer";
+import {
+  HASH_PATTERN,
+  agentCard,
+  handleA2A,
+  handleMcp,
+  isPaidCall,
+  listingProtocol,
+  payTo,
+  registrationFile,
+  type RpcRequest,
+} from "./builtAgentServer";
+import { apiBase } from "./builtAgents";
+import { PaymentRejected, decodePayment, formatU, paymentChallenge, paymentResponseHeader, textToBase64, type DecodedPayment } from "./lib/x402";
+import { checkPayment, settlePayment } from "./x402";
 
 const http = httpRouter();
 
@@ -199,14 +212,24 @@ for (const path of ["/api/v1/contracts", "/api/v1/hires", "/api/v1/agents", "/ap
  *
  *   GET  /api/v1/built/<hash>/registration.json   ERC-8004 registration file
  *   GET  /api/v1/built/<hash>/icon                the agent's icon
- *   POST /api/v1/built/<hash>/mcp                 MCP: its tools + `ask`
+ *   GET  /api/v1/built/<hash>/agent-card.json     A2A agent card (A2A listings)
+ *   POST /api/v1/built/<hash>/mcp                 MCP: its tools + `ask` (MCP listings)
+ *   POST /api/v1/built/<hash>/a2a                 A2A: message/send (A2A listings)
+ *
+ * PAID CALLS (2026-10-02): a listing with a price answers its work call
+ * (tools/call, message/send) with HTTP 402 and x402 terms until it carries a
+ * PAYMENT-SIGNATURE / X-PAYMENT header. Then: check (lib/x402.ts), simulate
+ * against U and reserve the nonce (x402.ts), do the work, and settle only if
+ * the work succeeded - a failed call is never charged, and a call whose
+ * payment cannot be settled does not get its result.
  * ------------------------------------------------------------------------ */
 
 const BUILT_PREFIX = "/api/v1/built/";
 const BUILT_CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "content-type, accept, mcp-protocol-version, mcp-session-id",
+  "access-control-allow-headers": "content-type, accept, mcp-protocol-version, mcp-session-id, payment-signature, x-payment",
+  "access-control-expose-headers": "payment-required, x-payment-requirements, payment-response, x-payment-response",
 };
 /** An MCP request is a few hundred bytes. Anything near this is not one. */
 const MAX_MCP_BODY_BYTES = 64 * 1024;
@@ -243,6 +266,12 @@ http.route({
         },
       });
     }
+    if (path.resource === "agent-card.json") {
+      if (listingProtocol(listing) !== "a2a" || listing.status === "unpublished" || listing.purpose === "private") return notFound();
+      return new Response(JSON.stringify(agentCard(listing), null, 2), {
+        headers: { ...BUILT_CORS, "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=60" },
+      });
+    }
     if (path.resource === "icon") {
       const blob = await ctx.storage.get(listing.iconStorageId);
       if (!blob) return notFound();
@@ -266,10 +295,12 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const path = builtPath(request);
-    if (!path || path.resource !== "mcp") return notFound();
+    if (!path || (path.resource !== "mcp" && path.resource !== "a2a")) return notFound();
     const listing = await ctx.runQuery(internal.builtAgents.byHash, { hash: path.hash });
     // A "just for me" agent has no public door (convex/builtAgentServer.ts).
     if (!listing || listing.status === "unpublished" || listing.purpose === "private") return notFound();
+    // Each listing answers on the one door it was published with.
+    if (path.resource !== listingProtocol(listing)) return notFound();
 
     const text = await request.text();
     const rpc = (body: unknown, status = 200) =>
@@ -289,8 +320,88 @@ http.route({
     if (!message || typeof message !== "object" || Array.isArray(message)) {
       return rpc({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Send one JSON-RPC request at a time." } }, 400);
     }
-    const response = await handleMcp(ctx, listing, message as Parameters<typeof handleMcp>[2]);
-    return response === null ? rpc(null, 202) : rpc(response);
+    const rpcMessage = message as RpcRequest;
+    const handle = () => (path.resource === "a2a" ? handleA2A(ctx, listing, rpcMessage) : handleMcp(ctx, listing, rpcMessage));
+    if (!isPaidCall(listing, rpcMessage)) {
+      const response = await handle();
+      return response === null ? rpc(null, 202) : rpc(response);
+    }
+
+    /* ───── a paid call ───── */
+    const priceRaw = listing.priceRaw as string;
+    const resourceUrl = `${apiBase()}/api/v1/built/${listing.hash}/${path.resource}`;
+    const toolName = typeof rpcMessage.params?.name === "string" ? rpcMessage.params.name.slice(0, 60) : "";
+    const resource = path.resource === "a2a" ? "a2a" : `mcp:${toolName}`;
+    const challenge = (error?: string) => {
+      const body = paymentChallenge({
+        priceRaw,
+        payTo: payTo(listing),
+        resourceUrl,
+        description: `${listing.name} · ${formatU(priceRaw)} U per call`,
+        error,
+      });
+      const encoded = textToBase64(JSON.stringify(body));
+      return new Response(JSON.stringify(body), {
+        status: 402,
+        headers: {
+          ...BUILT_CORS,
+          "content-type": "application/json; charset=utf-8",
+          "payment-required": encoded,
+          "x-payment-requirements": encoded,
+        },
+      });
+    };
+
+    const header = request.headers.get("payment-signature") ?? request.headers.get("x-payment");
+    if (!header) return challenge();
+    let payment: DecodedPayment;
+    try {
+      payment = decodePayment(header, { priceRaw, payTo: payTo(listing), nowSeconds: Math.floor(Date.now() / 1000) });
+    } catch (cause) {
+      return challenge(cause instanceof PaymentRejected ? cause.message : "The payment could not be read.");
+    }
+    const refused = await checkPayment(ctx, payment);
+    if (refused) return challenge(refused);
+    const reservation = await ctx.runMutation(internal.x402.reserve, {
+      hash: listing.hash,
+      payer: payment.authorization.from,
+      nonce: payment.authorization.nonce,
+      payTo: payment.authorization.to,
+      valueRaw: payment.authorization.value.toString(),
+      resource,
+    });
+    if (!reservation) return challenge("That payment was already used.");
+
+    let response: Record<string, unknown> | null;
+    try {
+      response = await handle();
+    } catch {
+      response = null;
+    }
+    const result = response?.result as { isError?: unknown } | undefined;
+    const failed = !response || "error" in response || result?.isError === true;
+    if (failed) {
+      // Not charged: the authorization is simply never submitted.
+      await ctx.runMutation(internal.x402.finish, { id: reservation, status: "released", txHash: null, detail: "The call failed." });
+      return response ? rpc(response) : rpc({ jsonrpc: "2.0", id: rpcMessage.id ?? null, error: { code: -32603, message: "The agent failed." } }, 500);
+    }
+    try {
+      const transaction = await settlePayment(ctx, payment);
+      await ctx.runMutation(internal.x402.finish, { id: reservation, status: "settled", txHash: transaction, detail: null });
+      const receipt = paymentResponseHeader({ transaction, payer: payment.authorization.from });
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { ...BUILT_CORS, "content-type": "application/json; charset=utf-8", "payment-response": receipt, "x-payment-response": receipt },
+      });
+    } catch (cause) {
+      await ctx.runMutation(internal.x402.finish, {
+        id: reservation,
+        status: "failed",
+        txHash: null,
+        detail: cause instanceof Error ? cause.message : String(cause),
+      });
+      return challenge("The payment could not be settled, so the result was withheld. Nothing was charged.");
+    }
   }),
 });
 

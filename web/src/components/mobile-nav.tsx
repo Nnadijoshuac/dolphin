@@ -6,8 +6,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
-import { SetAndQuestLink } from "@/components/set-and-quest-link";
-import { WalletConnectButton } from "@/wallet/wallet-provider";
+import { WalletAvatar } from "@/components/wallet-avatar";
+import { SET_AND_QUEST_URL } from "@/constants/site";
+import { useAppStore } from "@/store/use-app-store";
+import { ALTANA_NETWORK_LABEL, formatBnb } from "@/wallet/altana-policy";
+import { useAltanaWallet } from "@/wallet/altana-provider";
+import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
 /**
  * THE PHONE'S NAVIGATION — a menu button and a full-screen menu.
@@ -45,15 +49,73 @@ const OPEN_EVENT = "dolphin:mobile-menu-open";
 const DESTINATIONS: ReadonlyArray<{
   path: string;
   label: string;
-  icon: GlyphName;
+  /** "brand" is the Dolphin mark itself; it had the same sparkle as Set and Quest. */
+  icon: GlyphName | "brand";
   hint: string;
 }> = [
   { path: "/", label: "Discover", icon: "discover", hint: "Browse the live catalog" },
   { path: "/search", label: "Search", icon: "search", hint: "Find an agent by skill" },
-  { path: "/dolphin", label: "Dolphin", icon: "sparkle", hint: "Ask about any agent" },
+  { path: "/dolphin", label: "Dolphin", icon: "brand", hint: "Ask about any agent" },
   { path: "/my-agents", label: "My agents", icon: "agents", hint: "Hires and saved setups" },
-  { path: "/wallet", label: "Wallet", icon: "wallet", hint: "Balances and access" },
+  { path: "/wallet", label: "Wallet", icon: "wallet", hint: "Balances, history, assets" },
 ];
+
+const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
+
+/**
+ * WHO YOU ARE, FIRST (2026-10-02, owner: the menu "is an eyesore"). The old
+ * menu's only account control was a full-width Connect button stranded at the
+ * bottom. This card names the Dolphin Wallet with its balance and the
+ * connected wallet, and is where Connect lives when nothing is connected.
+ */
+function AccountCard({ onNavigate }: { onNavigate: () => void }) {
+  const identity = useWallet();
+  const dolphin = useAltanaWallet();
+  const hidden = useAppStore((s) => s.hideBalances);
+  const identityAddress = identity.isConnected ? identity.address ?? null : null;
+  const dolphinAddress = dolphin.status === "connected" ? dolphin.address : null;
+  const balance =
+    dolphin.balanceWei !== null && !dolphin.balanceError
+      ? hidden
+        ? "••••"
+        : `${formatBnb(dolphin.balanceWei)} BNB`
+      : dolphin.isReadingBalance
+        ? "Reading…"
+        : "Unavailable";
+
+  return (
+    <section aria-label="Your account" className="mm-account">
+      <Link className="mm-account__main" href="/wallet" onClick={onNavigate}>
+        {dolphinAddress ? (
+          <WalletAvatar address={dolphinAddress} kind="bot" radius={12} size={42} />
+        ) : (
+          <span className="mm-tile"><CategoryGlyph color="currentColor" name="bot" size={20} /></span>
+        )}
+        <span className="mm-account__text">
+          <span className="mm-account__name">Dolphin Wallet</span>
+          <span className="mm-account__value">
+            {dolphinAddress ? balance : dolphin.status === "unsupported" ? "Not available on this browser" : "Not set up yet"}
+          </span>
+        </span>
+        <CategoryGlyph color="currentColor" name="chevron-right" size={16} strokeWidth={2} />
+      </Link>
+      <div className="mm-account__foot">
+        {identityAddress ? (
+          <>
+            <WalletAvatar address={identityAddress} kind="human" radius={8} size={24} />
+            <span className="mm-account__addr">{short(identityAddress)}</span>
+            <span className="mm-account__status">
+              <span aria-hidden="true" className="mm-dot" />
+              Connected
+            </span>
+          </>
+        ) : (
+          <WalletConnectButton connectLabel="Connect wallet" />
+        )}
+      </div>
+    </section>
+  );
+}
 
 function isActiveRoute(pathname: string, path: string) {
   if (path === "/") return pathname === "/" || pathname.startsWith("/agent/");
@@ -147,33 +209,45 @@ export function MobileNavDrawer() {
       ref={dialog}
     >
       <div className="mobile-menu__panel">
-        <div className="mobile-menu__head">
-          <Link aria-label="Dolphin home" className="mobile-menu__brand" href="/" onClick={closeMenu}>
-            <BrandMark size={28} />
+        <div className="mm-head">
+          <Link aria-label="Dolphin home" className="mm-brand" href="/" onClick={closeMenu}>
+            <BrandMark size={26} />
             <span>Dolphin</span>
           </Link>
-          <span className="mobile-menu__title">Explore</span>
-          <button
-            aria-label="Close menu"
-            className="mobile-menu__close"
-            onClick={closeMenu}
-            type="button"
-          >
+          <button aria-label="Close menu" className="mm-close" onClick={closeMenu} type="button">
             <CategoryGlyph color="currentColor" name="close" size={18} strokeWidth={2} />
           </button>
         </div>
 
-        <SetAndQuestLink onClick={closeMenu} variant="drawer" />
+        <AccountCard onNavigate={closeMenu} />
+
+        {/* The campaign, as a banner rather than a gold row between two rules. */}
+        <Link
+          aria-current={pathname.startsWith(SET_AND_QUEST_URL) ? "page" : undefined}
+          className="mm-quest"
+          href={SET_AND_QUEST_URL}
+          onClick={closeMenu}
+        >
+          <span aria-hidden="true" className="mm-quest__icon">
+            <CategoryGlyph color="currentColor" name="sparkle" size={20} strokeWidth={2} />
+          </span>
+          <span className="mm-quest__text">
+            <span className="mm-quest__title">Set and Quest</span>
+            <span className="mm-quest__hint">Your campaign progress</span>
+          </span>
+          <CategoryGlyph color="currentColor" name="chevron-right" size={16} strokeWidth={2} />
+        </Link>
 
         <nav aria-label="Primary">
-          <ul className="mobile-menu__list">
-            {DESTINATIONS.map((item, index) => {
+          <p className="mm-label">Menu</p>
+          <ul className="mm-list">
+            {DESTINATIONS.map((item) => {
               const active = isActiveRoute(pathname, item.path);
               return (
                 <li key={item.path}>
                   <Link
                     aria-current={active ? "page" : undefined}
-                    className={`mobile-menu__item${active ? " mobile-menu__item--active" : ""}`}
+                    className={`mm-item${active ? " mm-item--active" : ""}`}
                     href={item.path}
                     /*
                      * Closed on the CLICK, not on a pathname effect. Watching
@@ -185,25 +259,18 @@ export function MobileNavDrawer() {
                      */
                     onClick={closeMenu}
                   >
-                    <span className="mobile-menu__number">{String(index + 1).padStart(2, "0")}</span>
-                    <span aria-hidden="true" className="mobile-menu__icon">
-                      <CategoryGlyph
-                        color="currentColor"
-                        name={item.icon}
-                        size={19}
-                        strokeWidth={active ? 2.1 : 1.8}
-                      />
+                    <span aria-hidden="true" className="mm-tile">
+                      {item.icon === "brand" ? (
+                        <BrandMark size={20} />
+                      ) : (
+                        <CategoryGlyph color="currentColor" name={item.icon} size={19} strokeWidth={active ? 2.1 : 1.8} />
+                      )}
                     </span>
-                    <span className="mobile-menu__text">
-                      <span className="mobile-menu__label">{item.label}</span>
-                      <span className="mobile-menu__hint">{item.hint}</span>
+                    <span className="mm-item__text">
+                      <span className="mm-item__label">{item.label}</span>
+                      <span className="mm-item__hint">{item.hint}</span>
                     </span>
-                    <CategoryGlyph
-                      color="currentColor"
-                      name="chevron-right"
-                      size={15}
-                      strokeWidth={2}
-                    />
+                    <CategoryGlyph color="currentColor" name="chevron-right" size={15} strokeWidth={2} />
                   </Link>
                 </li>
               );
@@ -211,15 +278,10 @@ export function MobileNavDrawer() {
           </ul>
         </nav>
 
-        {/*
-         * Connect lives in the drawer because the screens' own header rows
-         * have space for a title and one control, and navigation is what
-         * people open a menu for. Same WalletConnectButton as everywhere else,
-         * so the two-step disconnect confirm comes with it.
-         */}
-        <div className="mobile-menu__wallet">
-          <WalletConnectButton connectLabel="Connect wallet" />
-        </div>
+        <p className="mm-foot">
+          <span aria-hidden="true" className="mm-dot" />
+          {ALTANA_NETWORK_LABEL} · Mainnet
+        </p>
       </div>
     </dialog>
   );

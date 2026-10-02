@@ -50,7 +50,8 @@ export type ScheduleConfig = { everyMinutes: number };
 export type PriceConfig = { direction: "above" | "below"; priceUsd: number };
 export type WalletWatchConfig = { addresses: string[]; label: string | null };
 export type HireConfig = { agentKey: string; agentName: string };
-export type MemoryConfig = { url: string; keyName: string | null };
+/** url null: placed (by the builder, 2026-10-02) but not connected to the person's server yet - it does nothing until it is. */
+export type MemoryConfig = { url: string | null; keyName: string | null };
 export type Timeframe = "1h" | "4h" | "1d";
 export const TIMEFRAMES: readonly Timeframe[] = ["1h", "4h", "1d"];
 export type IndicatorsConfig = { timeframe: Timeframe };
@@ -224,13 +225,18 @@ export function validateBlocks(input: unknown): AgentBlock[] {
       }
       case "memory": {
         const url = typeof config.url === "string" ? config.url.trim().replace(/\/+$/, "") : "";
+        const keyName = typeof config.keyName === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(config.keyName) ? config.keyName : null;
+        if (!url) {
+          // Placed, not connected yet: Dolphin keeps no agent memory, so it waits for the person's server.
+          out.push({ id, type, config: { url: null, keyName } });
+          break;
+        }
         if (!url.startsWith("https://") || url.length > 300) fail("The memory server needs an https:// address.");
         try {
           assertSafeUrl(url);
         } catch {
           fail("That memory server address is not reachable from the internet.");
         }
-        const keyName = typeof config.keyName === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(config.keyName) ? config.keyName : null;
         out.push({ id, type, config: { url, keyName } });
         break;
       }
@@ -500,7 +506,7 @@ export function blockToolDefinitions(blocks: readonly AgentBlock[], trades: "pro
       },
     });
   }
-  if (blocks.some((block) => block.type === "memory")) {
+  if (blocks.some((block) => block.type === "memory" && Boolean(block.config.url))) {
     tools.push(
       {
         type: "function",

@@ -48,7 +48,7 @@ import { syncTriggers } from "./lib/triggerSync";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { memoryBrief, recall, remember, type MemoryTarget } from "./lib/agentMemory";
-import { mergeBuilderBlocks } from "./lib/builderBlocks";
+import { gradesTokens, mergeBuilderBlocks, withVerdictRules } from "./lib/builderBlocks";
 import { quietBrief, readDataSource, readNews } from "./lib/analyticalBlocks";
 import { TRADING_PLAYBOOK, TRADING_RUN_RULES } from "./lib/tradingPlaybook";
 import { chatCompletion, customChatUrl, isBrainProvider, type ChatMessage } from "./lib/openrouter";
@@ -102,7 +102,7 @@ WHAT AN AGENT BUILT HERE IS. Never promise more than this:
 - A name, a short description, instructions (its strategy, called the Melon), and a few tools.
 - Its tools come ONLY from the TOOLS list you are given. They belong to other agents listed on Dolphin, and they only READ: prices, pools, positions, protocol data. Some return an unsigned transaction that the person would sign from their own wallet.
 - Its brain runs on the person's OWN model key (OpenAI or OpenRouter), which they add in the Keys tab and choose on the Brain block. Dolphin does not supply one.
-- The canvas TOOLBOX adds more. YOU set up Schedule, Price, Market, Safety, Risk limits and Swap through the \`blocks\` field (below). The person adds Wallet watch, Memory and Hire themselves - tell them which to add when the job needs them:
+- The canvas TOOLBOX adds more. YOU set up Schedule, Price, Market, Safety, Indicators, Signal, Risk limits, Swap and Memory through the \`blocks\` field (below). Memory you place NOT CONNECTED - tell the person to add their memory server's address on it. The person adds Wallet watch, Hire, Data source, News and Quiet hours themselves (each needs addresses, URLs, keys or dates only they have) - tell them which to add when the job needs them:
   - Market (the token it trades: live price, candles and a chart), Safety (token security checks).
   - Triggers: Schedule (every 15 minutes to daily), Price (when the token crosses a level), Wallet watch (when a wallet they follow - a KOL, a whale - transacts). With Autopilot switched on, the agent runs on these by itself, up to 48 times a day.
   - Risk limits (dollars per trade, trades per day) and Swap: the agent may then PROPOSE PancakeSwap trades within those limits. By default the person approves and signs every trade. They can opt in to "Trade without asking" (Draft tab) so it trades by itself for 1-30 days within limits the wallet enforces, and stop it any time. Nothing guarantees a profit - never promise one.
@@ -117,6 +117,26 @@ ${TRADING_PLAYBOOK}
   - Every trading agent starts in PAPER mode (pretend money, real prices, fees and gas) until the person switches it to Live in the Draft tab. The expanded Price feed chart has a Backtest tab that tests a simple rule (trend, RSI dip, DCA) on real history with fees and slippage - it tests rules, not the Brain.
 - NAMES ON THE CANVAS - use these when you talk to the person: the schedule block is the "Scheduler", the market data block is the "Price feed", and the swap block is the "Market" (where it buys and sells, after Risk limits). Every run source (a message, the Scheduler, a Price trigger, Wallet watch) plugs into one "Trigger", which starts the Brain once per run. The Brain's connected read blocks (Price feed, Safety, Memory) run automatically on every run.
 - Write the instructions so they use what is there: e.g. "When your price trigger fires, read the market snapshot, check safety, and propose a trade only if...". Rules with exact numbers beat vague judgement.
+- CALL TOOLS BY WHAT THEY ARE. The Safety block gives the agent two tools: "the Safety check" (GoPlus: honeypot, taxes in %, owner powers, top-10 share with burned and locked supply set apart, liquidity locked or burned, GoPlus's trusted list) and "the market lookup" (price, liquidity, volume and change for ANY token address). The Price feed reads ONE fixed token. Never tell an agent to use a tool that is not on the canvas or in TOOLS (there is no "report tool").
+
+WHAT A PUBLISHED AGENT RUNS. When other people or agents hire it, it answers with its instructions, its Brain, its TOOLS and its read-only blocks (Price feed, Safety, Indicators) only. Swap, Hire and Memory run only in the owner's own runs. So for an agent meant to be hired, do not rely on Memory or trading, and say so if the person asks for them.
+
+RULES THAT SURVIVE REAL TOKENS (token checkers, safety screens, anything that grades tokens). Write verdict rules that do not condemn well-known tokens - picture CAKE and USDT when you write them:
+- Owner powers (mint, pause, blacklist, change taxes) exist on many legitimate tokens - USDT and CAKE can both mint. If the token is on GoPlus's trusted list, mention these powers; do not condemn it for them.
+- Holder concentration must leave out burned and locked supply - CAKE's largest "holder" is the zero address at 93.6%, burned.
+- Unknown is not bad. GoPlus often has no tax or liquidity data for big tokens; the agent says "unknown" and does not punish it.
+- Hard red flags (always Avoid): honeypot or cannot sell, sell tax above 10%, owner can change balances or set a per-wallet tax or take back ownership, hidden owner, self-destruct, a creator who made honeypots before.
+- Give each verdict level its own conditions with no overlap, checked in order (Avoid, then Caution, then Safe).
+- Answer format: the verdict first, then one reason per line with the exact figure, then what to check. It reports risk; it gives no investment advice.
+- WRITE THE CONDITIONS INTO THE INSTRUCTIONS - never just "checked in order". Unless the person gave other numbers, use: AVOID if any hard red flag above. CAUTION if any of: buy or sell tax above 5%; owner can mint, change taxes, pause or blacklist (only mentioned if the token is on GoPlus's trusted list); upgradeable contract; source not verified; wallets that can sell hold more than 30% in the top 10; liquidity under $50,000; less than half the liquidity locked or burned, when known. SAFE otherwise.
+
+RECIPES - the shapes that work; add every block the job needs in one go:
+- Token checker (hired per token): Safety only. Buyer input: a token address. No Schedule, no Memory.
+- Trend or DCA trader: Schedule (240 or 1440), Price feed, Indicators (1d), Safety, Risk limits, Swap; Memory placed so it remembers its position.
+- Dip or momentum trigger: Price feed, Signal (rsiBelow 30, 1h, or an MA cross), Safety, Risk limits, Swap.
+- Price alert / watcher: Price feed and a Price trigger at the person's level.
+- Position or wallet monitor: the TOOLS that read positions; ask the person to add Wallet watch with the wallets to follow; Memory placed so it reports what changed.
+- News-aware trader: as the trader, and ask the person to add News with their feed and Quiet hours with the event dates.
 - It cannot send emails or messages, and cannot trade without the person signing. If asked, say so plainly and offer the closest thing it can do.
 - It is private until the person puts it on-chain.
 
@@ -127,7 +147,7 @@ HOW TO WORK:
 - description: one or two sentences saying concretely what it does and for whom.
 - instructions: written TO the agent in the second person ("You check..."). Say what it does, which tool to use for what, what to do when a tool fails or returns nothing, and that it must never guess a number. Plain text, no markdown headings.
 - toolIds: only ids from the TOOLS list that the job needs, usually 1 to 4. If nothing in the list fits, say so honestly and leave toolIds null. Never invent a tool. A trading agent built from blocks needs no tools; leave toolIds null.
-- blocks: for a trading or monitoring agent, set up what the playbook says it needs, in one go: e.g. a schedule (60 or 240 minutes for trend following, 1440 for daily DCA), the market (symbol from: BNB, BTCB, ETH, CAKE, XVS - never a stablecoin), safety, risk (default $5 a trade and 2 trades a day for a first test unless the person gave numbers), and swap. A price trigger only if the person named a level. Only include blocks you are adding or changing this turn; null otherwise. Then, in your reply, tell them the blocks you added and what to add themselves (Memory so it remembers its position; "Trade without asking" in the Draft tab if it should trade without their signature).
+- blocks: set up everything the RECIPE for the job needs, in one go: e.g. a schedule (60 or 240 minutes for trend following, 1440 for daily DCA), the market (symbol from: BNB, BTCB, ETH, CAKE, XVS - never a stablecoin), indicators (timeframe 1h, 4h or 1d), a signal (condition rsiBelow, rsiAbove, maCrossUp, maCrossDown, macdCrossUp or macdCrossDown; level for RSI; timeframe), safety, risk (default $5 a trade and 2 trades a day for a first test unless the person gave numbers), swap, and memory (placed not connected) for agents that must remember. Indicators and Signal need a market. A price trigger only if the person named a level. Fill only the fields a block uses; null the rest. Only include blocks you are adding or changing this turn; null otherwise. Then, in your reply, tell them the blocks you added, that Memory needs their server's address, and what to add themselves ("Trade without asking" in the Draft tab if it should trade without their signature).
 - Use null for every field you are not changing this turn.
 - reply: speak to the person in 1 to 3 short sentences: what you changed, and your one question if you have one. Only say you set up a block if it is in the blocks field of THIS reply. No JSON, no field names, no tool ids in the reply.
 
@@ -991,6 +1011,12 @@ export const ask = action({
       }
 
       const applied = applyBuilderReply(current, compiled.reply, offered);
+      // A token-verdict agent always carries real conditions (lib/builderBlocks.ts TOKEN_VERDICT_RULES).
+      const repairedInstructions = withVerdictRules(applied.draft.instructions ?? "");
+      if (repairedInstructions) {
+        applied.draft.instructions = repairedInstructions;
+        if (!applied.changed.includes("instructions")) applied.changed.push("instructions");
+      }
       if (applied.unknownToolIds.length > 0) {
         console.warn("[agentBuilder] model named tools that were not offered:", applied.unknownToolIds);
       }
@@ -1009,9 +1035,14 @@ export const ask = action({
        */
       let blockNote = "";
       let blocksSet = false;
-      if (compiled.reply.blocks) {
+      // ...and its Safety block, which reads what those conditions are about.
+      const needsSafety = gradesTokens(applied.draft.instructions) && !(compiled.reply.blocks ?? []).some((block) => block.type === "safety");
+      const proposedBlocks = needsSafety
+        ? [...(compiled.reply.blocks ?? []), { type: "safety", symbol: null, everyMinutes: null, direction: null, priceUsd: null, maxTradeUsd: null, maxTradesPerDay: null }]
+        : compiled.reply.blocks;
+      if (proposedBlocks) {
         const currentBlocks: AgentBlock[] = await ctx.runQuery(internal.agentBuilder.blocksForConversation, { conversationId });
-        const merged = await mergeBuilderBlocks(currentBlocks, compiled.reply.blocks);
+        const merged = await mergeBuilderBlocks(currentBlocks, proposedBlocks);
         if (merged.added.length > 0) {
           const saved: boolean = await ctx.runMutation(internal.agentBuilder.saveBuilderBlocks, { conversationId, ownerAddress, blocks: merged.blocks });
           if (saved) {
@@ -1169,7 +1200,7 @@ export async function runTryTurn(
       const memoryBlock = blocks.find((block) => block.type === "memory");
       let memoryTarget: MemoryTarget | null = null;
       let memoryNote = "";
-      if (memoryBlock && memoryBlock.type === "memory" && draftId) {
+      if (memoryBlock && memoryBlock.type === "memory" && memoryBlock.config.url && draftId) {
         const memoryKey: string | null = memoryBlock.config.keyName
           ? await ctx.runAction(internal.envVars.reveal, { walletAddress: brain.walletAddress, name: memoryBlock.config.keyName })
           : null;

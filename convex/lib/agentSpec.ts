@@ -114,15 +114,18 @@ export const BUILDER_REPLY_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["type", "symbol", "everyMinutes", "direction", "priceUsd", "maxTradeUsd", "maxTradesPerDay"],
+          required: ["type", "symbol", "everyMinutes", "direction", "priceUsd", "maxTradeUsd", "maxTradesPerDay", "timeframe", "condition", "level"],
           properties: {
-            type: { type: "string", enum: ["schedule", "price", "market", "safety", "risk", "swap"] },
+            type: { type: "string", enum: ["schedule", "price", "market", "safety", "risk", "swap", "indicators", "signal", "memory"] },
             symbol: { type: ["string", "null"], description: "market: a token symbol from the verified list." },
             everyMinutes: { type: ["number", "null"], description: "schedule: 15, 30, 60, 240 or 1440." },
             direction: { type: ["string", "null"], description: "price: above or below." },
             priceUsd: { type: ["number", "null"], description: "price: the level in USD." },
             maxTradeUsd: { type: ["number", "null"], description: "risk: dollars per trade." },
             maxTradesPerDay: { type: ["number", "null"], description: "risk: trades per day." },
+            timeframe: { type: ["string", "null"], description: "indicators and signal: 1h, 4h or 1d." },
+            condition: { type: ["string", "null"], description: "signal: rsiBelow, rsiAbove, maCrossUp, maCrossDown, macdCrossUp or macdCrossDown." },
+            level: { type: ["number", "null"], description: "signal: the RSI level for rsiBelow/rsiAbove." },
           },
         },
       },
@@ -174,6 +177,9 @@ export function parseBuilderReply(content: string): BuilderReply | null {
             priceUsd: typeof item.priceUsd === "number" ? item.priceUsd : null,
             maxTradeUsd: typeof item.maxTradeUsd === "number" ? item.maxTradeUsd : null,
             maxTradesPerDay: typeof item.maxTradesPerDay === "number" ? item.maxTradesPerDay : null,
+            timeframe: typeof item.timeframe === "string" ? item.timeframe : null,
+            condition: typeof item.condition === "string" ? item.condition : null,
+            level: typeof item.level === "number" ? item.level : null,
           }))
       : null;
     if (!isStringOrNull(name) || !isStringOrNull(description) || !isStringOrNull(instructions)) {

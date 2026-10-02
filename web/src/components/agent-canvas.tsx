@@ -381,7 +381,9 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
       return { title: `${block.config.events.length} event${block.config.events.length === 1 ? "" : "s"} · ${block.config.marginHours}h aside`, detail: next ? `Next: ${new Date(next).toUTCString().slice(5, 22)} UTC` : "No upcoming event" };
     }
     case "memory":
-      return { title: "Your memory server", detail: block.config.url.replace(/^https:\/\//, "") };
+      return block.config.url
+        ? { title: "Your memory server", detail: block.config.url.replace(/^https:\/\//, "") }
+        : { title: "Not connected yet", detail: "Add your memory server's address" };
   }
 }
 

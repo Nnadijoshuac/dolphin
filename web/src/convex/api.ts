@@ -962,7 +962,7 @@ export type AgentBlockData =
   | { id: string; type: "price"; config: { direction: "above" | "below"; priceUsd: number } }
   | { id: string; type: "walletWatch"; config: { addresses: string[]; label: string | null } }
   | { id: string; type: "hire"; config: { agentKey: string; agentName: string } }
-  | { id: string; type: "memory"; config: { url: string; keyName: string | null } }
+  | { id: string; type: "memory"; config: { url: string | null; keyName: string | null } }
   | { id: string; type: "indicators"; config: { timeframe: "1h" | "4h" | "1d" } }
   | { id: string; type: "signal"; config: { condition: SignalCondition; level: number | null; timeframe: "1h" | "4h" | "1d" } }
   | { id: string; type: "dataSource"; config: SourceAuth & { label: string; url: string } }

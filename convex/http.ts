@@ -360,7 +360,7 @@ http.route({
     } catch (cause) {
       return challenge(cause instanceof PaymentRejected ? cause.message : "The payment could not be read.");
     }
-    const refused = await checkPayment(ctx, payment);
+    const refused = await checkPayment(ctx, listing.hash, payment);
     if (refused) return challenge(refused);
     const reservation = await ctx.runMutation(internal.x402.reserve, {
       hash: listing.hash,
@@ -386,7 +386,7 @@ http.route({
       return response ? rpc(response) : rpc({ jsonrpc: "2.0", id: rpcMessage.id ?? null, error: { code: -32603, message: "The agent failed." } }, 500);
     }
     try {
-      const transaction = await settlePayment(ctx, payment);
+      const transaction = await settlePayment(ctx, listing.hash, payment);
       await ctx.runMutation(internal.x402.finish, { id: reservation, status: "settled", txHash: transaction, detail: null });
       const receipt = paymentResponseHeader({ transaction, payer: payment.authorization.from });
       return new Response(JSON.stringify(response), {

@@ -1084,7 +1084,8 @@ export default defineSchema({
    * signed authorization Dolphin accepted, reserved BEFORE the work runs so
    * the same (payer, nonce) can never pay for two calls - the token refuses a
    * reused nonce too, this stops the second call before it does any work.
-   * The money goes payer -> builder; Dolphin only submits it and pays gas.
+   * The money goes payer -> builder's payout wallet. The agent's OWN wallet
+   * (agentWallets) submits it and pays the gas from the builder's top-up.
    */
   x402Payments: defineTable({
     hash: v.string(),
@@ -1104,17 +1105,29 @@ export default defineSchema({
     .index("by_hash", ["hash", "createdAt"]),
 
   /**
-   * THE WALLET THAT PAYS x402 SETTLEMENT GAS. Generated inside Convex
-   * (x402.ensureRelayer), sealed with DOLPHIN_ENV_KEY like agentTradeKeys;
-   * its key is never returned by any function. It holds BNB for gas only and
-   * is never the destination of a payment.
+   * EACH PUBLISHED AGENT'S OWN WALLET (owner's option A, 2026-10-02). It sends
+   * the agent's transactions while the builder is offline: submitting a
+   * buyer's signed x402 payment, delivering and collecting escrow jobs.
+   * Generated inside Convex (x402.ensureAgentWallet) and sealed with
+   * DOLPHIN_ENV_KEY like agentTradeKeys; no function returns the key.
+   *
+   * GUARDRAILS (owner, 2026-10-02):
+   *   1. x402 money never touches it: the buyer's signature names the
+   *      builder's payout wallet as recipient; this wallet only submits.
+   *   2. Escrow payouts that land here are forwarded to the payout wallet.
+   *   3. It holds gas money only, topped up by the builder, and can only ever
+   *      send BNB back to the builder (x402.withdrawAgentGas).
+   * Dolphin funds none of it.
    */
-  x402Relayer: defineTable({
+  agentWallets: defineTable({
+    hash: v.string(),
     address: v.string(),
     ciphertext: v.string(),
     iv: v.string(),
     createdAt: v.number(),
-  }),
+  })
+    .index("by_hash", ["hash"])
+    .index("by_address", ["address"]),
 
   /** Public `ask` calls per built agent per UTC day - every one spends model calls. */
   builtAgentUsage: defineTable({

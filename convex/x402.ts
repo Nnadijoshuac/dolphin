@@ -1,30 +1,31 @@
 /**
- * x402 FOR AGENTS BUILT ON DOLPHIN - records and the on-chain half (2026-10-02).
+ * x402 FOR AGENTS BUILT ON DOLPHIN - the agent's own wallet, the on-chain
+ * half, and the records (2026-10-02). lib/x402.ts decides whether a payment
+ * is well-formed.
  *
- * lib/x402.ts decides whether a payment is well-formed; this file:
- *   - reserves each (payer, nonce) once, before any work runs,
- *   - simulates the payer's authorization against U itself (balance and
- *     signature, EOA or ERC-1271 smart wallet, in one eth_call),
- *   - submits it after the work succeeded, from Dolphin's own gas wallet,
- *   - and keeps the gas wallet's key sealed (it is generated here and never
- *     leaves: no function returns it).
+ * WHO PAYS WHAT (owner, 2026-10-02: "I don't want to fund gas for anybody").
+ * The standard x402 split, measured on SwapGod on BNB Chain: the buyer only
+ * signs; the SELLER submits the signed authorization and pays the gas out of
+ * what it earns. Here the seller is the published agent, so each agent has
+ * its OWN wallet (agentWallets, option A), topped up with BNB by its builder.
+ * Dolphin funds nothing. Guardrails, enforced below:
+ *   1. The money goes buyer -> builder's payout wallet (decodePayment refuses
+ *      any other recipient). The agent wallet only submits and pays gas.
+ *   2. (Escrow payouts are forwarded on - see the ERC-8183 seller.)
+ *   3. The agent wallet can only send BNB back to the builder.
  *
- * ORDER, AND WHY. verify -> work -> settle, the order x402 servers use:
- *   - The payer is never charged for a call that failed: an errored result
- *     releases the reservation instead of settling it.
- *   - Settling after the work risks the payer moving their U in between, so
- *     the result is withheld when settlement fails - the builder loses one
- *     call's compute, never their payment.
+ * ORDER: verify -> work -> settle, the order x402 servers use. A failed call
+ * is never charged; a call whose payment cannot be settled gets no result.
  */
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { createWalletClient, http, parseAbi, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { bsc } from "viem/chains";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, internalQuery, type ActionCtx } from "./_generated/server";
+import { action, internalMutation, internalQuery, query, type ActionCtx } from "./_generated/server";
 import { BSC_RPC_URL, bscPublicClient } from "./lib/bscClient";
 import { open, seal } from "./lib/secretBox";
 import { U_TOKEN, type DecodedPayment } from "./lib/x402";
@@ -35,55 +36,92 @@ const U_AUTH_ABI = parseAbi([
   "function authorizationState(address authorizer, bytes32 nonce) view returns (bool)",
 ]);
 
-/** Below this the gas wallet cannot settle; paid calls are refused before any work. ~20 settlements at 0.1 gwei. */
-const MIN_RELAYER_WEI = BigInt("200000000000000"); // 0.0002 BNB
+/**
+ * Gas one settlement needs, generously: transferWithAuthorization is ~70-90k
+ * gas; 120k leaves room for a smart-wallet (ERC-1271) signature check.
+ */
+const SETTLE_GAS = BigInt(120_000);
 
-/* ───────── the gas wallet ───────── */
+/* ───────── each agent's own wallet ───────── */
 
-export const relayerRow = internalQuery({
-  args: {},
-  handler: async (ctx) => await ctx.db.query("x402Relayer").first(),
+export const walletRow = internalQuery({
+  args: { hash: v.string() },
+  handler: async (ctx, { hash }) => await ctx.db.query("agentWallets").withIndex("by_hash", (q) => q.eq("hash", hash)).first(),
 });
 
-export const storeRelayer = internalMutation({
-  args: { address: v.string(), ciphertext: v.string(), iv: v.string() },
+export const storeWallet = internalMutation({
+  args: { hash: v.string(), address: v.string(), ciphertext: v.string(), iv: v.string() },
   handler: async (ctx, args) => {
-    // First writer wins: two concurrent ensureRelayer calls must not make two wallets.
-    const existing = await ctx.db.query("x402Relayer").first();
+    // First writer wins: two concurrent calls must not make two wallets for one agent.
+    const existing = await ctx.db.query("agentWallets").withIndex("by_hash", (q) => q.eq("hash", args.hash)).first();
     if (existing) return existing.address;
-    await ctx.db.insert("x402Relayer", { ...args, createdAt: Date.now() });
+    await ctx.db.insert("agentWallets", { ...args, createdAt: Date.now() });
     return args.address;
   },
 });
 
-/**
- * Creates the gas wallet if there is none and returns ONLY its address, for
- * the owner to fund with a little BNB. Run once per deployment:
- *   npx convex run x402:ensureRelayer [--prod]
- */
-export const ensureRelayer = internalAction({
-  args: {},
-  handler: async (ctx): Promise<{ address: string; balanceBnbWei: string }> => {
-    const existing = await ctx.runQuery(internal.x402.relayerRow, {});
-    let address = existing?.address ?? null;
-    if (!address) {
-      const privateKey = generatePrivateKey();
-      const box = await seal(privateKey);
-      address = await ctx.runMutation(internal.x402.storeRelayer, {
-        address: privateKeyToAccount(privateKey).address,
-        ...box,
-      });
-    }
-    const balance = await bscPublicClient.getBalance({ address: address as Address });
-    return { address, balanceBnbWei: balance.toString() };
-  },
-});
+/** Creates the agent's wallet if it has none; returns only its address. */
+export async function ensureAgentWallet(ctx: ActionCtx, hash: string): Promise<string> {
+  const existing = await ctx.runQuery(internal.x402.walletRow, { hash });
+  if (existing) return existing.address;
+  const privateKey = generatePrivateKey();
+  const box = await seal(privateKey);
+  return await ctx.runMutation(internal.x402.storeWallet, { hash, address: privateKeyToAccount(privateKey).address, ...box });
+}
 
-async function relayerAccount(ctx: ActionCtx) {
-  const row = await ctx.runQuery(internal.x402.relayerRow, {});
+async function agentAccount(ctx: ActionCtx, hash: string) {
+  const row = await ctx.runQuery(internal.x402.walletRow, { hash });
   if (!row) return null;
   return privateKeyToAccount((await open(row)) as Hex);
 }
+
+/** The agent's wallet address, for its page. Public: an address is not a secret. */
+export const agentWallet = query({
+  args: { hash: v.string() },
+  handler: async (ctx, { hash }) => {
+    const row = await ctx.db.query("agentWallets").withIndex("by_hash", (q) => q.eq("hash", hash)).first();
+    return row ? { address: row.address } : null;
+  },
+});
+
+/** The owner creates the wallet for an agent published before wallets existed. */
+export const createAgentWallet = action({
+  args: { sessionToken: v.string(), hash: v.string() },
+  handler: async (ctx, { sessionToken, hash }): Promise<{ address: string }> => {
+    const owner: string = await ctx.runQuery(internal.builtAgents.sessionOwner, { sessionToken });
+    const listing = await ctx.runQuery(internal.builtAgents.byHash, { hash });
+    if (!listing || listing.ownerAddress !== owner) throw new ConvexError("That agent is not yours.");
+    if (listing.status !== "registered" || listing.network !== "bsc") throw new ConvexError("Only an agent live on BNB Chain gets a wallet.");
+    return { address: await ensureAgentWallet(ctx, hash) };
+  },
+});
+
+/**
+ * GUARDRAIL 3: the agent's gas money goes back to its builder, and only there.
+ * Sends everything except the gas this transfer itself costs.
+ */
+export const withdrawAgentGas = action({
+  args: { sessionToken: v.string(), hash: v.string() },
+  handler: async (ctx, { sessionToken, hash }): Promise<{ transactionHash: string; sentWei: string }> => {
+    const owner: string = await ctx.runQuery(internal.builtAgents.sessionOwner, { sessionToken });
+    const listing = await ctx.runQuery(internal.builtAgents.byHash, { hash });
+    if (!listing || listing.ownerAddress !== owner) throw new ConvexError("That agent is not yours.");
+    const account = await agentAccount(ctx, hash);
+    if (!account) throw new ConvexError("This agent has no wallet yet.");
+    const [balance, gasPrice] = await Promise.all([
+      bscPublicClient.getBalance({ address: account.address }),
+      bscPublicClient.getGasPrice(),
+    ]);
+    const fee = BigInt(21_000) * gasPrice;
+    if (balance <= fee) throw new ConvexError("There is nothing to withdraw: the balance would not cover the transfer's own gas.");
+    const wallet = createWalletClient({ account, chain: bsc, transport: http(BSC_RPC_URL) });
+    // The destination is the listing's owner, read here - never an argument.
+    const transactionHash = await wallet.sendTransaction({ to: listing.ownerAddress as Address, value: balance - fee, gas: BigInt(21_000), gasPrice });
+    const receipt = await bscPublicClient.waitForTransactionReceipt({ hash: transactionHash, timeout: 60_000 });
+    if (receipt.status !== "success") throw new ConvexError("The withdrawal failed on-chain.");
+    return { transactionHash, sentWei: (balance - fee).toString() };
+  },
+});
 
 /* ───────── reservations ───────── */
 
@@ -130,11 +168,11 @@ function authArgs(payment: DecodedPayment) {
 }
 
 /** A reason a payment cannot be taken, worded for the caller - or null when it can. */
-export async function checkPayment(ctx: ActionCtx, payment: DecodedPayment): Promise<string | null> {
-  const relayer = await relayerAccount(ctx);
-  if (!relayer) return "Paid calls are not open on this deployment yet.";
-  const gas = await bscPublicClient.getBalance({ address: relayer.address });
-  if (gas < MIN_RELAYER_WEI) return "Paid calls are paused for a moment. Try again later.";
+export async function checkPayment(ctx: ActionCtx, hash: string, payment: DecodedPayment): Promise<string | null> {
+  const account = await agentAccount(ctx, hash);
+  if (!account) return "This agent cannot take payments yet: its builder has not set up its wallet.";
+  const [gas, gasPrice] = await Promise.all([bscPublicClient.getBalance({ address: account.address }), bscPublicClient.getGasPrice()]);
+  if (gas < SETTLE_GAS * gasPrice) return "This agent is out of gas money for collecting payments. Its builder needs to top it up. Nothing was charged.";
 
   const used = await bscPublicClient.readContract({
     address: U_TOKEN,
@@ -147,7 +185,7 @@ export async function checkPayment(ctx: ActionCtx, payment: DecodedPayment): Pro
   try {
     // U itself checks the signature (ECDSA or ERC-1271), the balance and the nonce.
     await bscPublicClient.simulateContract({
-      account: relayer,
+      account,
       address: U_TOKEN,
       abi: U_AUTH_ABI,
       functionName: "transferWithAuthorization",
@@ -162,20 +200,20 @@ export async function checkPayment(ctx: ActionCtx, payment: DecodedPayment): Pro
   return null;
 }
 
-/** Submits the authorization and waits for it. Returns the transaction hash, or throws. */
-export async function settlePayment(ctx: ActionCtx, payment: DecodedPayment): Promise<string> {
-  const relayer = await relayerAccount(ctx);
-  if (!relayer) throw new Error("No gas wallet.");
-  const wallet = createWalletClient({ account: relayer, chain: bsc, transport: http(BSC_RPC_URL) });
-  const hash = await wallet.writeContract({
+/** Submits the authorization from the agent's own wallet and waits for it. Returns the transaction hash, or throws. */
+export async function settlePayment(ctx: ActionCtx, hash: string, payment: DecodedPayment): Promise<string> {
+  const account = await agentAccount(ctx, hash);
+  if (!account) throw new Error("No agent wallet.");
+  const wallet = createWalletClient({ account, chain: bsc, transport: http(BSC_RPC_URL) });
+  const txHash = await wallet.writeContract({
     address: U_TOKEN,
     abi: U_AUTH_ABI,
     functionName: "transferWithAuthorization",
     args: authArgs(payment),
   });
-  const receipt = await bscPublicClient.waitForTransactionReceipt({ hash, timeout: 60_000 });
-  if (receipt.status !== "success") throw new Error(`Settlement reverted: ${hash}`);
-  return hash;
+  const receipt = await bscPublicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
+  if (receipt.status !== "success") throw new Error(`Settlement reverted: ${txHash}`);
+  return txHash;
 }
 
 /**

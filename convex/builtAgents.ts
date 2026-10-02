@@ -10,6 +10,7 @@ import { MAX_ICONS_PER_WALLET_PER_DAY } from "./lib/iconPolicy";
 import { bscPublicClient } from "./lib/bscClient";
 import { screenAgent } from "./lib/screen";
 import { MAX_PRICE_U, MIN_PRICE_U, formatU, parsePriceU, priceInBounds } from "./lib/x402";
+import { ensureAgentWallet } from "./x402";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 
 /**
@@ -394,6 +395,8 @@ export const confirmRegistration = action({
       registerTxHash: args.transactionHash.toLowerCase(),
       registeredAt: new Date(Number(block.timestamp) * 1000).toISOString(),
     });
+    // Its own wallet, for collecting payments while the builder is offline (x402.ts, option A).
+    if (listing.network === "bsc") await ensureAgentWallet(ctx, listing.hash);
     return { tokenId: tokenId.toString(), agentKey };
   },
 });

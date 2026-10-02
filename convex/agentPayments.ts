@@ -2,7 +2,7 @@ import { getAddress, isAddress } from "viem";
 import { v } from "convex/values";
 
 import { api, internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, query, type ActionCtx } from "./_generated/server";
 import { BSC_CHAIN_ID, bscPublicClient } from "./lib/bscClient";
 import { safeFetch } from "./lib/safeFetch";
 import {
@@ -353,6 +353,32 @@ export const recordSellerReply = internalMutation({
  * Tell a seller its job is funded so it starts work. Relay only - by this
  * point the money has already moved, and this call cannot move any more of it.
  */
+/**
+ * What a plain-quote seller needs alongside `notify_funded` (2026-10-02).
+ *
+ * Brain on BNB's quote says: "fund it, then send skill:notify_funded with
+ * job_id and the parameters listed under needs", and `needs` is
+ * {address: "the account whose position to read"}. Dolphin sent job_id alone,
+ * so a funded Brain job had nothing to work on. A signed-quote seller anchors
+ * everything in the envelope and is sent job_id alone - that is the form
+ * job 56872 was accepted and delivered on, so it is not changed.
+ *
+ * The address is the one the task names (the hire's task is about the
+ * connected wallet unless the person edited it), else the hirer's wallet.
+ */
+async function fundedNeeds(ctx: ActionCtx, jobId: string): Promise<{ address?: string }> {
+  const row = await ctx.runQuery(internal.agentPayments.jobRowById, { jobId });
+  if (!row) return {};
+  try {
+    const parsed = JSON.parse(row.taskDescription) as { provider_sig?: unknown };
+    if (parsed && typeof parsed === "object" && "provider_sig" in parsed) return {};
+  } catch {
+    // Not JSON: a plain task, which is what a plain-quote seller is sent.
+  }
+  const named = /0x[0-9a-fA-F]{40}/.exec(row.taskDescription)?.[0] ?? row.hirerWalletAddress;
+  return named && isAddress(named) ? { address: getAddress(named) } : {};
+}
+
 export const notifyJobFunded = action({
   args: { agentKey: v.string(), jobId: v.string() },
   returns: v.object({ accepted: v.boolean(), detail: v.string() }),
@@ -369,7 +395,7 @@ export const notifyJobFunded = action({
       throw new Error(`${agent.name} publishes no callable A2A endpoint to notify.`);
     }
 
-    const result = await postA2A(endpoint, { skill: "notify_funded", job_id: Number(jobId) });
+    const result = await postA2A(endpoint, { skill: "notify_funded", job_id: Number(jobId), ...(await fundedNeeds(ctx, jobId)) });
     const detail = JSON.stringify(result).slice(0, 600);
     // The seller answers at once with accepted/rejected and then works in the
     // background; the deliverable is read back from the chain later. So a

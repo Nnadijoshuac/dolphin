@@ -114,6 +114,8 @@ export function PublishAgentDialog({
   // Owner, 2026-09-29: the choice belongs here, at Put on-chain - "make public" or "just for me".
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [price, setPrice] = useState("");
+  // Owner, 2026-10-02: published as a tool server (MCP) or an agent (A2A), paid per call in U.
+  const [protocol, setProtocol] = useState<"mcp" | "a2a">("mcp");
   const [network, setNetwork] = useState<Network>("bsc");
   const [review, setReview] = useState<Review | null>(null);
   const [stage, setStage] = useState<"form" | "reviewing" | "switching" | "signing" | "confirming" | "done">("form");
@@ -180,7 +182,8 @@ export function PublishAgentDialog({
         ...(email.trim() ? { email: email.trim() } : {}),
         ...(payout.trim() && visibility === "public" ? { payoutAddress: payout.trim() } : {}),
         visibility,
-        ...(visibility === "public" && Number(price) > 0 ? { priceUsd: Number(price) } : {}),
+        protocol,
+        ...(visibility === "public" && Number(price) > 0 ? { priceU: price.trim() } : {}),
       });
       /* The fee, read now: this exact call's gas at this moment's price. */
       const client = readClient(network);
@@ -338,9 +341,35 @@ export function PublishAgentDialog({
                   </button>
                 ))}
               </div>
-              {visibility === "public" ? (
-                <label className="mt-2 block text-[0.78rem] text-ink-soft">
-                  Price per job ($)
+            </section>
+
+            {visibility === "public" ? (
+              /* How people use it, and what a call costs (owner, 2026-10-02). */
+              <section>
+                <h3 className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-muted">How people use it</h3>
+                <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="How people use it">
+                  {([
+                    { value: "mcp", label: "Tool server", tag: "MCP", about: "Other AI apps call its tools" },
+                    { value: "a2a", label: "Agent", tag: "A2A", about: "Send it a task, get the result" },
+                  ] as const).map((option) => (
+                    <button
+                      aria-checked={protocol === option.value}
+                      className={`rounded-xl border px-3 py-2.5 text-left text-[0.8rem] ${protocol === option.value ? "border-ink bg-paper-muted" : "border-line/80"}`}
+                      key={option.value}
+                      onClick={() => edited(setProtocol)(option.value)}
+                      role="radio"
+                      type="button"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-ink">{option.label}</span>
+                        <span className="font-mono text-[0.62rem] text-muted">{option.tag}</span>
+                      </span>
+                      <span className="block text-[0.7rem] text-muted">{option.about}</span>
+                    </button>
+                  ))}
+                </div>
+                <label className="mt-3 block text-[0.78rem] text-ink-soft">
+                  {protocol === "mcp" ? "Price per tool call (U)" : "Price per task (U)"}
                   <input
                     className="mt-1 block w-full rounded-lg border border-line/80 bg-paper px-3 py-2 text-[0.86rem] text-ink"
                     inputMode="decimal"
@@ -349,8 +378,13 @@ export function PublishAgentDialog({
                     value={price}
                   />
                 </label>
-              ) : null}
-            </section>
+                <p className="mt-1 text-[0.7rem] leading-relaxed text-muted">
+                  {Number(price) > 0
+                    ? "Callers pay in U before each call, straight to your payout wallet. It answers with your own Brain."
+                    : "Free to use. Add a price to get paid in U per call."}
+                </p>
+              </section>
+            ) : null}
 
             {/* 1. Wallet */}
             <section>

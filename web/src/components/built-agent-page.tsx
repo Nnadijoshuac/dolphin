@@ -115,11 +115,18 @@ export function BuiltAgentPage({ hash }: { hash: string }) {
           <div className="surface-raised mt-4 p-5">
             <p className="eyebrow">Use it from your own app or agent</p>
             <div className="mt-1 divide-y divide-line/60">
-              <CopyLine label="MCP endpoint" value={agent.mcpUrl} />
+              <CopyLine label={agent.protocol === "a2a" ? "A2A agent card" : "MCP endpoint"} value={agent.endpointUrl} />
               <CopyLine label="Registration file" value={agent.registrationUrl} />
             </div>
             <p className="mt-2 text-[0.74rem] leading-relaxed text-muted">
-              Its MCP server offers <span className="font-mono">ask</span> (ask it a question) and the tools above.
+              {agent.protocol === "a2a" ? (
+                <>Send it a task over A2A (<span className="font-mono">message/send</span>) and it answers with the result.</>
+              ) : (
+                <>Its MCP server offers <span className="font-mono">ask</span> (ask it a question) and the tools above.</>
+              )}{" "}
+              {agent.priceDisplay
+                ? `Each ${agent.protocol === "a2a" ? "task" : "tool call"} costs ${agent.priceDisplay}, paid with x402 to its builder.`
+                : "Free to use."}
             </p>
           </div>
         ) : null}

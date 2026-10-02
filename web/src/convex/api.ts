@@ -1404,6 +1404,13 @@ export type BuiltAgentPublic = {
   iconUrl: string | null;
   registrationUrl: string;
   mcpUrl: string;
+  /** How it is called (2026-10-02): "mcp" tool server or "a2a" agent. */
+  protocol: "mcp" | "a2a";
+  /** The MCP server, or the A2A agent card. */
+  endpointUrl: string;
+  /** Price per call in U base units, paid with x402; null is free. */
+  priceRaw: string | null;
+  priceDisplay: string | null;
   pageUrl: string;
   registerTxUrl: string | null;
   /** The owner's latest confirmed setAgentURI, if any. */
@@ -1435,6 +1442,9 @@ export const builtAgentsApi = anyApi as unknown as {
         visibility?: "public" | "private";
         /** Price per job for a public agent; absent means free. */
         priceUsd?: number | null;
+        protocol?: "mcp" | "a2a";
+        /** Decimal U per call, e.g. "0.01". */
+        priceU?: string | null;
       },
       { hash: string; tokenURI: string; registry: string; chainId: number; pageUrl: string }
     >;

@@ -157,6 +157,7 @@ export const TRY_CONSULT_PROMPT = `You are the evidence-gathering step of an AI 
 
 - Call a tool when the answer depends on live data: prices, pools, positions, balances, protocol state.
 - Do not call a tool for a greeting, or for something you can answer by explaining.
+- CALL EVERY TOOL YOU NEED AT ONCE, in this one step - not one now and another after. Each extra step costs the person a long wait (measured 2026-10-02: a second round took 37 s; the tools themselves answer in under half a second).
 - Never write prose in this step. Only call tools or return empty.`;
 
 export function tryAnswerPrompt(
@@ -1039,10 +1040,19 @@ export const ask = action({
       let blockNote = "";
       let blocksSet = false;
       // ...and its Safety block, which reads what those conditions are about.
-      const needsSafety = gradesTokens(applied.draft.instructions) && !(compiled.reply.blocks ?? []).some((block) => block.type === "safety");
-      const proposedBlocks = needsSafety
-        ? [...(compiled.reply.blocks ?? []), { type: "safety", symbol: null, everyMinutes: null, direction: null, priceUsd: null, maxTradeUsd: null, maxTradesPerDay: null }]
-        : compiled.reply.blocks;
+      const grades = gradesTokens(applied.draft.instructions);
+      const needsSafety = grades && !(compiled.reply.blocks ?? []).some((block) => block.type === "safety");
+      /*
+       * A token checker reads ANY token through Safety; a Price feed reads ONE
+       * fixed token and runs on every run - measured 2026-10-02, a checker
+       * with a BNB Price feed read BNB's price and safety on every CAKE check.
+       * So the builder does not add one there (a Price feed the person placed stays).
+       */
+      const offeredBlocks = (compiled.reply.blocks ?? []).filter((block) => !(grades && (block.type === "market" || block.type === "indicators" || block.type === "price")));
+      const proposedBlocks =
+        needsSafety || offeredBlocks.length !== (compiled.reply.blocks ?? []).length
+          ? [...offeredBlocks, ...(needsSafety ? [{ type: "safety", symbol: null, everyMinutes: null, direction: null, priceUsd: null, maxTradeUsd: null, maxTradesPerDay: null }] : [])]
+          : compiled.reply.blocks;
       if (proposedBlocks) {
         const currentBlocks: AgentBlock[] = await ctx.runQuery(internal.agentBuilder.blocksForConversation, { conversationId });
         const merged = await mergeBuilderBlocks(currentBlocks, proposedBlocks);

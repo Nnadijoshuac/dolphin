@@ -977,6 +977,22 @@ export default defineSchema({
     sellerReply: v.optional(
       v.object({ accepted: v.boolean(), reason: v.union(v.string(), v.null()), at: v.string() }),
     ),
+    /**
+     * What the seller delivered (2026-10-02). On chain a job carries only a
+     * 32-byte commitment; the seller's submit transaction names a URL where
+     * the actual result lives. Fetched once (agentPayments.fetchDeliverable,
+     * through safeFetch) and kept, so the person reads the result rather than
+     * a hash. `content` is the seller's own words, shown as a quotation.
+     */
+    deliverable: v.optional(
+      v.object({
+        url: v.string(),
+        content: v.union(v.string(), v.null()),
+        contentType: v.union(v.string(), v.null()),
+        submitTx: v.union(v.string(), v.null()),
+        fetchedAt: v.string(),
+      }),
+    ),
     chainId: v.number(),
   })
     .index("by_job", ["chainId", "jobId"])

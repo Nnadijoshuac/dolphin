@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { BSC_CHAIN_ID, bscPublicClient } from "./lib/bscClient";
+import { safeFetch } from "./lib/safeFetch";
 import {
   QuoteRejected,
   TEXT_PARTS_ONLY,
@@ -734,5 +735,134 @@ export const getJobsForAgent = query({
       )
       .order("desc")
       .collect();
+  },
+});
+
+/* ───────────────────────── the delivered result ───────────────────────── */
+
+const DELIVERABLE_MAX_BYTES = 64 * 1024;
+const DELIVERABLE_TEXT_CHARS = 8000;
+
+export const jobRowById = internalQuery({
+  args: { jobId: v.string() },
+  handler: async (ctx, { jobId }) =>
+    ctx.db
+      .query("agentJobs")
+      .withIndex("by_job", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("jobId", jobId))
+      .unique(),
+});
+
+export const saveDeliverable = internalMutation({
+  args: {
+    jobId: v.string(),
+    deliverable: v.object({
+      url: v.string(),
+      content: v.union(v.string(), v.null()),
+      contentType: v.union(v.string(), v.null()),
+      submitTx: v.union(v.string(), v.null()),
+      fetchedAt: v.string(),
+    }),
+  },
+  handler: async (ctx, { jobId, deliverable }) => {
+    const row = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_job", (q) => q.eq("chainId", BSC_CHAIN_ID).eq("jobId", jobId))
+      .unique();
+    if (row) await ctx.db.patch(row._id, { deliverable });
+  },
+});
+
+/** The URL a seller's submit transaction names, read from the transaction's own input. */
+function urlInInput(input: string): string | null {
+  const hex = input.startsWith("0x") ? input.slice(2) : input;
+  let text = "";
+  for (let i = 0; i + 1 < hex.length; i += 2) {
+    const code = parseInt(hex.slice(i, i + 2), 16);
+    text += code >= 32 && code < 127 ? String.fromCharCode(code) : " ";
+  }
+  return /https:\/\/[^\s"'\<>]{4,500}/.exec(text)?.[0] ?? null;
+}
+
+/**
+ * WHAT THE AGENT ACTUALLY DELIVERED (owner, 2026-10-02: "I don't understand
+ * what it delivered"). The kernel stores a 32-byte commitment and nothing a
+ * person can read. Sellers built on bnbagent-studio write the result's URL into
+ * their `submit` transaction ("read the deliverable back from the CHAIN ... the
+ * submit tx carries the deliverable_url" - recurring-monitoring-service-agent's
+ * own card), and serve {response: {content, content_type}} there.
+ *
+ * So: find the submit transaction by its timestamp (binary search on block
+ * times, then the few blocks around it - public nodes refuse log queries), take
+ * the URL from its input, fetch it through safeFetch (a stranger's URL), keep
+ * the text. Measured on job 56872: block 125249548, the URL answered with the
+ * seller's report. Read once and stored; later views read the row.
+ */
+export const fetchDeliverable = action({
+  args: { jobId: v.string() },
+  handler: async (ctx, { jobId }): Promise<{ url: string; content: string | null; contentType: string | null } | null> => {
+    const row = await ctx.runQuery(internal.agentPayments.jobRowById, { jobId });
+    if (!row) return null;
+    if (row.deliverable?.content) return row.deliverable;
+
+    let id: bigint;
+    try {
+      id = BigInt(jobId);
+    } catch {
+      return null;
+    }
+    const job = await bscPublicClient.readContract({
+      address: getAddress(row.escrowContract) as `0x${string}`,
+      abi: COMMERCE_GET_JOB_ABI,
+      functionName: "getJob",
+      args: [id],
+    });
+    if (job.submittedAt === BigInt(0)) return null;
+
+    // The block of the submit, by time.
+    let hi = await bscPublicClient.getBlockNumber();
+    let lo = hi - BigInt(2_000_000);
+    while (hi - lo > BigInt(1)) {
+      const mid = (lo + hi) / BigInt(2);
+      const block = await bscPublicClient.getBlock({ blockNumber: mid });
+      if (block.timestamp < job.submittedAt) lo = mid;
+      else hi = mid;
+    }
+    const idHex = id.toString(16).padStart(64, "0");
+    const provider = job.provider.toLowerCase();
+    let submitTx: string | null = null;
+    let url: string | null = null;
+    for (let offset = -4; offset <= 4 && !url; offset++) {
+      const block = await bscPublicClient.getBlock({ blockNumber: hi + BigInt(offset), includeTransactions: true });
+      for (const tx of block.transactions) {
+        if (tx.from.toLowerCase() !== provider || !tx.input.toLowerCase().includes(idHex)) continue;
+        submitTx = tx.hash;
+        url = urlInInput(tx.input);
+        if (url) break;
+      }
+    }
+    if (!url) return null;
+
+    let content: string | null = null;
+    let contentType: string | null = null;
+    try {
+      const response = await safeFetch(url, { method: "GET", timeoutMs: 10_000, maxBytes: DELIVERABLE_MAX_BYTES });
+      if (response.ok) {
+        try {
+          const body = JSON.parse(response.text) as { response?: { content?: unknown; content_type?: unknown } };
+          content = typeof body.response?.content === "string" ? body.response.content : JSON.stringify(body.response ?? body, null, 2);
+          contentType = typeof body.response?.content_type === "string" ? body.response.content_type : null;
+        } catch {
+          content = response.text;
+          contentType = response.contentType || null;
+        }
+        content = content.slice(0, DELIVERABLE_TEXT_CHARS);
+      }
+    } catch {
+      /* the URL is kept; the text can be fetched again later */
+    }
+
+    const deliverable = { url, content, contentType, submitTx, fetchedAt: new Date().toISOString() };
+    await ctx.runMutation(internal.agentPayments.saveDeliverable, { jobId, deliverable });
+    return { url, content, contentType };
   },
 });

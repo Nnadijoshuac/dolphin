@@ -32,7 +32,6 @@ import { useState } from "react";
 
 import { AgentIcon } from "@/components/agent-icon";
 import { CancelHireHold } from "@/components/cancel-hire-hold";
-import { HoldButton } from "@/components/hold-button";
 import { useDeliverable } from "@/hooks/use-deliverable";
 import { OneLine } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -341,7 +340,7 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
             ) : (
               <p className="mt-2 text-[0.86rem] text-muted">Fetching the result…</p>
             )}
-            {delivery.state === "delivered" ? <ApproveDelivery agentName={agent.name} job={job} submittedAt={onChain.submittedAt} /> : null}
+            {delivery.state === "delivered" ? <PayoutNote agentName={agent.name} submittedAt={onChain.submittedAt} /> : null}
             <details className="mt-3 text-[0.74rem] text-muted">
               <summary className="cursor-pointer">Proof on BNB Chain</summary>
             <div className="mt-2 flex items-center gap-2 rounded-xl bg-paper-muted/60 px-4 py-3">
@@ -383,49 +382,19 @@ function JobPanels({ agent, job }: { agent: Agent; job: AgentJobRow }) {
 }
 
 /**
- * APPROVE & PAY NOW (owner, 2026-10-02: "why is it stuck at delivered?"). A
- * delivered job pays the seller on its own once the dispute window ends; a
- * person happy with the result can release it now. Hold, like every other
- * irreversible action.
+ * WHEN THE SELLER IS PAID. There is no "approve and pay now": measured
+ * 2026-10-02, the escrow's policy (0x9C01…6dE5) decides a submitted job only
+ * when its 7-day dispute window ends - router.settle before then reverts
+ * NotDecided(), for the buyer and anyone else. The policy exposes dispute()
+ * and reviewer votes, nothing that lets a buyer release early. So this says
+ * plainly when payment happens instead of offering a button that cannot work.
  */
-function ApproveDelivery({ job, agentName, submittedAt }: { job: AgentJobRow; agentName: string; submittedAt: number }) {
-  const wallet = useAltanaWallet();
-  const [state, setState] = useState<"idle" | "approving" | "done" | { error: string }>("idle");
-  const autoOn = submittedAt > 0 ? day((submittedAt + ESCROW_DISPUTE_WINDOW_SECONDS) * 1000) : null;
-  if (state === "done") return <p className="mt-3 text-[0.8rem] text-ink">Approved. {agentName} is being paid.</p>;
+function PayoutNote({ agentName, submittedAt }: { agentName: string; submittedAt: number }) {
+  const on = submittedAt > 0 ? day((submittedAt + ESCROW_DISPUTE_WINDOW_SECONDS) * 1000) : null;
   return (
-    <div className="mt-4">
-      <HoldButton
-        backgroundColor="var(--ink)"
-        className="manage-hold"
-        disabled={state === "approving" || wallet.status !== "connected"}
-        doneLabel="Approving..."
-        fillColor="#2f8a55"
-        fillTextColor="#ffffff"
-        holdTime={1400}
-        onHold={() => {
-          setState("approving");
-          wallet.approveDelivery(job.jobId).then(
-            () => setState("done"),
-            (cause: unknown) => setState({ error: toUserMessage(cause, "That could not be approved. Try again.") }),
-          );
-        }}
-        radius={11}
-        resetAfter={1800}
-        size="md"
-        textColor="var(--paper)"
-      >
-        Hold to approve and pay
-      </HoldButton>
-      <p className="mt-2 text-[0.74rem] leading-5 text-muted">
-        Happy with it? Pay {agentName} now.{autoOn ? ` Otherwise it's paid automatically on ${autoOn}.` : ""}
-      </p>
-      {typeof state === "object" ? (
-        <p className="mt-1 text-[0.74rem] text-danger" role="alert">
-          {state.error}
-        </p>
-      ) : null}
-    </div>
+    <p className="mt-3 text-[0.78rem] leading-5 text-muted">
+      {agentName} is paid automatically{on ? ` on ${on}` : " when the 7-day check ends"}.
+    </p>
   );
 }
 

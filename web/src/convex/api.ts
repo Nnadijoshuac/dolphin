@@ -1606,7 +1606,11 @@ export type TradingRuleTrade = {
 
 export const strategyApi = anyApi as unknown as {
   strategy: {
-    forConversation: Query<{ conversationKey: string }, { rules: TradingRuleView[]; trades: TradingRuleTrade[]; running: boolean }>;
+    forConversation: Query<
+      { conversationKey: string },
+      { rules: TradingRuleView[]; trades: TradingRuleTrade[]; running: boolean; dailyLossLimitUsd: number | null; lossTodayUsd: number }
+    >;
+    setDailyLossLimit: Mutation<{ conversationKey: string; usd: number | null }, null>;
     updateRule: Mutation<{ conversationKey: string; ruleId: string; sizeUsd?: number; leverage?: number; stopLossPct?: number | null }, { warnings: string[] }>;
     removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
     /** agent.json for the runner: the rules and a fresh report token (the old one stops working). */

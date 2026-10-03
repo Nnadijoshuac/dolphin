@@ -4,6 +4,7 @@ import { useMutation } from "convex/react";
 import { useState } from "react";
 
 import { KnowledgeSection } from "@/components/knowledge-section";
+import { PermissionsSection } from "@/components/permissions-section";
 import { TradingRulesSection } from "@/components/trading-rules-section";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AutoTradeCard } from "@/components/auto-trade-card";
@@ -177,10 +178,6 @@ export function AgentDraftPanel({
         ) : null}
       </div>
 
-      {onToggleAutopilot && !trying ? (
-        <ExecutionSwitch busy={autopilotBusy} draft={draft} onToggle={onToggleAutopilot} onWatchRuns={onWatchRuns} />
-      ) : null}
-
       {/* A visibly darker track and a white selected pill (owner, 2026-09-28: "you can't tell if it's on Keys or Draft"). */}
       <div aria-label="Panel" className="panel-tabs relative mx-2 mt-2 grid grid-cols-2 rounded-full p-[3px]" role="tablist">
         {/* The white pill glides to the open tab rather than jumping (owner: micro-animations). */}
@@ -273,9 +270,14 @@ export function AgentDraftPanel({
           )}
         </div>
 
+        {knowledgeConversation && !trying ? <PermissionsSection conversationKey={knowledgeConversation} draft={draft} /> : null}
         {knowledgeConversation && !trying ? <KnowledgeSection conversationKey={knowledgeConversation} /> : null}
         {knowledgeConversation && !trying ? <TradingRulesSection conversationKey={knowledgeConversation} /> : null}
       </div>
+
+      {onToggleAutopilot ? (
+        <AutopilotCard busy={autopilotBusy} draft={draft} onToggle={onToggleAutopilot} onWatchRuns={onWatchRuns} />
+      ) : null}
 
       {tradeKeyConversation ? (
         <PaperTradingCard conversationKey={tradeKeyConversation} hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))} />
@@ -367,13 +369,13 @@ function StatusPill({ live, autopilot, paper }: { live: boolean; autopilot: bool
 }
 
 /**
- * MANUAL OR AUTOPILOT, AT THE TOP (owner, 2026-10-03: "one of the most important controls
- * ... buried near the bottom"). Turning it on asks first, and says exactly what the agent
+ * AUTOPILOT, WHERE IT ALWAYS WAS (owner, 2026-10-03: a Manual | Autopilot switch at the top
+ * "doesn't look good" - keep the card, add the question). Turning it on asks first, and says exactly what the agent
  * will then do by itself - only what is true for THIS agent: its triggers, its trading
  * rules (paper inside Dolphin; real orders only on the builder's own server), and Dolphin
  * Wallet trading only when its Swap block trades live.
  */
-function ExecutionSwitch({
+function AutopilotCard({
   draft,
   busy,
   onToggle,
@@ -404,46 +406,46 @@ function ExecutionSwitch({
         ? `It can trade from your Dolphin Wallet without asking, if you have given it a trade key${risk && risk.type === "risk" ? ` - at most $${risk.config.maxTradeUsd} a trade and ${risk.config.maxTradesPerDay} a day` : ""}.`
         : "Its Dolphin Wallet trades stay on paper: Paper trading is on."
       : null,
-    "You can switch it back to Manual at any time.",
+    "You can switch Autopilot off at any time.",
   ].filter((line): line is string => Boolean(line));
 
   return (
-    <div className="mx-2 mt-2.5">
-      <div aria-label="How it runs" className="execution-switch" role="radiogroup">
-        {(["manual", "autopilot"] as const).map((mode) => {
-          const selected = mode === "autopilot" ? on : !on;
-          return (
-            <button
-              aria-checked={selected}
-              className="execution-switch__option"
-              disabled={busy || (mode === "autopilot" && !armable && !on)}
-              key={mode}
-              onClick={() => {
-                if (selected) return;
-                if (mode === "manual") onToggle(false);
-                else setAsking(true);
-              }}
-              role="radio"
-              type="button"
-            >
-              {mode === "autopilot" ? <span aria-hidden className="execution-switch__dot" data-on={on || undefined} /> : null}
-              {mode === "manual" ? "Manual" : "Autopilot"}
-            </button>
-          );
-        })}
+    <div className="mx-2 mt-3 rounded-xl border border-line bg-paper-strong px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] font-semibold text-ink">Autopilot</p>
+          <p className="text-[0.68rem] leading-snug text-muted">
+            {!armable
+              ? "Add a Schedule, Price, Signal or Wallet watch from the toolbox, or ask for a trading rule, to let it run on its own."
+              : on
+                ? [
+                    triggers.length ? `${triggers.length} trigger${triggers.length === 1 ? "" : "s"}, up to 48 runs a day on your key` : null,
+                    rules ? `${rules} rule${rules === 1 ? "" : "s"} watching Binance, on paper` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                    .replace(/^/, "On · ")
+                : "Off · it runs only when you ask it"}
+          </p>
+        </div>
+        <button
+          aria-checked={on}
+          aria-label="Autopilot"
+          className="autopilot-switch"
+          disabled={busy || (!armable && !on)}
+          // Off is immediate; on asks first (owner, 2026-10-03).
+          onClick={() => (on ? onToggle(false) : setAsking(true))}
+          role="switch"
+          type="button"
+        >
+          <span className="autopilot-switch__knob" />
+        </button>
       </div>
-      <p className="mt-1 px-1 text-[0.66rem] leading-snug text-muted">
-        {!armable && !on
-          ? "Add a Schedule, Price, Signal or Wallet watch, or ask for a trading rule, to let it run on its own."
-          : on
-            ? "It acts on its own now, within its limits."
-            : "It runs only when you ask it."}
-        {draft.autopilot && onWatchRuns ? (
-          <button className="ml-1.5 !text-[0.66rem] font-semibold text-accent-ink hover:underline" onClick={onWatchRuns} type="button">
-            Watch its runs →
-          </button>
-        ) : null}
-      </p>
+      {draft.autopilot && onWatchRuns ? (
+        <button className="mt-1.5 !text-[0.72rem] font-semibold text-accent-ink hover:underline" onClick={onWatchRuns} type="button">
+          Watch its runs →
+        </button>
+      ) : null}
 
       {asking ? (
         <div aria-labelledby="autopilot-confirm-title" aria-modal className="confirm-scrim" role="dialog">

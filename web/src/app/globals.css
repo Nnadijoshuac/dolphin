@@ -4317,3 +4317,68 @@ select {
 /* The footer's one-line disclaimer: present, quiet (owner, 2026-10-03). */
 .site-footer__disclaimer { display: block; margin-top: 0.3rem; font-size: 0.72rem; opacity: 0.8; }
 .site-footer__disclaimer a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ── Docs (components/docs-page.tsx): the legal frame, plus code and steps ── */
+.docs-code { margin: 12px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); overflow: hidden; }
+.docs-code figcaption { padding: 7px 14px; border-bottom: 1px solid var(--line); font-size: 0.74rem; font-weight: 600; color: var(--muted); }
+.docs-code pre { margin: 0; padding: 12px 14px; overflow-x: auto; font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.8rem; line-height: 1.6; color: var(--ink); white-space: pre; }
+.legal__text code { padding: 1px 5px; border-radius: 5px; background: var(--paper-muted); font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.84em; color: var(--ink); }
+.docs-code code { padding: 0; background: none; font-size: inherit; }
+.docs-steps { padding-left: 1.2rem; list-style: decimal; }
+.docs-steps li + li { margin-top: 6px; }
+.docs-steps li::marker { color: var(--faint); font-weight: 600; }
+
+/* ── The whitepaper (app/whitepaper): a paper, not a web page ── */
+.paper-shell { padding: 3rem 16px 5rem; background: var(--canvas); }
+.paper {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 72px) clamp(20px, 6vw, 80px);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper-strong);
+  box-shadow: 0 1px 2px rgb(23 24 19 / 4%), 0 24px 60px -32px rgb(23 24 19 / 22%);
+  font-family: var(--font-paper), Georgia, "Times New Roman", serif;
+  font-size: 1.04rem;
+  line-height: 1.75;
+  color: var(--ink);
+  hyphens: auto;
+}
+.paper__head { padding-bottom: 28px; border-bottom: 1px solid var(--line); text-align: center; }
+.paper__kicker { font-family: var(--font-geist-sans), system-ui, sans-serif; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-ink); }
+.paper__title { margin: 14px auto 0; max-width: 36rem; font-size: clamp(1.6rem, 3.6vw, 2.15rem); font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
+.paper__meta { margin-top: 14px; font-size: 0.92rem; font-style: italic; color: var(--muted); }
+.paper__actions { display: flex; justify-content: center; gap: 18px; margin-top: 18px; font-family: var(--font-geist-sans), system-ui, sans-serif; font-size: 0.82rem; }
+.paper__actions a, .paper__print { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+.paper__abstract { margin: 32px 0 8px; padding: 0 clamp(0px, 4vw, 36px); }
+.paper__abstract h2 { text-align: center; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+.paper__abstract p { margin-top: 10px; font-size: 0.98rem; text-align: justify; }
+.paper__toc { margin: 28px 0 8px; padding: 18px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.paper__toc h2 { font-size: 0.82rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+.paper__toc ol { margin-top: 8px; columns: 2; column-gap: 32px; font-size: 0.92rem; }
+.paper__toc a { color: var(--ink-soft); text-decoration: none; }
+.paper__toc a:hover { text-decoration: underline; }
+.paper section { scroll-margin-top: 90px; }
+.paper section > h2 { margin-top: 38px; font-size: 1.28rem; font-weight: 600; letter-spacing: -0.005em; }
+.paper section > h3 { margin-top: 20px; font-size: 1.04rem; font-weight: 600; font-style: italic; }
+.paper section p { margin-top: 12px; text-align: justify; }
+.paper code { font-family: var(--font-geist-mono), ui-monospace, monospace; font-size: 0.82em; }
+.paper a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+.paper__list { margin-top: 12px; padding-left: 1.4rem; list-style: decimal; }
+.paper__list--plain { list-style: disc; }
+.paper__list li + li { margin-top: 8px; }
+.paper__refs ol { margin-top: 12px; padding-left: 1.6rem; list-style: decimal; font-size: 0.9rem; }
+.paper__refs li + li { margin-top: 4px; }
+.paper__refs li::marker { content: "[" counter(list-item) "]  "; }
+.paper__foot { margin-top: 44px; padding-top: 16px; border-top: 1px solid var(--line); text-align: center; font-size: 0.8rem; color: var(--faint); }
+@media (max-width: 640px) {
+  .paper__toc ol { columns: 1; }
+  .paper section p, .paper__abstract p { text-align: left; }
+}
+/* Printed or saved as PDF: only the paper, black on white. */
+@media print {
+  header, footer.site-footer, nav[aria-label="Primary"], .paper__actions { display: none !important; }
+  .paper-shell { padding: 0; background: #fff; }
+  .paper { max-width: none; border: 0; box-shadow: none; padding: 0; color: #000; background: #fff; }
+  .paper section > h2 { break-after: avoid; }
+}

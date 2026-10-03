@@ -249,8 +249,11 @@ http.route({
 http.route({
   path: "/api/v1/mcp",
   method: "GET",
-  handler: httpAction(async () =>
-    new Response(
+  // An MCP client asking for a server-sent stream is told this server has none (MCP over HTTP allows 405).
+  handler: httpAction(async (_ctx, request) =>
+    (request.headers.get("accept") ?? "").includes("text/event-stream")
+      ? new Response(null, { status: 405, headers: { ...MCP_CORS, allow: "POST, OPTIONS" } })
+      : new Response(
       JSON.stringify(
         {
           name: "Dolphin marketplace MCP",

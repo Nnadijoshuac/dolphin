@@ -50,6 +50,9 @@ const COLUMNS = [
       { href: "/", label: "Discover" },
       { href: "/search", label: "Search agents" },
       { href: "/dolphin", label: "Build an agent" },
+      { href: "/docs", label: "Docs" },
+      { href: "/docs/mcp", label: "Use from Claude / ChatGPT" },
+      { href: "/whitepaper", label: "Whitepaper" },
     ],
   },
   {

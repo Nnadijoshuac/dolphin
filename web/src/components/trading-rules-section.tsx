@@ -92,7 +92,7 @@ function RunnerSteps() {
   const runner = `${typeof window === "undefined" ? "https://dolphinamp.xyz" : window.location.origin}/runner/dolphin-runner.mjs`;
   const lines = [
     "# 1. On your server (Node 20+), in a new folder, put the agent.json you just downloaded",
-    `curl -O ${runner}`,
+    `curl -LO ${runner}`,
     "",
     "# 2. Watch it trade on paper first - no orders, no keys",
     "node dolphin-runner.mjs",

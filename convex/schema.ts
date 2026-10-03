@@ -1301,6 +1301,25 @@ export default defineSchema({
    * construction: the builder is only ever offered tools that pass
    * lib/toolCapability.ts `isMutating`, and a try-run filters again.
    */
+  /**
+   * A BUILDER'S DOCUMENT, AS TEXT (owner, 2026-10-03; Agent/PLAN-2026-10-03-knowledge-mcps.md).
+   * The uploaded file is deleted once read: only its text is kept, gzipped one
+   * blob per section, so a tool call reads one section (~5 KB), not the whole
+   * document. `sha256` is of the extracted text and goes in the registration file.
+   */
+  agentKnowledge: defineTable({
+    draftId: v.id("agentDrafts"),
+    name: v.string(),
+    kind: v.union(v.literal("markdown"), v.literal("text"), v.literal("pdf")),
+    sha256: v.string(),
+    textChars: v.number(),
+    storedBytes: v.number(),
+    sections: v.array(v.object({ title: v.string(), slug: v.string(), chars: v.number(), storageId: v.id("_storage") })),
+    /** Phrases that try to steer an AI (lib/knowledge.ts injectionFlags), shown to the builder. */
+    flags: v.array(v.object({ reason: v.string(), excerpt: v.string() })),
+    createdAt: v.number(),
+  }).index("by_draft", ["draftId"]),
+
   agentDrafts: defineTable({
     conversationId: v.id("dolphinConversations"),
     /**

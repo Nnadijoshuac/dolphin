@@ -148,6 +148,16 @@ export const DOLPHIN_FALLBACK_MODELS = ["nvidia/nemotron-3-super-120b-a12b:free"
  */
 
 const REQUEST_TIMEOUT_MS = 90_000;
+/*
+ * A FREE MODEL THAT ACCEPTS THE REQUEST AND NEVER ANSWERS (owner, 2026-10-03: the build chat failed
+ * with "Could not reach OpenRouter: The signal has been aborted"; prod logged agentBuilder:ask at
+ * 90,173 ms - the whole timeout, then nothing). One that has not answered in 55 s rarely does, so
+ * Dolphin's own free models get 55 s, and the retry goes to the NEXT model in the chain rather than
+ * asking the stalled one again. A builder's own key and model keep 90 s and are never swapped.
+ */
+const FREE_MODEL_TIMEOUT_MS = 55_000;
+/** A request that ran out of time - Convex says "The signal has been aborted"; others say "timed out". */
+const STALLED = /aborted|timed? ?out|timeout/i;
 
 export type ChatMessage =
   | { role: "system"; content: string }
@@ -271,7 +281,7 @@ export type KeyLedger = (keyName: string) => Promise<void>;
  * not a demo. Deliberately NOT retried: a 429. A free-tier daily cap does not
  * clear in two seconds, and hammering it is how an account earns a longer one.
  */
-const TRANSIENT_UPSTREAM = /overloaded|temporarily|timeout|502|503|504|unavailable/i;
+const TRANSIENT_UPSTREAM = /overloaded|temporarily|timeout|aborted|timed out|502|503|504|unavailable/i;
 
 const MAX_ATTEMPTS = 3;
 
@@ -287,9 +297,13 @@ export async function chatCompletion(
 ): Promise<ChatResult> {
   let lastError: unknown;
 
+  // Dolphin's own models in order: after a stall, the next attempt starts from the next one.
+  const chain = options.endpoint ? [] : [...new Set([options.model ?? DOLPHIN_PRIMARY_MODEL, ...DOLPHIN_FALLBACK_MODELS])];
+  let current = options;
+
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      return await chatCompletionOnce(options);
+      return await chatCompletionOnce(current);
     } catch (cause) {
       lastError = cause;
 
@@ -299,6 +313,10 @@ export async function chatCompletion(
         TRANSIENT_UPSTREAM.test(cause.message);
 
       if (!retryable || attempt === MAX_ATTEMPTS - 1) throw cause;
+      if (cause instanceof OpenRouterError && STALLED.test(cause.message) && chain.length > 1) {
+        const at = chain.indexOf(current.model ?? DOLPHIN_PRIMARY_MODEL);
+        current = { ...current, model: chain[(at + 1) % chain.length] };
+      }
 
       // 1s, then 2s. Long enough for a provider blip, short enough that a user
       // watching a spinner does not conclude the app has hung.
@@ -318,6 +336,8 @@ async function chatCompletionOnce(options: {
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  /** Per-request time limit. Defaults: 55 s on Dolphin's free models, 90 s on a builder's own. Tests shorten it. */
+  timeoutMs?: number;
   /**
    * Whether OpenRouter may substitute another free model when the primary is
    * exhausted. Defaults to true, and MUST be false whenever `tools` are
@@ -482,7 +502,7 @@ async function sendOnce(
         method: "POST",
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(options.timeoutMs ?? (endpoint ? REQUEST_TIMEOUT_MS : FREE_MODEL_TIMEOUT_MS)),
       });
       response = { status: raw.status, ok: raw.ok };
       text = await raw.text();

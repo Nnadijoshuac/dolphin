@@ -89,3 +89,27 @@ test("every key out for the day: a rate limit naming how many keys were tried", 
     restoreEnv();
   }
 });
+
+test("a free model that never answers is given up on, and the retry goes to the next model in the chain", async () => {
+  const restoreEnv = withKeys({ OPENROUTER_API_KEY: "k1" });
+  const realFetch = globalThis.fetch;
+  const asked: string[] = [];
+  globalThis.fetch = (async (_url: string, init?: { body?: string; signal?: AbortSignal }) => {
+    const model = (JSON.parse(init?.body ?? "{}") as { model: string }).model;
+    asked.push(model);
+    if (asked.length === 1) {
+      // The first model accepts the request and never answers: only the time limit ends it.
+      return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(new Error("The signal has been aborted"))));
+    }
+    return new Response(JSON.stringify({ model, choices: [{ message: { content: "built" }, finish_reason: "stop" }] }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const result = await chatCompletion({ messages: [{ role: "user", content: "build" }], timeoutMs: 50 });
+    assert.equal(result.content, "built");
+    assert.equal(asked.length, 2);
+    assert.notEqual(asked[1], asked[0], "the retry asks a different model, not the stalled one");
+  } finally {
+    globalThis.fetch = realFetch;
+    restoreEnv();
+  }
+});

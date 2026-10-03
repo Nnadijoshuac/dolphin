@@ -22,15 +22,22 @@ import { BacktestPanel } from "@/components/backtest-panel";
  */
 
 type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
-export type Frame = "15m" | "1h" | "4h" | "1d";
+export type Frame = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
 
 const FRAMES: Record<Frame, string> = {
+  "1m": "minute?aggregate=1",
+  "5m": "minute?aggregate=5",
   "15m": "minute?aggregate=15",
   "1h": "hour?aggregate=1",
   "4h": "hour?aggregate=4",
   "1d": "day?aggregate=1",
 };
-const REFRESH_MS = 60_000;
+/*
+ * How often it re-reads (owner, 2026-10-03: "slow... you can't see anything moving"). Short
+ * frames every 10 s, so the forming candle visibly moves; GeckoTerminal allows 30 calls a
+ * minute per visitor, so one chart stays far inside it.
+ */
+const REFRESH_MS: Record<Frame, number> = { "1m": 10_000, "5m": 10_000, "15m": 20_000, "1h": 30_000, "4h": 60_000, "1d": 60_000 };
 /** Fetched once for both sizes; the small card draws the latest of them. */
 const FETCH_LIMIT = 160;
 const SMALL_COUNT = 64;
@@ -103,7 +110,7 @@ export function TradingChart({
   expanded?: boolean;
   onToggleExpand?: () => void;
 }) {
-  const [frame, setFrame] = useState<Frame>("1h");
+  const [frame, setFrame] = useState<Frame>("5m");
   const [state, setState] = useState<
     { status: "loading" } | { status: "error" } | { status: "ready"; candles: Candle[]; at: number }
   >({ status: "loading" });
@@ -137,7 +144,7 @@ export function TradingChart({
       } catch {
         if (!cancelled) setState((current) => (current.status === "ready" ? current : { status: "error" }));
       }
-      if (!cancelled) timer = window.setTimeout(load, REFRESH_MS);
+      if (!cancelled) timer = window.setTimeout(load, REFRESH_MS[frame]);
     };
     void load();
     return () => {

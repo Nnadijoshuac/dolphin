@@ -774,7 +774,11 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
   },
 ];
 
-const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = { market: "Needs a Price feed", risk: "Needs Risk limits", swap: "Needs a Market" };
+const NEEDS_LABEL: Partial<Record<AgentBlockData["type"], string>> = {
+  market: "Adds a Price feed first",
+  risk: "Adds Risk limits first - it trades only inside them",
+  swap: "Adds a Market first",
+};
 
 function Toolbox({
   blocks,
@@ -830,6 +834,15 @@ function Toolbox({
                       const existing = item.type === "tool" ? null : blocks.find((block) => block.type === item.type);
                       const missing =
                         item.type !== "tool" && item.needs && !blocks.some((block) => block.type === item.needs) ? item.needs : null;
+                      /*
+                       * A block with a missing prerequisite opens that prerequisite instead of sitting greyed out
+                       * (owner, 2026-10-03: "why are they greyed out?"): Market trades only after Risk limits, and
+                       * Quiet hours guards a Market - so picking either starts with what it needs.
+                       */
+                      const firstNeeded = (type: AgentBlockData["type"]): AgentBlockData["type"] => {
+                        const need = TOOLBOX.flatMap((g) => g.items).find((candidate) => candidate.type === type)?.needs;
+                        return need && !blocks.some((block) => block.type === need) ? firstNeeded(need) : type;
+                      };
                       const full = item.type === "tool" && toolCount >= MAX_TOOLS;
                       const id =
                         item.type === "tool"
@@ -843,10 +856,11 @@ function Toolbox({
                         <button
                           className="block-card"
                           data-active={selected === id || undefined}
-                          disabled={Boolean(missing) || full}
+                          data-needs={missing || undefined}
+                          disabled={full}
                           key={item.type}
                           onClick={() => {
-                            onPick(id);
+                            onPick(missing && item.type !== "tool" ? `new-${firstNeeded(item.type)}` : id);
                             setOpen(false);
                           }}
                           type="button"

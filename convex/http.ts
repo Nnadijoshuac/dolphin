@@ -30,6 +30,7 @@ import {
   type RpcRequest,
 } from "./builtAgentServer";
 import { apiBase } from "./builtAgents";
+import { handleMarketplaceMcp, type RpcMessage } from "./marketplaceMcp";
 import { PaymentRejected, decodePayment, formatU, paymentChallenge, paymentResponseHeader, textToBase64, type DecodedPayment } from "./lib/x402";
 import { runnerTokenHash } from "./strategy";
 import { checkPayment, settlePayment } from "./x402";
@@ -207,6 +208,69 @@ for (const path of ["/api/v1/contracts", "/api/v1/hires", "/api/v1/agents", "/ap
     handler: httpAction(async () => new Response(null, { status: 204, headers: CORS })),
   });
 }
+
+/* ---------------------------------------------------------------------------
+ * DOLPHIN FOR AI ASSISTANTS (2026-10-03) - convex/marketplaceMcp.ts
+ *
+ *   POST /api/v1/mcp   one MCP server for the whole marketplace: search_agents, get_agent, call_agent
+ *   GET  /api/v1/mcp   a short JSON description, for a person who opens the URL in a browser
+ * ------------------------------------------------------------------------ */
+
+const MCP_CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-allow-headers": "content-type, accept, mcp-protocol-version, mcp-session-id",
+};
+
+http.route({
+  path: "/api/v1/mcp",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const rpc = (body: unknown, status = 200) =>
+      new Response(body === null ? null : JSON.stringify(body), {
+        status: body === null ? 202 : status,
+        headers: { ...MCP_CORS, "content-type": "application/json; charset=utf-8" },
+      });
+    const text = await request.text();
+    if (text.length > 64 * 1024) return rpc({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Request too large." } }, 413);
+    let message: unknown;
+    try {
+      message = JSON.parse(text);
+    } catch {
+      return rpc({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error." } }, 400);
+    }
+    if (!message || typeof message !== "object" || Array.isArray(message)) {
+      return rpc({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Send one JSON-RPC request at a time." } }, 400);
+    }
+    return rpc(await handleMarketplaceMcp(ctx, message as RpcMessage));
+  }),
+});
+
+http.route({
+  path: "/api/v1/mcp",
+  method: "GET",
+  handler: httpAction(async () =>
+    new Response(
+      JSON.stringify(
+        {
+          name: "Dolphin marketplace MCP",
+          transport: "MCP over HTTP (JSON-RPC 2.0). POST to this URL.",
+          tools: ["search_agents", "get_agent", "call_agent"],
+          docs: "https://www.dolphinamp.xyz/docs/mcp",
+        },
+        null,
+        2,
+      ),
+      { headers: { ...MCP_CORS, "content-type": "application/json; charset=utf-8" } },
+    ),
+  ),
+});
+
+http.route({
+  path: "/api/v1/mcp",
+  method: "OPTIONS",
+  handler: httpAction(async () => new Response(null, { status: 204, headers: MCP_CORS })),
+});
 
 /* ---------------------------------------------------------------------------
  * BUILT AGENTS (2026-09-26) - see convex/builtAgentServer.ts

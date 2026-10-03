@@ -68,7 +68,7 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
           <RuleRow conversationKey={conversationKey} key={rule.id} rule={rule} />
         ))}
       </ul>
-      {view.trades.length > 0 ? <Trades trades={view.trades} /> : null}
+      {view.trades.length > 0 ? <Trades rules={view.rules} trades={view.trades} /> : null}
 
       <button
         className="mt-3 flex h-8 w-full items-center justify-center rounded-lg border border-line px-3 !text-[12px] font-semibold text-ink transition-colors hover:border-ink"
@@ -232,14 +232,36 @@ function NumberBox({
   );
 }
 
-function Trades({ trades }: { trades: TradingRuleTrade[] }) {
+/**
+ * WHY? (owner, 2026-10-03; UI review point 11). The reason the engine recorded at the time,
+ * with the values it saw ("RSI was 28.4, below 30"), and the limits the trade ran under.
+ * Trades recorded before 2026-10-03 carry the older reason without values; shown as stored.
+ */
+function TradeWhy({ trade, rule }: { trade: TradingRuleTrade; rule: TradingRuleView | undefined }) {
+  const limits = [
+    `$${trade.sizeUsd} a trade`,
+    ...(trade.leverage > 1 ? [`${trade.leverage}x`] : []),
+    ...(rule && rule.stopLossPct !== null ? [`stop-loss ${rule.stopLossPct}%`] : []),
+    trade.source === "runner" ? "on your server" : "on paper, at Binance's price",
+  ];
+  return (
+    <div className="trade-why">
+      <p className="text-ink-soft">{trade.reason}</p>
+      <p className="mt-0.5 text-muted">{limits.join(" · ")}</p>
+    </div>
+  );
+}
+
+function Trades({ trades, rules = [] }: { trades: TradingRuleTrade[]; rules?: TradingRuleView[] }) {
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="mt-3">
       <p className="text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-muted">Recent trades</p>
       <ul className="mt-1 divide-y divide-line/60">
         {trades.slice(0, 8).map((trade) => (
-          <li className="flex items-baseline justify-between gap-2 py-1 text-[0.68rem]" key={trade._id}>
-            <span className="min-w-0 truncate text-ink-soft" title={trade.reason}>
+          <li className="py-1 text-[0.68rem]" key={trade._id}>
+            <div className="flex items-baseline justify-between gap-2">
+            <span className="min-w-0 truncate text-ink-soft">
               {trade.kind === "enter" ? (trade.side === "short" ? "Shorted" : "Bought") : "Closed"} {trade.market} at {price(trade.price)}
               {trade.leverage > 1 ? ` · ${trade.leverage}x` : ""}
               {/* Where it happened: Dolphin's paper run, or the builder's server - reported, so never shown as verified. */}
@@ -252,6 +274,16 @@ function Trades({ trades }: { trades: TradingRuleTrade[] }) {
             >
               {trade.pnlPct === null ? `$${trade.sizeUsd}` : `${trade.pnlPct > 0 ? "+" : ""}${trade.pnlPct}%`}
             </span>
+            <button
+              aria-expanded={open === trade._id}
+              className="shrink-0 !text-[0.66rem] font-semibold text-accent-ink hover:underline"
+              onClick={() => setOpen((current) => (current === trade._id ? null : trade._id))}
+              type="button"
+            >
+              Why?
+            </button>
+            </div>
+            {open === trade._id ? <TradeWhy rule={rules.find((rule) => rule.id === trade.ruleId)} trade={trade} /> : null}
           </li>
         ))}
       </ul>

@@ -4219,3 +4219,14 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .popout-away { animation: none; }
 }
+
+/* Why? under a trade (trading-rules-section.tsx). */
+.trade-why {
+  margin: 0.3rem 0 0.15rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.5rem;
+  background: var(--paper-muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  animation: built-summary-in 200ms ease both;
+}

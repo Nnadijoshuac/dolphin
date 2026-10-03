@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, resultPct, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, observe, resultPct, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const H4 = 4 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 9, 1);
@@ -179,4 +179,19 @@ test("deciding is fast enough to run on every candle close", () => {
   for (let i = 0; i < 100; i++) decide(rule, history, EMPTY_STATE, T0);
   const perDecision = (performance.now() - started) / 100;
   assert.ok(perDecision < 5, `${perDecision.toFixed(3)} ms per decision`);
+});
+
+test("Why? carries the values the engine saw, not only what the rule asks for", () => {
+  const seen = candles([100, 101, 102, 101, 99, 97]);
+  const entry = decide(ownerRule, seen, EMPTY_STATE, seen[5].openTime + H4);
+  assert.equal(entry.type, "enter");
+  assert.equal(entry.reason, "Entry rule met: the last 3 closes each fell: $102 → $101 → $99 → $97.");
+  // A stop-loss names the entry, the price and the stop it hit.
+  const state = afterCandle(EMPTY_STATE, seen[5].openTime, entry, true, seen[5].openTime + H4);
+  const later = candles([100, 101, 102, 101, 99, 97, 102]);
+  const exit = decide(ownerRule, later, state, later[6].openTime + H4);
+  assert.match(exit.reason, /^Stop-loss: in at \$97, now \$102 - 5\.15% against the position; your stop is 5%\.$/);
+  // RSI reads its own value, to a tenth.
+  const falling = candles(Array.from({ length: 30 }, (_, i) => 100 - i));
+  assert.match(observe({ kind: "rsi", op: "below", value: 30 }, falling), /^RSI was \d+(\.\d)?, below 30$/);
 });

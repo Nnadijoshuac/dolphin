@@ -128,6 +128,48 @@ function holds(condition, candles) {
     }
   }
 }
+function fig(value) {
+  if (!Number.isFinite(value)) return String(value);
+  const abs = Math.abs(value);
+  const digits = abs >= 1e3 ? 2 : abs >= 1 ? 4 : 6;
+  return String(Number(value.toFixed(digits)));
+}
+function observe(condition, candles) {
+  const closes = candles.map((candle) => candle.close);
+  const n = closes.length;
+  const close = closes[n - 1];
+  if (n === 0) return describe(condition);
+  switch (condition.kind) {
+    case "price":
+      return `the price was $${fig(close)}, ${condition.op} $${fig(condition.value)}`;
+    case "rsi": {
+      const rsi = last(rsiSeries(closes, condition.period ?? 14));
+      return rsi === null ? describe(condition) : `RSI was ${fig(Math.round(rsi * 10) / 10)}, ${condition.op} ${condition.value}`;
+    }
+    case "price_vs_ma": {
+      const ma = last(condition.ma === "ema" ? emaSeries(closes, condition.length) : smaSeries(closes, condition.length));
+      return ma === null ? describe(condition) : `the price $${fig(close)} was ${condition.op} the ${condition.length} ${condition.ma.toUpperCase()} ($${fig(ma)})`;
+    }
+    case "ma_cross": {
+      const series = (length) => condition.ma === "ema" ? emaSeries(closes, length) : smaSeries(closes, length);
+      const fast = last(series(condition.fast));
+      const slow = last(series(condition.slow));
+      return fast === null || slow === null ? describe(condition) : `the ${condition.fast} ($${fig(fast)}) crossed ${condition.direction === "up" ? "above" : "below"} the ${condition.slow} ($${fig(slow)})`;
+    }
+    case "macd_cross": {
+      const { line, signal } = macdSeries(closes);
+      const macd = last(line);
+      const sig = last(signal);
+      return macd === null || sig === null ? describe(condition) : `MACD (${fig(macd)}) crossed ${condition.direction === "up" ? "above" : "below"} its signal (${fig(sig)})`;
+    }
+    case "trend":
+      return `the last ${condition.candles} closes each ${condition.direction === "down" ? "fell" : "rose"}: ${closes.slice(Math.max(0, n - condition.candles - 1)).map((value) => `$${fig(value)}`).join(" \u2192 ")}`;
+    case "change_pct": {
+      const from = closes[n - 1 - condition.candles];
+      return from > 0 ? `the price moved ${fig(Math.round((close - from) / from * 1e4) / 100)}% over ${condition.candles} candles, ${condition.op} ${condition.value}%` : describe(condition);
+    }
+  }
+}
 function utcDay(ms) {
   return new Date(ms).toISOString().slice(0, 10);
 }
@@ -143,13 +185,13 @@ function decide(rule, candles, state, now, guard) {
     const { side: side2, entryPrice } = state.position;
     const movePct = (price - entryPrice) / entryPrice * 100 * (side2 === "long" ? 1 : -1);
     if (rule.stopLossPct !== null && movePct <= -rule.stopLossPct) {
-      return { type: "exit", side: side2, price, reason: `Stop-loss: ${movePct.toFixed(2)}% against the position.` };
+      return { type: "exit", side: side2, price, reason: `Stop-loss: in at $${fig(entryPrice)}, now $${fig(price)} - ${Math.abs(movePct).toFixed(2)}% against the position; your stop is ${rule.stopLossPct}%.` };
     }
     if (rule.takeProfitPct !== null && movePct >= rule.takeProfitPct) {
-      return { type: "exit", side: side2, price, reason: `Take-profit: ${movePct.toFixed(2)}% in favour.` };
+      return { type: "exit", side: side2, price, reason: `Take-profit: in at $${fig(entryPrice)}, now $${fig(price)} - ${movePct.toFixed(2)}% in favour; your target is ${rule.takeProfitPct}%.` };
     }
     if (rule.until.length > 0 && rule.until.every((condition) => holds(condition, candles))) {
-      return { type: "exit", side: side2, price, reason: `Exit rule met: ${rule.until.map(describe).join(" and ")}.` };
+      return { type: "exit", side: side2, price, reason: `Exit rule met: ${rule.until.map((condition) => observe(condition, candles)).join(" and ")}.` };
     }
     return { type: "none", reason: "Holding." };
   }
@@ -170,7 +212,7 @@ function decide(rule, candles, state, now, guard) {
   if (side === "short" && rule.venue !== "binance-futures") {
     return { type: "none", reason: "Shorting needs Binance Futures; this venue only buys." };
   }
-  return { type: "enter", side, action: rule.action, price, reason: `Entry rule met: ${rule.when.map(describe).join(" and ")}.` };
+  return { type: "enter", side, action: rule.action, price, reason: `Entry rule met: ${rule.when.map((condition) => observe(condition, candles)).join(" and ")}.` };
 }
 function afterCandle(state, candleOpenTime, decision, executed, now) {
   const today = utcDay(now);

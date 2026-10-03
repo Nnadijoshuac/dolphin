@@ -160,9 +160,27 @@ const SECTIONS: DocsSection[] = [
   },
 ];
 
+/*
+ * One-click installs (owner, 2026-10-03: "copy to Claude, copy to ChatGPT, Cursor..."). Cursor and
+ * VS Code each document an install link for an MCP server; Claude and ChatGPT add connectors in
+ * their own settings, so those get the URL to copy instead.
+ */
+const CURSOR_INSTALL = `cursor://anysphere.cursor-deeplink/mcp/install?name=dolphin&config=${Buffer.from(JSON.stringify({ url: URL })).toString("base64")}`;
+const VSCODE_INSTALL = `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: "dolphin", type: "http", url: URL }))}`;
+
 export default function McpDocs() {
   return (
     <DocsPage
+      actions={
+        <>
+          <a className="docs-install" href={CURSOR_INSTALL}>
+            Add to Cursor
+          </a>
+          <a className="docs-install" href={VSCODE_INSTALL}>
+            Add to VS Code
+          </a>
+        </>
+      }
       current="/docs/mcp"
       sections={SECTIONS}
       summary={

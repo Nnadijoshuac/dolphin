@@ -112,7 +112,8 @@ const SECTIONS: DocsSection[] = [
                 <td>Discovery</td>
                 <td>Search and categories on the site, and the marketplace MCP for AI assistants.</td>
                 <td>
-                  <Link href="/docs/mcp">The MCP</Link> ran BNB Chain Token Safety on CAKE for an assistant (3 Oct 2026).
+                  <Link href="/docs/mcp">The MCP</Link> ran BNB Chain Token Safety on CAKE for an assistant (3 Oct 2026); its{" "}
+                  <code>get_escrow_job</code> tool reads any job below from BNB Chain.
                 </td>
               </tr>
               <tr>
@@ -155,7 +156,10 @@ const SECTIONS: DocsSection[] = [
               <tr>
                 <td>Reputation</td>
                 <td>Only a wallet that hired an agent can review it; reviews can be published on-chain.</td>
-                <td>The review form on each hire.</td>
+                <td>
+                  <strong>Partly observed:</strong> one review so far, from a hire on 8 September 2026; none yet from a paid
+                  job or published on-chain.
+                </td>
               </tr>
             </tbody>
           </table>

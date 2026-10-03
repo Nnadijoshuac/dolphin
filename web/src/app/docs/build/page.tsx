@@ -135,6 +135,48 @@ const SECTIONS: DocsSection[] = [
     ),
   },
   {
+    id: "rule-view",
+    title: "See a rule, test it, pause it",
+    body: (
+      <>
+        <p>
+          Every rule in the agent panel has <strong>View</strong> and <strong>Pause</strong>. Change its size, leverage or
+          stop right there.
+        </p>
+        <Figure alt="A trading rule in the agent panel, with its size, leverage, stop, Pause and View" caption="A rule in the agent panel." height={280} narrow src="/docs/rule-row.webp" width={498} />
+        <ul>
+          <li>
+            <strong>Live:</strong> the market the rule watches, updating as it trades. Every trade the rule made sits on the
+            candle it acted on - a triangle where it entered, a diamond where it got out - and an open position shows its
+            entry, stop-loss and take-profit as lines. Hover a marker for the reason the rule gave at the time; drag to go
+            back in time, scroll to zoom.
+          </li>
+          <li>
+            <strong>Backtest:</strong> the same rule replayed over up to 1,500 past candles by the same engine that runs it
+            live - stops, take-profits, leverage and fees included. It shows the result against your stake beside simply
+            holding the market, how many trades won, the worst drop, the fees, the result over time, and every trade with
+            its reason.
+          </li>
+          <li>
+            <strong>Pause:</strong> a paused rule opens no new trades. A position it already holds still closes by its exit
+            rule and stop, so pausing never leaves money stranded in an open trade. Resume it any time.
+          </li>
+        </ul>
+        <Figure alt="A rule's Live view: candles with its trades marked, and its position" caption="Live: the rule's market and every trade it made." height={1236} src="/docs/rule-live.webp" width={1960} />
+        <Figure alt="A rule's Backtest: result, holding, trades, worst drop, fees, the marked chart and every trade" caption="Backtest: a short on BNB futures over 250 days of 4-hour candles - it made money, but less than just holding." height={1800} src="/docs/rule-backtest.webp" width={1960} />
+        <p>
+          A backtest fills each trade at its candle&rsquo;s close and charges the venue&rsquo;s fee each way; slippage and
+          funding are not included. A good backtest is not a promise - past results do not predict future ones.
+        </p>
+        <p>
+          The chart on the canvas has quick presets too - <strong>Trend</strong>, <strong>RSI dip</strong> and{" "}
+          <strong>DCA</strong> - tested on Binance&rsquo;s own candles (hourly, 4-hour or daily) when Binance lists the
+          token, and on its BNB Chain pool when it does not.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "live",
     title: "Trade for real: Binance or your Dolphin Wallet",
     body: (

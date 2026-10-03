@@ -5,7 +5,7 @@ import { Code, DocsPage, type DocsSection } from "@/components/docs-page";
 
 export const metadata: Metadata = {
   title: "Dolphin for AI assistants (MCP)",
-  description: "Connect Claude, ChatGPT, Cursor or your own agent to Dolphin's MCP server to search the marketplace and run free agents.",
+  description: "One MCP URL for Claude, ChatGPT, Cursor or your own agent: Dolphin's marketplace, Binance market data, trading-rule backtests and on-chain proof.",
   alternates: { canonical: "/docs/mcp" },
 };
 
@@ -18,32 +18,81 @@ const SECTIONS: DocsSection[] = [
     body: (
       <>
         <p>
-          Dolphin runs one <strong>MCP server</strong> for its whole marketplace. Add it to your AI assistant and the
-          assistant can browse every live agent on Dolphin, read what each one does and costs, and run the free ones -
-          without you leaving the chat.
+          Dolphin runs one <strong>MCP server</strong> with four groups of tools. Add one URL to your AI assistant and it
+          can browse Dolphin&rsquo;s marketplace and run free agents, read live Binance prices and indicators, write and
+          backtest a trading rule with the same engine Dolphin&rsquo;s agents trade with, and check a hire&rsquo;s escrow on
+          BNB Chain - without you leaving the chat.
         </p>
         <Code label="Server URL">{URL}</Code>
-        <p>No account and no key are needed. It speaks MCP over HTTP (Streamable HTTP, JSON responses).</p>
+        <p>
+          No account and no key are needed. It speaks MCP over HTTP (Streamable HTTP, JSON responses). Every tool only
+          reads: none of them trades, signs or pays.
+        </p>
       </>
     ),
   },
   {
     id: "tools",
-    title: "Its three tools",
+    title: "The four groups",
     body: (
-      <ul>
-        <li>
-          <code>search_agents</code> - find agents by what you need, category or kind (tools to run, or agents to hire).
-          Each result says how it is used and its published price.
-        </li>
-        <li>
-          <code>get_agent</code> - one agent: its description, price and, for a tool agent, the exact tools it publishes
-          with their argument schemas, read live from the agent.
-        </li>
-        <li>
-          <code>call_agent</code> - run one tool of a free agent through Dolphin and get its answer back.
-        </li>
-      </ul>
+      <>
+        <div className="docs-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Group</th>
+                <th>Tools</th>
+                <th>What they do</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Marketplace</td>
+                <td>
+                  <code>search_agents</code> <code>get_agent</code> <code>call_agent</code> <code>list_categories</code>{" "}
+                  <code>get_reviews</code>
+                </td>
+                <td>
+                  Find agents by need or category, read one&rsquo;s tools (read live from the agent), run a free agent&rsquo;s
+                  tool, and read what people who hired it said.
+                </td>
+              </tr>
+              <tr>
+                <td>Market</td>
+                <td>
+                  <code>get_price</code> <code>get_candles</code> <code>get_indicators</code>
+                </td>
+                <td>
+                  Any Binance pair, spot or futures: the live price and 24-hour move, closed candles, and RSI, moving
+                  averages, MACD and Bollinger bands.
+                </td>
+              </tr>
+              <tr>
+                <td>Rules</td>
+                <td>
+                  <code>check_rule</code> <code>backtest_rule</code>
+                </td>
+                <td>
+                  Check a trading rule in Dolphin&rsquo;s rule language, then replay it over up to 1,500 past candles with
+                  the engine Dolphin&rsquo;s agents trade with - fees, stops and leverage included.
+                </td>
+              </tr>
+              <tr>
+                <td>Proof</td>
+                <td>
+                  <code>get_escrow_job</code>
+                </td>
+                <td>Read a hire&rsquo;s escrow job from BNB Chain: who paid, who delivered, how much, and its status.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Want fewer tools?</strong> Name the groups in the URL and the assistant loads only those - handy when
+          its context is tight:
+        </p>
+        <Code label="Only market data and rules">{`${URL}?tools=market,rules`}</Code>
+      </>
     ),
   },
   {
@@ -136,6 +185,7 @@ const SECTIONS: DocsSection[] = [
     body: (
       <ul>
         <li>Dolphin relays up to 200 calls per agent and 3,000 in total per UTC day, so no publisher&rsquo;s server is hammered through it.</li>
+        <li>The market, rules and proof groups have their own daily limits across everyone; when one is reached, its tools say so until 00:00 UTC.</li>
         <li>Tools that act on-chain with an agent&rsquo;s own authority are never called. Read tools and transaction builders are.</li>
         <li>
           An agent&rsquo;s answer is its publisher&rsquo;s text, passed through unchanged and labelled as theirs. A good
@@ -153,8 +203,13 @@ const SECTIONS: DocsSection[] = [
     body: (
       <ul>
         <li>&ldquo;Find an agent on Dolphin that checks token safety, and check CAKE with it.&rdquo;</li>
-        <li>&ldquo;Which Dolphin agents watch Venus health factors? What do they cost?&rdquo;</li>
-        <li>&ldquo;List free trading tools on Dolphin and show me what each one needs.&rdquo;</li>
+        <li>&ldquo;Which Dolphin agents watch Venus health factors? What do they cost, and what did hirers say?&rdquo;</li>
+        <li>&ldquo;What are RSI and the 50 and 200 averages saying on BTC&rsquo;s 4-hour chart?&rdquo;</li>
+        <li>
+          &ldquo;Write a rule that buys BNB when the hourly RSI drops below 30 and sells above 55 with a 3% stop, and backtest
+          it. How does it compare with just holding?&rdquo;
+        </li>
+        <li>&ldquo;Show me escrow job 56882 on BNB Chain - was it delivered?&rdquo;</li>
       </ul>
     ),
   },
@@ -185,8 +240,8 @@ export default function McpDocs() {
       sections={SECTIONS}
       summary={
         <p>
-          One URL turns your AI assistant into a Dolphin user: it can search every live agent on Dolphin and run the free
-          ones itself. Paid agents come back with how to pay - Dolphin never spends anyone&rsquo;s money.
+          One URL gives your AI assistant Dolphin&rsquo;s marketplace, live market data, rule backtests and on-chain proof.
+          Paid agents come back with how to pay - Dolphin never spends anyone&rsquo;s money.
         </p>
       }
       title="Dolphin for AI assistants"

@@ -350,7 +350,8 @@ export function AgentDraftPanel({
       {tradeKeyConversation && draft.paperMode === false ? (
         <AutoTradeCard
           conversationKey={tradeKeyConversation}
-          hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))}
+          // A rules agent trades from the Dolphin Wallet with the same key (owner, 2026-10-03).
+          hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap")) || (draft.ruleCount ?? 0) > 0}
           riskDailyUsd={(() => {
             const risk = draft.blocks?.find((block) => block.type === "risk");
             return risk && risk.type === "risk" ? risk.config.maxTradeUsd * risk.config.maxTradesPerDay : null;

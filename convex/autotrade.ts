@@ -104,10 +104,23 @@ export const ownedDraft = internalQuery({
       .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id))
       .unique();
     if (!draft) throw new ConvexError("That draft is empty.");
-    if (!draft.brain || draft.brain.walletAddress !== walletAddress) {
-      throw new ConvexError("Only the wallet whose key this agent's brain runs on can let it trade.");
+    /*
+     * WHO MAY LET IT TRADE. The wallet whose key the agent's brain runs on; for an agent with no
+     * brain - a rules agent needs none, its rules run with no model (owner, 2026-10-03: BNB Pulse
+     * could not be given a key at all) - the wallet that switched its Autopilot on, else the one
+     * that built it. Each of those was a signed-in wallet when it was recorded.
+     */
+    const owner = draft.brain ? draft.brain.walletAddress : (draft.autopilot?.walletAddress ?? draft.ownerAddress ?? null);
+    if (!owner || owner.toLowerCase() !== walletAddress.toLowerCase()) {
+      throw new ConvexError(draft.brain ? "Only the wallet whose key this agent's brain runs on can let it trade." : "Only the wallet that runs this agent can let it trade.");
     }
-    return { draftId: draft._id, walletAddress, name: draft.name ?? "Agent", blocks: (draft.blocks ?? []) as AgentBlock[] };
+    return {
+      draftId: draft._id,
+      walletAddress,
+      name: draft.name ?? "Agent",
+      blocks: (draft.blocks ?? []) as AgentBlock[],
+      rules: ((draft.rules ?? []) as { venue?: string; sizeUsd?: number; maxTradesPerDay?: number }[]).filter((rule) => rule && typeof rule === "object"),
+    };
   },
 });
 
@@ -139,7 +152,7 @@ export const prepare = action({
     /** Said before granting: the most a stolen key could move per token, and in BNB per day. */
     worstCaseUsdPerToken: number;
   }> => {
-    const owned: { draftId: Id<"agentDrafts">; walletAddress: string; name: string; blocks: AgentBlock[] } = await ctx.runQuery(
+    const owned: { draftId: Id<"agentDrafts">; walletAddress: string; name: string; blocks: AgentBlock[]; rules: { venue?: string; sizeUsd?: number; maxTradesPerDay?: number }[] } = await ctx.runQuery(
       internal.autotrade.ownedDraft,
       {
         sessionToken: args.sessionToken,
@@ -150,11 +163,21 @@ export const prepare = action({
       throw new ConvexError("Choose 1, 7 or 30 days.");
     }
     if (!isAddress(args.altanaWalletAddress)) throw new ConvexError("That is not a Dolphin Wallet address.");
+    /*
+     * WHAT THE KEY IS LIMITED TO: the Risk limits of an agent that swaps on its own judgement, and
+     * the rules that trade from the Dolphin Wallet - each rule's size times its trades a day
+     * (owner, 2026-10-03: a rules agent has no Swap or Risk block, so it could never be given a key).
+     */
     const risk = owned.blocks.find((block) => block.type === "risk");
-    if (!risk || !owned.blocks.some((block) => block.type === "swap")) {
-      throw new ConvexError("Add Risk limits and a Swap block first - they are what the key is limited to.");
+    const swaps = Boolean(risk) && owned.blocks.some((block) => block.type === "swap");
+    const riskDailyUsd = swaps && risk && risk.type === "risk" ? risk.config.maxTradeUsd * risk.config.maxTradesPerDay : 0;
+    const rulesDailyUsd = owned.rules
+      .filter((rule) => rule.venue === "dolphin-wallet")
+      .reduce((sum, rule) => sum + (Number(rule.sizeUsd) || 0) * (Number(rule.maxTradesPerDay) || 0), 0);
+    const dailyUsd = riskDailyUsd + rulesDailyUsd;
+    if (dailyUsd <= 0) {
+      throw new ConvexError("Add a trading rule that trades from the Dolphin Wallet, or Risk limits and a Swap block, first - they are what the key is limited to.");
     }
-    const dailyUsd: number = risk.type === "risk" ? risk.config.maxTradeUsd * risk.config.maxTradesPerDay : 0;
 
     const bnb = await bscPairFor(WBNB_BSC).catch(() => null);
     if (!bnb?.priceUsd) throw new ConvexError("BNB's live price could not be read, so no safe cap can be set. Try again shortly.");

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useEffect, useRef, useState } from "react";
 import { createPublicClient, formatUnits, http, parseAbi, type Address } from "viem";
@@ -9,7 +9,7 @@ import { bsc, bscTestnet } from "viem/chains";
 import { switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 
 import { CopyAddress, TopUpFromDolphin } from "@/components/agent-wallet-panel";
-import { BUILT_AGENT_CATEGORIES, builtAgentsApi, x402Api } from "@/convex/api";
+import { BUILT_AGENT_CATEGORIES, builtAgentsApi, knowledgeApi, x402Api } from "@/convex/api";
 import { BSC_RPC_URL } from "@/constants/agents";
 import { BSC_TESTNET_RPC_URL, useWallet, wagmiConfig } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
@@ -128,6 +128,14 @@ export function PublishAgentDialog({
   const [price, setPrice] = useState("");
   // Owner, 2026-10-02: published as a tool server (MCP) or an agent (A2A), paid per call in U.
   const [protocol, setProtocol] = useState<"mcp" | "a2a">("mcp");
+  /*
+   * AN AGENT WITH DOCUMENTS (knowledge, step 3) is a tool server whose tools
+   * are priced one by one in the draft panel - an escrow job has one price.
+   */
+  const knowledgeState = useQuery(knowledgeApi.knowledge.tools, { conversationKey: buildConversationKey });
+  const knowledgeTools = (knowledgeState?.tools ?? []).filter((tool) => tool.enabled);
+  const hasKnowledge = knowledgeTools.length > 0;
+  const pricedTools = knowledgeTools.filter((tool) => tool.priceU);
   // What a buyer gives it - the Hire form's fields and what its card declares to calling agents.
   const [inputs, setInputs] = useState<Array<"wallet" | "token">>(["wallet"]);
   const [network, setNetwork] = useState<Network>("bsc");
@@ -196,9 +204,9 @@ export function PublishAgentDialog({
         ...(email.trim() ? { email: email.trim() } : {}),
         ...(payout.trim() && visibility === "public" ? { payoutAddress: payout.trim() } : {}),
         visibility,
-        protocol,
+        protocol: hasKnowledge ? "mcp" : protocol,
         inputs,
-        ...(visibility === "public" && Number(price) > 0 ? { priceU: price.trim() } : {}),
+        ...(visibility === "public" && !hasKnowledge && Number(price) > 0 ? { priceU: price.trim() } : {}),
       });
       /* The fee, read now: this exact call's gas at this moment's price. */
       const client = readClient(network);
@@ -405,6 +413,17 @@ export function PublishAgentDialog({
               /* How people use it, and what a call costs (owner, 2026-10-02). */
               <section>
                 <h3 className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-muted">How people use it</h3>
+                {hasKnowledge ? (
+                  <div className="mt-2 rounded-xl border border-ink bg-paper-muted px-3 py-2.5 text-[0.8rem]">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-ink">Tool server</span>
+                      <span className="font-mono text-[0.62rem] text-muted">MCP</span>
+                    </span>
+                    <span className="block text-[0.7rem] text-muted">
+                      Other AI apps call its {knowledgeTools.length} tools. An agent with documents is a tool server: each tool is priced on its own.
+                    </span>
+                  </div>
+                ) : (
                 <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="How people use it">
                   {([
                     { value: "mcp", label: "Tool server", tag: "MCP", about: "Other AI apps call its tools" },
@@ -426,6 +445,7 @@ export function PublishAgentDialog({
                     </button>
                   ))}
                 </div>
+                )}
                 <p className="mt-3 text-[0.78rem] text-ink-soft">What a buyer gives it</p>
                 <div className="mt-1 flex flex-wrap gap-2" role="group" aria-label="What a buyer gives it">
                   {([
@@ -450,6 +470,25 @@ export function PublishAgentDialog({
                   })}
                 </div>
                 <p className="mt-1 text-[0.7rem] text-muted">Buyers fill these in on the Hire form; calling agents send them as fields. A free note is always allowed.</p>
+                {hasKnowledge ? (
+                  <div className="mt-3 text-[0.78rem] text-ink-soft">
+                    <p>Prices, set per tool in the draft panel</p>
+                    <ul className="mt-1 divide-y divide-line/60 rounded-lg border border-line/80 px-3">
+                      {knowledgeTools.map((tool) => (
+                        <li className="flex items-center justify-between gap-3 py-1.5" key={tool.name}>
+                          <span className="truncate font-mono text-[0.74rem] text-ink">{tool.name}</span>
+                          <span className="shrink-0 text-[0.74rem] tabular-nums text-ink-soft">{tool.priceU ? `${tool.priceU} U` : "Free"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-1 text-[0.7rem] leading-relaxed text-muted">
+                      {pricedTools.length > 0
+                        ? "Callers pay in U per call, straight to your payout wallet. The agent gets its own wallet to submit their payments; send it a little BNB for gas from its page."
+                        : "Every tool is free. Set a price on any tool in the draft panel to get paid per call."}
+                    </p>
+                  </div>
+                ) : (
+                <>
                 <label className="mt-3 block text-[0.78rem] text-ink-soft">
                   {protocol === "mcp" ? "Price per tool call (U)" : "Price per task (U)"}
                   <input
@@ -465,6 +504,8 @@ export function PublishAgentDialog({
                     ? "Callers pay in U, straight to your payout wallet. The agent gets its own wallet to collect payments; send it a little BNB for gas from its page. It answers with your own Brain."
                     : "Free to use. Add a price to get paid in U per call."}
                 </p>
+                </>
+                )}
               </section>
             ) : null}
 

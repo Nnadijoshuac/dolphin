@@ -23,7 +23,7 @@ import {
   agentCard,
   handleA2A,
   handleMcp,
-  isPaidCall,
+  callPrice,
   listingProtocol,
   payTo,
   registrationFile,
@@ -330,13 +330,18 @@ http.route({
     }
     const rpcMessage = message as RpcRequest;
     const handle = () => (path.resource === "a2a" ? handleA2A(ctx, listing, rpcMessage) : handleMcp(ctx, listing, rpcMessage));
-    if (!isPaidCall(listing, rpcMessage)) {
+    const priceRaw = callPrice(listing, rpcMessage);
+    if (!priceRaw) {
+      // A knowledge agent's free tool calls count against the day's free calls (convex/freeCalls.ts).
+      if (listing.knowledge && rpcMessage.method === "tools/call" && rpcMessage.id !== undefined) {
+        const spent = await ctx.runMutation(internal.freeCalls.spend, { hash: listing.hash });
+        if (!spent.ok) return rpc({ jsonrpc: "2.0", id: rpcMessage.id ?? null, result: { content: [{ type: "text", text: spent.reason }], isError: true } });
+      }
       const response = await handle();
       return response === null ? rpc(null, 202) : rpc(response);
     }
 
-    /* ───── a paid call ───── */
-    const priceRaw = listing.priceRaw as string;
+    /* ───── a paid call: this tool's own price (step 3), or the listing's ───── */
     const resourceUrl = `${apiBase()}/api/v1/built/${listing.hash}/${path.resource}`;
     const toolName = typeof rpcMessage.params?.name === "string" ? rpcMessage.params.name.slice(0, 60) : "";
     const resource = path.resource === "a2a" ? "a2a" : `mcp:${toolName}`;
@@ -345,7 +350,7 @@ http.route({
         priceRaw,
         payTo: payTo(listing),
         resourceUrl,
-        description: `${listing.name} · ${formatU(priceRaw)} U per call`,
+        description: `${listing.name}${toolName ? ` · ${toolName}` : ""} · ${formatU(priceRaw)} U per call`,
         error,
       });
       const encoded = textToBase64(JSON.stringify(body));

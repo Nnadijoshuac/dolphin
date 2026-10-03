@@ -40,6 +40,7 @@ import type * as envVars from "../envVars.js";
 import type * as erc8183Seller from "../erc8183Seller.js";
 import type * as facets from "../facets.js";
 import type * as favorites from "../favorites.js";
+import type * as freeCalls from "../freeCalls.js";
 import type * as healthAlerts from "../healthAlerts.js";
 import type * as http from "../http.js";
 import type * as iconProcessing from "../iconProcessing.js";
@@ -154,6 +155,7 @@ declare const fullApi: ApiFromModules<{
   erc8183Seller: typeof erc8183Seller;
   facets: typeof facets;
   favorites: typeof favorites;
+  freeCalls: typeof freeCalls;
   healthAlerts: typeof healthAlerts;
   http: typeof http;
   iconProcessing: typeof iconProcessing;

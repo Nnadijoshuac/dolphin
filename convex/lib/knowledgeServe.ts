@@ -128,3 +128,55 @@ export async function runKnowledgeTool(
     }
   }
 }
+
+/* ── Step 3: serving a PUBLISHED agent, from its snapshot ── */
+
+/** What a listing froze at publish: the documents as they were, and the tools as priced. */
+export type ListingKnowledge = {
+  documents: { documentId: string; name: string; sha256: string; sections: { title: string; slug: string; chars: number; storageId: Id<"_storage"> }[] }[];
+  tools: KnowledgeTool[];
+};
+
+export function servedFromListing(knowledge: ListingKnowledge | null | undefined): ServedKnowledge | null {
+  if (!knowledge || knowledge.tools.length === 0) return null;
+  return {
+    tools: knowledge.tools.filter((tool) => tool.enabled),
+    documents: knowledge.documents.map((doc) => doc.name),
+    sections: knowledge.documents.flatMap((doc) =>
+      doc.sections.map((section) => ({ documentId: doc.documentId, documentName: doc.name, title: section.title, slug: section.slug, storageId: section.storageId })),
+    ),
+  };
+}
+
+/** "0.01" -> U base units (18 decimals), the form x402 charges in. */
+export function priceUToRaw(priceU: string): string {
+  const [whole, fraction = ""] = priceU.split(".");
+  return (BigInt(whole || "0") * BigInt(10) ** BigInt(18) + BigInt((fraction + "0".repeat(18)).slice(0, 18) || "0")).toString();
+}
+
+/**
+ * What calling one of a knowledge agent's tools costs, or `known: false`
+ * when the name is not one of its knowledge tools (then the listing's own
+ * per-call price applies, as before step 3).
+ */
+export function knowledgeCallPrice(knowledge: ListingKnowledge | null | undefined, toolName: string): { known: boolean; priceRaw: string | null } {
+  const tool = knowledge?.tools.find((candidate) => candidate.name === toolName);
+  if (!tool) return { known: false, priceRaw: null };
+  if (!tool.enabled) return { known: true, priceRaw: null };
+  return { known: true, priceRaw: tool.priceU ? priceUToRaw(tool.priceU) : null };
+}
+
+/** The same price, in words a caller reads in tools/list and the registration file. */
+export function priceWords(tool: KnowledgeTool): string {
+  return tool.priceU ? `Costs ${tool.priceU} U per call, paid with x402.` : "Free.";
+}
+
+/** What the registration file says about a knowledge agent: every tool and price, and each document's fingerprint. */
+export function knowledgeRegistration(knowledge: ListingKnowledge) {
+  return {
+    tools: knowledge.tools
+      .filter((tool) => tool.enabled)
+      .map((tool) => ({ name: tool.name, description: tool.description, price: tool.priceU ? { amount: priceUToRaw(tool.priceU), display: `${tool.priceU} U` } : null })),
+    knowledge: knowledge.documents.map((doc) => ({ name: doc.name, sha256: doc.sha256, sections: doc.sections.length })),
+  };
+}

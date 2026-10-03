@@ -6,6 +6,8 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { PUBLIC_BLOCK_TYPES, activeBlocks, type AgentBlock } from "./lib/agentBlocks";
+import type { KnowledgeTool } from "./lib/knowledgeTools";
+import type { ListingKnowledge } from "./lib/knowledgeServe";
 import { capabilityCount, draftGaps } from "./lib/agentSpec";
 import { MAX_ICONS_PER_WALLET_PER_DAY } from "./lib/iconPolicy";
 import { bscPublicClient } from "./lib/bscClient";
@@ -208,6 +210,35 @@ export const prepareListing = mutation({
     }
     const gaps = draftGaps(draft, capabilityCount(draft));
     if (gaps.length > 0) throw new ConvexError(`The agent needs ${gaps.join(", ")} before it can go on-chain.`);
+
+    /*
+     * ITS DOCUMENTS AND THEIR TOOLS (step 3, Agent/PLAN-2026-10-03-knowledge-mcps.md),
+     * frozen into the listing. A documents agent is a tool server: each tool is
+     * called and priced on its own, which an escrow job (one task, one price) cannot do.
+     */
+    const knowledgeTools = (draft.knowledgeTools ?? []).filter((tool) => tool.enabled);
+    let knowledge: ListingKnowledge | undefined;
+    if (knowledgeTools.length > 0) {
+      if (protocol === "a2a") {
+        throw new ConvexError("An agent with documents is published as a tool server (MCP): each of its tools is called and priced on its own. Choose Tool server.");
+      }
+      if (visibility === "public" && knowledgeTools.some((tool) => tool.priceU) && args.network !== "bsc") {
+        throw new ConvexError("Paid tools are settled in U on BNB Chain. Publish on BNB Chain, or make every tool free to try it on Testnet.");
+      }
+      if (knowledgeTools.some((tool) => tool.kind === "ask") && !draft.brain) {
+        throw new ConvexError("The ask tool answers with your own model. Add a Brain with your API key, or switch ask off.");
+      }
+      const rows = await ctx.db
+        .query("agentKnowledge")
+        .withIndex("by_draft", (q) => q.eq("draftId", draft._id))
+        .collect();
+      knowledge = {
+        documents: rows
+          .sort((a, b) => a.createdAt - b.createdAt)
+          .map((row) => ({ documentId: row._id as string, name: row.name, sha256: row.sha256, sections: row.sections })),
+        tools: knowledgeTools as KnowledgeTool[],
+      };
+    }
     const name = draft.name as string;
     const description = draft.description as string;
     if (description.length < MIN_DESCRIPTION_CHARS) {
@@ -297,6 +328,8 @@ export const prepareListing = mutation({
       protocol,
       priceRaw,
       blocks: activeBlocks((draft.blocks ?? []) as AgentBlock[], draft.detached).filter((block) => PUBLIC_BLOCK_TYPES.includes(block.type)),
+      // Undefined clears it on a re-prepared publish whose documents were removed.
+      knowledge,
       inputs:
         args.inputs && args.inputs.length > 0
           ? [...new Set(args.inputs)]
@@ -492,6 +525,12 @@ async function publicView(ctx: { storage: { getUrl: (id: Doc<"builtAgents">["ico
         : `${apiBase()}/api/v1/built/${row.hash}/mcp`,
     priceRaw: row.priceRaw ?? null,
     priceDisplay: row.priceRaw ? `${formatU(row.priceRaw)} U` : null,
+    /** Its documents' tools as published, each with its own price (step 3); null for other agents. */
+    knowledgeTools: row.knowledge
+      ? row.knowledge.tools.filter((tool) => tool.enabled).map((tool) => ({ name: tool.name, description: tool.description, priceU: tool.priceU }))
+      : null,
+    /** Whether any call costs U: its single price, or any priced knowledge tool. Gas matters only then. */
+    paid: Boolean(row.priceRaw) || Boolean(row.knowledge?.tools.some((tool) => tool.enabled && tool.priceU)),
     pageUrl: `${siteBase()}/agent/${row.hash}`,
     registerTxUrl: row.registerTxHash ? `${explorer}/tx/${row.registerTxHash}` : null,
     uriUpdatedAt: row.uriUpdatedAt ?? null,

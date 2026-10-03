@@ -1053,6 +1053,25 @@ export default defineSchema({
      * inputs its card, registration file and quote declare to calling agents.
      */
     inputs: v.optional(v.array(v.union(v.literal("wallet"), v.literal("token")))),
+    /**
+     * ITS KNOWLEDGE AT PUBLISH (step 3 of Agent/PLAN-2026-10-03-knowledge-mcps.md): the
+     * documents' sections and the tools as priced, frozen like `blocks`, so a buyer
+     * gets what the builder tested. A section blob stays while any listing names it
+     * (knowledge.removeDocument). Each document's sha256 is in the registration file.
+     */
+    knowledge: v.optional(
+      v.object({
+        documents: v.array(
+          v.object({
+            documentId: v.string(),
+            name: v.string(),
+            sha256: v.string(),
+            sections: v.array(v.object({ title: v.string(), slug: v.string(), chars: v.number(), storageId: v.id("_storage") })),
+          }),
+        ),
+        tools: v.array(knowledgeToolValidator),
+      }),
+    ),
     /** Its read-only blocks at publish (PUBLIC_BLOCK_TYPES), so a hire gets what the builder tested. */
     blocks: v.optional(v.array(v.object({ id: v.string(), type: v.string(), config: v.any() }))),
     draftId: v.id("agentDrafts"),
@@ -1309,6 +1328,13 @@ export default defineSchema({
    * blob per section, so a tool call reads one section (~5 KB), not the whole
    * document. `sha256` is of the extracted text and goes in the registration file.
    */
+  /**
+   * FREE CALLS COUNTED PER DAY (owner, 2026-10-03: protect the free Convex plan).
+   * One row per agent per UTC day ("<hash>:<day>") and one for all of Dolphin
+   * ("all:<day>"); a knowledge agent's free tools stop for the day at the cap.
+   */
+  freeCalls: defineTable({ key: v.string(), count: v.number() }).index("by_key", ["key"]),
+
   agentKnowledge: defineTable({
     draftId: v.id("agentDrafts"),
     name: v.string(),

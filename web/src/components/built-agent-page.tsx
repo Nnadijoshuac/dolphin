@@ -52,6 +52,14 @@ function CopyLine({ label, value }: { label: string; value: string }) {
  * The registration file names this URL as the agent's web page, so buyers
  * arriving from a marketplace land here and must get the public page.
  */
+/** The price badge: one price, "from" the cheapest priced tool of a knowledge agent, or Free. */
+function priceChip(agent: BuiltAgentPublic): string {
+  const priced = (agent.knowledgeTools ?? []).filter((tool) => tool.priceU).map((tool) => Number(tool.priceU));
+  if (priced.length > 0) return `${priced.length < (agent.knowledgeTools ?? []).length ? "Free to try · from" : "From"} ${Math.min(...priced)} U per call`;
+  if (agent.priceDisplay) return `${agent.priceDisplay} per ${agent.protocol === "a2a" ? "hire" : "call"}`;
+  return "Free";
+}
+
 export function BuiltAgentPage({ hash }: { hash: string }) {
   const agent = useQuery(builtAgentsApi.builtAgents.publicByHash, { hash });
   const wallet = useWallet();
@@ -117,7 +125,7 @@ function BuiltAgentView({ agent, owner }: { agent: BuiltAgentPublic; owner: bool
               <span className={`agent-chip ${live ? "agent-chip--live" : "agent-chip--stop"}`}>{onChain}</span>
               <span className="agent-chip">{agent.protocol === "a2a" ? "A2A agent" : "MCP tool server"}</span>
               <span className="agent-chip">
-                {agent.priceDisplay ? `${agent.priceDisplay} per ${agent.protocol === "a2a" ? "hire" : "call"}` : "Free"}
+                {priceChip(agent)}
               </span>
               {gas.level ? (
                 <span className={`agent-chip ${gas.level === "ok" ? "agent-chip--live" : gas.level === "low" ? "agent-chip--warn" : "agent-chip--stop"}`}>
@@ -153,13 +161,19 @@ function BuiltAgentView({ agent, owner }: { agent: BuiltAgentPublic; owner: bool
                 <>
                   Send it a task over A2A (<span className="font-mono">message/send</span>) and it answers with the result.
                 </>
+              ) : agent.knowledgeTools ? (
+                <>Its MCP server offers the {agent.knowledgeTools.length} tools below.</>
               ) : (
                 <>
                   Its MCP server offers <span className="font-mono">ask</span> (ask it a question)
                   {agent.tools.length > 0 ? " and the tools below" : ""}.
                 </>
               )}{" "}
-              {agent.priceDisplay
+              {agent.knowledgeTools
+                ? agent.paid
+                  ? "Each tool has its own price, paid with x402 per call; the free ones cost nothing."
+                  : "Every tool is free to use."
+                : agent.priceDisplay
                 ? agent.protocol === "a2a"
                   ? `Each hire costs ${agent.priceDisplay}, held in escrow on BNB Chain until it delivers, or paid with x402.`
                   : `Each call costs ${agent.priceDisplay}, paid with x402.`
@@ -180,6 +194,19 @@ function BuiltAgentView({ agent, owner }: { agent: BuiltAgentPublic; owner: bool
                 <li className="agent-chip" key={`${tool.agentKey}:${tool.toolName}`} title={`from ${tool.agentName}`}>
                   <span className="font-mono">{tool.toolName}</span>
                   <span className="font-normal text-muted">· {tool.agentName}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {agent.knowledgeTools && agent.knowledgeTools.length > 0 ? (
+            <ul className="mt-3 divide-y divide-line/60">
+              {agent.knowledgeTools.map((tool) => (
+                <li className="flex items-start justify-between gap-4 py-2" key={tool.name}>
+                  <span className="min-w-0">
+                    <span className="block font-mono text-[0.8rem] text-ink">{tool.name}</span>
+                    <span className="block text-[0.74rem] leading-relaxed text-muted">{tool.description}</span>
+                  </span>
+                  <span className="shrink-0 text-[0.78rem] font-semibold tabular-nums text-ink-soft">{tool.priceU ? `${tool.priceU} U` : "Free"}</span>
                 </li>
               ))}
             </ul>

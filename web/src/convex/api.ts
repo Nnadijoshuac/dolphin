@@ -1411,6 +1411,10 @@ export type BuiltAgentPublic = {
   /** Price per call in U base units, paid with x402; null is free. */
   priceRaw: string | null;
   priceDisplay: string | null;
+  /** Its documents' tools as published, each with its own price (knowledge, step 3); null for other agents. */
+  knowledgeTools: { name: string; description: string; priceU: string | null }[] | null;
+  /** Whether any call costs U - its single price or any priced knowledge tool. */
+  paid: boolean;
   pageUrl: string;
   registerTxUrl: string | null;
   /** The owner's latest confirmed setAgentURI, if any. */

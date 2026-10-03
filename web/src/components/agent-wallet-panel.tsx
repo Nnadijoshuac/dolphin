@@ -55,7 +55,8 @@ export function useAgentGas(agent: BuiltAgentPublic): {
   level: GasLevel | null;
   refetch: () => void;
 } {
-  const paid = agent.status === "registered" && agent.network === "bsc" && Boolean(agent.priceRaw);
+  // Any priced call - its single price, or a priced knowledge tool - needs gas to settle.
+  const paid = agent.status === "registered" && agent.network === "bsc" && agent.paid;
   const row = useQuery(x402Api.x402.agentWallet, paid ? { hash: agent.hash } : "skip");
   const address = row?.address ?? null;
   const balance = useTanstackQuery({

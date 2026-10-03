@@ -95,7 +95,15 @@ export const removeDocument = mutation({
     const draft = await draftOf(ctx, conversation._id);
     const row = await ctx.db.get(documentId);
     if (!draft || !row || row.draftId !== draft._id) throw new ConvexError("That document is not in this agent.");
-    for (const section of row.sections) await ctx.storage.delete(section.storageId);
+    // A published agent still serves the sections it froze (step 3): those blobs stay.
+    const listings = await ctx.db
+      .query("builtAgents")
+      .withIndex("by_draft", (q) => q.eq("draftId", draft._id))
+      .collect();
+    const published = new Set(listings.flatMap((listing) => (listing.knowledge?.documents ?? []).flatMap((doc) => doc.sections.map((section) => section.storageId))));
+    for (const section of row.sections) {
+      if (!published.has(section.storageId)) await ctx.storage.delete(section.storageId);
+    }
     await ctx.db.delete(documentId);
     await regenerateTools(ctx, draft._id);
   },

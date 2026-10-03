@@ -48,6 +48,10 @@ const SECTIONS: LegalSection[] = [
           <li>trades you confirm yourself, from your own wallet or your Dolphin Wallet;</li>
           <li>trades your agent makes without asking you, through no-tap trading or Autopilot;</li>
           <li>
+            orders Dolphin places for your agent in Live mode, on Binance with the API key you saved or from your
+            Dolphin Wallet with the trade key you granted - you chose to connect them and to go live;
+          </li>
+          <li>
             orders placed by the Dolphin runner on your own server, with your own exchange keys or your Binance wallet -
             Dolphin never holds those keys and cannot see or stop those orders;
           </li>

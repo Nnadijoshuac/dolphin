@@ -106,13 +106,19 @@ const SECTIONS: LegalSection[] = [
         </p>
         <ul>
           <li>
-            <strong>Inside Dolphin they trade on paper.</strong> With Autopilot on, Dolphin checks your rules against
-            live Binance prices and records pretend trades. No real order is placed and no money moves.
+            <strong>Paper by default.</strong> With Autopilot on and Trading mode on Paper, Dolphin checks your rules
+            against live Binance prices and records pretend trades. No real order is placed and no money moves.
           </li>
           <li>
-            <strong>Real orders only run on your own server.</strong> If you download your agent and run the Dolphin
-            runner on a machine you control, it places real orders on Binance with your own API key or your Binance
-            wallet. Those keys stay on your machine; Dolphin never receives them and cannot see, change or stop those
+            <strong>Live, only when you choose it.</strong> If you switch Trading mode to Live - after accepting the
+            real-money disclaimer - Dolphin places real orders for your rules: on Binance (its testnet or live) with the
+            API key you saved in your Keys tab, or from your Dolphin Wallet with a trade key you granted. Dolphin stores
+            your Binance key encrypted and uses it only for your agent&rsquo;s orders, and refuses a live key that can
+            withdraw. Orders can fail, fill at a different price than expected, or be delayed.
+          </li>
+          <li>
+            <strong>Or on your own server.</strong> If you run the Dolphin runner on a machine you control, it places
+            orders with keys that stay on that machine; Dolphin never receives them and cannot see, change or stop those
             orders. What the runner reports back to Dolphin is shown as reported, not verified.
           </li>
           <li>

@@ -103,7 +103,8 @@ POST /api/v1/built/<agent>/mcp
       <p>
         Swaps from your Dolphin Wallet go through PancakeSwap and are approved by you, or by a no-tap trading key you
         granted for one agent - limited to swap functions, a daily amount and 1, 7 or 30 days, and revocable at any time.
-        Real Binance orders happen only on your own server. See <Link href="/docs/build">Building agents</Link> and the{" "}
+        Trading rules place real Binance orders only in Live mode - with the API key you connected, or from your own
+        server. See <Link href="/docs/build">Building agents</Link> and the{" "}
         <Link href="/policies/disclaimer">Disclaimer</Link>.
       </p>
     ),

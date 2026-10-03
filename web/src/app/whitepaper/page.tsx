@@ -202,10 +202,13 @@ export default function WhitepaperPage() {
           <p>
             Leverage defaults to 1x; up to 3x is treated as normal, 4-5x is allowed with an explicit liquidation warning,
             and more is refused. Every decision records the values it observed, so each trade can answer &ldquo;why?&rdquo;
-            in numbers. Inside Dolphin the engine trades on paper at live Binance prices. For real orders the same engine
-            ships as a self-contained runner the builder operates on their own server, with their own exchange key or
-            Binance Agentic Wallet; Dolphin never receives those credentials, and the runner&rsquo;s reports are labelled as
-            reported, not verified.
+            in numbers. By default the engine trades on paper at live Binance prices. In Live mode, which the owner
+            enters only after accepting a real-money disclaimer, it places real orders: on Binance&rsquo;s testnet or live
+            exchange with the owner&rsquo;s own API key, stored encrypted and refused if it can withdraw, or as PancakeSwap
+            swaps from the Dolphin Wallet through the scoped trade key. Fill prices, not candle closes, become the prices of
+            record. The same engine also ships as a self-contained runner for builders who keep their credentials on their
+            own server; Dolphin never receives those, and the runner&rsquo;s reports are labelled as reported, not
+            verified.
           </p>
         </section>
 
@@ -250,7 +253,8 @@ export default function WhitepaperPage() {
             <li>A listing proves an agent answered, not that its work is correct.</li>
             <li>Dolphin does not yet offer a dispute action for escrowed jobs; the policy contract supports one.</li>
             <li>The swap-recipient guard for no-tap trading is unaudited and not deployed.</li>
-            <li>Rules trade only on paper inside Dolphin; paper results ignore fees, slippage and funding.</li>
+            <li>Paper results ignore fees, slippage and funding; live orders can fill worse or fail.</li>
+            <li>A connected exchange key is held by Dolphin (encrypted, trade-only); a breach could place unwanted trades, though not withdrawals.</li>
             <li>Dolphin&rsquo;s own chat runs on free model tiers with daily limits.</li>
             <li>None of this has been reviewed by a regulator, and the legal pages await counsel.</li>
           </ul>

@@ -118,7 +118,41 @@ const SECTIONS: DocsSection[] = [
           </li>
         </ul>
         <p>
-          <strong>Inside Dolphin, rules trade on paper</strong> at live Binance prices - no real order, no money moves.
+          <strong>Paper first.</strong> Rules trade with pretend money at live Binance prices until you switch Trading mode
+          to Live.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "live",
+    title: "Trade for real: Binance or your Dolphin Wallet",
+    body: (
+      <>
+        <ol className="docs-steps">
+          <li>
+            <strong>Binance:</strong> save your API key and secret in the Keys tab - from{" "}
+            <a href="https://testnet.binance.vision" rel="noreferrer" target="_blank">testnet.binance.vision</a> for pretend
+            funds, or from Binance&rsquo;s API Management for real ones (trading on, withdrawals <strong>off</strong>).
+          </li>
+          <li>
+            Open the Binance block, choose <strong>Testnet</strong> or <strong>Live</strong>, pick your saved key and
+            secret, save, and press <strong>Check connection</strong>: it shows your USDT balance. A live key that can
+            withdraw is refused.
+          </li>
+          <li>
+            <strong>Dolphin Wallet:</strong> a rule on the Dolphin Wallet swaps on PancakeSwap with the agent&rsquo;s trade
+            key - grant it under &ldquo;Trade without asking&rdquo;.
+          </li>
+          <li>
+            Switch <strong>Trading mode</strong> to <strong>Live</strong>. The first time, you accept that every trade is
+            your own responsibility. From then on the rules place real orders on each closed candle, and the Timeline
+            says where each one went.
+          </li>
+        </ol>
+        <p>
+          Futures orders also place their stop-loss on Binance itself, so it holds between candles. Switch back to Paper or
+          turn Autopilot off at any time.
         </p>
       </>
     ),
@@ -129,7 +163,7 @@ const SECTIONS: DocsSection[] = [
     body: (
       <>
         <p>
-          For real orders, &ldquo;Run it on your server&rdquo; gives you <code>agent.json</code> and the Dolphin runner, a
+          To keep your keys off Dolphin entirely, &ldquo;Run it on your server&rdquo; gives you <code>agent.json</code> and the Dolphin runner, a
           single file that needs only Node.js. It streams Binance prices, decides in milliseconds on each closed candle,
           and places orders on Binance spot or futures with your API key - or through your Binance Agentic Wallet.
         </p>

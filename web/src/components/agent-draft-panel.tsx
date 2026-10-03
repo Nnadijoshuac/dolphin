@@ -435,7 +435,7 @@ function StatusPill({ live, autopilot, paper }: { live: boolean; autopilot: bool
  * AUTOPILOT, WHERE IT ALWAYS WAS (owner, 2026-10-03: a Manual | Autopilot switch at the top
  * "doesn't look good" - keep the card, add the question). Turning it on asks first, and says exactly what the agent
  * will then do by itself - only what is true for THIS agent: its triggers, its trading
- * rules (paper inside Dolphin; real orders only on the builder's own server), and Dolphin
+ * rules (paper, or real orders once Trading mode is Live), and Dolphin
  * Wallet trading only when its Swap block trades live.
  */
 function AutopilotCard({
@@ -462,7 +462,9 @@ function AutopilotCard({
       ? `It runs by itself on ${triggers.length} trigger${triggers.length === 1 ? "" : "s"}, up to 48 times a day. Each run uses your own model key.`
       : null,
     rules
-      ? `${rules === 1 ? "Its trading rule watches" : `Its ${rules} trading rules watch`} Binance and acts on every closed candle, with no AI in the way - on paper inside Dolphin. Real orders run only on your own server.`.replace("watch Binance and acts", "watch Binance and act")
+      ? `${rules === 1 ? "Its trading rule watches" : `Its ${rules} trading rules watch`} Binance and acts on every closed candle, with no AI in the way - ${
+          draft.paperMode === false ? "LIVE: real orders, on Binance or from your Dolphin Wallet." : "on paper, until you switch Trading mode to Live."
+        }`.replace("watch Binance and acts", "watch Binance and act")
       : null,
     swap
       ? draft.paperMode === false

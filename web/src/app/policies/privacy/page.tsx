@@ -112,6 +112,10 @@ const SECTIONS: LegalSection[] = [
             servers read public candles from Binance to check trading rules; nothing about you is sent.
           </li>
           <li>
+            <strong>Binance, in Live mode:</strong> if you connect a Binance API key in your Keys tab (stored encrypted,
+            like your other keys), Dolphin sends your agent&rsquo;s orders and balance checks to Binance with it.
+          </li>
+          <li>
             <strong>Your own server:</strong> if you run your agent yourself, it talks to Binance directly with your keys.
             Those keys and your exchange account details are never sent to Dolphin; only the trades it reports.
           </li>

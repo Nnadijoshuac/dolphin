@@ -57,7 +57,17 @@ export function PermissionsSection({ conversationKey, draft }: { conversationKey
   };
 
   const rows: { label: string; value: string }[] = [
-    ...(rules.length ? [{ label: "Trading rules", value: "On paper inside Dolphin · real orders only on your server" }] : []),
+    ...(rules.length
+      ? [
+          {
+            label: "Trading rules",
+            value:
+              draft.paperMode === false
+                ? `Live · ${binance && binance.type === "binance" && binance.config.network === "live" ? "Binance (real)" : "Binance testnet"} / Dolphin Wallet`
+                : "Paper · switch Trading mode to Live for real orders",
+          },
+        ]
+      : []),
     ...(swap ? [{ label: "Dolphin Wallet swaps", value: draft.paperMode === false ? "Live, with your trade key" : "On paper" }] : []),
     ...(sizes.length ? [{ label: "Most per trade", value: `$${Math.max(...sizes).toLocaleString("en")}` }] : []),
     { label: "Most leverage", value: `${leverage}x` },

@@ -276,29 +276,40 @@ function Turn({
                 {turn.errorReason}
               </p>
             </div>
+          ) : turn.errorKind === "input" ? (
+            /* Something the person can fix (no brain yet, a gap in the draft): the reason IS the message. */
+            <div className="rounded-2xl border border-line bg-paper-muted/60 px-4 py-3">
+              <p className="text-[0.92rem] font-semibold text-ink">This needs one thing from you first</p>
+              <p className="mt-1 text-[0.88rem] leading-relaxed text-ink-soft">{turn.errorReason ?? "Something in the request is missing."}</p>
+            </div>
           ) : (
-            <div className="rounded-2xl border border-danger/25 bg-danger-soft px-4 py-3">
-              <p className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-danger">
-                {turn.errorKind === "provider"
-                  ? "Model provider unavailable"
-                  : turn.errorKind === "input"
-                    ? "Could not process that"
-                    : "Dolphin failed"}
+            /*
+             * A FAILURE THE PERSON CANNOT FIX (owner, 2026-10-03: "the user shouldn't have to
+             * understand your infrastructure"). One plain sentence; the raw text - "Could not
+             * reach OpenRouter: The signal has been aborted" - stays behind Technical details.
+             */
+            <div className="rounded-2xl border border-danger/20 bg-danger-soft/60 px-4 py-3">
+              <p className="text-[0.92rem] font-semibold text-ink">Dolphin couldn&apos;t run this request</p>
+              <p className="mt-1 text-[0.88rem] leading-relaxed text-ink-soft">
+                {turn.errorKind === "provider" ? "The AI provider didn't respond in time." : "Something went wrong on our side."} It is safe to try again.
               </p>
-              <p className="mt-1.5 text-[0.9rem] leading-relaxed text-ink-soft">
-                {turn.errorReason ?? "Dolphin could not answer that."}
-              </p>
+              {turn.errorReason ? (
+                <details className="mt-1.5 text-[0.74rem] text-muted">
+                  <summary className="cursor-pointer select-none">Technical details</summary>
+                  <p className="mt-1 break-words font-mono text-[0.7rem] leading-relaxed">{turn.errorReason}</p>
+                </details>
+              ) : null}
             </div>
           )
         ) : null}
 
         {turn.status === "error" && onRetry ? (
           <button
-            className="rounded-full border border-line/80 px-3 py-1 text-[12.5px] font-semibold text-ink-soft transition-colors hover:bg-paper-muted hover:text-ink"
+            className="rounded-full bg-ink px-3.5 py-1.5 !text-[12.5px] font-semibold text-canvas transition-opacity hover:opacity-90"
             onClick={onRetry}
             type="button"
           >
-            Try again
+            <span className="text-canvas">Try again</span>
           </button>
         ) : null}
 

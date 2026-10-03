@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AgentIcon } from "@/components/agent-icon";
+import { priceLabel } from "@/components/agent-shelf";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { FavoriteButton } from "@/components/favorite-button";
 import { AgentTrialPanel } from "@/components/agent-trial-panel";
@@ -49,7 +50,10 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
   // The same total every card and the hire button show (hooks/use-hire-total.ts).
   const hireTotal = useHireTotal(agent);
   const priceText = (() => {
-    if (agent.protocol === "mcp") return "Free to Connect";
+    if (agent.protocol === "mcp") {
+      const label = priceLabel(agent);
+      return label && label !== "Free" ? `${label} per call` : "Free to Connect";
+    }
     if (rawAmount == null) return "Price not reported yet";
     if (Number(rawAmount) === 0) return "Free to hire";
     if (token) {

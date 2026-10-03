@@ -180,3 +180,31 @@ export function knowledgeRegistration(knowledge: ListingKnowledge) {
     knowledge: knowledge.documents.map((doc) => ({ name: doc.name, sha256: doc.sha256, sections: doc.sections.length })),
   };
 }
+
+/**
+ * A DOLPHIN-BUILT TOOL SERVER'S PRICE, FOR THE CATALOG (step 4). MCP has no
+ * quote to read, so the probe records no price for any MCP server (lib/probe.ts);
+ * for agents built here Dolphin knows the price, so it fills it in: the single
+ * per-call price, or "from" the cheapest priced tool. A built agent with no
+ * price at all is recorded as free (amount 0), which here is a fact, not a guess.
+ */
+export function builtListingPricing(listing: { priceRaw?: string | null; knowledge?: ListingKnowledge | null }, uToken: string) {
+  const tools = (listing.knowledge?.tools ?? []).filter((tool) => tool.enabled);
+  const raws = [
+    ...(listing.priceRaw ? [listing.priceRaw] : []),
+    ...tools.filter((tool) => tool.priceU).map((tool) => priceUToRaw(tool.priceU as string)),
+  ].map((raw) => BigInt(raw));
+  const base = { token: uToken, tokenSymbol: "U", tokenDecimals: 18, escrowContract: null };
+  if (raws.length === 0) return { ...base, amountRaw: "0", display: null };
+  const min = raws.reduce((a, b) => (b < a ? b : a));
+  const words = `${trimU(min)} U`;
+  const someFree = tools.some((tool) => !tool.priceU);
+  const varied = new Set(raws.map(String)).size > 1;
+  return { ...base, amountRaw: min.toString(), display: someFree ? `Free to try · from ${words}` : varied ? `From ${words}` : words };
+}
+
+function trimU(raw: bigint): string {
+  const whole = raw / BigInt(10) ** BigInt(18);
+  const fraction = (raw % BigInt(10) ** BigInt(18)).toString().padStart(18, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole.toString();
+}

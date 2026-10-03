@@ -260,12 +260,20 @@ export const verifyOne = internalAction({
     const name = detail.name.trim() || probe.cardName || `Agent ${parsed.tokenId}`;
     const description = detail.description;
 
+    /*
+     * A tool server built on Dolphin (knowledge, step 4): the probe reads no price
+     * from MCP, but Dolphin knows what its own listings charge - per call, or
+     * "from" the cheapest priced tool. Anything else keeps the probe's answer.
+     */
+    const pricing =
+      probe.pricing ?? (probe.protocol === "mcp" ? await ctx.runQuery(internal.builtAgents.pricingForAgentKey, { agentKey }) : null);
+
     const rank = computeRank({
       // Set by applyVerification from the existing row, so curation survives a
       // re-probe. Passing false here and letting the mutation re-add the boost
       // would be two sources of truth.
       curated: false,
-      hasPayableQuote: probe.pricing !== null,
+      hasPayableQuote: pricing !== null && pricing.amountRaw !== "0",
       skillCount: probe.skills.length,
       feedbackCount: detail.feedbackCount,
       sourceScore: detail.totalScore,
@@ -304,7 +312,7 @@ export const verifyOne = internalAction({
          * dual-protocol note in lib/probe.ts's probeAgent.
          */
         mcpEndpoint: probe.mcpEndpoint,
-        pricing: probe.pricing,
+        pricing,
         x402Supported: detail.x402Supported,
         feedbackCount: detail.feedbackCount,
         // Null below one feedback: an average over zero is an artefact, not a rating.

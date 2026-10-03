@@ -76,7 +76,9 @@ export function useHireTotal(agent: Agent): HireTotal {
   const uBalance = useDolphinUBalance();
 
   if (!paid || !pricing || decimals === null) {
-    return { text: agent.protocol === "mcp" ? null : label, agentPrice: label, converting: false, feeWei: null, setupWei: null };
+    // A tool server's price IS the total (knowledge, step 4): the caller's own app pays each
+    // call with x402, so no Dolphin Wallet relay fees ride along. Null when it publishes none.
+    return { text: label, agentPrice: label, converting: false, feeWei: null, setupWei: null };
   }
 
   let priceRaw: bigint;

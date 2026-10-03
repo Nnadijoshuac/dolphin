@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { knowledgeCallPrice, knowledgeRegistration, priceUToRaw, servedFromListing, type ListingKnowledge } from "../convex/lib/knowledgeServe";
+import { builtListingPricing, knowledgeCallPrice, knowledgeRegistration, priceUToRaw, servedFromListing, type ListingKnowledge } from "../convex/lib/knowledgeServe";
 
 const listing: ListingKnowledge = {
   documents: [
@@ -47,4 +47,14 @@ test("the registration file lists live tools with prices and each document's fin
   const file = knowledgeRegistration(listing);
   assert.deepEqual(file.tools.map((t) => [t.name, t.price?.display ?? "free"]), [["list_sections", "free"], ["get_showreel", "0.25 U"], ["ask", "0.02 U"]]);
   assert.deepEqual(file.knowledge, [{ name: "styles", sha256: "ab".repeat(32), sections: 1 }]);
+});
+
+test("the catalog price of a built tool server", () => {
+  const U = "0xU";
+  assert.deepEqual(builtListingPricing({ priceRaw: null, knowledge: listing }, U).display, "Free to try · from 0.02 U");
+  assert.equal(builtListingPricing({ priceRaw: null, knowledge: listing }, U).amountRaw, "20000000000000000");
+  assert.equal(builtListingPricing({ priceRaw: "50000000000000000", knowledge: null }, U).display, "0.05 U");
+  assert.deepEqual(builtListingPricing({ priceRaw: null, knowledge: null }, U).amountRaw, "0");
+  const allPaid = { ...listing, tools: listing.tools.filter((t) => t.priceU) };
+  assert.equal(builtListingPricing({ priceRaw: null, knowledge: allPaid }, U).display, "From 0.02 U");
 });

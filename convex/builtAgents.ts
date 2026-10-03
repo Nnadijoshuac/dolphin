@@ -7,12 +7,12 @@ import type { Doc } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { PUBLIC_BLOCK_TYPES, activeBlocks, type AgentBlock } from "./lib/agentBlocks";
 import type { KnowledgeTool } from "./lib/knowledgeTools";
-import type { ListingKnowledge } from "./lib/knowledgeServe";
+import { builtListingPricing, type ListingKnowledge } from "./lib/knowledgeServe";
 import { capabilityCount, draftGaps } from "./lib/agentSpec";
 import { MAX_ICONS_PER_WALLET_PER_DAY } from "./lib/iconPolicy";
 import { bscPublicClient } from "./lib/bscClient";
 import { screenAgent } from "./lib/screen";
-import { MAX_PRICE_U, MIN_PRICE_U, formatU, parsePriceU, priceInBounds } from "./lib/x402";
+import { MAX_PRICE_U, MIN_PRICE_U, U_TOKEN, formatU, parsePriceU, priceInBounds } from "./lib/x402";
 import { ensureAgentWallet } from "./x402";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 
@@ -550,6 +550,23 @@ export const inputsForAgentKey = query({
       .withIndex("by_agent_key", (q) => q.eq("agentKey", agentKey.toLowerCase()))
       .first();
     return row && row.status === "registered" ? (row.inputs ?? null) : null;
+  },
+});
+
+/**
+ * The catalog price of a tool server built on Dolphin (knowledge, step 4):
+ * the probe reads no price from any MCP server, but Dolphin knows its own.
+ * Null when the agent was not built here, or is not a live tool server.
+ */
+export const pricingForAgentKey = internalQuery({
+  args: { agentKey: v.string() },
+  handler: async (ctx, { agentKey }) => {
+    const row = await ctx.db
+      .query("builtAgents")
+      .withIndex("by_agent_key", (q) => q.eq("agentKey", agentKey.toLowerCase()))
+      .first();
+    if (!row || row.status !== "registered" || (row.protocol ?? "mcp") !== "mcp") return null;
+    return builtListingPricing(row, U_TOKEN);
   },
 });
 

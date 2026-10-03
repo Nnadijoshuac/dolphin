@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useGasPrice } from "wagmi";
 
+import { priceLabel } from "@/components/agent-shelf";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { agentRouteId } from "@/constants/agents";
 import { JobDeliveryStatus } from "@/components/job-delivery-status";
@@ -241,7 +242,10 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
   });
 
   const priceText = (() => {
-    if (agent.protocol === "mcp") return "Free to Connect";
+    if (agent.protocol === "mcp") {
+      const label = priceLabel(agent);
+      return label && label !== "Free" ? `${label} per call` : "Free to Connect";
+    }
 
     const isFreeQuote =
       chargedRaw === null &&

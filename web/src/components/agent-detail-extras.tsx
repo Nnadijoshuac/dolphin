@@ -76,17 +76,19 @@ export function AtAGlance({ agent }: { agent: Agent }) {
   const signals = useAgentSignals(convexClient ? [agent] : []).get(agent.agentKey);
   const isTools = agent.protocol === "mcp";
   // The total a hire costs, the same figure as every card and the hire button.
-  const label = isTools ? null : priceLabel(agent);
+  // A tool server's price is per call (knowledge, step 4); none published reads Free, as before.
+  const label = priceLabel(agent);
   const total = useHireTotal(agent);
   const price = label && label !== "Free" ? total.text ?? "…" : label;
+  const paidTools = isTools && Boolean(label) && label !== "Free";
   const checked = ago(agent.verification?.lastProbeAt ?? agent.verifiedAt, now);
   const online = agent.status === "live";
 
   const facts: { label: string; value: string; sub: string | null; dot?: boolean }[] = [
     {
       label: "Cost",
-      value: isTools ? "Free" : price === "Free" ? "Free" : price ? price : "Quoted when you hire",
-      sub: isTools ? "No fees to use it" : price && price !== "Free" ? "per job" : null,
+      value: isTools ? (paidTools ? (label as string) : "Free") : price === "Free" ? "Free" : price ? price : "Quoted when you hire",
+      sub: isTools ? (paidTools ? "per call, paid with x402" : "No fees to use it") : price && price !== "Free" ? "per job" : null,
     },
     {
       label: "Type",
@@ -128,7 +130,7 @@ export function AtAGlance({ agent }: { agent: Agent }) {
 }
 
 function PublisherRow({ agent }: { agent: Agent }) {
-  const label = agent.protocol === "mcp" ? "Tools" : priceLabel(agent);
+  const label = agent.protocol === "mcp" ? priceLabel(agent) ?? "Tools" : priceLabel(agent);
   const total = useHireTotal(agent);
   const price = label && label !== "Free" && label !== "Tools" ? total.text ?? "…" : label;
   return (
@@ -259,16 +261,19 @@ export function HowItWorks({ agent }: { agent: Agent }) {
   }, []);
 
   const isTools = agent.protocol === "mcp";
-  const label = isTools ? null : priceLabel(agent);
+  const label = priceLabel(agent);
   const total = useHireTotal(agent);
   const price = label && label !== "Free" ? total.text ?? label : label;
+  const paidTools = isTools && Boolean(label) && label !== "Free";
   const days = ESCROW_REFUND_DAYS;
   const steps = isTools
     ? [
         { title: "Copy its link", body: "One address, from the panel on this page." },
         { title: "Add it to your AI app", body: "Claude, Cursor, or any app that supports MCP." },
         { title: "Ask in plain words", body: `Your AI uses ${agent.name}’s tools for you.` },
-        { title: "Nothing to pay", body: "No wallet to connect and no fees to use it." },
+        paidTools
+          ? { title: "Pay per call", body: "Paid tools cost U per call, paid by your AI app with x402 straight to the builder. Free tools cost nothing." }
+          : { title: "Nothing to pay", body: "No wallet to connect and no fees to use it." },
       ]
     : [
         {

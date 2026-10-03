@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { priceLabel } from "@/components/agent-shelf";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { PearlButton } from "@/components/pearl-button";
 import type { Agent } from "@/types/agent";
@@ -30,6 +31,9 @@ export function McpUseAction({ agent }: { agent: Agent }) {
   };
 
   const toolCount = agent.skills.length;
+  // A paid tool server (x402 per call, knowledge step 4) is free to connect, not free to use.
+  const label = priceLabel(agent);
+  const paid = Boolean(label) && label !== "Free";
 
   return (
     <div className="surface-raised p-5 sm:p-6 rounded-2xl border border-line bg-paper shadow-sm">
@@ -39,7 +43,7 @@ export function McpUseAction({ agent }: { agent: Agent }) {
             Integration
           </p>
           <h2 className="mt-1 text-2xl font-bold tracking-[-0.04em] text-ink">
-            Free to Connect
+            {paid ? `${label} per call` : "Free to Connect"}
           </h2>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-900 border border-purple-200">
@@ -49,7 +53,9 @@ export function McpUseAction({ agent }: { agent: Agent }) {
       </div>
 
       <p className="mt-3 text-sm leading-relaxed text-muted">
-        Connect this MCP server directly to your AI client without paying gas or escrow fees.
+        {paid
+          ? "Connecting is free. Paid tools cost U per call, paid by your AI app with x402 straight to the builder; free tools cost nothing."
+          : "Connect this MCP server directly to your AI client without paying gas or escrow fees."}
       </p>
 
       <div className="mt-5">

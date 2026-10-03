@@ -28,11 +28,11 @@ const SECTIONS: DocsSection[] = [
       <>
         <p>Your agent is drawn as connected blocks, each labelled with what it does:</p>
         <Figure
-          alt="The Dolphin builder: the canvas of connected blocks and the agent panel"
-          caption="The builder: blocks on the canvas, the agent's panel on the right."
-          height={1343}
-          src="/docs/builder.webp"
-          width={1600}
+          alt="An agent on the canvas: two triggers, the brain and its strategy, a safety check, a tool, Binance and the answer"
+          caption="An agent on the canvas - each block labelled When, Think, Check, Read, Do or Report."
+          height={680}
+          src="/docs/canvas-agent.webp"
+          width={1800}
         />
         <ul>
           <li>
@@ -130,7 +130,7 @@ const SECTIONS: DocsSection[] = [
           <strong>Paper first.</strong> Rules trade with pretend money at live Binance prices until you switch Trading mode
           to Live.
         </p>
-        <Figure alt="Permissions: the limits an agent trades under, and its daily loss limit" caption="Permissions: every limit the agent trades under, and the daily loss limit." height={416} narrow src="/docs/permissions.webp" width={498} />
+        <Figure alt="Permissions: the limits an agent trades under, and its daily loss limit" caption="Permissions: every limit the agent trades under, and the daily loss limit." height={359} src="/docs/permissions-panel.webp" width={1100} />
       </>
     ),
   },

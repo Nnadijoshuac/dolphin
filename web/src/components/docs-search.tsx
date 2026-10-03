@@ -14,6 +14,62 @@ type Entry = { href: string; page: string; section: string; text: string };
  */
 let indexPromise: Promise<Entry[]> | null = null;
 
+export const HIT_KEY = "dolphin.docs-hit";
+export const HIT_EVENT = "dolphin:docs-hit";
+
+/**
+ * WHERE THE SEARCH POINTED (owner, 2026-10-03: "let the paragraph glow twice, then out, so the
+ * person knows why they are here"). After a search jump, the first paragraph or list item in the
+ * section that contains every searched word glows twice and fades. Reduced motion: a still tint.
+ */
+export function SearchHighlighter() {
+  useEffect(() => {
+    let timers: number[] = [];
+    const run = () => {
+      let hit: { href: string; words: string[]; at: number } | null = null;
+      try {
+        hit = JSON.parse(sessionStorage.getItem(HIT_KEY) ?? "null");
+      } catch {
+        hit = null;
+      }
+      if (!hit || Date.now() - hit.at > 10_000) return;
+      const [path, id] = hit.href.split("#");
+      const words = hit.words;
+      let tries = 0;
+      // Navigation and scrolling land a moment after the click; look until the section is there.
+      const attempt = () => {
+        tries++;
+        const section = window.location.pathname === path && id ? document.getElementById(id) : null;
+        if (!section) {
+          if (tries < 20) timers.push(window.setTimeout(attempt, 150));
+          return;
+        }
+        sessionStorage.removeItem(HIT_KEY);
+        const blocks = [...section.querySelectorAll<HTMLElement>(".docs-body p, .docs-body li, .docs-body td, .docs-code")];
+        const target = blocks.find((block) => words.every((word) => (block.textContent ?? "").toLowerCase().includes(word))) ?? blocks.find((block) => words.some((word) => (block.textContent ?? "").toLowerCase().includes(word))) ?? section.querySelector("h2");
+        if (!target) return;
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+        target.classList.remove("docs-hit");
+        void target.offsetWidth; // restart the animation on a repeat search
+        target.classList.add("docs-hit");
+        // Cleared by the element itself, not a timer this page might cancel while navigating away.
+        const clear = () => target.classList.remove("docs-hit");
+        target.addEventListener("animationend", clear, { once: true });
+        window.setTimeout(clear, 2600);
+      };
+      attempt();
+    };
+    run();
+    window.addEventListener(HIT_EVENT, run);
+    return () => {
+      window.removeEventListener(HIT_EVENT, run);
+      timers.forEach((timer) => window.clearTimeout(timer));
+      timers = [];
+    };
+  }, []);
+  return null;
+}
+
 async function buildIndex(pages: { href: string; label: string }[]): Promise<Entry[]> {
   const entries: Entry[] = [];
   await Promise.all(
@@ -115,7 +171,20 @@ export function DocsSearch({ pages }: { pages: { href: string; label: string }[]
                 <p className="docs-search__empty">Nothing matches &ldquo;{query}&rdquo;.</p>
               ) : (
                 results.map(({ entry, words }) => (
-                  <Link href={entry.href} key={entry.href} onClick={() => setOpen(false)}>
+                  <Link
+                    href={entry.href}
+                    key={entry.href}
+                    onClick={() => {
+                      // Tell the page which words brought the reader, so it can point at the paragraph.
+                      try {
+                        sessionStorage.setItem(HIT_KEY, JSON.stringify({ href: entry.href, words, at: Date.now() }));
+                      } catch {
+                        /* Blocked storage: the reader still lands on the section. */
+                      }
+                      window.dispatchEvent(new Event(HIT_EVENT));
+                      setOpen(false);
+                    }}
+                  >
                     <small>{entry.page}</small>
                     <strong>{entry.section}</strong>
                     <span>{snippet(entry.text, words)}</span>

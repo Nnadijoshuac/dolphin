@@ -2,8 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { CopyButton, CopyPageMenu, Toc } from "@/components/docs-client";
-import { DocsSearch } from "@/components/docs-search";
+import { CopyButton, CopyPageMenu, DocsSideNav, Toc } from "@/components/docs-client";
+import { DocsSearch, SearchHighlighter } from "@/components/docs-search";
 
 export type DocsSection = { id: string; title: string; body: ReactNode };
 
@@ -69,18 +69,7 @@ export function DocsPage({
     <div className="docs-shell">
       <aside className="docs-side">
         <DocsSearch pages={DOCS_NAV} />
-        <nav aria-label="Library">
-          {LIBRARY.map((section) => (
-            <div className="docs-side__group" key={section.group}>
-              <p className="docs-side__title">{section.group}</p>
-              {section.items.map((item) => (
-                <Link aria-current={item.href === current ? "page" : undefined} href={item.href} key={item.href}>
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          ))}
-        </nav>
+        <DocsSideNav current={current} groups={LIBRARY} />
       </aside>
 
       {/* Phones: the library as one menu above the page. */}
@@ -126,6 +115,7 @@ export function DocsPage({
         </div>
         <div className="docs-lead">{summary}</div>
 
+        <SearchHighlighter />
         <article data-docs-article>
           {sections.map((section) => (
             <section className="docs-section" id={section.id} key={section.id}>
@@ -143,17 +133,23 @@ export function DocsPage({
         {previous || next ? (
           <nav aria-label="More pages" className="docs-pager">
             {previous ? (
-              <Link href={previous.href}>
-                <small>← Previous</small>
-                {previous.label}
+              <Link className="docs-pager__link" href={previous.href}>
+                <span aria-hidden className="docs-pager__arrow">‹</span>
+                <span>
+                  <small>Previous</small>
+                  {previous.label}
+                </span>
               </Link>
             ) : (
               <span />
             )}
             {next ? (
-              <Link className="docs-pager__next" href={next.href}>
-                <small>Next →</small>
-                {next.label}
+              <Link className="docs-pager__link docs-pager__next" href={next.href}>
+                <span>
+                  <small>Next</small>
+                  {next.label}
+                </span>
+                <span aria-hidden className="docs-pager__arrow">›</span>
               </Link>
             ) : null}
           </nav>
@@ -190,7 +186,8 @@ export function Code({ children, label }: { children: string; label?: string }) 
 export function Figure({ src, alt, caption, width, height, narrow = false }: { src: string; alt: string; caption: string; width: number; height: number; narrow?: boolean }) {
   return (
     <figure className="docs-figure" data-narrow={narrow || undefined}>
-      <Image alt={alt} height={height} sizes="(max-width: 820px) 100vw, 720px" src={src} width={width} />
+      {/* Served as captured: these are already-compressed WebP, and re-encoding them blurs the text. */}
+      <Image alt={alt} height={height} src={src} unoptimized width={width} />
       <figcaption>{caption}</figcaption>
     </figure>
   );

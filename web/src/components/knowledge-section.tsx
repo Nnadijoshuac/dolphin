@@ -172,7 +172,9 @@ export function KnowledgeSection({ conversationKey }: { conversationKey: string 
       {toolState && toolState.tools.length > 0 ? (
         <div className="mt-4">
           <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Tools buyers can call</p>
-          <p className="mt-0.5 text-[0.68rem] leading-relaxed text-faint">Dolphin suggested these prices. Change any, or leave a box empty for free.</p>
+          <p className="mt-0.5 text-[0.68rem] leading-relaxed text-faint">
+            Dolphin suggested these prices. Change any, or leave a box empty for free. Want another? Ask in the chat: &ldquo;add a tool that…&rdquo;
+          </p>
           <ul className="mt-2 space-y-1.5">
             {toolState.tools.map((tool) => (
               <ToolRow conversationKey={conversationKey} hasBrain={toolState.hasBrain} key={tool.name} tool={tool} />
@@ -186,9 +188,11 @@ export function KnowledgeSection({ conversationKey }: { conversationKey: string 
 
 function ToolRow({ conversationKey, tool, hasBrain }: { conversationKey: string; tool: KnowledgeTool; hasBrain: boolean }) {
   const setTool = useMutation(knowledgeApi.knowledge.setTool);
+  const removeTool = useMutation(knowledgeApi.knowledge.removeTool);
+  const described = tool.kind === "described";
   const [price, setPrice] = useState(tool.priceU ?? "");
   const [error, setError] = useState<string | null>(null);
-  const needsBrain = tool.kind === "ask" && !hasBrain;
+  const needsBrain = (tool.kind === "ask" || described) && !hasBrain;
 
   const save = async (change: { price?: string; enabled?: boolean }) => {
     setError(null);
@@ -217,7 +221,10 @@ function ToolRow({ conversationKey, tool, hasBrain }: { conversationKey: string;
           onChange={(event) => void save({ enabled: event.target.checked })}
           type="checkbox"
         />
-        <span className="min-w-0 flex-1 truncate font-mono text-[0.76rem] text-ink">{tool.name}</span>
+        <span className={`min-w-0 flex-1 font-mono text-[0.76rem] text-ink ${described ? "break-words" : "truncate"}`} title={tool.name}>
+          {tool.name}
+          {described ? <span className="text-muted">({(tool.inputs ?? []).map((input) => input.name).join(", ")})</span> : null}
+        </span>
         <label className="flex shrink-0 items-center gap-1 rounded-md border border-line/80 bg-paper px-1.5 py-0.5">
           <span className="sr-only">Price of {tool.name} in U</span>
           <input
@@ -234,10 +241,30 @@ function ToolRow({ conversationKey, tool, hasBrain }: { conversationKey: string;
           />
           <span className="text-[0.66rem] text-muted">U</span>
         </label>
+        {described ? (
+          <button
+            aria-label={`Remove ${tool.name}`}
+            className="grid size-6 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-paper hover:text-ink"
+            onClick={() => void removeTool({ conversationKey, name: tool.name }).catch((cause) => setError(reason(cause, "That tool could not be removed.")))}
+            type="button"
+          >
+            <span aria-hidden className="text-base leading-none">×</span>
+          </button>
+        ) : null}
       </div>
       <p className="mt-0.5 pl-[22px] text-[0.68rem] leading-relaxed text-muted">
-        {needsBrain ? "Answers questions with your own model. Add a Brain to offer it." : tool.description}
+        {needsBrain
+          ? described
+            ? `${tool.description} Runs on your own model: add a Brain to offer it.`
+            : "Answers questions with your own model. Add a Brain to offer it."
+          : tool.description}
       </p>
+      {described && tool.instructions ? (
+        <details className="mt-1 pl-[22px] text-[0.68rem] text-muted">
+          <summary className="cursor-pointer select-none">How it works</summary>
+          <p className="mt-1 whitespace-pre-line leading-relaxed text-ink-soft">{tool.instructions}</p>
+        </details>
+      ) : null}
       {error ? (
         <p className="mt-0.5 pl-[22px] text-[0.68rem] text-danger" role="alert">
           {error}

@@ -15,7 +15,7 @@
  * Prices are only SUGGESTED (owner: "so they know what a price looks like").
  */
 
-export type KnowledgeToolKind = "list" | "get" | "get_any" | "search" | "ask";
+export type KnowledgeToolKind = "list" | "get" | "get_any" | "search" | "ask" | "described";
 
 export type KnowledgeTool = {
   name: string;
@@ -28,6 +28,10 @@ export type KnowledgeTool = {
   enabled: boolean;
   /** True once the builder changed the description: regeneration keeps their words. */
   edited?: boolean;
+  /** kind "described" (level 2, step 5): what a caller passes - text inputs only. */
+  inputs?: { name: string; description: string }[];
+  /** kind "described": what the tool does, written to the model that runs it. */
+  instructions?: string;
 };
 
 export type KnowledgeDoc = { id: string; name: string; sections: { title: string; slug: string }[] };
@@ -37,6 +41,11 @@ export const MAX_KNOWLEDGE_TOOLS = 20;
 export const PER_SECTION_TOOL_LIMIT = 16;
 export const SUGGESTED_PRICE_GET = "0.01";
 export const SUGGESTED_PRICE_ASK = "0.02";
+/** A described tool runs a model, like ask, so it is suggested ask's price. */
+export const SUGGESTED_PRICE_DESCRIBED = "0.02";
+export const MAX_DESCRIBED_TOOLS = 5;
+/** Names a described tool cannot take: they belong to the proposed tools. */
+const RESERVED = /^(list_sections|search_knowledge|ask|get_.*)$/;
 /** The same bounds x402 enforces (lib/x402.ts priceInBounds). */
 export const MIN_PRICE_U = 0.001;
 export const MAX_PRICE_U = 1000;
@@ -75,7 +84,9 @@ function getName(slug: string, taken: Set<string>): string {
  */
 export function proposeKnowledgeTools(docs: readonly KnowledgeDoc[], previous: readonly KnowledgeTool[], hasBrain: boolean): KnowledgeTool[] {
   const sections = docs.flatMap((doc) => doc.sections.map((section) => ({ doc, section })));
-  if (sections.length === 0) return [];
+  // Described tools are the builder's, not the documents': they survive every regeneration as they are.
+  const described = previous.filter((tool) => tool.kind === "described");
+  if (sections.length === 0) return described;
   const many = sections.length > PER_SECTION_TOOL_LIMIT;
   const titles = (limit: number) => {
     const names = sections.slice(0, limit).map(({ section }) => section.title);
@@ -140,7 +151,7 @@ export function proposeKnowledgeTools(docs: readonly KnowledgeDoc[], previous: r
   );
 
   const before = new Map(previous.map((tool) => [tool.name, tool]));
-  return proposed.slice(0, MAX_KNOWLEDGE_TOOLS).map((tool) => {
+  const fromDocuments = proposed.slice(0, MAX_KNOWLEDGE_TOOLS - described.length).map((tool) => {
     const kept = before.get(tool.name);
     if (!kept) return tool;
     return {
@@ -150,6 +161,63 @@ export function proposeKnowledgeTools(docs: readonly KnowledgeDoc[], previous: r
       ...(kept.edited ? { description: kept.description, edited: true } : {}),
     };
   });
+  return [...fromDocuments, ...described];
+}
+
+export type DescribedToolInput = { name: string; description: string; inputs: { name: string; description: string }[]; instructions: string };
+
+function snake(text: string, max: number): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, max)
+    .replace(/_+$/, "");
+}
+
+/**
+ * A described tool (level 2, step 5) as the builder's chat proposed it, made
+ * safe: a snake_case name no other tool has, a real description, at most
+ * three text inputs, and instructions the model that runs it can follow.
+ * A problem comes back in words for the chat reply.
+ */
+export function cleanDescribedTool(
+  raw: DescribedToolInput,
+  existing: readonly KnowledgeTool[],
+  hasBrain: boolean,
+): { tool: KnowledgeTool } | { problem: string } {
+  const name = snake(raw.name ?? "", 40);
+  if (name.length < 3) return { problem: "a tool with no usable name" };
+  if (RESERVED.test(name)) return { problem: `"${name}" (that name belongs to a document tool)` };
+  const taken = existing.find((tool) => tool.name === name);
+  if (taken && taken.kind !== "described") return { problem: `"${name}" (another tool has that name)` };
+  if (!taken && existing.filter((tool) => tool.kind === "described").length >= MAX_DESCRIBED_TOOLS) {
+    return { problem: `"${name}" (an agent has at most ${MAX_DESCRIBED_TOOLS} tools of its own)` };
+  }
+  if (!taken && existing.length >= MAX_KNOWLEDGE_TOOLS) return { problem: `"${name}" (an agent has at most ${MAX_KNOWLEDGE_TOOLS} tools)` };
+  const description = (raw.description ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  if (description.length < 10) return { problem: `"${name}" (it needs a sentence saying what it returns)` };
+  const instructions = (raw.instructions ?? "").trim().slice(0, 1_500);
+  if (instructions.length < 10) return { problem: `"${name}" (it needs instructions for how to do it)` };
+  const inputs: { name: string; description: string }[] = [];
+  for (const input of (raw.inputs ?? []).slice(0, 3)) {
+    const inputName = snake(input.name ?? "", 30);
+    if (inputName.length < 2 || inputs.some((other) => other.name === inputName)) continue;
+    inputs.push({ name: inputName, description: (input.description ?? "").replace(/\s+/g, " ").trim().slice(0, 150) || inputName });
+  }
+  return {
+    tool: {
+      name,
+      kind: "described",
+      description,
+      section: null,
+      // An update keeps the builder's price and on/off; a new tool starts suggested, and on only with a brain.
+      priceU: taken ? taken.priceU : SUGGESTED_PRICE_DESCRIBED,
+      enabled: taken ? taken.enabled : hasBrain,
+      inputs,
+      instructions,
+    },
+  };
 }
 
 /** Words of a query worth matching: lower-case, 3+ letters, minus filler. */

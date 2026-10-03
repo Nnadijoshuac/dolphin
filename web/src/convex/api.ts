@@ -1537,9 +1537,12 @@ export type KnowledgeDocument = {
 /** A tool a knowledge agent offers buyers (convex/lib/knowledgeTools.ts). */
 export type KnowledgeTool = {
   name: string;
-  kind: "list" | "get" | "get_any" | "search" | "ask";
+  kind: "list" | "get" | "get_any" | "search" | "ask" | "described";
   description: string;
   section: { documentId: string; slug: string } | null;
+  /** A described tool (step 5): its text inputs and instructions. */
+  inputs?: { name: string; description: string }[];
+  instructions?: string;
   /** Price per call in U ("0.01"); null is free. */
   priceU: string | null;
   enabled: boolean;
@@ -1557,5 +1560,6 @@ export const knowledgeApi = anyApi as unknown as {
     >;
     tools: Query<{ conversationKey: string }, { tools: KnowledgeTool[]; hasBrain: boolean }>;
     setTool: Mutation<{ conversationKey: string; name: string; price?: string; enabled?: boolean; description?: string }, null>;
+    removeTool: Mutation<{ conversationKey: string; name: string }, null>;
   };
 };

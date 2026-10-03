@@ -225,8 +225,8 @@ export const prepareListing = mutation({
       if (visibility === "public" && knowledgeTools.some((tool) => tool.priceU) && args.network !== "bsc") {
         throw new ConvexError("Paid tools are settled in U on BNB Chain. Publish on BNB Chain, or make every tool free to try it on Testnet.");
       }
-      if (knowledgeTools.some((tool) => tool.kind === "ask") && !draft.brain) {
-        throw new ConvexError("The ask tool answers with your own model. Add a Brain with your API key, or switch ask off.");
+      if (knowledgeTools.some((tool) => tool.kind === "ask" || tool.kind === "described") && !draft.brain) {
+        throw new ConvexError("Ask and the tools you described run on your own model. Add a Brain with your API key, or switch them off.");
       }
       const rows = await ctx.db
         .query("agentKnowledge")

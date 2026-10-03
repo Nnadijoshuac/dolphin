@@ -76,6 +76,11 @@ export type BuilderReply = {
   blocks: BuilderBlock[] | null;
   /** Who it is for, once the person has said. Null: unchanged. */
   purpose: "private" | "tools" | "hire" | null;
+  /**
+   * Tools the person described in words (knowledge, step 5): "add a tool that
+   * writes a storyboard". lib/knowledgeTools.ts cleanDescribedTool decides. Null: none.
+   */
+  describedTools?: { name: string; description: string; inputs: { name: string; description: string }[]; instructions: string }[] | null;
 };
 
 /**
@@ -88,7 +93,7 @@ export const BUILDER_REPLY_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["reply", "name", "description", "instructions", "toolIds", "blocks"],
+    required: ["reply", "name", "description", "instructions", "toolIds", "blocks", "describedTools"],
     properties: {
       reply: {
         type: "string",
@@ -107,6 +112,31 @@ export const BUILDER_REPLY_SCHEMA = {
         type: ["array", "null"],
         items: { type: "string" },
         description: "The complete set of tool ids the agent should have, or null to keep them.",
+      },
+      describedTools: {
+        type: ["array", "null"],
+        description:
+          "Tools the person asked for in words that buyers call directly (\"add a tool that writes a storyboard from a style and a length\"), or null for none. Only when they asked for a tool.",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["name", "description", "inputs", "instructions"],
+          properties: {
+            name: { type: "string", description: "snake_case, starts with a verb: make_storyboard." },
+            description: { type: "string", description: "One sentence a buyer reads: what it returns." },
+            inputs: {
+              type: "array",
+              description: "Up to three text inputs the caller gives.",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["name", "description"],
+                properties: { name: { type: "string" }, description: { type: "string" } },
+              },
+            },
+            instructions: { type: "string", description: "How to do it, written to the model that runs it; say which documents or sections to use." },
+          },
+        },
       },
       blocks: {
         type: ["array", "null"],
@@ -182,6 +212,21 @@ export function parseBuilderReply(content: string): BuilderReply | null {
             level: typeof item.level === "number" ? item.level : null,
           }))
       : null;
+    // Described tools are lenient too: an entry missing its words is dropped, never the reply.
+    const describedTools = Array.isArray(record.describedTools)
+      ? (record.describedTools as unknown[])
+          .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null && typeof (item as { name?: unknown }).name === "string")
+          .map((item) => ({
+            name: String(item.name),
+            description: typeof item.description === "string" ? item.description : "",
+            instructions: typeof item.instructions === "string" ? item.instructions : "",
+            inputs: Array.isArray(item.inputs)
+              ? (item.inputs as unknown[])
+                  .filter((input): input is Record<string, unknown> => typeof input === "object" && input !== null && typeof (input as { name?: unknown }).name === "string")
+                  .map((input) => ({ name: String(input.name), description: typeof input.description === "string" ? input.description : "" }))
+              : [],
+          }))
+      : null;
     if (!isStringOrNull(name) || !isStringOrNull(description) || !isStringOrNull(instructions)) {
       continue;
     }
@@ -198,6 +243,7 @@ export function parseBuilderReply(content: string): BuilderReply | null {
       description,
       instructions,
       toolIds: toolIds as string[] | null,
+      describedTools,
       blocks: blocks && blocks.length ? blocks : null,
       purpose: record.purpose === "private" || record.purpose === "tools" || record.purpose === "hire" ? record.purpose : null,
     };

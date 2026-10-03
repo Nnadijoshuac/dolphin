@@ -513,7 +513,7 @@ export async function ask(ctx: ActionCtx, listing: Listing, question: string, wa
         const binding = menu.bindings.get(call.function.name);
         let content: string;
         if (knowledge && call.function.name.startsWith(KNOWLEDGE_PREFIX)) {
-          content = (await runKnowledgeTool(ctx, knowledge, call.function.name, call.function.arguments || "{}")).text.slice(0, 20_000);
+          content = (await runKnowledgeTool(ctx, knowledge, call.function.name, call.function.arguments || "{}", undefined, endpoint)).text.slice(0, 20_000);
         } else if (call.function.name.startsWith("block_") && blockTools.some((tool) => tool.function.name === call.function.name)) {
           const result = await runBlockTool(blocks, call.function.name, call.function.arguments || "{}", 0);
           // Labelled in words: the model copies whatever label it is shown (job 56882, "(block_token_safety)").
@@ -594,7 +594,9 @@ export async function handleMcp(ctx: ActionCtx, listing: Listing, message: RpcRe
         // A tool the builder switched off does not exist for callers.
         if (tool && !tool.enabled) return reply({ content: [{ type: "text", text: `No tool named ${name}.` }], isError: true });
         if (tool && tool.kind !== "ask") {
-          const result = await runKnowledgeTool(ctx, served, name, JSON.stringify(args), "");
+          // A described tool (step 5) runs on the builder's own Brain; the document tools need no model.
+          const brain = tool.kind === "described" ? await builderBrain(ctx, listing) : null;
+          const result = await runKnowledgeTool(ctx, served, name, JSON.stringify(args), "", brain);
           return reply({ content: [{ type: "text", text: result.text }], isError: result.isError });
         }
         if (name === "ask" && !tool) return reply({ content: [{ type: "text", text: "No tool named ask." }], isError: true });

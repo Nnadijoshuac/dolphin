@@ -132,6 +132,10 @@ RULES THAT SURVIVE REAL TOKENS (token checkers, safety screens, anything that gr
 - Answer format: the verdict first, then one reason per line with the exact figure, then what to check. It reports risk; it gives no investment advice.
 - WRITE THE CONDITIONS INTO THE INSTRUCTIONS - never just "checked in order". Unless the person gave other numbers, use: AVOID if any hard red flag above. CAUTION if any of: buy or sell tax above 5%; owner can mint, change taxes, pause or blacklist (only mentioned if the token is on GoPlus's trusted list); upgradeable contract; source not verified; wallets that can sell hold more than 30% in the top 10; liquidity under $50,000; less than half the liquidity locked or burned, when known. SAFE otherwise.
 
+DOCUMENTS AND THEIR TOOLS. The person can add documents (Markdown, text, PDF) in the draft panel under Knowledge. Dolphin then makes the tools buyers call from them by itself - list_sections, one get_ tool per section, search_knowledge, ask - and the person prices each one there. Never put those in describedTools.
+- DESCRIBED TOOLS: when the person asks for a tool in words ("add a tool that writes a storyboard from a style and a length"), put it in \`describedTools\`: a snake_case name starting with a verb (make_storyboard), one sentence a buyer reads, up to three text inputs (style, seconds), and instructions to the model that runs it - which documents or sections to use, and exactly what to return. It runs on the person's own Brain and reads their documents. Only when they asked for a tool; to change one, send it again under the same name.
+- Say it is set up only when you put it in describedTools, and remind them to price it under Knowledge.
+
 RECIPES - the shapes that work; add every block the job needs in one go:
 - Token checker (hired per token): Safety only. Buyer input: a token address. No Schedule, no Memory.
 - Trend or DCA trader: Schedule (240 or 1440), Price feed, Indicators (1d), Safety, Risk limits, Swap; Memory placed so it remembers its position.
@@ -1068,8 +1072,20 @@ export const ask = action({
         if (merged.skipped.length > 0) blockNote = `I could not add ${merged.skipped.join("; ")}.`;
       }
 
+      /* Tools the person described in words (knowledge, step 5): lib/knowledgeTools.ts cleanDescribedTool decides. */
+      let describedNote = "";
+      if (compiled.reply.describedTools && compiled.reply.describedTools.length > 0) {
+        const result: { added: string[]; skipped: string[] } = await ctx.runMutation(internal.knowledge.addDescribedTools, {
+          conversationId,
+          tools: compiled.reply.describedTools,
+        });
+        if (result.added.length > 0) applied.changed.push("tools");
+        if (result.skipped.length > 0) describedNote = `I could not add ${result.skipped.join("; ")}.`;
+      }
+
       let reply = resolveToolIdReferences(stripRawPayloads(compiled.reply.reply), offered).trim();
       if (blockNote) reply = `${reply}${reply ? "\n\n" : ""}${blockNote}`;
+      if (describedNote) reply = `${reply}${reply ? "\n\n" : ""}${describedNote}`;
       /*
        * NEVER CLAIM WORK THAT WAS NOT DONE. Measured 2026-09-29: the free model
        * wrote "I've set up a scheduler, market feed, safety check, risk limits
@@ -1459,7 +1475,8 @@ export async function runTryTurn(
                 toolName: call.function.name.slice(KNOWLEDGE_PREFIX.length),
                 argumentsJson: call.function.arguments || "{}",
               });
-              const result = await runKnowledgeTool(ctx, knowledge as ServedKnowledge, call.function.name, call.function.arguments);
+              // A described tool (step 5) runs on this same Brain.
+              const result = await runKnowledgeTool(ctx, knowledge as ServedKnowledge, call.function.name, call.function.arguments, undefined, endpoint);
               await ctx.runMutation(internal.dolphin.completeToolCall, {
                 toolCallId,
                 resultText: result.text.slice(0, 20_000),

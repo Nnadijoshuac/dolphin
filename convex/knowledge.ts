@@ -6,7 +6,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { injectionFlags, MAX_AGENT_TEXT_CHARS, MAX_DOCUMENTS, MAX_SECTIONS, normaliseText, splitSections } from "./lib/knowledge";
-import { parsePriceU, proposeKnowledgeTools, type KnowledgeTool } from "./lib/knowledgeTools";
+import { cleanDescribedTool, parsePriceU, proposeKnowledgeTools, type KnowledgeTool } from "./lib/knowledgeTools";
 
 /**
  * A draft's documents (Agent/PLAN-2026-10-03-knowledge-mcps.md, steps 1-2).
@@ -102,7 +102,9 @@ export const removeDocument = mutation({
       .collect();
     const published = new Set(listings.flatMap((listing) => (listing.knowledge?.documents ?? []).flatMap((doc) => doc.sections.map((section) => section.storageId))));
     for (const section of row.sections) {
-      if (!published.has(section.storageId)) await ctx.storage.delete(section.storageId);
+      if (published.has(section.storageId)) continue;
+      // A blob already gone must never leave a document stuck (found on dev 2026-10-03: "storage id ... not found").
+      if (await ctx.db.system.get(section.storageId)) await ctx.storage.delete(section.storageId);
     }
     await ctx.db.delete(documentId);
     await regenerateTools(ctx, draft._id);
@@ -155,6 +157,58 @@ export const setTool = mutation({
       knowledgeTools: current.map((candidate) => (candidate.name === name ? next : candidate)),
       updatedAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Tools the builder described in the build chat (step 5, level 2), added or
+ * updated by name. What cannot be made safe is skipped and named, for the reply.
+ */
+export const addDescribedTools = internalMutation({
+  args: {
+    conversationId: v.id("dolphinConversations"),
+    tools: v.array(
+      v.object({
+        name: v.string(),
+        description: v.string(),
+        inputs: v.array(v.object({ name: v.string(), description: v.string() })),
+        instructions: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, { conversationId, tools }): Promise<{ added: string[]; skipped: string[] }> => {
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation) return { added: [], skipped: [] };
+    const draftId = await ensureDraft(ctx, conversation);
+    const draft = await ctx.db.get(draftId);
+    let current = ((draft?.knowledgeTools ?? []) as KnowledgeTool[]).slice();
+    const added: string[] = [];
+    const skipped: string[] = [];
+    for (const raw of tools.slice(0, 5)) {
+      const made = cleanDescribedTool(raw, current, Boolean(draft?.brain));
+      if ("problem" in made) {
+        skipped.push(made.problem);
+        continue;
+      }
+      const at = current.findIndex((tool) => tool.name === made.tool.name);
+      current = at >= 0 ? current.map((tool, i) => (i === at ? made.tool : tool)) : [...current, made.tool];
+      added.push(made.tool.name);
+    }
+    if (added.length > 0) await ctx.db.patch(draftId, { knowledgeTools: current, updatedAt: Date.now() });
+    return { added, skipped };
+  },
+});
+
+/** The builder removes a tool they described. Document tools are switched off instead, never removed. */
+export const removeTool = mutation({
+  args: { conversationKey: v.string(), name: v.string() },
+  handler: async (ctx, { conversationKey, name }) => {
+    const conversation = await buildConversation(ctx, conversationKey);
+    const draft = await draftOf(ctx, conversation._id);
+    const current = (draft?.knowledgeTools ?? []) as KnowledgeTool[];
+    const tool = current.find((candidate) => candidate.name === name);
+    if (!draft || !tool || tool.kind !== "described") throw new ConvexError("Only a tool you described can be removed; switch the others off.");
+    await ctx.db.patch(draft._id, { knowledgeTools: current.filter((candidate) => candidate.name !== name), updatedAt: Date.now() });
   },
 });
 

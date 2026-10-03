@@ -9,6 +9,9 @@ import type { ChartCandle } from "@/convex/api";
  * take-profit"). Candles, every trade the rule made as a marker on the candle it judged, the
  * line from each entry to its exit, and the open position's entry, stop and target as levels.
  * Drag to pan, scroll (or the buttons) to zoom; it follows the newest candle until panned away.
+ *
+ * The canvas's token chart draws with it too (components/trading-chart.tsx): with volume bars,
+ * compact in the small card, and asking for older history when panned to its first candle.
  */
 
 export type ChartMarker = {
@@ -37,7 +40,8 @@ function timeLabel(t: number, timeframe: string): string {
   const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   if (timeframe === "1d") return day;
   if (timeframe === "1h" || timeframe === "4h") return `${day} ${time}`;
-  return time;
+  // Short candles: the time alone today, with the day once the chart is dragged back past it.
+  return date.toDateString() === new Date().toDateString() ? time : `${day} ${time}`;
 }
 
 /** The index of the candle that contains `time`: the last one opening at or before it. */
@@ -62,6 +66,10 @@ export function RuleChart({
   timeframe,
   height = 320,
   initialSpan = 120,
+  volume = false,
+  compact = false,
+  pegDollar = false,
+  onNeedOlder,
 }: {
   candles: readonly ChartCandle[];
   markers?: readonly ChartMarker[];
@@ -69,6 +77,14 @@ export function RuleChart({
   timeframe: string;
   height?: number;
   initialSpan?: number;
+  /** Volume bars along the bottom (candles' `v`). */
+  volume?: boolean;
+  /** No OHLC line or zoom buttons - for a small card that shows the price itself. */
+  compact?: boolean;
+  /** A dollar token near its peg: a scale of at least $0.98-$1.02, so a 0.3% wobble looks like one. */
+  pegDollar?: boolean;
+  /** Called when the view reaches the first candle: load older history. */
+  onNeedOlder?: () => void;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
@@ -91,7 +107,8 @@ export function RuleChart({
   const available = candles.length;
   useEffect(() => {
     const element = svg.current;
-    if (!element) return;
+    // In a compact card the wheel stays with the page (the canvas zooms with it).
+    if (!element || compact) return;
     const wheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
       event.preventDefault();
@@ -102,16 +119,31 @@ export function RuleChart({
   });
 
   const total = candles.length;
-  if (total === 0) return <div className="rule-chart grid place-items-center text-[0.72rem] text-muted" style={{ height }}>No candles yet.</div>;
-
   const shown = Math.min(Math.max(span, MIN_SPAN), total);
   const lag = Math.min(Math.max(offset, 0), total - shown);
   const end = total - lag;
   const start = end - shown;
+
+  // Panned to the first candle: ask for older history (once per history length).
+  const askedAt = useRef(-1);
+  const nearStart = total > 0 && start <= 3;
+  useEffect(() => {
+    if (!onNeedOlder || !nearStart || askedAt.current === total) return;
+    askedAt.current = total;
+    onNeedOlder();
+  }, [nearStart, onNeedOlder, total]);
+
+  if (total === 0) return <div className="rule-chart grid place-items-center text-[0.72rem] text-muted" style={{ height }}>No candles yet.</div>;
+
   const visible = candles.slice(start, end);
 
   const plotW = width - PAD.left - PAD.right;
-  const plotH = height - PAD.top - PAD.bottom;
+  const fullH = height - PAD.top - PAD.bottom;
+  // With volume, the bottom fifth holds its bars.
+  const plotH = volume ? fullH * 0.8 : fullH;
+  const volumeTop = PAD.top + plotH + 6;
+  const volumeH = fullH - plotH - 6;
+  const maxVolume = Math.max(...visible.map((candle) => candle.v ?? 0), 0);
   const step = plotW / shown;
   const bodyW = Math.max(1, Math.min(14, step * 0.66));
   let low = Math.min(...visible.map((candle) => candle.l));
@@ -122,6 +154,11 @@ export function RuleChart({
       low = Math.min(low, level.price);
       high = Math.max(high, level.price);
     }
+  }
+  if (pegDollar && high < 1.1 && low > 0.9 && high - low < 0.04) {
+    const middle = (high + low) / 2;
+    low = middle - 0.02;
+    high = middle + 0.02;
   }
   const margin = (high - low) * 0.08 || high * 0.01 || 1;
   low -= margin;
@@ -151,7 +188,7 @@ export function RuleChart({
 
   return (
     <div className="rule-chart" ref={wrap}>
-      <div className="rule-chart__head">
+      <div className="rule-chart__head" hidden={compact}>
         <span>{timeLabel(hoveredCandle.t, timeframe)}</span>
         <span>O <b>{fmt(hoveredCandle.o)}</b></span>
         <span>H <b>{fmt(hoveredCandle.h)}</b></span>
@@ -213,6 +250,24 @@ export function RuleChart({
             </g>
           );
         })}
+
+        {volume && maxVolume > 0
+          ? visible.map((candle, index) => {
+              const barH = ((candle.v ?? 0) / maxVolume) * volumeH;
+              return (
+                <rect
+                  className={candle.c >= candle.o ? "rule-chart__up" : "rule-chart__down"}
+                  fill="currentColor"
+                  height={Math.max(0.5, barH)}
+                  key={`v${candle.t}`}
+                  opacity={0.28}
+                  width={Math.max(1, step * 0.7)}
+                  x={xAt(index) - Math.max(1, step * 0.7) / 2}
+                  y={volumeTop + volumeH - barH}
+                />
+              );
+            })
+          : null}
 
         {visible.map((candle, index) => {
           const up = candle.c >= candle.o;

@@ -1993,8 +1993,7 @@ select {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 14px 34px -20px rgba(15, 23, 42, 0.35);
   overflow: hidden;
 }
-.trading-chart__body { height: 260px; }
-.trading-chart__frame { display: block; width: 100%; height: 100%; border: 0; }
+.trading-chart__body { height: 190px; }
 .trading-chart__live { width: 6px; height: 6px; border-radius: 999px; background: var(--candle-up); animation: rule-live 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .trading-chart__live { animation: none; } }
 .trading-chart[data-collapsed] { padding-bottom: 8px; }
@@ -4711,6 +4710,7 @@ select {
 .rule-chart { position: relative; width: 100%; user-select: none; }
 .rule-chart__head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 4px; font-size: 0.68rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rule-chart__head b { color: var(--ink); font-weight: 650; }
+.rule-chart__head[hidden] { display: none; }
 .rule-chart__zoom { display: inline-flex; gap: 4px; margin-left: auto; }
 .rule-chart__zoom button { min-width: 24px; height: 22px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-soft); font-size: 12px; font-weight: 650; }
 .rule-chart__zoom button:hover { border-color: var(--ink); color: var(--ink); }

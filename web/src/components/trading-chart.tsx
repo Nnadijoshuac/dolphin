@@ -1,56 +1,34 @@
 "use client";
 
-import { useAction } from "convex/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Address } from "viem";
 
 import { BacktestPanel } from "@/components/backtest-panel";
-import { strategyApi } from "@/convex/api";
+import { RuleChart } from "@/components/rule-chart";
+import type { ChartCandle } from "@/convex/api";
+import { bscPublicClient } from "@/services/chain";
+import { livePricer } from "@/wallet/pool-live-price";
 
 /**
  * The live chart for the token a trading agent works on. (owner, 2026-09-28:
  * "you should be able to see what that currency is actually doing IRL")
  *
- * A LIVE CHART, EMBEDDED (owner, 2026-10-03: "the market is almost never still... it's updating
- * every one minute... these people's money"; "I got a pair from TradingView... at least it was
- * live"). Dolphin drew its own candles here from Binance and GeckoTerminal. On a network that
- * blocks Binance (the owner's) the live stream never connected and the price moved once a minute;
- * GeckoTerminal caches about a minute too. Routing it through Dolphin's server cost Convex calls
- * on every refresh of every open chart.
- *
- * Now the chart is embedded, served and kept live by its provider, which the owner's network
- * reaches:
- *   - a token Binance lists: TradingView's chart of the Binance pair (BINANCE:BNBUSDT), tick by tick;
- *   - any other token: GeckoTerminal's live chart of its BNB Chain pool (the block's own, or the
- *     deepest one DexScreener knows).
- * Whether Binance lists a token is asked of Dolphin ONCE and remembered in the browser for a week,
- * so a chart costs at most one Convex call per token per week - never one per refresh.
- * (DexScreener's embed was tried first: its chart never received data in a test browser, so it
- * could not be verified.)
+ * OUR OWN CHART, LIVE ON ANY NETWORK, FREE TO RUN (owner, 2026-10-03). The TradingView embed that
+ * briefly replaced it brought drawing tools nobody here needs ("what we just need here was just the
+ * chart... more like a preview"), and Dolphin's earlier chart froze on networks that block Binance.
+ * Now, all in the browser and with no Convex call:
+ *   - HISTORY: the token's BNB Chain pool from GeckoTerminal, 1,000 candles a page, older pages
+ *     loaded as the chart is dragged back - so a trader can study what the market did and judge
+ *     what their agent is doing. Re-read after each candle closes.
+ *   - LIVE: the pool's own price read from BNB Chain every 1.5 s while the tab is visible
+ *     (wallet/pool-live-price.ts) - the price the Dolphin Wallet trades at, which moves with every
+ *     swap - drawn into the forming candle.
+ * Quiet pools only report candles that traded; the gaps are drawn as flat candles at the last price
+ * with no volume, so time on the chart is real time. Every number drawn was read; while nothing
+ * has loaded it says so (AGENTS.md §5).
  */
 
 export type Frame = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
-
-/** TradingView's interval names, and GeckoTerminal's, for each frame. */
-const TV_INTERVALS: Record<Frame, string> = { "1m": "1", "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D" };
-const FRAME_NAMES = Object.keys(TV_INTERVALS) as Frame[];
-const LISTED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Whether Binance lists a pair, remembered per browser for a week. Null: not known yet. */
-function rememberedListing(pair: string): boolean | null {
-  try {
-    const saved = JSON.parse(localStorage.getItem(`dolphin.binanceListed.${pair}`) ?? "null") as { listed: boolean; at: number } | null;
-    return saved && Date.now() - saved.at < LISTED_TTL_MS ? saved.listed : null;
-  } catch {
-    return null;
-  }
-}
-function rememberListing(pair: string, listed: boolean) {
-  try {
-    localStorage.setItem(`dolphin.binanceListed.${pair}`, JSON.stringify({ listed, at: Date.now() }));
-  } catch {
-    /* storage blocked: it is asked again next time */
-  }
-}
 
 const FRAMES: Record<Frame, string> = {
   "1m": "minute?aggregate=1",
@@ -60,10 +38,15 @@ const FRAMES: Record<Frame, string> = {
   "4h": "hour?aggregate=4",
   "1d": "day?aggregate=1",
 };
+const FRAME_MS: Record<Frame, number> = { "1m": 60_000, "5m": 300_000, "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
+const PAGE = 1000;
+/** The most candles kept, gaps included, however far back the chart is dragged. */
+const MAX_CANDLES = 6000;
+const LIVE_MS = 1_500;
 
 const BINANCE_ALIASES: Record<string, string> = { WBNB: "BNB", BTCB: "BTC" };
 
-/** A dollar stablecoin: a USD in its name, or one of the known ones. Binance has no XUSDT market for these. */
+/** A dollar stablecoin: a USD in its name, or one of the known ones. Drawn on a peg-sized scale. */
 export function isDollarToken(symbol: string): boolean {
   const s = symbol.toUpperCase().replace(/[^A-Z0-9]/g, "");
   return ["U", "DAI", "FDUSD"].includes(s) || /USD/.test(s);
@@ -86,37 +69,54 @@ export async function findPool(tokenAddress: string): Promise<string | null> {
   return pairs[0]?.pairAddress ?? null;
 }
 
-/** A pool's candles from GeckoTerminal - for the backtest presets of tokens Binance does not list. */
-export async function loadCandles(pool: string, tokenAddress: string, frame: Frame, limit = 160) {
+/** A pool's candles from GeckoTerminal, oldest first; `before` (seconds) pages back in time. */
+export async function loadCandles(pool: string, tokenAddress: string, frame: Frame, limit = PAGE, before?: number) {
   const joiner = FRAMES[frame].includes("?") ? "&" : "?";
   const response = await fetch(
-    `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${pool}/ohlcv/${FRAMES[frame]}${joiner}limit=${limit}&currency=usd&token=${tokenAddress}`,
-    { headers: { accept: "application/json" } },
+    `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${pool}/ohlcv/${FRAMES[frame]}${joiner}limit=${limit}&currency=usd&token=${tokenAddress}${before ? `&before_timestamp=${before}` : ""}`,
+    { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) },
   );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = (await response.json()) as { data?: { attributes?: { ohlcv_list?: number[][] } } };
   return (data.data?.attributes?.ohlcv_list ?? []).map(([t, o, h, l, c, v]) => ({ t, o, h, l, c, v })).sort((a, b) => a.t - b.t);
 }
 
-/** Follows the site's light or dark look, so the embedded chart matches it. */
-function useDark(): boolean {
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const read = () => {
-      const forced = document.documentElement.dataset.theme;
-      setDark(forced ? forced === "dark" : media.matches);
-    };
-    read();
-    media.addEventListener("change", read);
-    const observer = new MutationObserver(read);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => {
-      media.removeEventListener("change", read);
-      observer.disconnect();
-    };
-  }, []);
-  return dark;
+/** Seconds -> the chart's milliseconds. */
+const toChart = (candle: { t: number; o: number; h: number; l: number; c: number; v: number }): ChartCandle => ({ ...candle, t: candle.t * 1000 });
+
+/** Merges candles by open time (later wins), oldest first, and draws each untraded interval flat at the last price. */
+function combine(older: readonly ChartCandle[], newer: readonly ChartCandle[], frame: Frame, now: number): ChartCandle[] {
+  const byTime = new Map<number, ChartCandle>();
+  for (const candle of [...older, ...newer]) byTime.set(candle.t, candle);
+  const sorted = [...byTime.values()].sort((a, b) => a.t - b.t);
+  const step = FRAME_MS[frame];
+  const out: ChartCandle[] = [];
+  for (const candle of sorted) {
+    const previous = out[out.length - 1];
+    if (previous) for (let t = previous.t + step; t < candle.t && out.length < MAX_CANDLES * 2; t += step) out.push({ t, o: previous.c, h: previous.c, l: previous.c, c: previous.c, v: 0 });
+    out.push(candle);
+  }
+  const current = Math.floor(now / step) * step;
+  while (out.length && out[out.length - 1].t + step <= current) {
+    const last = out[out.length - 1];
+    out.push({ t: last.t + step, o: last.c, h: last.c, l: last.c, c: last.c, v: 0 });
+  }
+  return out.slice(-MAX_CANDLES);
+}
+
+/** The live price drawn into the forming candle, or a new candle once the interval rolls over. */
+function withTick(candles: readonly ChartCandle[], price: number, frame: Frame, now: number): ChartCandle[] {
+  const last = candles[candles.length - 1];
+  if (!last) return candles as ChartCandle[];
+  const start = Math.floor(now / FRAME_MS[frame]) * FRAME_MS[frame];
+  if (start > last.t) return [...combine(candles, [], frame, start), { t: start, o: last.c, h: Math.max(last.c, price), l: Math.min(last.c, price), c: price, v: 0 }].slice(-MAX_CANDLES);
+  return [...candles.slice(0, -1), { ...last, c: price, h: Math.max(last.h, price), l: Math.min(last.l, price) }];
+}
+
+function price(value: number): string {
+  if (value >= 100) return value.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (value >= 1) return value.toLocaleString("en", { maximumFractionDigits: 3 });
+  return value.toPrecision(4);
 }
 
 function ExpandIcon({ expanded }: { expanded: boolean }) {
@@ -130,6 +130,8 @@ function ExpandIcon({ expanded }: { expanded: boolean }) {
     </svg>
   );
 }
+
+type Series = { key: string; candles: ChartCandle[]; oldestReached: boolean };
 
 export function TradingChart({
   tokenAddress,
@@ -149,84 +151,155 @@ export function TradingChart({
   // Expanded, the chart can switch to testing a rule on this token's history.
   const [view, setView] = useState<"chart" | "backtest">("chart");
   const testing = expanded && view === "backtest";
-  const dark = useDark();
-  const checkMarket = useAction(strategyApi.strategy.marketCandles);
-  // What to chart: the Binance pair when Binance lists the token, else its BNB Chain pool.
-  const [source, setSource] = useState<{ key: string; chart: { kind: "binance"; pair: string } | { kind: "pool"; pool: string } | null } | null>(null);
-  const sourceKey = `${tokenAddress}:${symbol}:${poolAddress ?? ""}`;
-  const chart = source && source.key === sourceKey ? source.chart : undefined;
 
+  // The pool: the block's own, else the deepest one DexScreener knows.
+  const [found, setFound] = useState<{ token: string; pool: string | null } | null>(null);
+  const pool = poolAddress ?? (found && found.token === tokenAddress ? found.pool : null);
+  const poolPending = !poolAddress && (!found || found.token !== tokenAddress);
   useEffect(() => {
+    if (poolAddress) return;
     let cancelled = false;
-    void (async () => {
-      const pair = binancePair(symbol);
-      if (pair) {
-        let listed = rememberedListing(pair);
-        if (listed === null) {
-          const answer = await checkMarket({ venue: "binance-spot", market: pair, timeframe: "1d", limit: 20 }).catch(() => null);
-          // No answer (offline): not remembered, so it is asked again next time.
-          if (answer !== null) {
-            listed = Array.isArray(answer) && answer.length > 0;
-            rememberListing(pair, listed);
-          }
-        }
-        if (listed) {
-          if (!cancelled) setSource({ key: sourceKey, chart: { kind: "binance", pair } });
-          return;
-        }
-      }
-      const pool = poolAddress ?? (await findPool(tokenAddress).catch(() => null));
-      if (!cancelled) setSource({ key: sourceKey, chart: pool ? { kind: "pool", pool } : null });
-    })();
+    void findPool(tokenAddress)
+      .catch(() => null)
+      .then((result) => {
+        if (!cancelled) setFound({ token: tokenAddress, pool: result });
+      });
     return () => {
       cancelled = true;
     };
-  }, [checkMarket, poolAddress, sourceKey, symbol, tokenAddress]);
+  }, [poolAddress, tokenAddress]);
 
+  const key = `${pool}:${tokenAddress}:${frame}`;
+  const [series, setSeries] = useState<Series | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  // True while live ticks arrive; cleared 6 s after the last one, so it never claims a stopped feed.
+  const [live, setLive] = useState(false);
+  const candles = series && series.key === key ? series.candles : null;
+
+  // History: the latest page, then again a few seconds after each candle closes.
+  useEffect(() => {
+    if (!pool) return;
+    let cancelled = false;
+    let timer = 0;
+    const load = async () => {
+      try {
+        const page = (await loadCandles(pool, tokenAddress, frame)).map(toChart);
+        if (cancelled) return;
+        if (page.length === 0) setFailed(key);
+        else {
+          setFailed(null);
+          setSeries((current) =>
+            current && current.key === key
+              ? { ...current, candles: combine(current.candles, page, frame, Date.now()) }
+              : { key, candles: combine([], page, frame, Date.now()), oldestReached: page.length < PAGE },
+          );
+        }
+      } catch {
+        if (!cancelled) setFailed((current) => current ?? key);
+      }
+      if (!cancelled) timer = window.setTimeout(load, FRAME_MS[frame] - (Date.now() % FRAME_MS[frame]) + 15_000);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [frame, key, pool, tokenAddress]);
+
+  // Live: the pool's own price from BNB Chain, every 1.5 s while the tab is visible.
+  useEffect(() => {
+    if (!pool || !/^0x[0-9a-fA-F]{40}$/.test(pool)) return;
+    let cancelled = false;
+    let timer = 0;
+    let stale = 0;
+    void (async () => {
+      const pricer = await livePricer(bscPublicClient, pool as Address, tokenAddress as Address).catch(() => null);
+      if (!pricer || cancelled) return;
+      const tick = async () => {
+        if (!document.hidden) {
+          const value = await pricer.read().catch(() => null);
+          if (cancelled) return;
+          if (value !== null && Number.isFinite(value) && value > 0) {
+            const now = Date.now();
+            setSeries((current) => (current && current.key === key ? { ...current, candles: withTick(current.candles, value, frame, now) } : current));
+            setLive(true);
+            window.clearTimeout(stale);
+            stale = window.setTimeout(() => setLive(false), 6_000);
+          }
+        }
+        if (!cancelled) timer = window.setTimeout(tick, LIVE_MS);
+      };
+      void tick();
+    })();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.clearTimeout(stale);
+      setLive(false);
+    };
+  }, [frame, key, pool, tokenAddress]);
+
+  // Older history, when the chart is dragged back to its first candle.
+  const loadingOlder = useRef(false);
+  const loadOlder = useCallback(() => {
+    if (!pool || loadingOlder.current || !series || series.key !== key || series.oldestReached || series.candles.length >= MAX_CANDLES) return;
+    loadingOlder.current = true;
+    const before = Math.floor(series.candles[0].t / 1000);
+    void loadCandles(pool, tokenAddress, frame, PAGE, before)
+      .then((page) => {
+        setSeries((current) =>
+          current && current.key === key
+            ? { ...current, candles: combine(page.map(toChart), current.candles, frame, Date.now()), oldestReached: page.length < PAGE }
+            : current,
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        loadingOlder.current = false;
+      });
+  }, [frame, key, pool, series, tokenAddress]);
+
+  // The chart's height follows its box (the card, or the whole canvas when expanded).
+  const [bodyHeight, setBodyHeight] = useState(170);
+  const measure = useCallback((element: HTMLDivElement | null) => {
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setBodyHeight(Math.max(120, Math.round(entry.contentRect.height))));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const last = candles?.[candles.length - 1];
+  const dayAgo = candles && last ? candles.find((candle) => candle.t >= last.t - 86_400_000) : undefined;
+  const change = last && dayAgo ? ((last.c - dayAgo.o) / dayAgo.o) * 100 : null;
   const showBody = expanded || !collapsed;
-  const src = !chart
-    ? null
-    : chart.kind === "binance"
-      ? `https://s.tradingview.com/widgetembed/?${new URLSearchParams({
-          symbol: `BINANCE:${chart.pair}`,
-          interval: TV_INTERVALS[frame],
-          theme: dark ? "dark" : "light",
-          style: "1",
-          timezone: "Etc/UTC",
-          locale: "en",
-          hide_side_toolbar: expanded ? "0" : "1",
-          withdateranges: "0",
-          hideideas: "1",
-          saveimage: "0",
-        }).toString()}`
-      : `https://www.geckoterminal.com/bsc/pools/${chart.pool}?${new URLSearchParams({
-          embed: "1",
-          info: "0",
-          swaps: "0",
-          grayscale: "0",
-          light_chart: dark ? "0" : "1",
-          chart_type: "price",
-          resolution: frame,
-        }).toString()}`;
 
   return (
     <div className="trading-chart" data-collapsed={!showBody || undefined} data-expanded={expanded || undefined}>
-      <div className="flex items-center gap-2 px-3 pt-2.5 pb-2">
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
         <button
           aria-expanded={showBody}
-          className="flex min-w-0 flex-1 items-baseline gap-2 text-left"
+          className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden whitespace-nowrap text-left"
           disabled={expanded}
           onClick={() => setCollapsed((value) => !value)}
           type="button"
         >
           <span className={`${expanded ? "!text-[16px]" : "!text-[13px]"} font-semibold text-ink`}>{symbol}</span>
-          <span className="flex items-center gap-1 !text-[10.5px] font-semibold text-muted">
-            <span className="trading-chart__live" /> Live
-          </span>
+          {last ? <span className={`font-mono ${expanded ? "!text-[16px]" : "!text-[13px]"} text-ink`}>${price(last.c)}</span> : null}
+          {change !== null ? (
+            <span className={`font-mono !text-[11px] ${change >= 0 ? "trading-chart__up" : "trading-chart__down"}`} title="Over the last 24 hours">
+              {change >= 0 ? "+" : ""}
+              {change.toFixed(2)}%
+            </span>
+          ) : null}
+          {live ? (
+            <span className="flex items-center gap-1 self-center !text-[10px] font-semibold text-muted">
+              <span className="trading-chart__live" /> Live
+            </span>
+          ) : null}
         </button>
         {showBody && !testing ? (
           <div className="flex rounded-full bg-paper-muted p-[2px]" role="radiogroup" aria-label="Candle length">
-            {FRAME_NAMES.map((option) => (
+            {(Object.keys(FRAMES) as Frame[]).map((option) => (
               <button
                 aria-checked={frame === option}
                 className={`rounded-full px-2 py-0.5 !text-[10.5px] font-semibold transition-colors ${frame === option ? "bg-paper-strong text-ink shadow-sm" : "text-muted hover:text-ink"}`}
@@ -263,21 +336,25 @@ export function TradingChart({
         ) : null}
       </div>
 
-      {testing ? <BacktestPanel poolAddress={chart?.kind === "pool" ? chart.pool : poolAddress} symbol={symbol} tokenAddress={tokenAddress} /> : null}
+      {testing ? <BacktestPanel poolAddress={pool} symbol={symbol} tokenAddress={tokenAddress} /> : null}
 
       {showBody && !testing ? (
-        <div className="trading-chart__body">
-          {src ? (
-            <iframe
-              className="trading-chart__frame"
-              key={src}
-              referrerPolicy="strict-origin-when-cross-origin"
-              src={src}
-              title={`${symbol} live chart`}
+        <div className="trading-chart__body" ref={measure}>
+          {candles ? (
+            <RuleChart
+              candles={candles}
+              compact={!expanded}
+              height={expanded ? bodyHeight - 30 : bodyHeight}
+              initialSpan={expanded ? 160 : 64}
+              key={`${key}-${expanded}`}
+              onNeedOlder={expanded ? loadOlder : undefined}
+              pegDollar={isDollarToken(symbol)}
+              timeframe={frame}
+              volume={expanded}
             />
           ) : (
             <div className="grid h-full place-items-center px-6 text-center text-[0.72rem] text-muted">
-              {chart === undefined ? "Loading the market…" : `No live chart for ${symbol} right now. It needs a BNB Chain pool with trading.`}
+              {poolPending || (pool && failed !== key) ? "Loading the market…" : `No live chart for ${symbol} right now. It needs a BNB Chain pool with trading.`}
             </div>
           )}
         </div>

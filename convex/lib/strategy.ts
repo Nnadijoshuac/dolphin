@@ -96,6 +96,9 @@ export type Decision =
   | { type: "enter"; side: "long" | "short"; action: Action; price: number; reason: string }
   | { type: "exit"; side: "long" | "short"; price: number; reason: string };
 
+/** Binance's taker fee for each venue; PancakeSwap's pool fee for the Dolphin Wallet. In basis points. Backtests charge it on every fill. */
+export const VENUE_FEE_BPS: Record<Venue, number> = { "binance-spot": 10, "binance-futures": 5, "binance-wallet": 10, "dolphin-wallet": 25 };
+
 /* ── Bounds: a rule can never ask for more than these ── */
 export const LIMITS = {
   maxConditions: 6,

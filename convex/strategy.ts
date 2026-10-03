@@ -9,7 +9,7 @@ import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } fro
 import { closedCandles, historyCandles, MarketDataError } from "./lib/binanceMarket";
 import { checkConnection, closePosition, openPosition, type ConnectionReport, type Held } from "./lib/binanceTrade";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, simulate, TIMEFRAMES, TIMEFRAME_MS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, simulate, TIMEFRAMES, TIMEFRAME_MS, VENUE_FEE_BPS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -524,8 +524,6 @@ export const ruleOf = internalQuery({
   },
 });
 
-/** Binance's taker fee for each venue; PancakeSwap's pool fee for the Dolphin Wallet. In basis points. */
-const VENUE_FEE_BPS: Record<Rule["venue"], number> = { "binance-spot": 10, "binance-futures": 5, "binance-wallet": 10, "dolphin-wallet": 25 };
 const BACKTEST_CANDLES = 1_500;
 
 type ChartCandle = { t: number; o: number; h: number; l: number; c: number };

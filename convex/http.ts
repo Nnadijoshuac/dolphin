@@ -30,7 +30,7 @@ import {
   type RpcRequest,
 } from "./builtAgentServer";
 import { apiBase } from "./builtAgents";
-import { handleMarketplaceMcp, type RpcMessage } from "./marketplaceMcp";
+import { GROUP_NAMES, GROUPS, groupsFrom, handleMarketplaceMcp, type RpcMessage } from "./marketplaceMcp";
 import { PaymentRejected, decodePayment, formatU, paymentChallenge, paymentResponseHeader, textToBase64, type DecodedPayment } from "./lib/x402";
 import { runnerTokenHash } from "./strategy";
 import { checkPayment, settlePayment } from "./x402";
@@ -212,7 +212,8 @@ for (const path of ["/api/v1/contracts", "/api/v1/hires", "/api/v1/agents", "/ap
 /* ---------------------------------------------------------------------------
  * DOLPHIN FOR AI ASSISTANTS (2026-10-03) - convex/marketplaceMcp.ts
  *
- *   POST /api/v1/mcp   one MCP server for the whole marketplace: search_agents, get_agent, call_agent
+ *   POST /api/v1/mcp   one MCP server, every tool group: marketplace, market, rules, proof
+ *                      (?tools=market,rules serves only the groups named)
  *   GET  /api/v1/mcp   a short JSON description, for a person who opens the URL in a browser
  * ------------------------------------------------------------------------ */
 
@@ -242,7 +243,7 @@ http.route({
     if (!message || typeof message !== "object" || Array.isArray(message)) {
       return rpc({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Send one JSON-RPC request at a time." } }, 400);
     }
-    return rpc(await handleMarketplaceMcp(ctx, message as RpcMessage));
+    return rpc(await handleMarketplaceMcp(ctx, message as RpcMessage, groupsFrom(new URL(request.url).searchParams.get("tools"))));
   }),
 });
 
@@ -258,7 +259,8 @@ http.route({
         {
           name: "Dolphin marketplace MCP",
           transport: "MCP over HTTP (JSON-RPC 2.0). POST to this URL.",
-          tools: ["search_agents", "get_agent", "call_agent"],
+          groups: Object.fromEntries(GROUP_NAMES.map((group) => [group, GROUPS[group].map((tool) => tool.name)])),
+          onlySomeGroups: "Add ?tools=market,rules to the URL to load only those groups.",
           docs: "https://www.dolphinamp.xyz/docs/mcp",
         },
         null,

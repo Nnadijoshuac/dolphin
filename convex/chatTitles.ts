@@ -17,6 +17,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation } from "./_generated/server";
 import { chatCompletion } from "./lib/openrouter";
+import { keyLedger } from "./modelKeys";
 
 const PROMPT =
   "Write a short title for a chat that starts with the message below. " +
@@ -47,6 +48,7 @@ export const summarize = internalAction({
     let title: string | null = null;
     try {
       const result = await chatCompletion({
+        ledger: keyLedger(ctx),
         messages: [
           { role: "system", content: PROMPT },
           { role: "user", content: firstMessage.slice(0, 1_500) },

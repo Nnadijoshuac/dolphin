@@ -8,6 +8,7 @@ import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
 import { looksLikeLeakedReasoning } from "./lib/leakedReasoning";
 import { McpError, callMcpTool, listMcpTools, openMcpSession, MCP_PROTOCOL_VERSION } from "./lib/mcpClient";
 import { OpenRouterError, chatCompletion, isBrainProvider, modelProviderMismatch, type BrainEndpoint, type ChatMessage } from "./lib/openrouter";
+import { keyLedger } from "./modelKeys";
 import { isMutating } from "./lib/toolCapability";
 import {
   knowledgeCallPrice,
@@ -504,7 +505,7 @@ export async function ask(ctx: ActionCtx, listing: Listing, question: string, wa
   try {
     let remaining = MAX_TOOL_CALLS;
     for (let round = 0; round < MAX_TOOL_ROUNDS && remaining > 0 && allTools.length > 0; round++) {
-      const turn = await chatCompletion({ messages, tools: allTools, toolChoice: "auto", ...(endpoint ? { endpoint } : {}) });
+      const turn = await chatCompletion({ messages, tools: allTools, toolChoice: "auto", ledger: keyLedger(ctx), ...(endpoint ? { endpoint } : {}) });
       if (turn.toolCalls.length === 0) break;
       const batch = turn.toolCalls.slice(0, remaining);
       remaining -= batch.length;
@@ -548,7 +549,7 @@ export async function ask(ctx: ActionCtx, listing: Listing, question: string, wa
         readNote +
         (unreachable.length ? `\n\nTOOLS YOU COULD NOT USE THIS TURN:\n${unreachable.join("\n")}` : ""),
     };
-    const final = await chatCompletion({ messages, ...(endpoint ? { endpoint } : {}) });
+    const final = await chatCompletion({ messages, ledger: keyLedger(ctx), ...(endpoint ? { endpoint } : {}) });
     const answer = stripToolNames(stripRawPayloads(final.content)).trim();
     if (!answer || looksLikeLeakedReasoning(answer)) {
       return { content: [{ type: "text", text: "This agent could not write an answer just now. Ask again." }], isError: true };

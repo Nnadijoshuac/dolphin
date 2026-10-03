@@ -53,7 +53,8 @@ import { memoryBrief, recall, remember, type MemoryTarget } from "./lib/agentMem
 import { gradesTokens, mergeBuilderBlocks, withVerdictRules } from "./lib/builderBlocks";
 import { quietBrief, readDataSource, readNews } from "./lib/analyticalBlocks";
 import { TRADING_PLAYBOOK, TRADING_RUN_RULES } from "./lib/tradingPlaybook";
-import { chatCompletion, customChatUrl, isBrainProvider, modelProviderMismatch, type ChatMessage } from "./lib/openrouter";
+import { chatCompletion, customChatUrl, isBrainProvider, modelProviderMismatch, type ChatMessage, type KeyLedger } from "./lib/openrouter";
+import { keyLedger } from "./modelKeys";
 import { assertSafeUrl } from "./lib/safeFetch";
 import { isMutating } from "./lib/toolCapability";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
@@ -943,7 +944,7 @@ function summarizeChanges(changed: readonly string[]): string {
   return `I updated ${list}. The draft on the right shows them.`;
 }
 
-async function compileTurn(messages: ChatMessage[]): Promise<{ reply: BuilderReply; model: string } | null> {
+async function compileTurn(messages: ChatMessage[], ledger: KeyLedger): Promise<{ reply: BuilderReply; model: string } | null> {
   /*
    * Two attempts. Structured replies from the free model fail about one time
    * in three, and a second try is cheaper for the person than asking them to
@@ -952,6 +953,7 @@ async function compileTurn(messages: ChatMessage[]): Promise<{ reply: BuilderRep
   for (let attempt = 0; attempt < 2; attempt++) {
     const result = await chatCompletion({
       messages,
+      ledger,
       responseSchema: BUILDER_REPLY_SCHEMA,
       temperature: 0.3,
       // Raised from 2,500 when replies began carrying blocks: a reasoning model spent the budget
@@ -1027,7 +1029,7 @@ export const ask = action({
         { role: "user", content: `The person describes the agent they want:\n${text}` },
       ];
 
-      const compiled = await compileTurn(messages);
+      const compiled = await compileTurn(messages, keyLedger(ctx));
       if (!compiled) {
         await ctx.runMutation(internal.dolphin.setMessageStatus, {
           messageId: assistantId,
@@ -1429,7 +1431,7 @@ export async function runTryTurn(
         });
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS && callsRemaining > 0; round++) {
-            const turn = await chatCompletion({ messages, tools: allTools, toolChoice: "auto", endpoint });
+            const turn = await chatCompletion({ messages, tools: allTools, toolChoice: "auto", endpoint, ledger: keyLedger(ctx) });
             /* Consult prose is never carried forward. See the same note in dolphin.ask. */
             if (turn.toolCalls.length === 0) break;
             const batch = turn.toolCalls.slice(0, callsRemaining);
@@ -1583,6 +1585,7 @@ export async function runTryTurn(
       const final = await chatCompletion({
         messages,
         endpoint,
+        ledger: keyLedger(ctx),
         ...(allTools.length > 0 ? { tools: allTools, toolChoice: "none" as const } : {}),
       });
       const content = stripToolNames(stripRawPayloads(final.content)).trim();

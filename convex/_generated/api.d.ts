@@ -99,6 +99,7 @@ import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as lib_x402 from "../lib/x402.js";
 import type * as liveness from "../liveness.js";
 import type * as model_agent from "../model/agent.js";
+import type * as modelKeys from "../modelKeys.js";
 import type * as myAgents from "../myAgents.js";
 import type * as paperTrading from "../paperTrading.js";
 import type * as protocols_aave from "../protocols/aave.js";
@@ -217,6 +218,7 @@ declare const fullApi: ApiFromModules<{
   "lib/x402": typeof lib_x402;
   liveness: typeof liveness;
   "model/agent": typeof model_agent;
+  modelKeys: typeof modelKeys;
   myAgents: typeof myAgents;
   paperTrading: typeof paperTrading;
   "protocols/aave": typeof protocols_aave;

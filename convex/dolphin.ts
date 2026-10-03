@@ -28,6 +28,7 @@ import {
   type ChatMessage,
   type ToolCall,
 } from "./lib/openrouter";
+import { keyLedger } from "./modelKeys";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 import { coerceAgentKey } from "./model/agent";
 import { readHealthFactorStats } from "./protocols/venus";
@@ -1107,6 +1108,7 @@ export const checkModelBudget = internalAction({
     let toolCallProbe: { model: string; toolCalls: number; finishReason: string | null } | string;
     try {
       const result = await chatCompletion({
+        ledger: keyLedger(ctx),
         messages: [{ role: "user", content: "What is the weather in Lagos? Use the tool." }],
         tools: [
           {
@@ -1150,6 +1152,7 @@ export const checkModelBudget = internalAction({
     let menuProbe: unknown;
     try {
       const result = await chatCompletion({
+        ledger: keyLedger(ctx),
         messages: [
           { role: "system", content: CONSULT_PROMPT },
           { role: "user", content: text },
@@ -1419,6 +1422,7 @@ export const ask = action({
               messages,
               tools: menu.tools,
               toolChoice: "auto",
+              ledger: keyLedger(ctx),
             });
 
             /*
@@ -1633,7 +1637,7 @@ Reply in at most two sentences: ${callsMade > 0 ? "you re-checked just now, so s
        * fault - and an empty or garbled reply is reported the same way. The
        * person can ask again; nothing is dressed up as an answer.
        */
-      let final = await chatCompletion({ messages });
+      let final = await chatCompletion({ messages, ledger: keyLedger(ctx) });
       let content = stripRawPayloads(final.content);
       let leaked = looksLikeLeakedReasoning(content);
       /*
@@ -1646,7 +1650,7 @@ Reply in at most two sentences: ${callsMade > 0 ? "you re-checked just now, so s
       if (content.trim().length === 0 || leaked) {
         console.warn(`[Dolphin] ${final.model} gave no usable answer; retrying once on ${DOLPHIN_FALLBACK_MODELS[0]}.`);
         try {
-          final = await chatCompletion({ messages, model: DOLPHIN_FALLBACK_MODELS[0] });
+          final = await chatCompletion({ messages, model: DOLPHIN_FALLBACK_MODELS[0], ledger: keyLedger(ctx) });
           content = stripRawPayloads(final.content);
           leaked = looksLikeLeakedReasoning(content);
         } catch (cause) {
@@ -1853,6 +1857,18 @@ export function humanizeError(cause: unknown): { message: string; kind: DolphinE
       message:
         "The model garbled its reply to Dolphin and no usable answer came back. Nothing was consulted on your behalf. Try asking again.",
       kind: "fault",
+    };
+  }
+
+  /*
+   * The free model busy for everyone (OpenRouter: "temporarily rate-limited upstream"). Not
+   * Dolphin out of calls - more keys would not help and it clears in minutes - so it must not
+   * read as "out of answers" (owner, 2026-10-03: out of answers while keys had calls left).
+   */
+  if (lower.includes("busy upstream")) {
+    return {
+      message: "The free model Dolphin uses is busy for everyone right now. Dolphin still has answers left; try again in a minute.",
+      kind: "provider",
     };
   }
 

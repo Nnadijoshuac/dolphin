@@ -182,6 +182,8 @@ export type ToolCall = {
 export type ChatResult = {
   /** The assistant's prose. Empty string when it only called tools. */
   content: string;
+  /** Which of Dolphin's keys sent it (OPENROUTER_API_KEY, _2, ...); null on a builder's own key. */
+  keyName?: string | null;
   toolCalls: ToolCall[];
   /** Which model actually answered - the fallback chain makes this vary. */
   model: string;
@@ -204,16 +206,54 @@ export class OpenRouterError extends Error {
   }
 }
 
-function readApiKey(): string {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key || key.trim().length === 0) {
+/**
+ * DOLPHIN'S KEYS, ONE AT A TIME (owner, 2026-10-03: "one request goes to one API at a time").
+ *
+ * OPENROUTER_API_KEY, then OPENROUTER_API_KEY_2, _3 ... - each from a separate OpenRouter
+ * account, so each has its own free-model allowance (50 requests a day under $10 of credits,
+ * 20 a minute). A request is sent with ONE key; only when OpenRouter refuses that key for a
+ * limit does the same request move to the next. Before 2026-10-03 only the first key was
+ * ever read: _2 and _3 sat idle while chat said it was out of answers.
+ */
+export const DOLPHIN_KEY_NAMES = ["OPENROUTER_API_KEY", ...Array.from({ length: 8 }, (_, i) => `OPENROUTER_API_KEY_${i + 2}`)];
+
+function dolphinKeys(): { name: string; secret: string }[] {
+  const keys = DOLPHIN_KEY_NAMES.flatMap((name) => {
+    const secret = process.env[name]?.trim();
+    return secret ? [{ name, secret }] : [];
+  });
+  if (keys.length === 0) {
     throw new OpenRouterError(
       "OPENROUTER_API_KEY is not set on this Convex deployment, so the Dolphin " +
         "agent has no model to think with. Set it with `npx convex env set`.",
     );
   }
-  return key.trim();
+  return keys;
 }
+
+/**
+ * Keys OpenRouter refused for a limit, and until when to leave them alone. A per-process
+ * memory only: a fresh process simply tries the key once more and learns again. A daily
+ * limit rests the key until the next UTC midnight (OpenRouter's reset); a per-minute one, a minute.
+ */
+const resting = new Map<string, number>();
+
+/** Tests only: forget which keys are resting. */
+export function forgetRestingKeys(): void {
+  resting.clear();
+}
+
+function restUntil(message: string, now: number): number {
+  if (/per-?day|daily/i.test(message)) {
+    const midnight = new Date(now);
+    midnight.setUTCHours(24, 0, 0, 0);
+    return midnight.getTime();
+  }
+  return now + 60_000;
+}
+
+/** Called once for every request a Dolphin key actually sent, with that key's name (convex/modelKeys.ts). */
+export type KeyLedger = (keyName: string) => Promise<void>;
 
 /**
  * One chat completion, with tools.
@@ -289,10 +329,11 @@ async function chatCompletionOnce(options: {
    * used - not its key, not its model, not its free-model fallback chain.
    */
   endpoint?: BrainEndpoint;
+  /** Counts each request one of Dolphin's keys sends, per key (convex/modelKeys.ts keyLedger). */
+  ledger?: KeyLedger;
 }): Promise<ChatResult> {
   const endpoint = options.endpoint;
   if (endpoint?.provider === "anthropic") return anthropicCompletion(options, endpoint);
-  const apiKey = endpoint ? endpoint.apiKey : readApiKey();
   const model = endpoint ? endpoint.model : (options.model ?? DOLPHIN_PRIMARY_MODEL);
   const hasTools = Boolean(options.tools && options.tools.length > 0);
 
@@ -364,6 +405,54 @@ async function chatCompletionOnce(options: {
   }
 
   const label = endpoint ? BRAIN_PROVIDERS[endpoint.provider].label : "OpenRouter";
+  if (endpoint) return sendOnce(options, body, endpoint.apiKey, label, null);
+
+  // Dolphin's own keys: the first one not resting, and the next only when it is refused for a limit.
+  const keys = dolphinKeys();
+  const now = Date.now();
+  const awake = keys.filter((key) => (resting.get(key.name) ?? 0) <= now);
+  // All resting (or a stale memory): try them all again rather than refuse on a guess.
+  const order = awake.length > 0 ? awake : keys;
+  let lastLimit: OpenRouterError | null = null;
+  for (const key of order) {
+    try {
+      const result = await sendOnce(options, body, key.secret, label, key.name);
+      return { ...result, keyName: key.name };
+    } catch (cause) {
+      if (cause instanceof OpenRouterError && cause.isRateLimit) {
+        resting.set(key.name, restUntil(cause.message, Date.now()));
+        lastLimit = cause;
+        continue;
+      }
+      if (cause instanceof KeyRefusedError) {
+        console.error(`[Dolphin] ${cause.message} Moving to the next key.`);
+        resting.set(key.name, Date.now() + 10 * 60_000);
+        continue;
+      }
+      throw cause;
+    }
+  }
+  if (!lastLimit) throw new OpenRouterError(`OpenRouter turned down every one of Dolphin's ${keys.length} key${keys.length === 1 ? "" : "s"}. Check them in the ops console.`);
+  throw new OpenRouterError(
+    `Dolphin has used up its free model calls for now on all ${keys.length} of its key${keys.length === 1 ? "" : "s"}. ` +
+      `Free-tier limits reset daily at 00:00 UTC. Last refusal: ${lastLimit?.message ?? "a rate limit"}`,
+    true,
+  );
+}
+
+/** One of Dolphin's own keys refused outright (revoked, wrong): skipped for the next one. */
+class KeyRefusedError extends OpenRouterError {}
+
+/** One request with one key. A refusal for a limit is thrown with `isRateLimit`, so the caller can move to the next key. */
+async function sendOnce(
+  options: Parameters<typeof chatCompletionOnce>[0],
+  body: Record<string, unknown>,
+  apiKey: string,
+  label: string,
+  keyName: string | null,
+): Promise<ChatResult> {
+  const endpoint = options.endpoint;
+  const model = body.model as string;
   const headers: Record<string, string> = {
     authorization: `Bearer ${apiKey}`,
     "content-type": "application/json",
@@ -403,7 +492,13 @@ async function chatCompletionOnce(options: {
       `Could not reach ${label}: ${cause instanceof Error ? cause.message : String(cause)}`,
     );
   }
+  // OpenRouter answered, so this key sent a request: count it against this key.
+  if (keyName && options.ledger) await options.ledger(keyName).catch(() => undefined);
 
+  if (!endpoint && (response.status === 401 || response.status === 403)) {
+    // One of Dolphin's keys revoked or wrong: the next key carries the request (chatCompletionOnce).
+    throw new KeyRefusedError(`OpenRouter turned down ${keyName ?? "a key"} (HTTP ${response.status}).`);
+  }
   if (endpoint && (response.status === 401 || response.status === 403)) {
     throw new OpenRouterError(`Your ${label} key was refused (HTTP ${response.status}). Check it in the Keys tab.`);
   }
@@ -430,11 +525,17 @@ async function chatCompletionOnce(options: {
     throw new OpenRouterError(`${label} refused the request: ${reason}`);
   }
   if (response.status === 429) {
-    throw new OpenRouterError(
-      "Dolphin has used up its free model calls for now. Free-tier limits reset " +
-        "on a daily cycle, and they are counted per account rather than per key.",
-      true,
-    );
+    const reason = refusalText(text);
+    /*
+     * "temporarily rate-limited upstream": the free MODEL is busy for everyone, not this key
+     * out of calls. Another key would not help, so it is not a rate limit for rotation; the
+     * wording keeps it out of "out of answers" (dolphin.ts humanizeError) and inside the
+     * transient retry.
+     */
+    if (/upstream/i.test(reason)) {
+      throw new OpenRouterError(`The free model is busy upstream for everyone right now (temporarily): ${reason}`);
+    }
+    throw new OpenRouterError(`OpenRouter refused this key for a limit: ${reason}`, true);
   }
   if (!response.ok) {
     throw new OpenRouterError(
@@ -459,6 +560,9 @@ async function chatCompletionOnce(options: {
   if (inlineError) {
     const message = typeof inlineError.message === "string" ? inlineError.message : "unknown error";
     const code = inlineError.code;
+    if (code === 429 && /upstream/i.test(message)) {
+      throw new OpenRouterError(`The free model is busy upstream for everyone right now (temporarily): ${message}`);
+    }
     throw new OpenRouterError(`OpenRouter refused the request: ${message}`, code === 429);
   }
 
@@ -857,4 +961,16 @@ async function anthropicCompletion(
     .map((block) => ({ id: block.id, type: "function", function: { name: block.name, arguments: JSON.stringify(block.input ?? {}) } }));
 
   return { content, toolCalls, model: response.model, finishReason: response.stop_reason, providerContent: response.content };
+}
+
+/** The sentence inside an OpenRouter error body ({"error":{"message":...}}), or the start of the raw text. */
+function refusalText(text: string): string {
+  try {
+    const body = JSON.parse(text) as { error?: { message?: unknown; metadata?: { raw?: unknown } } };
+    const raw = body.error?.metadata?.raw;
+    const message = typeof body.error?.message === "string" ? body.error.message : null;
+    return [message, typeof raw === "string" ? raw : null].filter(Boolean).join(" - ").slice(0, 300) || text.slice(0, 300);
+  } catch {
+    return text.slice(0, 300);
+  }
 }

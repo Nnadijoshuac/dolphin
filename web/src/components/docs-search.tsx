@@ -80,7 +80,12 @@ async function buildIndex(pages: { href: string; label: string }[]): Promise<Ent
         doc.querySelectorAll<HTMLElement>("[data-docs-article] section[id]").forEach((section) => {
           section.querySelectorAll(".docs-anchor, .docs-copy").forEach((element) => element.remove());
           const heading = section.querySelector("h2")?.textContent?.trim() ?? label;
-          const text = (section.textContent ?? "").replace(/\s+/g, " ").trim();
+          // Block by block, with a space between, so words from two paragraphs never run together.
+          const text = [...section.querySelectorAll("p, li, td, th, h3, figcaption, pre")]
+            .map((block) => block.textContent ?? "")
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
           entries.push({ href: `${href}#${section.id}`, page: label, section: heading, text });
         });
       } catch {
@@ -98,7 +103,7 @@ function snippet(text: string, words: string[]): string {
   return `${start > 0 ? "…" : ""}${text.slice(start, start + 150)}${start + 150 < text.length ? "…" : ""}`;
 }
 
-export function DocsSearch({ pages, hotkey = true }: { pages: { href: string; label: string }[]; hotkey?: boolean }) {
+export function DocsSearch({ pages, hotkey = true, variant = "box" }: { pages: { href: string; label: string }[]; hotkey?: boolean; variant?: "box" | "icon" }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState<Entry[] | null>(null);
@@ -145,6 +150,14 @@ export function DocsSearch({ pages, hotkey = true }: { pages: { href: string; la
 
   return (
     <>
+      {variant === "icon" ? (
+        <button aria-label="Search the docs" className="docs-mbar__button" onClick={() => setOpen(true)} type="button">
+          <svg aria-hidden fill="none" height={19} viewBox="0 0 24 24" width={19}>
+            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+            <path d="m20 20-3.5-3.5" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          </svg>
+        </button>
+      ) : (
       <button className="docs-searchbox" onClick={() => setOpen(true)} type="button">
         <svg aria-hidden fill="none" height={14} viewBox="0 0 24 24" width={14}>
           <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
@@ -153,6 +166,7 @@ export function DocsSearch({ pages, hotkey = true }: { pages: { href: string; la
         <span>Search docs…</span>
         <kbd>Ctrl K</kbd>
       </button>
+      )}
       {/* On document.body: inside the sticky sidebar the dialog sat under the page's own headings. */}
       {open && typeof document !== "undefined" ? createPortal(
         <div aria-label="Search the docs" aria-modal className="docs-search" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)} role="dialog">

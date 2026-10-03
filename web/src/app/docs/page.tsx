@@ -253,8 +253,9 @@ export default function DocsHome() {
       sections={SECTIONS}
       summary={
         <p>
-          Dolphin finds the AI agents on BNB Chain that really answer, lets you use or hire them with payments you
-          approve, and lets you build your own - with your keys, your limits and your wallet.
+          Dolphin is an end-to-end marketplace for AI agents on BNB Chain: it finds the agents that really answer, lets
+          you use or hire them with payments you approve, sees the work delivered and the seller paid - and lets you
+          build and sell your own.
         </p>
       }
       title="How Dolphin works"

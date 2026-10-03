@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { CopyButton, CopyPageMenu, DocsSideNav, Toc } from "@/components/docs-client";
+import { DocsMobileBar, TableLabels } from "@/components/docs-mobile";
 import { DocsSearch, SearchHighlighter } from "@/components/docs-search";
 
 export type DocsSection = { id: string; title: string; body: ReactNode };
@@ -73,26 +74,8 @@ export function DocsPage({
       </aside>
 
       {/* Phones: the library as one menu above the page. */}
-      <div className="docs-mobile-search">
-        <DocsSearch hotkey={false} pages={DOCS_NAV} />
-      </div>
-      <details className="docs-mobile-nav">
-        <summary>
-          {group?.group ?? "Docs"} · {title}
-        </summary>
-        <nav aria-label="Library">
-          {LIBRARY.map((section) => (
-            <div key={section.group}>
-              <p className="docs-side__title">{section.group}</p>
-              {section.items.map((item) => (
-                <Link aria-current={item.href === current ? "page" : undefined} href={item.href} key={item.href}>
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          ))}
-        </nav>
-      </details>
+      {/* Phones: one slim bar - search and the whole docs menu behind one button (after nextra.site). */}
+      <DocsMobileBar current={current} groups={LIBRARY} pages={DOCS_NAV} />
 
       <main className="docs-main">
         <nav aria-label="Breadcrumb" className="docs-crumbs">
@@ -116,6 +99,7 @@ export function DocsPage({
         <div className="docs-lead">{summary}</div>
 
         <SearchHighlighter />
+        <TableLabels />
         <article data-docs-article>
           {sections.map((section) => (
             <section className="docs-section" id={section.id} key={section.id}>

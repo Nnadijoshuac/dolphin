@@ -1518,3 +1518,36 @@ export const BUILT_AGENT_CATEGORIES = [
   { value: "payments", label: "Payments" },
   { value: "general", label: "General" },
 ] as const;
+
+/** A draft's documents (convex/knowledge.ts, convex/knowledgeIngest.ts): knowledge, step 1. */
+export type KnowledgeDocument = {
+  id: string;
+  name: string;
+  kind: "markdown" | "text" | "pdf";
+  textChars: number;
+  storedBytes: number;
+  sections: { title: string; slug: string; chars: number }[];
+  flags: { reason: string; excerpt: string }[];
+};
+
+export const knowledgeApi = anyApi as unknown as {
+  knowledge: {
+    uploadUrl: Mutation<{ conversationKey: string }, { uploadUrl: string }>;
+    documents: Query<{ conversationKey: string }, KnowledgeDocument[]>;
+    removeDocument: Mutation<{ conversationKey: string; documentId: string }, null>;
+  };
+  knowledgeIngest: {
+    addDocument: Action<
+      { conversationKey: string; storageId: string; fileName: string },
+      {
+        name: string;
+        kind: "markdown" | "text" | "pdf";
+        textChars: number;
+        storedBytes: number;
+        uploadBytes: number;
+        sections: string[];
+        flags: { reason: string; excerpt: string }[];
+      }
+    >;
+  };
+};

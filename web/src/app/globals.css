@@ -4111,3 +4111,7 @@ select {
 .topup-row > button { min-height: 38px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.78rem; font-weight: 650; color: var(--ink); background: var(--paper); }
 .topup-row > button:hover:not(:disabled) { border-color: var(--ink); }
 .topup-row > button:disabled { opacity: 0.45; }
+
+/* Knowledge in the draft panel (components/knowledge-section.tsx): a file dragged over it is welcome. */
+.knowledge-drop { border-radius: 12px; transition: outline-color 160ms ease; outline: 2px dashed transparent; outline-offset: 2px; }
+.knowledge-drop.is-over { outline-color: color-mix(in srgb, var(--ink) 55%, transparent); background: color-mix(in srgb, var(--paper-muted) 50%, transparent); }

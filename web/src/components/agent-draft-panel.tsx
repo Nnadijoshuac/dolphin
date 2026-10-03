@@ -3,6 +3,7 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
 
+import { KnowledgeSection } from "@/components/knowledge-section";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AutoTradeCard } from "@/components/auto-trade-card";
 import { PaperTradingCard } from "@/components/paper-trading-card";
@@ -108,6 +109,7 @@ export function AgentDraftPanel({
   onWatchRuns,
   autopilotBusy = false,
   tradeKeyConversation = null,
+  knowledgeConversation = null,
 }: {
   draft: AgentDraft;
   onClose?: () => void;
@@ -129,6 +131,8 @@ export function AgentDraftPanel({
   autopilotBusy?: boolean;
   /** The build conversation, when this agent may be given a trade key (Build mode). */
   tradeKeyConversation?: string | null;
+  /** The build conversation, when documents can be added (Build mode, not a try-run). */
+  knowledgeConversation?: string | null;
 }) {
   // Draft, or the builder's own keys (owner, 2026-09-28: "a new tab ... to manage their envs").
   const [tab, setTab] = useState<"draft" | "keys">("draft");
@@ -257,6 +261,8 @@ export function AgentDraftPanel({
             </ul>
           )}
         </div>
+
+        {knowledgeConversation && !trying ? <KnowledgeSection conversationKey={knowledgeConversation} /> : null}
       </div>
 
       {onToggleAutopilot ? (

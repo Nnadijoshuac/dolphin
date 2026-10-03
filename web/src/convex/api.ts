@@ -1620,7 +1620,8 @@ export type TradingRuleView = {
 };
 
 /** A candle for the rule chart: open time in ms. */
-export type ChartCandle = { t: number; o: number; h: number; l: number; c: number };
+/** `v`: traded value in USDT, when Binance gave it. */
+export type ChartCandle = { t: number; o: number; h: number; l: number; c: number; v?: number };
 
 /** convex/lib/strategy.ts SimResult. */
 export type RuleBacktest = {

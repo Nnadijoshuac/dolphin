@@ -526,8 +526,15 @@ export const ruleOf = internalQuery({
 
 const BACKTEST_CANDLES = 1_500;
 
-type ChartCandle = { t: number; o: number; h: number; l: number; c: number };
-const toChart = (candle: Candle): ChartCandle => ({ t: candle.openTime, o: candle.open, h: candle.high, l: candle.low, c: candle.close });
+type ChartCandle = { t: number; o: number; h: number; l: number; c: number; v?: number };
+const toChart = (candle: Candle): ChartCandle => ({
+  t: candle.openTime,
+  o: candle.open,
+  h: candle.high,
+  l: candle.low,
+  c: candle.close,
+  ...(candle.quoteVolume !== undefined && Number.isFinite(candle.quoteVolume) ? { v: candle.quoteVolume } : {}),
+});
 
 /**
  * Replays a rule over Binance's real history with the live engine's own decisions

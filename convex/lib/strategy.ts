@@ -74,7 +74,8 @@ export type Rule = {
   cooldownMinutes: number;
 };
 
-export type Candle = { openTime: number; open: number; high: number; low: number; close: number };
+/** `quoteVolume`: the candle's traded value in the quote currency (USDT), when the source gives it. Rules never read it. */
+export type Candle = { openTime: number; open: number; high: number; low: number; close: number; quoteVolume?: number };
 
 /** What the rule holds right now, kept by whoever runs it. */
 export type Position = { side: "long" | "short"; entryPrice: number; openedAt: number } | null;

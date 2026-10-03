@@ -1,8 +1,10 @@
 "use client";
 
+import { useAction } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { BacktestPanel } from "@/components/backtest-panel";
+import { strategyApi } from "@/convex/api";
 
 /**
  * The live chart for the token a trading agent works on. (owner, 2026-09-28:
@@ -52,22 +54,65 @@ const PAD_LARGE = { top: 16, right: 68, bottom: 26, left: 10 };
  * second). Tokens Binance does not list keep GeckoTerminal. Binance's own symbols for the
  * BNB Chain wrappers: WBNB is BNB, BTCB is BTC.
  */
-const BINANCE_REST = "https://data-api.binance.vision/api/v3/klines";
 const BINANCE_STREAM = "wss://data-stream.binance.vision/ws";
 const BINANCE_ALIASES: Record<string, string> = { WBNB: "BNB", BTCB: "BTC" };
 
+/**
+ * A dollar stablecoin: a USD in its name, or one of the known ones. Binance has no XUSDT market
+ * for these, and their chart is drawn on a peg-sized scale (see DOLLAR_SPAN below).
+ * (Owner, 2026-10-03: bnbUSD drew 0.5% wobbles as towering candles.)
+ */
+export function isDollarToken(symbol: string): boolean {
+  const s = symbol.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return ["U", "DAI", "FDUSD"].includes(s) || /USD/.test(s);
+}
+
 export function binancePair(symbol: string): string | null {
   const base = (BINANCE_ALIASES[symbol.toUpperCase()] ?? symbol.toUpperCase()).replace(/[^A-Z0-9]/g, "");
-  if (!base || ["USDT", "USDC", "U", "FDUSD", "BUSD"].includes(base)) return null;
+  if (!base || isDollarToken(base)) return null;
   return `${base}USDT`;
 }
 
-async function binanceCandles(pair: string, frame: Frame, limit = FETCH_LIMIT): Promise<Candle[] | null> {
-  const response = await fetch(`${BINANCE_REST}?symbol=${pair}&interval=${frame}&limit=${limit}`);
-  if (!response.ok) return null; // not a Binance market: the caller falls back to the pool
-  const rows = (await response.json()) as unknown[][];
-  return rows.map((row) => ({ t: Number(row[0]) / 1000, o: Number(row[1]), h: Number(row[2]), l: Number(row[3]), c: Number(row[4]), v: Number(row[7]) }));
+/*
+ * THE HISTORY COMES THROUGH DOLPHIN (owner, 2026-10-03: the chart sat on "Loading the market"). Asked
+ * straight from the browser, Binance can hang without an answer on a network that blocks it - the
+ * owner's does - before the chart falls back to the pool. Dolphin's server reaches Binance from
+ * anywhere and says "no such market" in a fraction of a second. Only the live stream is direct.
+ */
+type CandleLoader = (args: { venue: string; market: string; timeframe: string; limit?: number }) => Promise<{ t: number; o: number; h: number; l: number; c: number; v?: number }[] | { error: string }>;
+
+async function binanceCandles(load: CandleLoader, pair: string, frame: Frame): Promise<Candle[] | null> {
+  const answer = await load({ venue: "binance-spot", market: pair, timeframe: frame, limit: FETCH_LIMIT }).catch(() => null);
+  if (!Array.isArray(answer) || answer.length === 0) return null; // not a Binance market: the caller falls back to the pool
+  // Closed candles with their traded value; the stream adds the forming candle.
+  return answer.map((candle) => ({ t: candle.t / 1000, o: candle.o, h: candle.h, l: candle.l, c: candle.c, v: candle.v ?? 0 }));
 }
+
+const FRAME_SECONDS: Record<Frame, number> = { "1m": 60, "5m": 300, "15m": 900, "1h": 3_600, "4h": 14_400, "1d": 86_400 };
+
+/**
+ * A pool only reports candles in which something traded. A quiet pool's 8 candles over 12 hours
+ * were drawn edge to edge as if they were consecutive. Each missing interval becomes a flat candle
+ * at the last price with no volume, up to now, so time on the chart is real time.
+ */
+function fillGaps(candles: Candle[], frame: Frame, now = Date.now() / 1000): Candle[] {
+  if (candles.length === 0) return candles;
+  const step = FRAME_SECONDS[frame];
+  const out: Candle[] = [];
+  for (const candle of candles) {
+    const previous = out[out.length - 1];
+    if (previous) {
+      for (let t = previous.t + step; t < candle.t && out.length < FETCH_LIMIT * 4; t += step) out.push({ t, o: previous.c, h: previous.c, l: previous.c, c: previous.c, v: 0 });
+    }
+    out.push(candle);
+  }
+  const current = Math.floor(now / step) * step;
+  for (let last = out[out.length - 1]; last.t + step <= current; last = out[out.length - 1]) out.push({ t: last.t + step, o: last.c, h: last.c, l: last.c, c: last.c, v: 0 });
+  return out.slice(-FETCH_LIMIT);
+}
+
+/** A dollar token's chart spans at least this much ($0.98-$1.02), so a 0.3% wobble looks like one. */
+const DOLLAR_SPAN = 0.04;
 
 export async function findPool(tokenAddress: string): Promise<string | null> {
   const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
@@ -136,6 +181,8 @@ export function TradingChart({
   onToggleExpand?: () => void;
 }) {
   const [frame, setFrame] = useState<Frame>("5m");
+  const loadMarket = useAction(strategyApi.strategy.marketCandles);
+  const dollar = isDollarToken(symbol);
   const [state, setState] = useState<
     { status: "loading" } | { status: "error" } | { status: "ready"; candles: Candle[]; at: number }
   >({ status: "loading" });
@@ -166,15 +213,22 @@ export function TradingChart({
       try {
         const pool = poolAddress ?? (await findPool(tokenAddress));
         if (!pool) throw new Error("no pool");
-        const candles = await loadCandles(pool, tokenAddress, frame);
+        const candles = fillGaps(await loadCandles(pool, tokenAddress, frame), frame);
         if (!cancelled) setState(candles.length ? { status: "ready", candles, at: Date.now() } : { status: "error" });
       } catch {
         if (!cancelled) setState((current) => (current.status === "ready" ? current : { status: "error" }));
       }
       if (!cancelled) timer = window.setTimeout(poll, REFRESH_MS[frame]);
     };
+    // Binance with no stream (a network that blocks it): its closed candles, re-read through Dolphin.
+    const pollBinance = async (pair: string) => {
+      const candles = await binanceCandles(loadMarket, pair, frame);
+      if (cancelled) return;
+      if (candles) setState({ status: "ready", candles, at: Date.now() });
+      timer = window.setTimeout(() => void pollBinance(pair), REFRESH_MS[frame]);
+    };
     const live = async (pair: string) => {
-      const history = await binanceCandles(pair, frame).catch(() => null);
+      const history = await binanceCandles(loadMarket, pair, frame);
       if (cancelled) return;
       if (!history || history.length === 0) return void poll();
       setState({ status: "ready", candles: history, at: Date.now() });
@@ -217,9 +271,10 @@ export function TradingChart({
         } else return;
         if (!frameRequest) frameRequest = window.requestAnimationFrame(flush);
       };
-      // A dropped stream falls back to polling rather than freezing the chart.
+      // A stream that never connects (a network that blocks Binance) or drops: Binance's candles,
+      // re-read through Dolphin, rather than a frozen chart.
       socket.onclose = () => {
-        if (!cancelled) void poll();
+        if (!cancelled) void pollBinance(pair);
       };
     };
     const pair = binancePair(symbol);
@@ -233,14 +288,20 @@ export function TradingChart({
         socket.close();
       }
     };
-  }, [frame, poolAddress, tokenAddress, symbol]);
+  }, [frame, poolAddress, tokenAddress, symbol, loadMarket]);
 
   const pad = expanded ? PAD_LARGE : PAD_SMALL;
   const geometry = useMemo(() => {
     if (state.status !== "ready") return null;
     const candles = expanded ? state.candles : state.candles.slice(-SMALL_COUNT);
-    const low = Math.min(...candles.map((candle) => candle.l));
-    const high = Math.max(...candles.map((candle) => candle.h));
+    let low = Math.min(...candles.map((candle) => candle.l));
+    let high = Math.max(...candles.map((candle) => candle.h));
+    // A dollar token near its peg is drawn on a peg-sized scale, centred on its range.
+    if (dollar && high < 1.1 && low > 0.9 && high - low < DOLLAR_SPAN) {
+      const middle = (high + low) / 2;
+      low = middle - DOLLAR_SPAN / 2;
+      high = middle + DOLLAR_SPAN / 2;
+    }
     const span = high - low || high * 0.01 || 1;
     const innerW = box.w - pad.left - pad.right;
     const innerH = box.h - pad.top - pad.bottom;
@@ -252,8 +313,11 @@ export function TradingChart({
     const volumeTop = pad.top + priceH + 6;
     const volumeH = innerH - priceH - 6;
     const valueAt = (py: number) => low + ((pad.top + priceH - py) / priceH) * span;
-    return { candles, low, high, step, y, valueAt, bodyW: Math.max(1.5, step * 0.62), maxVolume, volumeTop, volumeH, priceH };
-  }, [state, expanded, pad, box.w, box.h]);
+    // tradedHigh/Low: what actually traded, for the stats line (the scale may be wider for a dollar token).
+    const tradedHigh = Math.max(...candles.map((candle) => candle.h));
+    const tradedLow = Math.min(...candles.map((candle) => candle.l));
+    return { candles, low, high, tradedHigh, tradedLow, step, y, valueAt, bodyW: Math.max(1.5, step * 0.62), maxVolume, volumeTop, volumeH, priceH };
+  }, [state, expanded, pad, box.w, box.h, dollar]);
 
   // A hover from the other size can point past the candles drawn now.
   const hv = geometry && hover && hover.index < geometry.candles.length ? hover : null;
@@ -350,8 +414,8 @@ export function TradingChart({
             </>
           ) : (
             <>
-              <span>High <b>{price(geometry.high)}</b></span>
-              <span>Low <b>{price(geometry.low)}</b></span>
+              <span>High <b>{price(geometry.tradedHigh)}</b></span>
+              <span>Low <b>{price(geometry.tradedLow)}</b></span>
               {volumeUsd !== null ? <span>Volume <b>{usdCompact(volumeUsd)}</b></span> : null}
               <span>{geometry.candles.length} candles · {frame}</span>
             </>

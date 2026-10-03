@@ -42,6 +42,7 @@ export async function closedCandles(venue: Venue, symbol: string, timeframe: Tim
       low: Number(row[3]),
       close: Number(row[4]),
       closeTime: Number(row[6]),
+      quoteVolume: Number(row[7]),
     }))
     .filter((candle) => Number.isFinite(candle.close) && candle.closeTime < now)
     .slice(-limit)

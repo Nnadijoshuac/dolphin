@@ -15,6 +15,7 @@ import {
   minimumOut,
   quoteTrade,
 } from "@/wallet/pancakeswap-trade";
+import { ExternalArrow } from "@/components/external-arrow";
 
 /**
  * THE TRADE TICKET under a chat answer. (2026-09-26)
@@ -270,7 +271,7 @@ export function TradeTicket({ ticket }: { ticket: TradeTicketData }) {
               rel="noopener noreferrer"
               target="_blank"
             >
-              View it on BscScan ↗
+              View it on BscScan<ExternalArrow />
             </a>
           ) : (
             <p className="text-[0.78rem] text-muted">The wallet did not report a transaction hash.</p>

@@ -8,6 +8,7 @@ import {
 } from "@/hooks/use-agent-reviews";
 import { convexClient } from "@/providers/convex-provider";
 import type { AgentReviewRow } from "@/convex/api";
+import { ExternalArrow } from "@/components/external-arrow";
 
 /**
  * THE TRACK RECORD: what Dolphin can verify itself, and what hirers said.
@@ -261,7 +262,7 @@ function ReviewRow({ review }: { review: AgentReviewRow }) {
             rel="noreferrer"
             target="_blank"
           >
-            On-chain ↗
+            On-chain<ExternalArrow />
           </a>
         ) : null}
       </div>

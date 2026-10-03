@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { ExternalArrow } from "@/components/external-arrow";
 
 const SITE = "https://www.dolphinamp.xyz";
 
@@ -134,14 +135,14 @@ export function CopyPageMenu({ title, path }: { title: string; path: string }) {
           <a href={`https://chatgpt.com/?hints=search&q=${encodeURIComponent(prompt)}`} onClick={() => setOpen(false)} rel="noreferrer" role="menuitem" target="_blank">
             <ChatGptGlyph />
             <span>
-              <strong>Open in ChatGPT ↗</strong>
+              <strong>Open in ChatGPT<ExternalArrow /></strong>
               <small>Ask questions about this page</small>
             </span>
           </a>
           <a href={`https://claude.ai/new?q=${encodeURIComponent(prompt)}`} onClick={() => setOpen(false)} rel="noreferrer" role="menuitem" target="_blank">
             <ClaudeGlyph />
             <span>
-              <strong>Open in Claude ↗</strong>
+              <strong>Open in Claude<ExternalArrow /></strong>
               <small>Ask questions about this page</small>
             </span>
           </a>
@@ -180,7 +181,7 @@ export function Toc({ items }: { items: { id: string; title: string }[] }) {
       </ul>
       <div className="docs-toc__extra">
         <a href="https://x.com/dolphin_Agents" rel="noreferrer" target="_blank">
-          Question? Ask us on X ↗
+          Question? Ask us on X<ExternalArrow />
         </a>
       </div>
     </nav>

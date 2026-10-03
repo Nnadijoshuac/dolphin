@@ -9,6 +9,7 @@ import { RepointAgentUri } from "@/components/repoint-agent-uri";
 import { BUILT_AGENT_CATEGORIES, builtAgentsApi, type BuiltAgentPublic } from "@/convex/api";
 import { useAgent } from "@/hooks/use-agents";
 import { useWallet } from "@/wallet/wallet-provider";
+import { ExternalArrow } from "@/components/external-arrow";
 
 /**
  * THE PAGE OF AN AGENT BUILT ON DOLPHIN: /agent/<hash>. (2026-09-26)
@@ -225,21 +226,21 @@ function BuiltAgentView({ agent, owner }: { agent: BuiltAgentPublic; owner: bool
             {agent.registerTxUrl ? (
               <p>
                 <a className="underline" href={agent.registerTxUrl} rel="noopener noreferrer" target="_blank">
-                  Registration transaction ↗
+                  Registration transaction<ExternalArrow />
                 </a>
               </p>
             ) : null}
             {agent.links.website ? (
               <p>
                 <a className="underline" href={agent.links.website} rel="noopener noreferrer nofollow" target="_blank">
-                  Website ↗
+                  Website<ExternalArrow />
                 </a>
               </p>
             ) : null}
             {agent.links.x ? (
               <p>
                 <a className="underline" href={`https://x.com/${agent.links.x}`} rel="noopener noreferrer nofollow" target="_blank">
-                  @{agent.links.x} on X ↗
+                  @{agent.links.x} on X<ExternalArrow />
                 </a>
               </p>
             ) : null}

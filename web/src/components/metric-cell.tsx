@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { LiveMetric } from "@/types/agent";
+import { ExternalArrow } from "@/components/external-arrow";
 
 type MetricCellProps<T> = {
   label: string;
@@ -78,7 +79,7 @@ export function MetricCell<T>({ label, metric, format }: MetricCellProps<T>) {
               rel="noreferrer"
               target="_blank"
             >
-              {metric.source.label} ↗
+              {metric.source.label}<ExternalArrow />
             </Link>
           ) : (
             <span>{metric.source.label}</span>

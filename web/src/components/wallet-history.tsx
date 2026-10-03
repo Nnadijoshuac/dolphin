@@ -20,6 +20,7 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { walletHistoryApi, type WalletHistoryEntry } from "@/convex/api";
 import { convexClient } from "@/providers/convex-provider";
 import { useAltanaWallet } from "@/wallet/altana-provider";
+import { ExternalArrow } from "@/components/external-arrow";
 
 const PAGE = 10;
 
@@ -187,7 +188,7 @@ function WalletHistoryContent({
         </div>
         {address ? (
           <a href={`https://bscscan.com/address/${address}`} rel="noreferrer" target="_blank">
-            BscScan ↗
+            BscScan<ExternalArrow />
           </a>
         ) : null}
       </header>}

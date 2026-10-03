@@ -13,6 +13,7 @@ import {
 import { track } from "@/lib/analytics";
 import { convexClient } from "@/providers/convex-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
+import { ExternalArrow } from "@/components/external-arrow";
 
 /**
  * TWO QUESTIONS AND A SENTENCE. Not stars.
@@ -363,7 +364,7 @@ function PublishOnChain({
           rel="noreferrer"
           target="_blank"
         >
-          {existingTxHash} ↗
+          {existingTxHash}<ExternalArrow />
         </a>
       </div>
     );

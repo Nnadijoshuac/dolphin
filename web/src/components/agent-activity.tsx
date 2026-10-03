@@ -18,6 +18,7 @@ import { usePaymentRates } from "@/hooks/use-payment-rates";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { formatUsd } from "@/wallet/token-usd";
 import { useWallet } from "@/wallet/wallet-provider";
+import { ExternalArrow } from "@/components/external-arrow";
 
 const DEFAULT_MAX_ROWS = 6;
 
@@ -414,7 +415,7 @@ function AgentActivityContent({
             rel="noreferrer"
             target="_blank"
           >
-            BscScan ↗
+            BscScan<ExternalArrow />
           </a>
         ) : null}
       </header>

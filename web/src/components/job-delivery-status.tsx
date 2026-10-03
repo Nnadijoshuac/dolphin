@@ -25,6 +25,7 @@ import { useWallet } from "@/wallet/wallet-provider";
 import { useHiredAgents } from "@/hooks/use-hired-agents";
 import { CancelHireHold } from "@/components/cancel-hire-hold";
 import { toUserMessage } from "@/wallet/wallet-errors";
+import { ExternalArrow } from "@/components/external-arrow";
 
 /**
  * What happened to a paid hire after the money moved.
@@ -286,7 +287,7 @@ export function JobDeliveryStatus({ agentKey }: { agentKey: string }) {
         rel="noreferrer"
         target="_blank"
       >
-        View on BscScan ↗
+        View on BscScan<ExternalArrow />
       </a>
 
       {delivery.state === "overdue" && !declined && (

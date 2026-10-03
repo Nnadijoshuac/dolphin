@@ -17,6 +17,7 @@ import {
   withdrawRefusal,
   type WithdrawAsset,
 } from "@/wallet/withdraw-policy";
+import { ExternalArrow } from "@/components/external-arrow";
 
 /**
  * The Dolphin Wallet's two assets, and the way money leaves it. (2026-09-26)
@@ -176,7 +177,7 @@ export function WithdrawDialog({
                 rel="noreferrer"
                 target="_blank"
               >
-                View on BscScan ↗
+                View on BscScan<ExternalArrow />
               </a>
             ) : (
               <p className="mt-2 text-sm text-muted">It will show in your wallet shortly.</p>

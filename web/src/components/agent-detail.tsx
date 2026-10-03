@@ -20,6 +20,7 @@ import { useAgentCategoryStats } from "@/hooks/use-category-stats";
 import { categoryLabel } from "@/constants/agents";
 import { convexClient } from "@/providers/convex-provider";
 import type { Agent, AgentLiveStats, LiveMetric } from "@/types/agent";
+import { ExternalArrow } from "@/components/external-arrow";
 
 function shortAddress(value: string | null) {
   if (!value) return "Not published";
@@ -314,7 +315,7 @@ function TechnicalDetailsAccordion({
             rel="noreferrer"
             target="_blank"
           >
-            Registration record and transactions on BscScan ↗
+            Registration record and transactions on BscScan<ExternalArrow />
           </a>
 
           {agent.sourceLabels.length > 0 ? (
@@ -334,7 +335,7 @@ function TechnicalDetailsAccordion({
                         rel="noreferrer"
                         target="_blank"
                       >
-                        Source URL ↗
+                        Source URL<ExternalArrow />
                       </a>
                     ) : (
                       <span className="text-faint text-[11px]">No public URL</span>

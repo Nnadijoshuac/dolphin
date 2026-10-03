@@ -13,6 +13,7 @@ import { BUILT_AGENT_CATEGORIES, builtAgentsApi, knowledgeApi, x402Api } from "@
 import { BSC_RPC_URL } from "@/constants/agents";
 import { BSC_TESTNET_RPC_URL, useWallet, wagmiConfig } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
+import { ExternalArrow } from "@/components/external-arrow";
 
 /**
  * PUT A BUILT AGENT ON-CHAIN. (2026-09-26, owner's decisions in
@@ -369,7 +370,7 @@ export function PublishAgentDialog({
                 Open its page
               </Link>
               <a className="underline" href={`${EXPLORER[done.network]}/tx/${done.txHash}`} rel="noopener noreferrer" target="_blank">
-                See the registration on BscScan ↗
+                See the registration on BscScan<ExternalArrow />
               </a>
             </div>
             {done.network === "bsc" ? (

@@ -7,6 +7,7 @@ import { agentToolsApi, type AgentTransactionPlan } from "@/convex/api";
 import type { Agent } from "@/types/agent";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
+import { ExternalArrow } from "@/components/external-arrow";
 
 /**
  * AN AGENT BUILDS IT. THE USER SIGNS IT. NOBODY HOLDS A KEY.
@@ -245,7 +246,7 @@ export function AgentTransactionPanel({ agent }: { agent: Agent }) {
             rel="noreferrer"
             target="_blank"
           >
-            {state.reference} ↗
+            {state.reference}<ExternalArrow />
           </a>
         </div>
       )}

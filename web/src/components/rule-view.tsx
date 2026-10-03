@@ -155,15 +155,21 @@ function useLiveCandles(rule: TradingRuleView): LiveState {
         return "The market did not answer. Try again in a moment.";
       }
     };
-    // Without the stream: re-read the closed candles a few times per candle.
+    // Two seconds after the candle in view closes.
+    const untilNextClose = () => {
+      const frame = TIMEFRAME_MS[timeframe] ?? 60_000;
+      return frame - (Date.now() % frame) + 2_000;
+    };
+    // Without the stream (a network that blocks Binance): re-read once each candle closes - nothing
+    // new exists between closes, and every read is a Convex call (owner, 2026-10-03).
     const poll = async () => {
       const result = await fetchHistory();
       if (cancelled) return;
       if (Array.isArray(result)) setState({ status: "ready", candles: result, streaming: false });
-      timer = window.setTimeout(poll, Math.min(Math.max((TIMEFRAME_MS[timeframe] ?? 60_000) / 4, 10_000), 60_000));
+      timer = window.setTimeout(poll, untilNextClose());
     };
     const connect = (urls: string[]) => {
-      if (urls.length === 0) return void (timer = window.setTimeout(poll, 10_000));
+      if (urls.length === 0) return void (timer = window.setTimeout(poll, untilNextClose()));
       let heard = false;
       const current = new WebSocket(urls[0]);
       socket = current;

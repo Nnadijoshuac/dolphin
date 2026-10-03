@@ -4278,3 +4278,49 @@ select {
 /* The lifecycle's current stage: gold, and gently alive. */
 .lifecycle-bar { transition: background-color 400ms ease; }
 .lifecycle-bar--active { background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/*
+ * THE LIGHT BRAND TOUCH (owner, 2026-10-03; UI review point 12): "Figma's restraint, Dolphin's
+ * identity". Two rules only:
+ * 1. Gold marks what is ACTIVE - the selected block, the current lifecycle stage, Autopilot on,
+ *    focus - and nothing decorative.
+ * 2. Liquid glass on the few small things that float over the canvas (hint, zoom controls,
+ *    maximize / pop-out, the "open in another tab" chip, a confirmation). Small surfaces,
+ *    so the blur stays cheap; never on the large panels.
+ */
+.glass,
+.panel-controls,
+.popout-away__item,
+.agent-canvas .react-flow__controls {
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent), 0 6px 18px -12px rgba(15, 23, 42, 0.35);
+}
+.agent-canvas .react-flow__controls { border-radius: 12px; overflow: hidden; padding: 2px; }
+.agent-canvas .react-flow__controls-button { background: transparent; border-bottom-color: color-mix(in srgb, var(--line) 60%, transparent); }
+.confirm-card {
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22), inset 0 1px 0 color-mix(in srgb, #fff 50%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .glass,
+  :root:not([data-theme="light"]) .panel-controls,
+  :root:not([data-theme="light"]) .popout-away__item,
+  :root:not([data-theme="light"]) .agent-canvas .react-flow__controls,
+  :root:not([data-theme="light"]) .confirm-card { box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 8px 22px -12px rgb(0 0 0 / 60%); }
+}
+:root[data-theme="dark"] .glass,
+:root[data-theme="dark"] .panel-controls,
+:root[data-theme="dark"] .popout-away__item,
+:root[data-theme="dark"] .agent-canvas .react-flow__controls,
+:root[data-theme="dark"] .confirm-card { box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 8px 22px -12px rgb(0 0 0 / 60%); }
+
+/* The block you are editing is the active thing on the canvas: gold, not its category colour. */
+.agent-block[data-selected] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 16px 34px -18px rgba(15, 23, 42, 0.38);
+}

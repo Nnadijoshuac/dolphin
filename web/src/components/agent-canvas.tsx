@@ -1256,11 +1256,11 @@ export function AgentCanvas({
           />
         </div>
       ) : editKey && !market ? (
-        <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted backdrop-blur">
+        <p className="glass pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full px-3 py-1 text-[0.72rem] text-muted">
           Click a block to change it · drag from a dot to connect · double-click a line to cut it
         </p>
       ) : run ? (
-        <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-paper/80 px-3 py-1 text-[0.72rem] text-muted backdrop-blur">
+        <p className="glass pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full px-3 py-1 text-[0.72rem] text-muted">
           {run.phase === "thinking"
             ? "Thinking…"
             : run.phase === "consulting"

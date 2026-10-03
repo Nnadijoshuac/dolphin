@@ -18,7 +18,7 @@ import { execFile } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-import { afterCandle, decide, describeRule, EMPTY_STATE, resultPct, type Candle, type Decision, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, type Candle, type Decision, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const VERSION = "1.0.0";
 const args = process.argv.slice(2);
@@ -43,10 +43,23 @@ const BSC_TOKENS: Record<string, string> = {
 };
 const BSC_USDT = "0x55d398326f99059fF775485246999027B3197955";
 
-type AgentFile = { version: number; agent: { name: string }; rules: Rule[]; report: { url: string; token: string } | null };
+type AgentFile = {
+  version: number;
+  agent: { name: string };
+  rules: Rule[];
+  /** The daily loss limit across all rules (owner, 2026-10-03), enforced here with the same engine. */
+  limits?: { dailyLossLimitUsd: number | null };
+  report: { url: string; token: string } | null;
+};
 /** Per rule: the engine's state plus what this runner holds on the venue, so an exit sells exactly what was bought. */
 type Held = { qty: string; orderRef: string | null; stopOrderId: number | null };
-type Saved = Record<string, { state: RuleState; held: Held | null }>;
+type Saved = Record<string, { state: RuleState; held: Held | null }> & { __loss?: { day: string; usd: number } };
+
+/** Today's realized loss on this server, kept in runner-state.json so a restart does not reset it. */
+function lossToday(saved: Saved): number {
+  const day = new Date().toISOString().slice(0, 10);
+  return saved.__loss?.day === day ? saved.__loss.usd : 0;
+}
 
 const log = (...parts: unknown[]) => console.log(new Date().toISOString().slice(11, 23), ...parts);
 
@@ -260,14 +273,14 @@ type Arrival = { receivedAt: number; exchangeLagMs: number | null };
 
 async function onClosed(agent: AgentFile, feed: Feed, saved: Saved, arrival: Arrival) {
   for (const rule of feed.rules) {
-    const entry = saved[rule.id] ?? { state: EMPTY_STATE, held: null };
+    const entry = (saved[rule.id] as { state: RuleState; held: Held | null } | undefined) ?? { state: EMPTY_STATE, held: null };
     const judged = feed.candles[feed.candles.length - 1];
     // Starting up never trades on history: the first look only records where the market stands.
     if (entry.state.lastCandle === null) {
       saved[rule.id] = { ...entry, state: { ...entry.state, lastCandle: judged.openTime } };
       continue;
     }
-    const decision = decide(rule, feed.candles, entry.state, Date.now());
+    const decision = decide(rule, feed.candles, entry.state, Date.now(), { limitUsd: agent.limits?.dailyLossLimitUsd ?? null, lossTodayUsd: lossToday(saved) });
     if (decision.type === "none") {
       saved[rule.id] = { ...entry, state: afterCandle(entry.state, judged.openTime, decision, true, Date.now()) };
       continue;
@@ -283,6 +296,12 @@ async function onClosed(agent: AgentFile, feed: Feed, saved: Saved, arrival: Arr
     }
     const pnlPct = decision.type === "exit" && entry.state.position ? resultPct(entry.state.position.side, entry.state.position.entryPrice, decision.price, rule.leverage) : null;
     saved[rule.id] = { state: afterCandle(entry.state, judged.openTime, decision, executed, Date.now()), held: executed ? result.held : entry.held };
+    if (executed && pnlPct !== null && resultUsd(pnlPct, rule.sizeUsd) < 0) {
+      saved.__loss = { day: new Date().toISOString().slice(0, 10), usd: Math.round((lossToday(saved) - resultUsd(pnlPct, rule.sizeUsd)) * 100) / 100 };
+      if (agent.limits?.dailyLossLimitUsd && saved.__loss.usd >= agent.limits.dailyLossLimitUsd) {
+        log(`Daily loss limit reached ($${saved.__loss.usd} of $${agent.limits.dailyLossLimitUsd}): no new trades until midnight UTC. Exits still run.`);
+      }
+    }
     save(saved);
     if (!executed) continue;
     log(
@@ -366,6 +385,7 @@ async function main() {
   const saved = loadSaved();
   console.log(`\n  Dolphin runner ${VERSION} · ${agent.agent.name} · ${LIVE ? "LIVE - real orders" : "paper - no orders (add --live for real ones)"}\n`);
   for (const rule of agent.rules) console.log(`  • ${describeRule(rule)} [${rule.venue}]`);
+  if (agent.limits?.dailyLossLimitUsd) console.log(`  • Daily loss limit: $${agent.limits.dailyLossLimitUsd} across all rules (today so far: $${lossToday(saved)})`);
   console.log("");
   if (LIVE && agent.rules.some((rule) => rule.venue === "binance-spot" || rule.venue === "binance-futures") && !(process.env.BINANCE_API_KEY && process.env.BINANCE_API_SECRET)) {
     fail("Live Exchange rules need BINANCE_API_KEY and BINANCE_API_SECRET in this server's environment (withdrawals off, IP-restricted to this server).");

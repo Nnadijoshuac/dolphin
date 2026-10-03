@@ -131,7 +131,10 @@ function holds(condition, candles) {
 function utcDay(ms) {
   return new Date(ms).toISOString().slice(0, 10);
 }
-function decide(rule, candles, state, now) {
+function resultUsd(pnlPct, sizeUsd) {
+  return Math.round(pnlPct * sizeUsd / 100 * 100) / 100 + 0;
+}
+function decide(rule, candles, state, now, guard) {
   const judged = candles[candles.length - 1];
   if (!judged) return { type: "none", reason: "No closed candle yet." };
   if (state.lastCandle !== null && judged.openTime <= state.lastCandle) return { type: "none", reason: "Already judged this candle." };
@@ -154,6 +157,9 @@ function decide(rule, candles, state, now) {
     return { type: "none", reason: "Entry conditions not met." };
   }
   const today = utcDay(now);
+  if (guard && guard.limitUsd !== null && guard.lossTodayUsd >= guard.limitUsd) {
+    return { type: "none", reason: `Daily loss limit reached: $${guard.lossTodayUsd} lost today, limit $${guard.limitUsd}. No new trades until midnight UTC.` };
+  }
   if (state.tradesDay === today && state.tradesToday >= rule.maxTradesPerDay) {
     return { type: "none", reason: `Daily cap of ${rule.maxTradesPerDay} trades reached.` };
   }
@@ -225,6 +231,10 @@ var BSC_TOKENS = {
   XVS: "0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63"
 };
 var BSC_USDT = "0x55d398326f99059fF775485246999027B3197955";
+function lossToday(saved) {
+  const day = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  return saved.__loss?.day === day ? saved.__loss.usd : 0;
+}
 var log = (...parts) => console.log((/* @__PURE__ */ new Date()).toISOString().slice(11, 23), ...parts);
 function fail(message) {
   console.error(`
@@ -398,7 +408,7 @@ async function onClosed(agent, feed, saved, arrival) {
       saved[rule.id] = { ...entry, state: { ...entry.state, lastCandle: judged.openTime } };
       continue;
     }
-    const decision = decide(rule, feed.candles, entry.state, Date.now());
+    const decision = decide(rule, feed.candles, entry.state, Date.now(), { limitUsd: agent.limits?.dailyLossLimitUsd ?? null, lossTodayUsd: lossToday(saved) });
     if (decision.type === "none") {
       saved[rule.id] = { ...entry, state: afterCandle(entry.state, judged.openTime, decision, true, Date.now()) };
       continue;
@@ -414,6 +424,12 @@ async function onClosed(agent, feed, saved, arrival) {
     }
     const pnlPct = decision.type === "exit" && entry.state.position ? resultPct(entry.state.position.side, entry.state.position.entryPrice, decision.price, rule.leverage) : null;
     saved[rule.id] = { state: afterCandle(entry.state, judged.openTime, decision, executed, Date.now()), held: executed ? result.held : entry.held };
+    if (executed && pnlPct !== null && resultUsd(pnlPct, rule.sizeUsd) < 0) {
+      saved.__loss = { day: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), usd: Math.round((lossToday(saved) - resultUsd(pnlPct, rule.sizeUsd)) * 100) / 100 };
+      if (agent.limits?.dailyLossLimitUsd && saved.__loss.usd >= agent.limits.dailyLossLimitUsd) {
+        log(`Daily loss limit reached ($${saved.__loss.usd} of $${agent.limits.dailyLossLimitUsd}): no new trades until midnight UTC. Exits still run.`);
+      }
+    }
     save(saved);
     if (!executed) continue;
     log(
@@ -488,6 +504,7 @@ async function main() {
   Dolphin runner ${VERSION} \xB7 ${agent.agent.name} \xB7 ${LIVE ? "LIVE - real orders" : "paper - no orders (add --live for real ones)"}
 `);
   for (const rule of agent.rules) console.log(`  \u2022 ${describeRule(rule)} [${rule.venue}]`);
+  if (agent.limits?.dailyLossLimitUsd) console.log(`  \u2022 Daily loss limit: $${agent.limits.dailyLossLimitUsd} across all rules (today so far: $${lossToday(saved)})`);
   console.log("");
   if (LIVE && agent.rules.some((rule) => rule.venue === "binance-spot" || rule.venue === "binance-futures") && !(process.env.BINANCE_API_KEY && process.env.BINANCE_API_SECRET)) {
     fail("Live Exchange rules need BINANCE_API_KEY and BINANCE_API_SECRET in this server's environment (withdrawals off, IP-restricted to this server).");

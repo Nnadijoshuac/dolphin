@@ -7,7 +7,7 @@ import { apiBase } from "./builtAgents";
 import { ensureDraft } from "./knowledge";
 import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } from "./lib/agentBlocks";
 import { closedCandles, MarketDataError } from "./lib/binanceMarket";
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, venueProblem, type Candle, type Rule, type RuleState } from "./lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, venueProblem, type Candle, type LossGuard, type Rule, type RuleState } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -142,12 +142,36 @@ export const removeRule = mutation({
   },
 });
 
+/** Today's (UTC) realized loss from an agent's rule exits, in dollars - 0 when it is up. */
+async function lossTodayUsd(ctx: QueryCtx, draftId: Id<"agentDrafts">, source: "dolphin" | "runner"): Promise<number> {
+  const midnight = Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const trades = await ctx.db
+    .query("strategyTrades")
+    .withIndex("by_draft", (q) => q.eq("draftId", draftId).gte("at", midnight))
+    .collect();
+  const net = trades
+    .filter((trade) => trade.kind === "exit" && trade.pnlPct !== null && (trade.source ?? "dolphin") === source)
+    .reduce((sum, trade) => sum + resultUsd(trade.pnlPct as number, trade.sizeUsd), 0);
+  return net < 0 ? Math.round(-net * 100) / 100 : 0;
+}
+
+/** The builder sets the daily loss limit in the Permissions section. Null removes it. */
+export const setDailyLossLimit = mutation({
+  args: { conversationKey: v.string(), usd: v.union(v.number(), v.null()) },
+  handler: async (ctx, { conversationKey, usd }) => {
+    const draft = await draftOfKey(ctx, conversationKey);
+    if (!draft) throw new ConvexError("That is not an agent draft.");
+    if (usd !== null && !(Number.isFinite(usd) && usd >= 1 && usd <= 1_000_000)) throw new ConvexError("A daily loss limit is $1 or more - or empty for none.");
+    await ctx.db.patch(draft._id, { dailyLossLimitUsd: usd === null ? null : Math.round(usd * 100) / 100, updatedAt: Date.now() });
+  },
+});
+
 /** The draft panel's view: each rule in words, its warnings, whether it holds a position, and its recent trades. */
 export const forConversation = query({
   args: { conversationKey: v.string() },
   handler: async (ctx, { conversationKey }) => {
     const draft = await draftOfKey(ctx, conversationKey);
-    if (!draft) return { rules: [], trades: [], running: false };
+    if (!draft) return { rules: [], trades: [], running: false, dailyLossLimitUsd: null, lossTodayUsd: 0 };
     const rules = rulesOf(draft);
     const views = [];
     for (const rule of rules) {
@@ -176,7 +200,13 @@ export const forConversation = query({
       .withIndex("by_draft", (q) => q.eq("draftId", draft._id))
       .order("desc")
       .take(20);
-    return { rules: views, trades, running: Boolean(draft.autopilot?.on) };
+    return {
+      rules: views,
+      trades,
+      running: Boolean(draft.autopilot?.on),
+      dailyLossLimitUsd: draft.dailyLossLimitUsd ?? null,
+      lossTodayUsd: await lossTodayUsd(ctx, draft._id, "dolphin"),
+    };
   },
 });
 
@@ -186,7 +216,7 @@ export const armed = internalQuery({
   args: {},
   handler: async (ctx) => {
     const drafts = await ctx.db.query("agentDrafts").collect();
-    const out: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState>; misfits: Record<string, string> }[] = [];
+    const out: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState>; misfits: Record<string, string>; guard: LossGuard }[] = [];
     for (const draft of drafts) {
       const rules = rulesOf(draft);
       if (!draft.autopilot?.on || rules.length === 0) continue;
@@ -205,7 +235,7 @@ export const armed = internalQuery({
         const misfit = venueProblem(rule, binance);
         if (misfit) misfits[rule.id] = misfit;
       }
-      out.push({ draftId: draft._id, rules, states, misfits });
+      out.push({ draftId: draft._id, rules, states, misfits, guard: { limitUsd: draft.dailyLossLimitUsd ?? null, lossTodayUsd: await lossTodayUsd(ctx, draft._id, "dolphin") } });
     }
     return out;
   },
@@ -250,7 +280,7 @@ export const tick = internalAction({
   args: {},
   handler: async (ctx): Promise<{ rules: number; trades: number }> => {
     const now = Date.now();
-    const armedDrafts: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState>; misfits: Record<string, string> }[] = await ctx.runQuery(
+    const armedDrafts: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState>; misfits: Record<string, string>; guard: LossGuard }[] = await ctx.runQuery(
       internal.strategy.armed,
       {},
     );
@@ -258,7 +288,7 @@ export const tick = internalAction({
     const cache = new Map<string, Promise<Candle[]>>();
     let rulesChecked = 0;
     let trades = 0;
-    for (const { draftId, rules, states, misfits } of armedDrafts) {
+    for (const { draftId, rules, states, misfits, guard } of armedDrafts) {
       for (const rule of rules) {
         rulesChecked++;
         const state = states[rule.id] ?? EMPTY_STATE;
@@ -289,7 +319,12 @@ export const tick = internalAction({
           continue;
         }
         if (judged.openTime <= state.lastCandle) continue;
-        const decision = decide(rule, candles, state, now);
+        const decision = decide(rule, candles, state, now, guard);
+        // A loss closed in this run counts at once toward the next rule's check.
+        if (decision.type === "exit" && state.position) {
+          const usd = resultUsd(resultPct(state.position.side, state.position.entryPrice, decision.price, rule.leverage), rule.sizeUsd);
+          if (usd < 0) guard.lossTodayUsd = Math.round((guard.lossTodayUsd - usd) * 100) / 100;
+        }
         // Paper inside Dolphin: every decision "executes" at the closed candle's price.
         const next = afterCandle(state, judged.openTime, decision, true, now);
         const trade =
@@ -349,6 +384,8 @@ export const exportForRunner = mutation({
       version: 1,
       agent: { name: draft.name ?? "Dolphin agent" },
       rules,
+      // Enforced by the runner itself against its own closed trades (same engine, lib/strategy.ts).
+      limits: { dailyLossLimitUsd: draft.dailyLossLimitUsd ?? null },
       report: { url: `${apiBase()}/api/v1/runner/report`, token },
     };
   },

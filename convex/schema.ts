@@ -1409,6 +1409,12 @@ export default defineSchema({
      * once in agent.json; a new download replaces it, so an old file stops reporting.
      */
     runnerTokenHash: v.optional(v.string()),
+    /**
+     * THE DAILY LOSS LIMIT in dollars (owner, 2026-10-03; lib/strategy.ts LossGuard): once
+     * today's realized losses from its trading rules reach it, no rule opens anything new
+     * until midnight UTC. Null or absent: none.
+     */
+    dailyLossLimitUsd: v.optional(v.union(v.number(), v.null())),
     conversationId: v.id("dolphinConversations"),
     /**
      * WHO IT IS FOR (mentor review, 2026-09-29: plain language, protocols in an

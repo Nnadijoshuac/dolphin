@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, resultPct, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, resultPct, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const H4 = 4 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 9, 1);
@@ -146,6 +146,23 @@ test("a rule may not reach past its Binance block", () => {
   assert.match(venueProblem({ venue: "binance-wallet", leverage: 1 }, exchange) ?? "", /set to the Exchange/);
   assert.match(venueProblem({ venue: "binance-spot", leverage: 1 }, null) ?? "", /no Binance block/);
   assert.equal(venueProblem({ venue: "dolphin-wallet", leverage: 1 }, null), null);
+});
+
+test("the daily loss limit stops new entries, never exits", () => {
+  const seen = candles([102, 101, 99, 97]);
+  const now = seen[3].openTime + H4;
+  // $50 limit, $55 already lost today: no new short, with the reason.
+  const blocked = decide(ownerRule, seen, EMPTY_STATE, now, { limitUsd: 50, lossTodayUsd: 55 });
+  assert.equal(blocked.type, "none");
+  assert.match(blocked.reason, /Daily loss limit reached: \$55 lost today, limit \$50/);
+  // Under the limit it still trades; no limit set, it trades.
+  assert.equal(decide(ownerRule, seen, EMPTY_STATE, now, { limitUsd: 50, lossTodayUsd: 20 }).type, "enter");
+  assert.equal(decide(ownerRule, seen, EMPTY_STATE, now, { limitUsd: null, lossTodayUsd: 999 }).type, "enter");
+  // An open short still exits when its exit rule holds, even past the limit.
+  const holding: RuleState = { ...EMPTY_STATE, position: { side: "short", entryPrice: 97, openedAt: T0 } };
+  const exit = decide(ownerRule, candles([97, 95, 93, 94, 95]), holding, now + H4, { limitUsd: 50, lossTodayUsd: 80 });
+  assert.equal(exit.type, "exit");
+  assert.equal(resultUsd(-15, 50), -7.5);
 });
 
 test("a rule reads in plain words", () => {

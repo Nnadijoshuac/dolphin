@@ -172,7 +172,20 @@ function utcDay(ms: number): string {
  * before entries, so a position is never added to and a rule never flips in
  * one step. The caller executes the decision, then calls `afterTrade`.
  */
-export function decide(rule: Rule, candles: readonly Candle[], state: RuleState, now: number): Decision {
+/**
+ * THE DAILY LOSS LIMIT (owner, 2026-10-03: "once it's $50 you can't trade again" - against
+ * revenge trading). Across ALL of an agent's rules: once today's realized losses reach the
+ * limit, no rule opens anything new until midnight UTC. Exits still run, so an open
+ * position can always close. Realized = closed trades only, in dollars of margin.
+ */
+export type LossGuard = { limitUsd: number | null; lossTodayUsd: number };
+
+/** A closed trade's result in dollars: its % (leverage included) of the margin it put up. */
+export function resultUsd(pnlPct: number, sizeUsd: number): number {
+  return Math.round(((pnlPct * sizeUsd) / 100) * 100) / 100 + 0;
+}
+
+export function decide(rule: Rule, candles: readonly Candle[], state: RuleState, now: number, guard?: LossGuard): Decision {
   const judged = candles[candles.length - 1];
   if (!judged) return { type: "none", reason: "No closed candle yet." };
   if (state.lastCandle !== null && judged.openTime <= state.lastCandle) return { type: "none", reason: "Already judged this candle." };
@@ -197,6 +210,9 @@ export function decide(rule: Rule, candles: readonly Candle[], state: RuleState,
     return { type: "none", reason: "Entry conditions not met." };
   }
   const today = utcDay(now);
+  if (guard && guard.limitUsd !== null && guard.lossTodayUsd >= guard.limitUsd) {
+    return { type: "none", reason: `Daily loss limit reached: $${guard.lossTodayUsd} lost today, limit $${guard.limitUsd}. No new trades until midnight UTC.` };
+  }
   if (state.tradesDay === today && state.tradesToday >= rule.maxTradesPerDay) {
     return { type: "none", reason: `Daily cap of ${rule.maxTradesPerDay} trades reached.` };
   }

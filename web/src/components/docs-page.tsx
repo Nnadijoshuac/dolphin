@@ -1,7 +1,9 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { CopyButton, CopyPageMenu, Toc } from "@/components/docs-client";
+import { DocsSearch } from "@/components/docs-search";
 
 export type DocsSection = { id: string; title: string; body: ReactNode };
 
@@ -66,6 +68,7 @@ export function DocsPage({
   return (
     <div className="docs-shell">
       <aside className="docs-side">
+        <DocsSearch pages={DOCS_NAV} />
         <nav aria-label="Library">
           {LIBRARY.map((section) => (
             <div className="docs-side__group" key={section.group}>
@@ -81,6 +84,9 @@ export function DocsPage({
       </aside>
 
       {/* Phones: the library as one menu above the page. */}
+      <div className="docs-mobile-search">
+        <DocsSearch pages={DOCS_NAV} />
+      </div>
       <details className="docs-mobile-nav">
         <summary>
           {group?.group ?? "Docs"} · {title}
@@ -172,6 +178,20 @@ export function Code({ children, label }: { children: string; label?: string }) 
       <pre>
         <code>{children}</code>
       </pre>
+    </figure>
+  );
+}
+
+/**
+ * A screenshot of the real screen a passage explains (owner, 2026-10-03, after nextra.site).
+ * Captured from Dolphin itself into /public/docs; `width` is the image's own pixel width, shown at
+ * half size because it was captured at 2x.
+ */
+export function Figure({ src, alt, caption, width, height, narrow = false }: { src: string; alt: string; caption: string; width: number; height: number; narrow?: boolean }) {
+  return (
+    <figure className="docs-figure" data-narrow={narrow || undefined}>
+      <Image alt={alt} height={height} sizes="(max-width: 820px) 100vw, 720px" src={src} width={width} />
+      <figcaption>{caption}</figcaption>
     </figure>
   );
 }

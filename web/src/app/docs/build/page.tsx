@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { DocsPage, type DocsSection } from "@/components/docs-page";
+import { DocsPage, Figure, type DocsSection } from "@/components/docs-page";
 
 export const metadata: Metadata = {
   title: "Building agents",
@@ -27,6 +27,13 @@ const SECTIONS: DocsSection[] = [
     body: (
       <>
         <p>Your agent is drawn as connected blocks, each labelled with what it does:</p>
+        <Figure
+          alt="The Dolphin builder: the canvas of connected blocks and the agent panel"
+          caption="The builder: blocks on the canvas, the agent's panel on the right."
+          height={1343}
+          src="/docs/builder.webp"
+          width={1600}
+        />
         <ul>
           <li>
             <strong>When</strong> - what starts a run: a message, a schedule, a price crossing, a wallet doing something,
@@ -51,9 +58,11 @@ const SECTIONS: DocsSection[] = [
           </li>
         </ul>
         <p>
-          Add blocks from the toolbox, drag them, connect or cut lines, and open a block to change it. On a desktop you can
-          maximize the canvas or the agent panel, or pop either into its own browser tab.
+          Add blocks from the toolbox, drag them, connect or cut lines, and open a block to change it. A block that needs
+          another first - Market needs Risk limits - adds that one first. On a desktop you can maximize the canvas or the
+          agent panel, or pop either into its own browser tab.
         </p>
+        <Figure alt="The Add block toolbox" caption="Add block: every block, what it does, and what it needs first." height={700} narrow src="/docs/toolbox.webp" width={800} />
       </>
     ),
   },
@@ -109,7 +118,7 @@ const SECTIONS: DocsSection[] = [
             about 100 / leverage % away; more than 5x is refused. A short needs Binance Futures and a stop or an exit.
           </li>
           <li>
-            <strong>Daily loss limit:</strong> set it under Permissions. Once a day&rsquo;s closed losses reach it, the
+            <strong>Daily loss limit:</strong> set it under Permissions (below). Once a day&rsquo;s closed losses reach it, the
             rules open nothing new until 00:00 UTC; open positions can still close.
           </li>
           <li>
@@ -121,6 +130,7 @@ const SECTIONS: DocsSection[] = [
           <strong>Paper first.</strong> Rules trade with pretend money at live Binance prices until you switch Trading mode
           to Live.
         </p>
+        <Figure alt="Permissions: the limits an agent trades under, and its daily loss limit" caption="Permissions: every limit the agent trades under, and the daily loss limit." height={416} narrow src="/docs/permissions.webp" width={498} />
       </>
     ),
   },
@@ -139,6 +149,7 @@ const SECTIONS: DocsSection[] = [
             Open the Binance block, choose <strong>Testnet</strong> or <strong>Live</strong>, pick your saved key and
             secret, save, and press <strong>Check connection</strong>: it shows your USDT balance. A live key that can
             withdraw is refused.
+            <Figure alt="The Binance block with its Connect section" caption="The Binance block: Exchange or Wallet, futures and leverage, and Connect (Testnet or Live)." height={1062} narrow src="/docs/binance-block.webp" width={560} />
           </li>
           <li>
             <strong>Dolphin Wallet:</strong> a rule on the Dolphin Wallet swaps on PancakeSwap with the agent&rsquo;s trade
@@ -148,6 +159,8 @@ const SECTIONS: DocsSection[] = [
             Switch <strong>Trading mode</strong> to <strong>Live</strong>. The first time, you accept that every trade is
             your own responsibility. From then on the rules place real orders on each closed candle, and the Timeline
             says where each one went.
+            <Figure alt="Trading mode: Paper or Live" caption="Trading mode, in the agent panel." height={202} narrow src="/docs/trading-mode.webp" width={520} />
+            <Figure alt="The real-money notice shown before going Live" caption="Before the first real trade: the notice, which must be accepted." height={596} narrow src="/docs/live-notice.webp" width={712} />
           </li>
         </ol>
         <p>

@@ -609,6 +609,7 @@ const BLOCK_TITLES: Record<BlockType, string> = {
   dataSource: "Data source",
   news: "News",
   quietHours: "Quiet hours",
+  binance: "Binance",
 };
 
 const BLOCK_ABOUT: Record<BlockType, string> = {
@@ -625,6 +626,7 @@ const BLOCK_ABOUT: Record<BlockType, string> = {
   indicators: "Technical indicators for the Price feed's token, computed in code on closed candles only and read on every run: RSI(14), MACD(12,26,9), Bollinger bands (20,2), the 20- and 50-candle averages, volume against its average, and any cross that just happened.",
   signal: "Makes its own signal: it fires the Trigger when a technical condition turns true on a newly closed candle - an RSI level, a moving-average cross or a MACD cross. Checked every 5 minutes; fires once per candle, never on a candle still forming.",
   memory: "Your agent's memory, kept on your own server - Dolphin stores none of it. Before every run it reads what it did last time; after it, a record of the run is saved. It can also note things down itself.",
+  binance: "Where the agent's trading rules trade for real once you run it on your own server: your Binance Wallet (the keyless Agentic Wallet - spot only) or the Binance Exchange (spot, and futures if you switch them on). Dolphin never sees a Binance key or session - they stay on your server. Inside Dolphin, rules trade on paper at live Binance prices.",
   hire: "A paid agent from Dolphin's catalog that yours can call on. When it asks for work, the agent quotes a price and you confirm each payment from your Dolphin Wallet with your passkey. It delivers on-chain afterwards.",
 };
 
@@ -713,6 +715,10 @@ function BlockEditor({
     Array.isArray(config.events) ? (config.events as { label: string; at: string }[]).map((event) => `${event.label} | ${event.at.slice(0, 16).replace("T", " ")}`).join("\n") : "",
   );
   const [marginHours, setMarginHours] = useState(config.marginHours ? String(config.marginHours) : "2");
+  // Binance (fast rules, phase 3). Leverage defaults to 1x (owner, 2026-10-03).
+  const [binanceAccount, setBinanceAccount] = useState<"wallet" | "exchange">(config.account === "wallet" ? "wallet" : "exchange");
+  const [binanceFutures, setBinanceFutures] = useState(config.futures === true);
+  const [binanceLeverage, setBinanceLeverage] = useState(Number(config.maxLeverage ?? 1) || 1);
   const [timeframe, setTimeframe] = useState<"1h" | "4h" | "1d">((config.timeframe as "1h" | "4h" | "1d") ?? (type === "signal" ? "1h" : "1d"));
   const [condition, setCondition] = useState<SignalCondition>((config.condition as SignalCondition) ?? "rsiBelow");
   const [level, setLevel] = useState(config.level ? String(config.level) : "");
@@ -798,6 +804,10 @@ function BlockEditor({
       }
       case "indicators":
         return { id, type, config: { timeframe } };
+      case "binance": {
+        const futures = binanceAccount === "exchange" && binanceFutures;
+        return { id, type, config: { account: binanceAccount, futures, maxLeverage: futures ? binanceLeverage : 1 } };
+      }
       case "signal":
         return {
           id,
@@ -1109,6 +1119,50 @@ function BlockEditor({
             />
           </div>
           <p className="text-[0.7rem] leading-snug text-muted">Closed candles only: the candle still forming never counts.</p>
+        </div>
+      ) : null}
+
+      {type === "binance" ? (
+        <div className="mt-3 space-y-3">
+          <div>
+            <Label>Trade through</Label>
+            <ChoiceList
+              ariaLabel="Trade through"
+              choices={[
+                { value: "exchange", label: "Binance Exchange (order book)" },
+                { value: "wallet", label: "Binance Wallet (Agentic Wallet, on-chain)" },
+              ]}
+              onChange={(next) => setBinanceAccount(next as "wallet" | "exchange")}
+              searchable={false}
+              value={binanceAccount}
+            />
+          </div>
+          {binanceAccount === "exchange" ? (
+            <label className="flex items-center gap-2 text-[0.78rem] text-ink-soft">
+              <input checked={binanceFutures} className="size-3.5 accent-[var(--ink)]" onChange={(event) => setBinanceFutures(event.target.checked)} type="checkbox" />
+              Futures too - lets rules short, with leverage
+            </label>
+          ) : (
+            <p className="text-[0.7rem] leading-snug text-muted">The Binance Wallet buys and sells on-chain (spot). It cannot short.</p>
+          )}
+          {binanceAccount === "exchange" && binanceFutures ? (
+            <div>
+              <Label>Most leverage a rule may use</Label>
+              <ChoiceList
+                ariaLabel="Most leverage"
+                choices={[1, 2, 3, 4, 5].map((value) => ({ value: String(value), label: `${value}x${value === 1 ? " (default)" : value > 3 ? " - high risk" : ""}` }))}
+                onChange={(next) => setBinanceLeverage(Number(next))}
+                searchable={false}
+                value={String(binanceLeverage)}
+              />
+              {binanceLeverage > 3 ? (
+                <p className="mt-1.5 rounded-md border border-[#d9901a]/40 bg-[#d9901a]/10 px-2 py-1 text-[0.7rem] leading-snug text-ink-soft">
+                  {binanceLeverage}x is above the usual 1-3x. A move of about {Math.round(100 / binanceLeverage)}% against a position would liquidate it, and everything in it would be lost.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+          <p className="text-[0.7rem] leading-snug text-muted">No key goes in here. When you run the agent on your own server, its key or wallet session stays there.</p>
         </div>
       ) : null}
 

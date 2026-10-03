@@ -41,7 +41,7 @@ import { indicatorReport, SIGNAL_CONDITIONS, type SignalCondition } from "./indi
 import { assertSafeUrl } from "./safeFetch";
 import { verifiedTokenBySymbol, verifiedTokens, type TradeToken } from "./tradeTokens";
 
-export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "hire", "memory", "indicators", "signal", "dataSource", "news", "quietHours"] as const;
+export const BLOCK_TYPES = ["market", "safety", "swap", "risk", "schedule", "price", "walletWatch", "hire", "memory", "indicators", "signal", "dataSource", "news", "quietHours", "binance"] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export type MarketConfig = { tokenAddress: string; symbol: string; name: string; poolAddress: string | null };
@@ -60,6 +60,14 @@ export type SourceAuth = { authMode: AuthMode; authParam: string | null; keyName
 export type DataSourceConfig = SourceAuth & { label: string; url: string };
 export type NewsConfig = SourceAuth & { url: string; keywords: string[] };
 export type QuietHoursConfig = { events: QuietEvent[]; marginHours: number };
+/**
+ * BINANCE (owner, 2026-10-03; fast rules, phase 3): where the agent's trading
+ * rules trade with real money once it runs on the builder's own server. The
+ * Binance Wallet is the Agentic Wallet (keyless, on-chain, spot only); the
+ * Exchange is the order book, with futures if switched on. NO KEY IS EVER HERE:
+ * the wallet session and exchange API keys live only on the builder's server.
+ */
+export type BinanceConfig = { account: "wallet" | "exchange"; futures: boolean; maxLeverage: number };
 
 export type AgentBlock =
   | { id: string; type: "market"; config: MarketConfig }
@@ -75,7 +83,8 @@ export type AgentBlock =
   | { id: string; type: "signal"; config: SignalConfig }
   | { id: string; type: "dataSource"; config: DataSourceConfig }
   | { id: string; type: "news"; config: NewsConfig }
-  | { id: string; type: "quietHours"; config: QuietHoursConfig };
+  | { id: string; type: "quietHours"; config: QuietHoursConfig }
+  | { id: string; type: "binance"; config: BinanceConfig };
 
 export const MAX_BLOCKS = 12;
 /** Fastest schedule. Every run spends the builder's own model key. */
@@ -105,7 +114,7 @@ export function validateBlocks(input: unknown): AgentBlock[] {
   const seenIds = new Set<string>();
   const out: AgentBlock[] = [];
 
-  for (const raw of input as Array<Record<string, unknown>>) {
+  for (const raw of input as Record<string, unknown>[]) {
     // The Wallet block was removed (2026-09-29); an old draft's entry is dropped quietly.
     if (raw?.type === "wallet") continue;
     const id = typeof raw?.id === "string" && /^[a-z0-9-]{1,24}$/.test(raw.id) ? raw.id : null;
@@ -240,6 +249,16 @@ export function validateBlocks(input: unknown): AgentBlock[] {
         out.push({ id, type, config: { url, keyName } });
         break;
       }
+      case "binance": {
+        const account = config.account === "wallet" ? "wallet" : "exchange";
+        // The Agentic Wallet trades spot only: no futures, no leverage.
+        const futures = account === "exchange" && config.futures === true;
+        // Owner, 2026-10-03: 1x unless the builder chooses more (1-3x normal, up to 5x with a warning).
+        const leverage = Number(config.maxLeverage ?? 1);
+        if (futures && !(Number.isInteger(leverage) && leverage >= 1 && leverage <= 5)) fail("The most leverage is a whole number from 1x to 5x.");
+        out.push({ id, type, config: { account, futures, maxLeverage: futures ? leverage : 1 } });
+        break;
+      }
       case "safety":
       case "swap":
         out.push({ id, type, config: {} } as AgentBlock);
@@ -295,7 +314,7 @@ export type PairSnapshot = {
 /** The deepest BSC pair for a token, from DexScreener. Null when it has none. */
 export async function bscPairFor(tokenAddress: string): Promise<PairSnapshot | null> {
   const data = (await getJson(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`)) as {
-    pairs?: Array<Record<string, any>>;
+    pairs?: Record<string, any>[];
   };
   const pairs = (data.pairs ?? []).filter((pair) => pair.chainId === "bsc");
   pairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
@@ -334,7 +353,7 @@ export async function poolCandles(
   tokenAddress: string,
   timeframe: "hour" | "4h" | "day",
   limit: number,
-): Promise<Array<[number, number, number, number, number, number]>> {
+): Promise<[number, number, number, number, number, number][]> {
   const path = timeframe === "4h" ? "hour?aggregate=4&" : `${timeframe}?`;
   const data = (await getJson(
     `https://api.geckoterminal.com/api/v2/networks/bsc/pools/${poolAddress}/ohlcv/${path}limit=${limit}&currency=usd&token=${tokenAddress}`,
@@ -398,7 +417,7 @@ function round(value: number | null, digits = 2): string {
 }
 
 /** The trend block of the snapshot: what the playbook's trend-following rule reads. */
-function trendReport(daily: ReadonlyArray<readonly number[]>, price: number | null): string {
+function trendReport(daily: readonly (readonly number[])[], price: number | null): string {
   const closes = daily.map((candle) => candle[4]);
   if (closes.length < 20) return `Daily trend: not enough history (${closes.length} daily candles).`;
   // Indicators compare CLOSED candles only; the live price is reported separately.
@@ -614,7 +633,7 @@ export function safetyReport(report: Record<string, any>): string {
   ].filter(Boolean);
   lines.push(danger.length ? `Owner powers and warnings: ${danger.join("; ")}.` : "Owner powers and warnings: none found.");
 
-  const holders = Array.isArray(report.holders) ? (report.holders as Array<Record<string, any>>) : [];
+  const holders = Array.isArray(report.holders) ? (report.holders as Record<string, any>[]) : [];
   if (holders.length) {
     let burned = 0;
     let locked = 0;
@@ -643,7 +662,7 @@ export function safetyReport(report: Record<string, any>): string {
     lines.push(`Owner holds ${pct(report.owner_percent) ?? "unknown"}, creator holds ${pct(report.creator_percent) ?? "unknown"}.`);
   }
 
-  const lp = Array.isArray(report.lp_holders) ? (report.lp_holders as Array<Record<string, any>>) : [];
+  const lp = Array.isArray(report.lp_holders) ? (report.lp_holders as Record<string, any>[]) : [];
   if (lp.length) {
     let lpBurned = 0;
     let lpLocked = 0;

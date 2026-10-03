@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, resultPct, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, resultPct, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const H4 = 4 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 9, 1);
@@ -135,6 +135,16 @@ test("results include leverage, and a short gains when the price falls", () => {
   assert.equal(resultPct("short", 100, 105, 3), -15);
   assert.equal(resultPct("long", 766.08, 772.21, 1), 0.8);
   assert.equal(resultPct("long", 100, 100, 1), 0);
+});
+
+test("a rule may not reach past its Binance block", () => {
+  const exchange = { account: "exchange" as const, futures: true, maxLeverage: 3 };
+  assert.equal(venueProblem({ venue: "binance-futures", leverage: 2 }, exchange), null);
+  assert.match(venueProblem({ venue: "binance-futures", leverage: 5 }, exchange) ?? "", /above the Binance block's 3x/);
+  assert.match(venueProblem({ venue: "binance-futures", leverage: 1 }, { ...exchange, futures: false }) ?? "", /switch on futures/);
+  assert.match(venueProblem({ venue: "binance-wallet", leverage: 1 }, exchange) ?? "", /set to the Exchange/);
+  assert.match(venueProblem({ venue: "binance-spot", leverage: 1 }, null) ?? "", /no Binance block/);
+  assert.equal(venueProblem({ venue: "dolphin-wallet", leverage: 1 }, null), null);
 });
 
 test("a rule reads in plain words", () => {

@@ -3,8 +3,10 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
+import { ensureDraft } from "./knowledge";
+import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } from "./lib/agentBlocks";
 import { closedCandles, MarketDataError } from "./lib/binanceMarket";
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, type Candle, type Rule, type RuleState } from "./lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, venueProblem, type Candle, type Rule, type RuleState } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -34,6 +36,12 @@ function rulesOf(draft: Doc<"agentDrafts"> | null): Rule[] {
   return ((draft?.rules ?? []) as Rule[]).filter((rule) => rule && typeof rule.id === "string");
 }
 
+/** The draft's Binance block (phase 3), if it has one plugged in on the canvas. */
+function binanceOf(draft: Pick<Doc<"agentDrafts">, "blocks" | "detached"> | null): BinanceConfig | null {
+  const block = activeBlocks((draft?.blocks ?? []) as AgentBlock[], draft?.detached).find((candidate) => candidate.type === "binance");
+  return block && block.type === "binance" ? block.config : null;
+}
+
 function newRuleId(): string {
   return `rule-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -46,15 +54,17 @@ function newRuleId(): string {
 export const addRules = internalMutation({
   args: { conversationId: v.id("dolphinConversations"), rules: v.array(v.any()) },
   handler: async (ctx, { conversationId, rules }): Promise<{ added: string[]; problems: string[]; warnings: string[] }> => {
-    const draft = await ctx.db
-      .query("agentDrafts")
-      .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
-      .unique();
-    if (!draft) return { added: [], problems: ["the draft does not exist yet - describe the agent first"], warnings: [] };
+    // A first message that only asks for a rule still has a draft to hold it (as documents do).
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation) return { added: [], problems: ["the conversation is gone"], warnings: [] };
+    const draft = await ctx.db.get(await ensureDraft(ctx, conversation));
+    if (!draft) return { added: [], problems: ["the draft could not be made"], warnings: [] };
     let current = rulesOf(draft);
     const added: string[] = [];
     const problems: string[] = [];
     const warnings: string[] = [];
+    let blocks = (draft.blocks ?? []) as AgentBlock[];
+    let binance = binanceOf(draft);
     for (const raw of rules.slice(0, MAX_RULES)) {
       const same = current.find(
         (rule) => rule.market === String((raw as { market?: unknown }).market ?? "").trim() && rule.timeframe === (raw as { timeframe?: unknown }).timeframe && rule.action === (raw as { action?: unknown }).action,
@@ -70,11 +80,26 @@ export const addRules = internalMutation({
         problems.push(`a rule (an agent holds at most ${MAX_RULES})`);
         continue;
       }
+      // A rule that trades on Binance brings its Binance block when there is none yet (phase 3).
+      if (made.rule.venue !== "dolphin-wallet" && !binance) {
+        binance = {
+          account: made.rule.venue === "binance-wallet" ? "wallet" : "exchange",
+          futures: made.rule.venue === "binance-futures",
+          // The rule's own leverage, never more: the default is 1x (owner, 2026-10-03).
+          maxLeverage: made.rule.venue === "binance-futures" ? made.rule.leverage : 1,
+        };
+        blocks = [...blocks, { id: `binance-${Math.random().toString(36).slice(2, 8)}`, type: "binance", config: binance }];
+      }
+      const misfit = venueProblem(made.rule, binance);
+      if (misfit) {
+        problems.push(`a rule (${misfit})`);
+        continue;
+      }
       current = same ? current.map((rule) => (rule.id === same.id ? made.rule : rule)) : [...current, made.rule];
       added.push(made.rule.name);
       warnings.push(...made.warnings);
     }
-    if (added.length > 0) await ctx.db.patch(draft._id, { rules: current, updatedAt: Date.now() });
+    if (added.length > 0) await ctx.db.patch(draft._id, { rules: current, blocks: validateBlocks(blocks), updatedAt: Date.now() });
     return { added, problems, warnings };
   },
 });
@@ -95,6 +120,8 @@ export const updateRule = mutation({
     if (!draft || !rule) throw new ConvexError("That rule is not in this agent.");
     const made = cleanRule({ ...rule, ...change }, rule.id);
     if ("problems" in made) throw new ConvexError(`That change does not fit the rule: ${made.problems.join("; ")}.`);
+    const misfit = venueProblem(made.rule, binanceOf(draft));
+    if (misfit) throw new ConvexError(`That change does not fit: ${misfit}.`);
     await ctx.db.patch(draft._id, { rules: rules.map((candidate) => (candidate.id === ruleId ? { ...made.rule, name: rule.name } : candidate)), updatedAt: Date.now() });
     return { warnings: made.warnings };
   },
@@ -158,7 +185,7 @@ export const armed = internalQuery({
   args: {},
   handler: async (ctx) => {
     const drafts = await ctx.db.query("agentDrafts").collect();
-    const out: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState> }[] = [];
+    const out: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState>; misfits: Record<string, string> }[] = [];
     for (const draft of drafts) {
       const rules = rulesOf(draft);
       if (!draft.autopilot?.on || rules.length === 0) continue;
@@ -170,7 +197,14 @@ export const armed = internalQuery({
           .unique();
         states[rule.id] = (run?.state as RuleState | undefined) ?? EMPTY_STATE;
       }
-      out.push({ draftId: draft._id, rules, states });
+      // The block may have changed since the rule was written: a rule that no longer fits is held, with the reason.
+      const binance = binanceOf(draft);
+      const misfits: Record<string, string> = {};
+      for (const rule of rules) {
+        const misfit = venueProblem(rule, binance);
+        if (misfit) misfits[rule.id] = misfit;
+      }
+      out.push({ draftId: draft._id, rules, states, misfits });
     }
     return out;
   },
@@ -215,15 +249,22 @@ export const tick = internalAction({
   args: {},
   handler: async (ctx): Promise<{ rules: number; trades: number }> => {
     const now = Date.now();
-    const armedDrafts: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState> }[] = await ctx.runQuery(internal.strategy.armed, {});
+    const armedDrafts: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState>; misfits: Record<string, string> }[] = await ctx.runQuery(
+      internal.strategy.armed,
+      {},
+    );
     // One fetch per market per run, however many rules read it.
     const cache = new Map<string, Promise<Candle[]>>();
     let rulesChecked = 0;
     let trades = 0;
-    for (const { draftId, rules, states } of armedDrafts) {
+    for (const { draftId, rules, states, misfits } of armedDrafts) {
       for (const rule of rules) {
         rulesChecked++;
         const state = states[rule.id] ?? EMPTY_STATE;
+        if (misfits[rule.id]) {
+          await ctx.runMutation(internal.strategy.record, { draftId, ruleId: rule.id, state, lastError: `Paused: ${misfits[rule.id]}.`, trade: null });
+          continue;
+        }
         const key = `${rule.venue === "binance-futures" ? "f" : "s"}:${rule.market}:${rule.timeframe}`;
         if (!cache.has(key)) cache.set(key, closedCandles(rule.venue, rule.market, rule.timeframe, 200, now));
         let candles: Candle[];

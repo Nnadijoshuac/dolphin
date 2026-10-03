@@ -140,7 +140,7 @@ TRADING RULES - for an agent that trades on market conditions, write them in \`r
 - venue: binance-futures for anything that shorts or uses leverage; binance-spot to buy on Binance; dolphin-wallet to buy from the Dolphin Wallet on BNB Chain; binance-wallet for the person's Binance Agentic Wallet. market: a Binance pair like BNBUSDT.
 - action: buy (go long) or short (binance-futures only). A rule sells through its exits - \`until\` conditions, stopLossPct, takeProfitPct - never a separate "sell".
 - Conditions (all fields present, unused ones null): rsi (op, value, period), price_vs_ma (op, ma sma/ema, length), ma_cross (direction, fast, slow, ma), macd_cross (direction), trend (direction, candles: "3 lower closes in a row" = trend down 3), price (op, value), change_pct (op, value, candles).
-- Every short needs a stop-loss or an until. Leverage 1 to 3 unless the person asks for more; never above 5 - above 3 Dolphin warns them about liquidation. Keep maxTradesPerDay small (1-3) unless told otherwise.
+- Every short needs a stop-loss or an until. Leverage is 1 unless the person asks for leverage; never above 5 - above 3 Dolphin warns them about liquidation. Keep maxTradesPerDay small (1-3) unless told otherwise.
 - Example - "short BNB on 4-hour candles when the trend turns down, hold until it turns up, 2x, stop at 5%": venue binance-futures, market BNBUSDT, timeframe 4h, when [trend down 3], action short, until [trend up 2], stopLossPct 5, leverage 2.
 - When you write rules, add NO Schedule, Price trigger, Price feed, Indicators, Signal, Risk limits, Swap or Safety block: the rule reads Binance's candles itself and carries its own size, stop and daily cap.
 - Inside Dolphin rules trade on PAPER at live Binance prices while Autopilot is on. Real money comes only when the person runs the agent on their own server (being built now). Never say live trading can be switched on in Dolphin, and never ask for Binance keys in the chat. Say this when you add rules.
@@ -1645,6 +1645,7 @@ const BLOCK_LABELS: Record<AgentBlock["type"], string> = {
   dataSource: "Data source",
   news: "News",
   quietHours: "Quiet hours",
+  binance: "Binance",
 };
 
 function blockToolNameFor(type: AgentBlock["type"]): string | null {

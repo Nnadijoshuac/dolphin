@@ -335,7 +335,7 @@ export const room = internalQuery({
 });
 
 /** A brand-new build chat may have no draft row yet; a document creates it, as updateDraft does. */
-async function ensureDraft(ctx: MutationCtx, conversation: Doc<"dolphinConversations">): Promise<Id<"agentDrafts">> {
+export async function ensureDraft(ctx: MutationCtx, conversation: Doc<"dolphinConversations">): Promise<Id<"agentDrafts">> {
   const existing = await draftOf(ctx, conversation._id);
   if (existing) return existing._id;
   const now = Date.now();

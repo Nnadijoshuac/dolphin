@@ -1,3 +1,4 @@
+import type { BinanceConfig } from "./agentBlocks";
 import { emaSeries, macdSeries, rsiSeries, smaSeries } from "./indicators";
 
 /**
@@ -421,4 +422,20 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
   };
   rule.name = typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 80) : describeRule(rule).slice(0, 80);
   return { rule, warnings };
+}
+
+/**
+ * Whether a rule fits the Binance block (phase 3). The block is where real
+ * money would trade, so a rule may not reach past it: futures only when the
+ * block allows futures, never more leverage than the block's maximum, and the
+ * Agentic Wallet only for binance-wallet rules. Null: it fits (or needs no Binance).
+ */
+export function venueProblem(rule: Pick<Rule, "venue" | "leverage">, binance: BinanceConfig | null): string | null {
+  if (rule.venue === "dolphin-wallet") return null;
+  if (!binance) return "it trades on Binance, but the agent has no Binance block - add one from the toolbox";
+  if (rule.venue === "binance-wallet") return binance.account === "wallet" ? null : "it trades from the Binance Wallet, but the Binance block is set to the Exchange";
+  if (binance.account !== "exchange") return "it trades on the Binance Exchange, but the Binance block is set to the Binance Wallet";
+  if (rule.venue === "binance-futures" && !binance.futures) return "it trades futures - switch on futures on the Binance block";
+  if (rule.leverage > binance.maxLeverage) return `it uses ${rule.leverage}x, above the Binance block's ${binance.maxLeverage}x - raise the block's limit or lower the rule's`;
+  return null;
 }

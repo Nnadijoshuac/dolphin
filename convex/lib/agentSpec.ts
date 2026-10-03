@@ -166,7 +166,7 @@ export const BUILDER_REPLY_SCHEMA = {
           } },
             stopLossPct: { type: ["number", "null"] },
             takeProfitPct: { type: ["number", "null"] },
-            leverage: { type: ["number", "null"], description: "binance-futures only; 1 to 3 unless the person asked for more (max 5)." },
+            leverage: { type: ["number", "null"], description: "binance-futures only; 1 unless the person asked for leverage (max 5)." },
             maxTradesPerDay: { type: ["number", "null"] },
             cooldownMinutes: { type: ["number", "null"] },
           },

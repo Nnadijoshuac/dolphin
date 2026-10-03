@@ -319,6 +319,7 @@ export const BLOCK_LOOK: Record<AgentBlockData["type"], { kind: BlockKind; label
   dataSource: { kind: "sense", label: "Data source", glyph: "external" },
   news: { kind: "sense", label: "News", glyph: "share" },
   quietHours: { kind: "risk", label: "Quiet hours", glyph: "clock" },
+  binance: { kind: "hands", label: "Binance", glyph: "wallet" },
 };
 
 function money(value: number): string {
@@ -380,6 +381,13 @@ function blockSummary(block: AgentBlockData): { title: string; detail: string } 
       const next = block.config.events.map((event) => event.at).filter((at) => Date.parse(at) > Date.now()).sort()[0];
       return { title: `${block.config.events.length} event${block.config.events.length === 1 ? "" : "s"} · ${block.config.marginHours}h aside`, detail: next ? `Next: ${new Date(next).toUTCString().slice(5, 22)} UTC` : "No upcoming event" };
     }
+    case "binance":
+      return block.config.account === "wallet"
+        ? { title: "Binance Wallet", detail: "Agentic Wallet · spot · runs on your server" }
+        : {
+            title: block.config.futures ? "Binance spot + futures" : "Binance spot",
+            detail: `${block.config.futures ? `Up to ${block.config.maxLeverage}x · ` : ""}keys stay on your server`,
+          };
     case "memory":
       return block.config.url
         ? { title: "Your memory server", detail: block.config.url.replace(/^https:\/\//, "") }
@@ -477,9 +485,11 @@ export function draftGraph(
   const quiet = find("quietHours");
   const swap = find("swap");
   const hire = find("hire");
+  // Where trading rules trade for real (fast rules, phase 3): its own row, beside the trade chain.
+  const binance = find("binance");
   const chain: AgentBlockData[] = [];
   for (const block of [risk, quiet, swap]) if (block) chain.push(block);
-  const rows: string[] = ["output", ...(chain.length ? ["chain"] : []), ...(hire ? ["hire"] : [])];
+  const rows: string[] = ["output", ...(chain.length ? ["chain"] : []), ...(hire ? ["hire"] : []), ...(binance ? ["binance"] : [])];
   const rowY = (name: string) => brainY + (rows.indexOf(name) - (rows.length - 1) / 2) * ACTION_ROW;
   place("output", actionX, rowY("output"), { kind: "output", title: "Answer", detail: "Replies with what its tools returned" });
   chain.forEach((block, index) => {
@@ -488,6 +498,7 @@ export function draftGraph(
     place(`block-${block.id}`, actionX + index * (NODE_WIDTH + CHAIN_GAP), rowY("chain"), data);
   });
   if (hire) place(`block-${hire.id}`, actionX, rowY("hire"), { ...blockData(hire), agent: agentLook(hire.config.agentKey) });
+  if (binance) place(`block-${binance.id}`, actionX, rowY("binance"), blockData(binance, `block:${binance.id}`));
 
   const edge = (source: string, target: string, targetHandle: string, member?: string, sourceHandle = "out"): FlowEdge => ({
     id: `${source}->${target}`,
@@ -522,6 +533,7 @@ export function draftGraph(
     }
   }
   if (hire && live(`block:${hire.id}`)) edges.push(edge("brain", `block-${hire.id}`, "in", `block:${hire.id}`));
+  if (binance && live(`block:${binance.id}`)) edges.push(edge("brain", `block-${binance.id}`, "in", `block:${binance.id}`));
 
   return { nodes, edges };
 }
@@ -711,6 +723,7 @@ const TOOLBOX: { title: string; items: ToolboxItem[] }[] = [
       { type: "risk", label: "Risk limits", about: "Dollars per trade and trades per day", glyph: "filter" },
       { type: "quietHours", label: "Quiet hours", about: "Stand aside around scheduled events", glyph: "clock", needs: "swap" },
       { type: "swap", label: "Market", about: "Buys and sells on PancakeSwap, after the Risk gate", glyph: "wallet", needs: "risk" },
+      { type: "binance", label: "Binance", about: "Your Binance Wallet or Exchange, for trading rules - runs on your server", glyph: "wallet" },
     ],
   },
 ];

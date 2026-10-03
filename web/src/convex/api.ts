@@ -967,7 +967,9 @@ export type AgentBlockData =
   | { id: string; type: "signal"; config: { condition: SignalCondition; level: number | null; timeframe: "1h" | "4h" | "1d" } }
   | { id: string; type: "dataSource"; config: SourceAuth & { label: string; url: string } }
   | { id: string; type: "news"; config: SourceAuth & { url: string; keywords: string[] } }
-  | { id: string; type: "quietHours"; config: { events: { label: string; at: string }[]; marginHours: number } };
+  | { id: string; type: "quietHours"; config: { events: { label: string; at: string }[]; marginHours: number } }
+  /** Where trading rules trade for real once the agent runs on the builder's own server. No key is ever here. */
+  | { id: string; type: "binance"; config: { account: "wallet" | "exchange"; futures: boolean; maxLeverage: number } };
 
 /** How a builder's data source takes its key (convex/lib/analyticalBlocks.ts). */
 export type SourceAuth = { authMode: "none" | "bearer" | "header" | "query"; authParam: string | null; keyName: string | null };

@@ -4599,5 +4599,5 @@ select {
 .docs-side .docs-sidenav a:hover { background: transparent; color: var(--ink); }
 .docs-side .docs-sidenav a[aria-current="page"] { background: transparent; color: var(--accent-ink); font-weight: 600; }
 
-/* The external-link arrow (components/external-arrow.tsx): raised to the words' top right. */
-.ext-arrow { display: inline-block; width: 0.66em; height: 0.66em; margin-left: 0.16em; vertical-align: 0.42em; flex-shrink: 0; opacity: 0.75; }
+/* The external-link arrow (components/external-arrow.tsx): 1em, centred on the line, as nextra.site draws it. */
+.ext-arrow { position: relative; top: -0.24em; display: inline-block; width: 1em; height: 1em; margin-left: 0.22em; vertical-align: text-top; flex-shrink: 0; }

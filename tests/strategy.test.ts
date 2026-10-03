@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, observe, resultPct, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, observe, resultPct, simulate, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const H4 = 4 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 9, 1);
@@ -198,4 +198,29 @@ test("Why? carries the values the engine saw, not only what the rule asks for", 
   const flat = candles([100, 101, 102]);
   const none = decide(ownerRule, flat, EMPTY_STATE, flat[2].openTime + H4);
   assert.equal(none.reason, "No trade: the last 3 closes went $100 → $101 → $102, not each lower.");
+});
+
+test("a backtest replays the live engine trade for trade, and charges the fee on every fill", () => {
+  const closes = [100, 101, 102, 101, 99, 97, 95, 93, 94, 95, 96, 95, 93, 91, 92, 93];
+  const live = replay(ownerRule, closes).events;
+  const sim = simulate(ownerRule, candles(closes), { feeBps: 10, dailyLossLimitUsd: null, warmup: 1 });
+  assert.deepEqual(sim.trades.map((t) => `${t.kind}:${t.side}@${t.price}`), live);
+  // Each round trip pays the fee twice on $50 x 2 leverage = $100 notional, 0.1% each side.
+  const exits = sim.trades.filter((t) => t.kind === "exit");
+  assert.ok(exits.length >= 1);
+  const first = exits[0];
+  const gross = (resultPct("short", 97, first.price, 2) * 50) / 100;
+  assert.equal(first.pnlUsd, Math.round((gross - 0.2) * 100) / 100);
+  assert.equal(sim.feesUsd, Math.round(sim.trades.length * 0.1 * 100) / 100);
+});
+
+test("a backtest honours the daily loss limit across the day", () => {
+  // Shorts stopped out over and over in one day: with a $1 limit, the second entry never happens.
+  const stopRule = { ...ownerRule, stopLossPct: 1, maxTradesPerDay: 50, cooldownMinutes: 0 };
+  const closes = [100, 99, 98, 97, 100, 99, 98, 97, 100, 99, 98, 97, 100];
+  // One hour apart, so every trade falls on the same UTC day (the limit resets at midnight).
+  const minuteCandles = closes.map((close, i) => ({ openTime: T0 + i * 3_600_000, open: close, high: close, low: close, close }));
+  const free = simulate(stopRule, minuteCandles, { feeBps: 0, dailyLossLimitUsd: null, warmup: 1 });
+  const limited = simulate(stopRule, minuteCandles, { feeBps: 0, dailyLossLimitUsd: 1, warmup: 1 });
+  assert.ok(free.trades.filter((t) => t.kind === "enter").length > limited.trades.filter((t) => t.kind === "enter").length);
 });

@@ -530,3 +530,103 @@ export function venueProblem(rule: Pick<Rule, "venue" | "leverage">, binance: Bi
   if (rule.leverage > binance.maxLeverage) return `it uses ${rule.leverage}x, above the Binance block's ${binance.maxLeverage}x - raise the block's limit or lower the rule's`;
   return null;
 }
+
+/* ── Backtest: the same decisions, replayed over history (owner, 2026-10-03) ── */
+
+export type SimTrade = {
+  kind: "enter" | "exit";
+  side: "long" | "short";
+  /** The judged candle's open time, ms. */
+  time: number;
+  price: number;
+  reason: string;
+  /** On an exit: the result, leverage included, after fees. */
+  pnlPct?: number;
+  pnlUsd?: number;
+};
+
+export type SimResult = {
+  trades: SimTrade[];
+  /** Realised plus open result after each candle, in dollars. */
+  equity: { time: number; usd: number }[];
+  totalUsd: number;
+  /** Total result against one trade's size. */
+  returnPct: number;
+  wins: number;
+  losses: number;
+  maxDrawdownUsd: number;
+  feesUsd: number;
+  /** The market's own move over the same candles (buy and hold), %. */
+  buyHoldPct: number;
+  open: { side: "long" | "short"; entryPrice: number; time: number } | null;
+};
+
+/**
+ * Replays a rule over closed candles exactly as the engine runs it: `decide` on each newly closed
+ * candle with the state `afterCandle` leaves, fills at that candle's close, the daily loss limit
+ * per UTC day. On top, what paper trading leaves out: the venue's fee on every fill
+ * (`feeBps` of the position's value). Funding and slippage are not modelled - said where shown.
+ */
+export function simulate(rule: Rule, candles: readonly Candle[], options: { feeBps: number; dailyLossLimitUsd: number | null; warmup?: number }): SimResult {
+  const timeframeMs = TIMEFRAME_MS[rule.timeframe];
+  const warmup = Math.min(options.warmup ?? 60, Math.max(0, candles.length - 1));
+  let state: RuleState = { ...EMPTY_STATE, lastCandle: candles[warmup - 1]?.openTime ?? null };
+  const trades: SimTrade[] = [];
+  const equity: { time: number; usd: number }[] = [];
+  let realised = 0;
+  let fees = 0;
+  let wins = 0;
+  let losses = 0;
+  const lossByDay = new Map<string, number>();
+  const notional = rule.sizeUsd * rule.leverage;
+  const fee = (notional * options.feeBps) / 10_000;
+  for (let index = warmup; index < candles.length; index++) {
+    const window = candles.slice(0, index + 1);
+    const candle = candles[index];
+    const now = candle.openTime + timeframeMs;
+    const day = new Date(now).toISOString().slice(0, 10);
+    const guard: LossGuard = { limitUsd: options.dailyLossLimitUsd, lossTodayUsd: lossByDay.get(day) ?? 0 };
+    const held = state.position;
+    const decision = decide(rule, window, state, now, guard);
+    if (decision.type === "enter") {
+      fees += fee;
+      realised -= fee;
+      trades.push({ kind: "enter", side: decision.side, time: candle.openTime, price: decision.price, reason: decision.reason });
+    } else if (decision.type === "exit" && held) {
+      const pct = resultPct(held.side, held.entryPrice, decision.price, rule.leverage);
+      const usd = Math.round((resultUsd(pct, rule.sizeUsd) - fee * 2) * 100) / 100 + 0;
+      fees += fee;
+      realised += resultUsd(pct, rule.sizeUsd) - fee;
+      if (usd >= 0) wins++;
+      else {
+        losses++;
+        lossByDay.set(day, Math.round(((lossByDay.get(day) ?? 0) - usd) * 100) / 100);
+      }
+      trades.push({ kind: "exit", side: held.side, time: candle.openTime, price: decision.price, reason: decision.reason, pnlPct: pct, pnlUsd: usd });
+    }
+    state = afterCandle(state, candle.openTime, decision, true, now);
+    const open = state.position ? resultUsd(resultPct(state.position.side, state.position.entryPrice, candle.close, rule.leverage), rule.sizeUsd) : 0;
+    equity.push({ time: candle.openTime, usd: Math.round((realised + open) * 100) / 100 });
+  }
+  let peak = 0;
+  let maxDrawdown = 0;
+  for (const point of equity) {
+    peak = Math.max(peak, point.usd);
+    maxDrawdown = Math.max(maxDrawdown, peak - point.usd);
+  }
+  const first = candles[warmup]?.close ?? candles[0]?.close ?? 0;
+  const last = candles[candles.length - 1]?.close ?? first;
+  const totalUsd = equity.length ? equity[equity.length - 1].usd : 0;
+  return {
+    trades,
+    equity,
+    totalUsd,
+    returnPct: rule.sizeUsd > 0 ? Math.round((totalUsd / rule.sizeUsd) * 10_000) / 100 + 0 : 0,
+    wins,
+    losses,
+    maxDrawdownUsd: Math.round(maxDrawdown * 100) / 100,
+    feesUsd: Math.round(fees * 100) / 100,
+    buyHoldPct: first > 0 ? Math.round(((last - first) / first) * 10_000) / 100 + 0 : 0,
+    open: state.position ? { side: state.position.side, entryPrice: state.position.entryPrice, time: state.position.openedAt } : null,
+  };
+}

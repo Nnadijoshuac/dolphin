@@ -1605,6 +1605,7 @@ export type TradingRuleView = {
   sizeUsd: number;
   leverage: number;
   stopLossPct: number | null;
+  takeProfitPct: number | null;
   warnings: string[];
   position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null;
   lastCheckedAt: number | null;
@@ -1614,6 +1615,23 @@ export type TradingRuleView = {
   /** How long after the candle closed that check ran, in ms. */
   lastLagMs: number | null;
   timeframe: string;
+};
+
+/** A candle for the rule chart: open time in ms. */
+export type ChartCandle = { t: number; o: number; h: number; l: number; c: number };
+
+/** convex/lib/strategy.ts SimResult. */
+export type RuleBacktest = {
+  trades: { kind: "enter" | "exit"; side: "long" | "short"; time: number; price: number; reason: string; pnlPct?: number; pnlUsd?: number }[];
+  equity: { time: number; usd: number }[];
+  totalUsd: number;
+  returnPct: number;
+  wins: number;
+  losses: number;
+  maxDrawdownUsd: number;
+  feesUsd: number;
+  buyHoldPct: number;
+  open: { side: "long" | "short"; entryPrice: number; time: number } | null;
 };
 
 export type TradingRuleTrade = {
@@ -1645,6 +1663,13 @@ export const strategyApi = anyApi as unknown as {
       { rules: TradingRuleView[]; trades: TradingRuleTrade[]; running: boolean; dailyLossLimitUsd: number | null; lossTodayUsd: number }
     >;
     setDailyLossLimit: Mutation<{ conversationKey: string; usd: number | null }, null>;
+    /** The rule replayed over Binance's history by the live engine's own decisions. */
+    backtestRule: Action<
+      { conversationKey: string; ruleId: string },
+      { candles: ChartCandle[]; result: RuleBacktest; feeBps: number; market: string; timeframe: string } | { error: string }
+    >;
+    /** A market's recent closed candles (the chart then streams the rest live). */
+    marketCandles: Action<{ venue: string; market: string; timeframe: string; limit?: number }, ChartCandle[] | { error: string }>;
     /** Checks the Binance block's saved key against Binance (its balance, and on live that it cannot withdraw). */
     checkBinance: Action<{ sessionToken: string; conversationKey: string }, BinanceConnection | { error: string }>;
     updateRule: Mutation<{ conversationKey: string; ruleId: string; sizeUsd?: number; leverage?: number; stopLossPct?: number | null }, { warnings: string[] }>;

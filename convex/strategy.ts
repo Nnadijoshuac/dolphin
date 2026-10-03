@@ -6,10 +6,10 @@ import { action, internalAction, internalMutation, internalQuery, mutation, quer
 import { apiBase } from "./builtAgents";
 import { ensureDraft } from "./knowledge";
 import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } from "./lib/agentBlocks";
-import { closedCandles, MarketDataError } from "./lib/binanceMarket";
+import { closedCandles, historyCandles, MarketDataError } from "./lib/binanceMarket";
 import { checkConnection, closePosition, openPosition, type ConnectionReport, type Held } from "./lib/binanceTrade";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, TIMEFRAME_MS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState } from "./lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, simulate, TIMEFRAMES, TIMEFRAME_MS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -191,6 +191,7 @@ export const forConversation = query({
         sizeUsd: rule.sizeUsd,
         leverage: rule.leverage,
         stopLossPct: rule.stopLossPct,
+        takeProfitPct: rule.takeProfitPct,
         warnings: "warnings" in made ? made.warnings : [],
         position: ((run?.state as RuleState | undefined)?.position ?? null) as RuleState["position"],
         lastCheckedAt: run?.lastCheckedAt ?? null,
@@ -486,6 +487,61 @@ export const tick = internalAction({
       }
     }
     return { rules: rulesChecked, trades };
+  },
+});
+
+/* ── The rule view: its market's candles, and its backtest (owner, 2026-10-03) ── */
+
+/** One rule of a build conversation, with the draft's daily loss limit. */
+export const ruleOf = internalQuery({
+  args: { conversationKey: v.string(), ruleId: v.string() },
+  handler: async (ctx, { conversationKey, ruleId }) => {
+    const draft = await draftOfKey(ctx, conversationKey);
+    const rule = rulesOf(draft).find((candidate) => candidate.id === ruleId) ?? null;
+    return rule ? { rule, dailyLossLimitUsd: draft?.dailyLossLimitUsd ?? null } : null;
+  },
+});
+
+/** Binance's taker fee for each venue; PancakeSwap's pool fee for the Dolphin Wallet. In basis points. */
+const VENUE_FEE_BPS: Record<Rule["venue"], number> = { "binance-spot": 10, "binance-futures": 5, "binance-wallet": 10, "dolphin-wallet": 25 };
+const BACKTEST_CANDLES = 1_500;
+
+type ChartCandle = { t: number; o: number; h: number; l: number; c: number };
+const toChart = (candle: Candle): ChartCandle => ({ t: candle.openTime, o: candle.open, h: candle.high, l: candle.low, c: candle.close });
+
+/**
+ * Replays a rule over Binance's real history with the live engine's own decisions
+ * (lib/strategy.ts simulate) - so a backtest cannot disagree with how the rule trades.
+ */
+export const backtestRule = action({
+  args: { conversationKey: v.string(), ruleId: v.string() },
+  handler: async (ctx, { conversationKey, ruleId }): Promise<{ candles: ChartCandle[]; result: SimResult; feeBps: number; market: string; timeframe: string } | { error: string }> => {
+    const found = await ctx.runQuery(internal.strategy.ruleOf, { conversationKey, ruleId });
+    if (!found) return { error: "That rule is gone." };
+    const { rule, dailyLossLimitUsd } = found as { rule: Rule; dailyLossLimitUsd: number | null };
+    let candles: Candle[];
+    try {
+      candles = await historyCandles(rule.venue, rule.market, rule.timeframe, BACKTEST_CANDLES);
+    } catch (cause) {
+      return { error: cause instanceof MarketDataError ? cause.message : "Binance's history did not answer. Try again." };
+    }
+    if (candles.length < 80) return { error: "Not enough history yet for this market and timeframe." };
+    const feeBps = VENUE_FEE_BPS[rule.venue];
+    return { candles: candles.map(toChart), result: simulate(rule, candles, { feeBps, dailyLossLimitUsd }), feeBps, market: rule.market, timeframe: rule.timeframe };
+  },
+});
+
+/** A rule market's recent closed candles, for its live chart (the browser then streams the rest). */
+export const marketCandles = action({
+  args: { venue: v.string(), market: v.string(), timeframe: v.string(), limit: v.optional(v.number()) },
+  handler: async (_ctx, args): Promise<ChartCandle[] | { error: string }> => {
+    const timeframe = (TIMEFRAMES as readonly string[]).includes(args.timeframe) ? (args.timeframe as Rule["timeframe"]) : "1h";
+    const venue = args.venue === "binance-futures" ? "binance-futures" : "binance-spot";
+    try {
+      return (await closedCandles(venue, args.market, timeframe, Math.min(Math.max(args.limit ?? 200, 20), 1000))).map(toChart);
+    } catch (cause) {
+      return { error: cause instanceof MarketDataError ? cause.message : "Binance did not answer." };
+    }
   },
 });
 

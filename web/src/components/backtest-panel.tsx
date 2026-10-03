@@ -1,17 +1,28 @@
 "use client";
 
+import { useAction } from "convex/react";
 import { useState } from "react";
 
-import { findPool, loadCandles, type Frame } from "@/components/trading-chart";
-import { runBacktest, type BacktestResult, type Rule } from "@/lib/backtest";
+import { binancePair, findPool, loadCandles, type Frame } from "@/components/trading-chart";
+import { strategyApi } from "@/convex/api";
+import { runBacktest, type BacktestResult, type Candle, type Rule } from "@/lib/backtest";
 
 /**
  * THE BACKTEST VIEW, in the expanded chart (mentor review, 2026-09-29).
  * Tests a simple RULE on this token's real history - never the Brain - with
  * fees, slippage and gas on every fill, signals on closed candles filled at
  * the next open, and buy-and-hold beside it. Runs in the browser: no database
- * reads, candles straight from GeckoTerminal.
+ * reads.
+ *
+ * PRICED BY BINANCE (owner, 2026-10-03: "a more recent and more reliable pricing"). A token
+ * Binance lists is tested on Binance's own closed candles - read through Dolphin
+ * (strategy.marketCandles, the trading rules' source), so it works on networks that block
+ * Binance - up to 1,000 of them, at Binance's 0.1% fee and no gas. Anything else keeps its
+ * BNB Chain pool (GeckoTerminal), the pool's 0.25% fee and gas.
  */
+
+const FRAME_SECONDS: Record<"1h" | "4h" | "1d", number> = { "1h": 3_600, "4h": 14_400, "1d": 86_400 };
+const FRAME_WORDS: Record<"1h" | "4h" | "1d", string> = { "1h": "hourly", "4h": "4-hour", "1d": "daily" };
 
 type RuleKind = Rule["kind"];
 const RULES: { kind: RuleKind; label: string; about: string }[] = [
@@ -43,7 +54,9 @@ function Curve({ result }: { result: BacktestResult }) {
 
 export function BacktestPanel({ tokenAddress, poolAddress, symbol }: { tokenAddress: string; poolAddress: string | null; symbol: string }) {
   const [kind, setKind] = useState<RuleKind>("trend");
-  const [frame, setFrame] = useState<Frame>("1d");
+  const [frame, setFrame] = useState<"1h" | "4h" | "1d">("1d");
+  const marketCandles = useAction(strategyApi.strategy.marketCandles);
+  const pair = binancePair(symbol);
   const [fast, setFast] = useState("20");
   const [slow, setSlow] = useState("50");
   const [buyBelow, setBuyBelow] = useState("30");
@@ -52,7 +65,9 @@ export function BacktestPanel({ tokenAddress, poolAddress, symbol }: { tokenAddr
   const [dcaUsd, setDcaUsd] = useState("50");
   const [slippage, setSlippage] = useState("0.5");
   const [gas, setGas] = useState("0.05");
-  const [state, setState] = useState<{ status: "idle" } | { status: "running" } | { status: "error"; message: string } | { status: "done"; result: BacktestResult; candles: number; from: number; to: number }>({ status: "idle" });
+  const [state, setState] = useState<
+    { status: "idle" } | { status: "running" } | { status: "error"; message: string } | { status: "done"; result: BacktestResult; candles: number; from: number; to: number; venue: "binance" | "pool" }
+  >({ status: "idle" });
 
   const rule = (): Rule =>
     kind === "trend"
@@ -61,20 +76,37 @@ export function BacktestPanel({ tokenAddress, poolAddress, symbol }: { tokenAddr
         ? { kind, period: 14, buyBelow: Number(buyBelow) || 30, sellAbove: Number(sellAbove) || 70 }
         : { kind, everyCandles: Math.max(1, Number(every) || 7), amountUsd: Math.max(1, Number(dcaUsd) || 50) };
 
+  /** Binance's closed candles for the pair, or null when Binance has no such market. */
+  const binanceCandles = async (): Promise<Candle[] | null> => {
+    if (!pair) return null;
+    const answer = await marketCandles({ venue: "binance-spot", market: pair, timeframe: frame, limit: 1000 }).catch(() => null);
+    if (!Array.isArray(answer) || answer.length < 30) return null;
+    return answer.map((candle) => ({ t: candle.t / 1000, o: candle.o, h: candle.h, l: candle.l, c: candle.c, v: 0 }));
+  };
+
   const run = async () => {
     setState({ status: "running" });
     try {
-      const pool = poolAddress ?? (await findPool(tokenAddress));
-      if (!pool) throw new Error(`No BNB Chain pool with trading for ${symbol}.`);
-      const period = frame === "1d" ? 86_400 : 14_400;
-      // Closed candles only: the one still forming is left out.
-      const candles = (await loadCandles(pool, tokenAddress, frame, 1000)).filter((c) => c.t + period <= Date.now() / 1000);
-      const result = runBacktest(candles, rule(), { feeBps: 25, slippageBps: Math.round((Number(slippage) || 0) * 100), gasUsd: Number(gas) || 0 });
-      setState({ status: "done", result, candles: candles.length, from: candles[0].t, to: candles[candles.length - 1].t });
+      const slippageBps = Math.round((Number(slippage) || 0) * 100);
+      const fromBinance = await binanceCandles();
+      let candles: Candle[];
+      if (fromBinance) candles = fromBinance;
+      else {
+        const pool = poolAddress ?? (await findPool(tokenAddress));
+        if (!pool) throw new Error(`No market with trading for ${symbol}: Binance does not list it and it has no BNB Chain pool.`);
+        // Closed candles only: the one still forming is left out.
+        candles = (await loadCandles(pool, tokenAddress, frame as Frame, 1000)).filter((c) => c.t + FRAME_SECONDS[frame] <= Date.now() / 1000);
+      }
+      if (candles.length < 30) throw new Error(`Only ${candles.length} candles of ${symbol} history - too few to test on.`);
+      const result = runBacktest(candles, rule(), fromBinance ? { feeBps: 10, slippageBps, gasUsd: 0 } : { feeBps: 25, slippageBps, gasUsd: Number(gas) || 0 });
+      setState({ status: "done", result, candles: candles.length, from: candles[0].t, to: candles[candles.length - 1].t, venue: fromBinance ? "binance" : "pool" });
     } catch (cause) {
       setState({ status: "error", message: cause instanceof Error ? cause.message : "The backtest could not run." });
     }
   };
+
+  // Which market the costs are for: the one the last run used, else Binance when it could list the token.
+  const onBinance = state.status === "done" ? state.venue === "binance" : pair !== null;
 
   const input = (label: string, value: string, set: (v: string) => void, width = "w-16") => (
     <label className="flex items-center gap-1.5 text-[0.74rem] text-ink-soft">
@@ -101,7 +133,7 @@ export function BacktestPanel({ tokenAddress, poolAddress, symbol }: { tokenAddr
           ))}
         </div>
         <div className="flex rounded-full bg-paper-muted p-[2px]" role="radiogroup" aria-label="Candles">
-          {(["1d", "4h"] as const).map((option) => (
+          {(["1d", "4h", "1h"] as const).map((option) => (
             <button
               aria-checked={frame === option}
               className={`rounded-full px-2.5 py-1 !text-[11px] font-semibold ${frame === option ? "bg-paper-strong text-ink shadow-sm" : "text-muted hover:text-ink"}`}
@@ -110,7 +142,7 @@ export function BacktestPanel({ tokenAddress, poolAddress, symbol }: { tokenAddr
               role="radio"
               type="button"
             >
-              {option === "1d" ? "Daily" : "4-hour"}
+              {option === "1d" ? "Daily" : option === "4h" ? "4-hour" : "Hourly"}
             </button>
           ))}
         </div>
@@ -133,9 +165,9 @@ export function BacktestPanel({ tokenAddress, poolAddress, symbol }: { tokenAddr
             {input("Amount $", dcaUsd, setDcaUsd)}
           </>
         )}
-        <span className="text-[0.74rem] text-ink-soft">Pool fee 0.25%</span>
+        <span className="text-[0.74rem] text-ink-soft">{onBinance ? "Binance fee 0.1%" : "Pool fee 0.25%"}</span>
         {input("Slippage %", slippage, setSlippage, "w-12")}
-        {input("Gas $", gas, setGas, "w-14")}
+        {onBinance ? null : input("Gas $", gas, setGas, "w-14")}
         <button
           className="ml-auto h-8 rounded-lg bg-ink px-4 !text-[12px] font-semibold disabled:opacity-40"
           disabled={state.status === "running"}
@@ -165,10 +197,11 @@ export function BacktestPanel({ tokenAddress, poolAddress, symbol }: { tokenAddr
           </div>
           <Curve result={state.result} />
           <p className="text-[0.7rem] leading-snug text-muted">
-            $1,000 tested on {state.candles} closed {frame === "1d" ? "daily" : "4-hour"} {symbol} candles,{" "}
+            $1,000 tested on {state.candles.toLocaleString("en")} closed {FRAME_WORDS[frame]} {state.venue === "binance" ? pair : symbol} candles,{" "}
             {new Date(state.from * 1000).toLocaleDateString()} – {new Date(state.to * 1000).toLocaleDateString()}. Solid line: the rule. Dashed:
-            buy and hold. Signals are read on each candle&apos;s close and filled at the next open, paying the pool fee, slippage and
-            gas every time. This tests the rule, not your agent&apos;s Brain, and past results do not predict future ones.
+            buy and hold. Signals are read on each candle&apos;s close and filled at the next open, paying{" "}
+            {state.venue === "binance" ? "Binance's 0.1% fee and slippage" : "the pool fee, slippage and gas"} every time. This tests the rule, not your
+            agent&apos;s Brain, and past results do not predict future ones.
           </p>
         </>
       ) : null}

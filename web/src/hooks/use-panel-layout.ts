@@ -88,6 +88,31 @@ export function columnsFor(layout: PanelLayout, width: number, sizes: Sizes): [n
   return [0, builder, width - builder - draft, draft];
 }
 
+/**
+ * Maximized or popped-out panels (owner, 2026-10-03). A maximized panel takes the whole
+ * width; a panel away in its own tab gives its width to its neighbour. Still four tracks,
+ * so the change animates like any other.
+ */
+export type PanelFocus = { maximized: "draft" | "canvas" | null; away: { draft: boolean; canvas: boolean } };
+export const NO_FOCUS: PanelFocus = { maximized: null, away: { draft: false, canvas: false } };
+
+export function focusColumns(layout: PanelLayout, columns: [number, number, number, number], focus: PanelFocus): [number, number, number, number] {
+  const width = columns.reduce((a, b) => a + b, 0);
+  if (focus.maximized === "draft" && layout !== "chat" && !focus.away.draft) return [0, 0, 0, width];
+  if (focus.maximized === "canvas" && layout === "canvas" && !focus.away.canvas) return [0, 0, width, 0];
+  const next: [number, number, number, number] = [...columns];
+  if (layout === "canvas" && focus.away.canvas) {
+    next[1] += next[2];
+    next[2] = 0;
+  }
+  if (layout !== "chat" && focus.away.draft) {
+    // To the canvas while it is here, otherwise to the chat.
+    next[layout === "canvas" && !focus.away.canvas ? 2 : 1] += next[3];
+    next[3] = 0;
+  }
+  return next;
+}
+
 /** The borders a person can drag in each layout, and which panel each one sizes. */
 export function handlesFor(layout: PanelLayout): { key: PanelKey; afterColumn: number; invert: boolean }[] {
   if (layout === "chat") return [{ key: "history", afterColumn: 0, invert: false }];
@@ -115,7 +140,7 @@ function subscribeReducedMotion(onChange: () => void) {
   return () => media.removeEventListener("change", onChange);
 }
 
-export function usePanelLayout(layout: PanelLayout) {
+export function usePanelLayout(layout: PanelLayout, focus: PanelFocus = NO_FOCUS) {
   const isDesktop = useSyncExternalStore(
     subscribeDesktop,
     () => window.matchMedia(DESKTOP_QUERY).matches,
@@ -150,7 +175,7 @@ export function usePanelLayout(layout: PanelLayout) {
     return () => observer.disconnect();
   }, [element]);
 
-  const columns = isDesktop && width ? columnsFor(layout, width, sizes) : null;
+  const columns = isDesktop && width ? focusColumns(layout, columnsFor(layout, width, sizes), focus) : null;
 
   const startDrag = useCallback(
     (key: PanelKey, invert: boolean, event: React.PointerEvent<HTMLElement>) => {
@@ -213,7 +238,16 @@ export function usePanelLayout(layout: PanelLayout) {
             dragging || reducedMotion ? "none" : "grid-template-columns 460ms cubic-bezier(0.22, 1, 0.36, 1)",
         }
       : undefined,
-    handles: columns ? handlesFor(layout) : [],
+    // A border is draggable only between two panels that are both showing.
+    handles: columns
+      ? handlesFor(layout).filter((handle) =>
+          handle.key === "history"
+            ? columns[0] > 0 && columns[1] > 0
+            : handle.key === "builder"
+              ? columns[1] > 0 && columns[2] > 0
+              : columns[3] > 0 && columns[0] + columns[1] + columns[2] > 0,
+        )
+      : [],
     dragging,
     startDrag,
     nudge,

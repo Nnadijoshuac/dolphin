@@ -4141,3 +4141,81 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .built-summary { animation: none; }
 }
+
+/* Maximize and pop out (owner, 2026-10-03): quiet icon buttons, desktop only. */
+.panel-icon-button {
+  display: grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.5rem;
+  color: var(--muted);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.panel-icon-button:hover {
+  background: var(--paper-muted);
+  color: var(--ink);
+}
+.panel-controls {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 5;
+  display: flex;
+  gap: 0.15rem;
+  padding: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  backdrop-filter: blur(10px);
+}
+.panel-controls__button {
+  display: grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.5rem;
+  color: var(--muted);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.panel-controls__button:hover {
+  background: var(--paper-muted);
+  color: var(--ink);
+}
+.popout-away {
+  position: absolute;
+  top: 3.1rem;
+  left: 50%;
+  z-index: 40;
+  transform: translateX(-50%);
+  gap: 0.5rem;
+  animation: popout-away-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.popout-away__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0.35rem 0.3rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-soft);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.popout-away__back {
+  border-radius: 999px;
+  background: var(--ink);
+  padding: 0.22rem 0.7rem;
+  font-size: 0.74rem !important;
+  font-weight: 600;
+  color: var(--canvas) !important;
+}
+@keyframes popout-away-in {
+  from { opacity: 0; transform: translate(-50%, -4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popout-away { animation: none; }
+}

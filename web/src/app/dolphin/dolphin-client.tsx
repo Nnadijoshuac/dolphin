@@ -30,6 +30,7 @@ import {
     type DolphinTurn,
 } from "@/hooks/use-dolphin-conversation";
 import { usePanelLayout, type PanelKey } from "@/hooks/use-panel-layout";
+import { usePopoutBeat, usePopouts, type PopAction, type PopKind } from "@/hooks/use-popout";
 import { useAppStore, type ChatHistoryEntry } from "@/store/use-app-store";
 import { NEW_CONVERSATION, useDolphinPlaceStore } from "@/store/use-dolphin-place-store";
 import { toast } from "@/store/use-toast-store";
@@ -374,6 +375,84 @@ function Turn({
   );
 }
 
+function MaximizeGlyph({ on }: { on: boolean }) {
+  return (
+    <svg aria-hidden fill="none" height={14} viewBox="0 0 24 24" width={14}>
+      <path
+        d={on ? "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" : "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"}
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function PopOutGlyph({ back = false }: { back?: boolean }) {
+  return (
+    <svg aria-hidden fill="none" height={14} viewBox="0 0 24 24" width={14}>
+      <path
+        d={back ? "M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5M10 14l10-10M10 8v6h6" : "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"}
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+/** Maximize and pop out, floating over the canvas's top-right corner (or "put back" in its own tab). */
+function PanelControls({
+  what,
+  maximized = false,
+  onMaximize,
+  onPopOut,
+  onPopIn,
+}: {
+  what: string;
+  maximized?: boolean;
+  onMaximize?: () => void;
+  onPopOut?: () => void;
+  onPopIn?: () => void;
+}) {
+  return (
+    <div className="panel-controls">
+      {onMaximize ? (
+        <button aria-label={maximized ? `Restore the ${what}` : `Maximize the ${what}`} className="panel-controls__button" onClick={onMaximize} title={maximized ? "Restore (Esc)" : "Maximize"} type="button">
+          <MaximizeGlyph on={maximized} />
+        </button>
+      ) : null}
+      {onPopOut ? (
+        <button aria-label={`Open the ${what} in a new tab`} className="panel-controls__button" onClick={onPopOut} title="Open in a new tab" type="button">
+          <PopOutGlyph />
+        </button>
+      ) : null}
+      {onPopIn ? (
+        <button aria-label={`Put the ${what} back`} className="panel-controls__button" onClick={onPopIn} title="Put it back" type="button">
+          <PopOutGlyph back />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** A popped tab whose conversation has nothing for it to show yet. */
+function PopoutWaiting({ what, onPutBack }: { what: string; onPutBack: () => void }) {
+  return (
+    <div className="grid h-full place-items-center px-6">
+      <div className="text-center">
+        <p className="text-[0.95rem] font-semibold text-ink">Nothing to show in the {what} yet</p>
+        <p className="mt-1 text-[0.82rem] text-muted">It follows the conversation in your main Dolphin tab.</p>
+        <button className="mt-3 rounded-full border border-line px-3.5 py-1.5 !text-[12.5px] font-semibold text-ink" onClick={onPutBack} type="button">
+          Put it back
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ChatHistory({
   activeKey,
   entries,
@@ -483,12 +562,15 @@ export function DolphinClient({
   seedAgentName,
   autoAsk,
   initialConversationKey = null,
+  solo = null,
 }: {
   seedAgentKey: string | null;
   seedAgentName?: string | null;
   autoAsk?: boolean;
   /** From `?c=`: a conversation to open straight away. */
   initialConversationKey?: string | null;
+  /** `?solo=`: this tab holds one popped-out panel (hooks/use-popout.ts). */
+  solo?: PopKind | null;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [draftOpen, setDraftOpen] = useState(false);
@@ -758,7 +840,6 @@ export function DolphinClient({
             : null;
     return { phase, tools, triggeredBy } as CanvasRun;
   }, [trying, turns]);
-  const { measure: measurePanels, ...panels } = usePanelLayout(showCanvas ? "canvas" : withDraft ? "draft" : "chat");
   const askedPrompts = useMemo(
     () => turns.filter((turn) => turn.role === "user").map((turn) => turn.content),
     [turns],
@@ -864,6 +945,39 @@ export function DolphinClient({
       tokenId: entry.tokenId,
     })),
   };
+
+  /*
+   * MAXIMIZE AND POP OUT (owner, 2026-10-03), desktop only. A popped panel lives in its
+   * own tab and asks this window to try, publish or open runs, because those change what
+   * this window shows. Escape leaves a maximized panel.
+   */
+  const [maximized, setMaximized] = useState<"draft" | "canvas" | null>(null);
+  const runAction = (action: PopAction) => {
+    const handlers = { try: draftPanelActions.onTry, back: draftPanelActions.onBack, publish: draftPanelActions.onPublish, watchRuns: draftPanelActions.onWatchRuns };
+    handlers[action]?.();
+  };
+  const popouts = usePopouts(solo === null, conversationKey, runAction);
+  const beat = usePopoutBeat(solo, conversationKey, openConversation);
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setMaximized(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [maximized]);
+  useEffect(() => {
+    if (solo) document.title = solo === "draft" ? `${draftName} · Agent panel` : `${draftName} · Canvas`;
+  }, [solo, draftName]);
+  const popOut = (kind: PopKind) => {
+    setMaximized(null);
+    if (!popouts.popOut(kind)) toast.notice("Your browser blocked the new tab. Allow pop-ups for Dolphin and try again.");
+  };
+  const layoutName = showCanvas ? "canvas" : withDraft ? "draft" : "chat";
+  const { measure: measurePanels, ...panels } = usePanelLayout(layoutName, {
+    maximized,
+    away: { draft: popouts.away.draft && withDraft, canvas: popouts.away.canvas && showCanvas },
+  });
+  const draftAway = popouts.away.draft && withDraft;
+  const canvasAway = popouts.away.canvas && showCanvas;
 
   const suggestions = trying
     ? []
@@ -992,6 +1106,41 @@ export function DolphinClient({
       {sendError ? <p className="mt-2 px-3 text-[0.8rem] text-ink">{sendError}</p> : null}
     </form>
   );
+
+  if (solo) {
+    const soloActions = {
+      ...draftPanelActions,
+      onTry: draftPanelActions.onTry ? () => beat.ask("try") : undefined,
+      onBack: draftPanelActions.onBack ? () => beat.ask("back") : undefined,
+      onPublish: draftPanelActions.onPublish ? () => beat.ask("publish") : undefined,
+      onWatchRuns: draftPanelActions.onWatchRuns ? () => beat.ask("watchRuns") : undefined,
+    };
+    // Closing the tab says goodbye (pagehide); a tab the browser will not close goes home instead.
+    const putBack = () => {
+      window.close();
+      window.setTimeout(() => window.location.assign(conversationKey ? `/dolphin?c=${conversationKey}` : "/dolphin"), 300);
+    };
+    return (
+      <div className={`dolphin-chat-page relative grid grid-cols-[minmax(0,1fr)] overflow-hidden ${styles.shell}`}>
+        {solo === "draft" ? (
+          <div className="mx-auto h-full min-h-0 w-full max-w-[46rem]">
+            {withDraft ? (
+              <AgentDraftPanel draft={agentDraft} onPopIn={putBack} {...soloActions} />
+            ) : (
+              <PopoutWaiting onPutBack={putBack} what="agent panel" />
+            )}
+          </div>
+        ) : showCanvas ? (
+          <div className="relative h-full min-h-0">
+            <AgentCanvas draft={agentDraft} editKey={building ? buildConversationKey : null} layoutKey={buildConversationKey} run={canvasRun} />
+            <PanelControls onPopIn={putBack} what="canvas" />
+          </div>
+        ) : (
+          <PopoutWaiting onPutBack={putBack} what="canvas" />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1273,13 +1422,21 @@ export function DolphinClient({
       </section>
 
       <div className="relative z-0 hidden min-h-0 min-w-0 overflow-hidden lg:block">
-        {showCanvas ? (
-          <AgentCanvas
-            draft={agentDraft}
-            editKey={building ? buildConversationKey : null}
-            layoutKey={buildConversationKey}
-            run={canvasRun}
-          />
+        {showCanvas && !canvasAway ? (
+          <>
+            <AgentCanvas
+              draft={agentDraft}
+              editKey={building ? buildConversationKey : null}
+              layoutKey={buildConversationKey}
+              run={canvasRun}
+            />
+            <PanelControls
+              maximized={maximized === "canvas"}
+              onMaximize={() => setMaximized((current) => (current === "canvas" ? null : "canvas"))}
+              onPopOut={() => popOut("canvas")}
+              what="canvas"
+            />
+          </>
         ) : null}
       </div>
 
@@ -1288,13 +1445,37 @@ export function DolphinClient({
         * pinned to the right edge - so it slides in from the right rather than
         * being squeezed open (owner, 2026-09-28).
         */}
-      <div className="relative z-20 hidden min-h-0 overflow-hidden lg:flex lg:justify-end">
-        {withDraft ? (
-          <div className="h-full shrink-0" style={{ width: panels.columns?.[3] || panels.sizes.draft }}>
-            <AgentDraftPanel draft={agentDraft} {...draftPanelActions} />
+      <div className={`relative z-20 hidden min-h-0 overflow-hidden lg:flex ${maximized === "draft" ? "lg:justify-center lg:bg-paper" : "lg:justify-end"}`}>
+        {withDraft && !draftAway ? (
+          <div
+            className="h-full shrink-0"
+            style={{ width: maximized === "draft" ? Math.min(panels.columns?.[3] || 736, 736) : panels.columns?.[3] || panels.sizes.draft }}
+          >
+            <AgentDraftPanel
+              draft={agentDraft}
+              maximized={maximized === "draft"}
+              onMaximize={() => setMaximized((current) => (current === "draft" ? null : "draft"))}
+              onPopOut={() => popOut("draft")}
+              {...draftPanelActions}
+            />
           </div>
         ) : null}
       </div>
+
+      {draftAway || canvasAway ? (
+        <div className="popout-away hidden lg:flex" role="status">
+          {(["draft", "canvas"] as const)
+            .filter((kind) => (kind === "draft" ? draftAway : canvasAway))
+            .map((kind) => (
+              <span className="popout-away__item" key={kind}>
+                {kind === "draft" ? "Agent panel" : "Canvas"} is open in another tab
+                <button className="popout-away__back" onClick={() => popouts.bringBack(kind)} type="button">
+                  Bring it back
+                </button>
+              </span>
+            ))}
+        </div>
+      ) : null}
 
       <SlideOver
         className="lg:hidden"

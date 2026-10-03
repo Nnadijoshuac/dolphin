@@ -116,6 +116,10 @@ export function AgentDraftPanel({
   autopilotBusy = false,
   tradeKeyConversation = null,
   knowledgeConversation = null,
+  maximized = false,
+  onMaximize,
+  onPopOut,
+  onPopIn,
 }: {
   draft: AgentDraft;
   onClose?: () => void;
@@ -139,6 +143,11 @@ export function AgentDraftPanel({
   tradeKeyConversation?: string | null;
   /** The build conversation, when documents can be added (Build mode, not a try-run). */
   knowledgeConversation?: string | null;
+  /** Desktop only: fill the page, open in its own tab, or (in that tab) go back. */
+  maximized?: boolean;
+  onMaximize?: () => void;
+  onPopOut?: () => void;
+  onPopIn?: () => void;
 }) {
   // Draft, or the builder's own keys (owner, 2026-09-28: "a new tab ... to manage their envs").
   const [tab, setTab] = useState<"draft" | "keys">("draft");
@@ -166,6 +175,48 @@ export function AgentDraftPanel({
           </div>
           <p className="text-[11px] text-muted">{live.length > 0 ? `On ${live[0].networkLabel} · #${live[0].tokenId}` : "Private · only you can run it"}</p>
         </div>
+        {onMaximize || onPopOut || onPopIn ? (
+          <div className="hidden shrink-0 items-center gap-0.5 lg:flex">
+            {onMaximize ? (
+              <button
+                aria-label={maximized ? "Restore the agent panel" : "Maximize the agent panel"}
+                className="panel-icon-button"
+                onClick={onMaximize}
+                title={maximized ? "Restore (Esc)" : "Maximize"}
+                type="button"
+              >
+                <svg aria-hidden fill="none" height={14} viewBox="0 0 24 24" width={14}>
+                  <path
+                    d={maximized ? "M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" : "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"}
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                  />
+                </svg>
+              </button>
+            ) : null}
+            {onPopOut || onPopIn ? (
+              <button
+                aria-label={onPopIn ? "Put the agent panel back" : "Open the agent panel in a new tab"}
+                className="panel-icon-button"
+                onClick={onPopIn ?? onPopOut}
+                title={onPopIn ? "Put it back" : "Open in a new tab"}
+                type="button"
+              >
+                <svg aria-hidden fill="none" height={14} viewBox="0 0 24 24" width={14}>
+                  <path
+                    d={onPopIn ? "M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5M10 14l10-10M10 8v6h6" : "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"}
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                  />
+                </svg>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {onClose ? (
           <button
             aria-label="Close agent draft"

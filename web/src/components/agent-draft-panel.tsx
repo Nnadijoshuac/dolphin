@@ -100,7 +100,18 @@ function Field({
   );
 }
 
-const STEPS = ["Draft it", "Try it privately", "Put it on-chain"] as const;
+/**
+ * THE LIFECYCLE (owner, 2026-10-03: Draft → Test → Paper → Live). Each stage is a fact
+ * about the agent, never a claim: Draft until nothing is missing; Test once it can be tried
+ * privately; Paper while Autopilot runs it on paper - only for an agent that trades, so
+ * the stage is absent otherwise; Live once it is registered on-chain.
+ */
+function lifecycle(draft: AgentDraft, ready: boolean, onChain: boolean): { steps: string[]; current: number } {
+  const trades = (draft.ruleCount ?? 0) > 0 || Boolean(draft.blocks?.some((block) => block.type === "swap"));
+  const steps = trades ? ["Draft", "Test", "Paper", "Live"] : ["Draft", "Test", "Live"];
+  const current = onChain ? steps.length - 1 : trades && draft.autopilot?.on ? 2 : ready ? 1 : 0;
+  return { steps, current };
+}
 
 export function AgentDraftPanel({
   draft,
@@ -156,7 +167,7 @@ export function AgentDraftPanel({
   // Step 1 is where every draft starts; the later steps light up as the
   // builder moves the draft through them.
   const live = published.filter((entry) => entry.status === "registered");
-  const currentStep = live.length > 0 ? 3 : ready ? 1 : 0;
+  const stages = lifecycle(draft, ready, live.length > 0);
 
   return (
     <aside
@@ -255,21 +266,18 @@ export function AgentDraftPanel({
       <div className="relative mt-0 min-h-0 flex-1 overflow-hidden">
         <div className="panel-slider flex h-full" data-tab={tab}>
       <div className="flex h-full w-1/2 min-w-0 flex-col" inert={tab !== "draft"}>
-      <ol className="mt-3 flex items-center gap-1.5 px-2" aria-label="Build steps">
-        {STEPS.map((step, index) => {
-          const done = index < currentStep;
-          const active = index === currentStep;
+      <ol className="mt-3 flex items-center gap-1.5 px-2" aria-label="Lifecycle">
+        {stages.steps.map((step, index) => {
+          const done = index < stages.current;
+          const active = index === stages.current;
           return (
             <li
               aria-current={active ? "step" : undefined}
               className="flex min-w-0 flex-1 flex-col gap-1.5"
               key={step}
             >
-              <span
-                className={`h-1 rounded-full ${
-                  done ? "bg-success" : active ? "bg-ink" : "bg-line"
-                }`}
-              />
+              {/* Gold marks where the agent is now: the brand's colour, for the active state only. */}
+              <span className={`lifecycle-bar h-1 rounded-full ${done ? "bg-ink/70" : active ? "lifecycle-bar--active" : "bg-line"}`} />
               <span
                 className={`truncate text-[0.64rem] font-medium ${
                   active ? "text-ink" : "text-muted"
@@ -506,8 +514,8 @@ function AutopilotCard({
               Let {draft.name?.trim() || "this agent"} act on its own?
             </h3>
             <ul className="mt-3 space-y-2">
-              {consequences.map((line) => (
-                <li className="flex gap-2 text-[0.82rem] leading-relaxed text-ink-soft" key={line}>
+              {consequences.map((line, index) => (
+                <li className="flex gap-2 text-[0.82rem] leading-relaxed text-ink-soft" key={`${index}:${line}`}>
                   <span aria-hidden className="mt-[0.55em] size-1.5 shrink-0 rounded-full bg-ink/40" />
                   {line}
                 </li>

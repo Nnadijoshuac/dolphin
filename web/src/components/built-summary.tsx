@@ -77,8 +77,8 @@ export function BuiltSummary({ conversationKey, draft, onReview }: { conversatio
           <div className="grid grid-cols-[5.5rem_1fr] gap-x-3" key={section.label}>
             <dt className="pt-px text-[0.72rem] font-medium text-muted">{section.label}</dt>
             <dd className="min-w-0 space-y-0.5">
-              {section.lines.map((line) => (
-                <p className="text-[0.84rem] leading-snug text-ink" key={line}>
+              {section.lines.map((line, index) => (
+                <p className="text-[0.84rem] leading-snug text-ink" key={`${index}:${line}`}>
                   {line}
                 </p>
               ))}
@@ -95,8 +95,8 @@ export function BuiltSummary({ conversationKey, draft, onReview }: { conversatio
             {attention.length === 1 ? "1 thing needs your attention" : `${attention.length} things need your attention`}
           </p>
           <ul className="mt-1 space-y-1">
-            {attention.map((line) => (
-              <li className="flex gap-2 text-[0.8rem] leading-snug text-ink-soft" key={line}>
+            {attention.map((line, index) => (
+              <li className="flex gap-2 text-[0.8rem] leading-snug text-ink-soft" key={`${index}:${line}`}>
                 <span aria-hidden className="mt-[0.45em] size-1.5 shrink-0 rounded-full bg-accent" />
                 {line}
               </li>

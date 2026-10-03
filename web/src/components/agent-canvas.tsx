@@ -21,7 +21,7 @@ import {
   useStore,
 } from "@xyflow/react";
 import { useMutation } from "convex/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { AgentCanvasInspector } from "@/components/agent-canvas-inspector";
 import { AgentIcon } from "@/components/agent-icon";
@@ -134,6 +134,40 @@ const KIND_LABEL: Record<BlockKind, string> = {
   hands: "Hands",
 };
 
+/**
+ * WHAT EACH BLOCK DOES, IN ONE WORD (owner, 2026-10-03; UI review point 3): WHEN, THINK,
+ * READ, CHECK, DO, REPORT - in the block's own colour, before its name. A label, not a
+ * re-layout: the canvas keeps its shape.
+ */
+const KIND_VERB: Record<BlockKind, string | null> = {
+  trigger: "When",
+  tool: "Read",
+  melon: "Think",
+  brain: "Think",
+  output: "Report",
+  add: null,
+  sense: "Read",
+  risk: "Check",
+  hands: "Do",
+};
+
+/**
+ * THE BUILD (owner, 2026-10-03: "nodes appear one by one, the connectors draw - fast but
+ * visible"). On first paint each block arrives BUILD_STEP_MS after the one before and each
+ * line draws in just after the block it leads to, all inside BUILD_MAX_MS. A block or line
+ * added later - a new block from the toolbox - animates alone, at once. Reduced motion: none.
+ */
+const BUILD_STEP_MS = 70;
+const BUILD_MAX_MS = 1200;
+const BuildContext = createContext<{ startedAt: number; orderOf: ReadonlyMap<string, number> }>({ startedAt: 0, orderOf: new Map() });
+
+function useBuildDelay(order: number, extra = 0): number {
+  const { startedAt } = useContext(BuildContext);
+  // Fixed at mount: a block's entrance never replays on a later render.
+  const [delay] = useState(() => (Date.now() - startedAt > BUILD_MAX_MS ? 0 : Math.min(order * BUILD_STEP_MS, BUILD_MAX_MS) + extra));
+  return delay;
+}
+
 const KIND_GLYPH = {
   trigger: "arrow-right",
   tool: "spanner",
@@ -154,13 +188,17 @@ const MAX_TOOLS = 8;
 function BlockView({ data, selected }: NodeProps<BlockNode>) {
   const { kind } = data;
   const state = data.state ?? "idle";
+  const delay = useBuildDelay(data.order ?? 0);
+  // An empty block still says what it is for ("Think · Brain - no model yet").
+  const verb = data.blockType === "safety" ? "Check" : KIND_VERB[kind];
   return (
     <div
       className={`agent-block agent-block--${kind} ${data.empty || kind === "add" ? "agent-block--empty" : ""}`}
+      data-block={data.blockType}
       data-detached={data.detached || undefined}
       data-selected={selected || undefined}
       data-state={state}
-      style={{ width: NODE_WIDTH, animationDelay: `${(data.order ?? 0) * 45}ms` }}
+      style={{ width: NODE_WIDTH, animationDelay: `${delay}ms` }}
     >
       {kind === "brain" ? (
         <>
@@ -199,7 +237,11 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted">{data.label ?? KIND_LABEL[kind]}</span>
+            <span className="truncate text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted">
+              {verb ? <span className="agent-block__verb">{verb}</span> : null}
+              {verb ? <span aria-hidden className="mx-1 opacity-50">·</span> : null}
+              {data.label ?? KIND_LABEL[kind]}
+            </span>
             {state === "done" ? <span className="agent-block__tick" aria-label="Done">✓</span> : null}
             {state === "active" ? <span className="agent-block__live" aria-label="Running" /> : null}
             {data.detached ? <span className="agent-block__unplugged">Not connected</span> : null}
@@ -231,7 +273,10 @@ function BlockView({ data, selected }: NodeProps<BlockNode>) {
  * warms and pulses of light travel along it - toward the brain, or out of it
  * (`reverse`) when the brain is calling a tool.
  */
-function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<FlowEdge>) {
+function FlowEdgeView({ id, data, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<FlowEdge>) {
+  const { orderOf } = useContext(BuildContext);
+  // A line draws in once both of its blocks are there.
+  const delay = useBuildDelay(Math.max(orderOf.get(source) ?? 0, orderOf.get(target) ?? 0), 140);
   const [path] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, curvature: 0.35 });
   if (data?.cutAt !== undefined) return <CutEdge at={data.cutAt} path={path} />;
   const active = Boolean(data?.active);
@@ -245,6 +290,7 @@ function FlowEdgeView({ id, data, sourceX, sourceY, targetX, targetY, sourcePosi
         id={id}
         path={path}
         pathLength={1}
+        style={{ animationDelay: `${delay}ms` }}
       />
       {active ? (
         <>
@@ -1116,8 +1162,16 @@ export function AgentCanvas({
     setFitVersion((version) => version + 1);
   }, [layoutKey]);
 
+  // When this canvas first drew, and each block's place in the build order (BUILD_STEP_MS).
+  const [buildStartedAt] = useState(() => Date.now());
+  const build = useMemo(
+    () => ({ startedAt: buildStartedAt, orderOf: new Map(base.nodes.map((node) => [node.id, node.data.order ?? 0])) }),
+    [base.nodes, buildStartedAt],
+  );
+
   return (
     <div aria-label="Agent canvas" className="agent-canvas relative h-full min-h-0 w-full" ref={canvasRoot} role="region">
+      <BuildContext.Provider value={build}>
       <ReactFlow
         connectionLineStyle={{ stroke: "var(--flow)", strokeWidth: 2, strokeDasharray: "5 5" }}
         connectionRadius={34}
@@ -1150,6 +1204,7 @@ export function AgentCanvas({
         </Controls>
         <FitOnChange count={base.nodes.length} version={fitVersion} />
       </ReactFlow>
+      </BuildContext.Provider>
 
       {market && market.type === "market" ? (
         <>

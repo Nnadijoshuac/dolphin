@@ -1993,7 +1993,10 @@ select {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 14px 34px -20px rgba(15, 23, 42, 0.35);
   overflow: hidden;
 }
-.trading-chart__body { height: 170px; }
+.trading-chart__body { height: 260px; }
+.trading-chart__frame { display: block; width: 100%; height: 100%; border: 0; }
+.trading-chart__live { width: 6px; height: 6px; border-radius: 999px; background: var(--candle-up); animation: rule-live 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .trading-chart__live { animation: none; } }
 .trading-chart[data-collapsed] { padding-bottom: 8px; }
 .trading-chart__up { color: var(--candle-up); }
 .trading-chart__down { color: var(--candle-down); }

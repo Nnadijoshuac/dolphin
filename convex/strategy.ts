@@ -253,49 +253,50 @@ type ArmedDraft = {
   agentName: string;
 };
 
-export const armed = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const drafts = await ctx.db.query("agentDrafts").collect();
-    const out: ArmedDraft[] = [];
-    for (const draft of drafts) {
-      const rules = rulesOf(draft);
-      if (!draft.autopilot?.on || rules.length === 0) continue;
-      const states: Record<string, RuleState> = {};
-      const helds: Record<string, Held | null> = {};
-      for (const rule of rules) {
-        const run = await ctx.db
-          .query("strategyRuns")
-          .withIndex("by_draft_rule", (q) => q.eq("draftId", draft._id).eq("ruleId", rule.id))
-          .unique();
-        states[rule.id] = (run?.state as RuleState | undefined) ?? EMPTY_STATE;
-        helds[rule.id] = (run?.held as Held | undefined) ?? null;
-      }
-      // The block may have changed since the rule was written: a rule that no longer fits is held, with the reason.
-      const binance = binanceOf(draft);
-      const misfits: Record<string, string> = {};
-      for (const rule of rules) {
-        const misfit = venueProblem(rule, binance);
-        if (misfit) misfits[rule.id] = misfit;
-      }
-      out.push({
-        draftId: draft._id,
-        rules,
-        states,
-        helds,
-        misfits,
-        guard: { limitUsd: draft.dailyLossLimitUsd ?? null, lossTodayUsd: await lossTodayUsd(ctx, draft._id, "dolphin") },
-        live: draft.paperMode === false,
-        paused: draft.pausedRuleIds ?? [],
-        acknowledged: Boolean(draft.liveAcknowledgedAt),
-        owner: draft.autopilot?.walletAddress ?? null,
-        binance,
-        agentName: draft.name ?? "Agent",
-      });
+/** A draft whose rules are running: Autopilot on and at least one rule. */
+const isArmed = (draft: Doc<"agentDrafts">) => Boolean(draft.autopilot?.on) && rulesOf(draft).length > 0;
+
+/** Every armed agent with its rules' states - what one run of the engine works on. */
+async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
+  const drafts = await ctx.db.query("agentDrafts").collect();
+  const out: ArmedDraft[] = [];
+  for (const draft of drafts) {
+    const rules = rulesOf(draft);
+    if (!draft.autopilot?.on || rules.length === 0) continue;
+    const states: Record<string, RuleState> = {};
+    const helds: Record<string, Held | null> = {};
+    for (const rule of rules) {
+      const run = await ctx.db
+        .query("strategyRuns")
+        .withIndex("by_draft_rule", (q) => q.eq("draftId", draft._id).eq("ruleId", rule.id))
+        .unique();
+      states[rule.id] = (run?.state as RuleState | undefined) ?? EMPTY_STATE;
+      helds[rule.id] = (run?.held as Held | undefined) ?? null;
     }
-    return out;
-  },
-});
+    // The block may have changed since the rule was written: a rule that no longer fits is held, with the reason.
+    const binance = binanceOf(draft);
+    const misfits: Record<string, string> = {};
+    for (const rule of rules) {
+      const misfit = venueProblem(rule, binance);
+      if (misfit) misfits[rule.id] = misfit;
+    }
+    out.push({
+      draftId: draft._id,
+      rules,
+      states,
+      helds,
+      misfits,
+      guard: { limitUsd: draft.dailyLossLimitUsd ?? null, lossTodayUsd: await lossTodayUsd(ctx, draft._id, "dolphin") },
+      live: draft.paperMode === false,
+      paused: draft.pausedRuleIds ?? [],
+      acknowledged: Boolean(draft.liveAcknowledgedAt),
+      owner: draft.autopilot?.walletAddress ?? null,
+      binance,
+      agentName: draft.name ?? "Agent",
+    });
+  }
+  return out;
+}
 
 export const record = internalMutation({
   args: {
@@ -353,38 +354,47 @@ async function clockRow(ctx: { db: QueryCtx["db"] }) {
   return ctx.db.query("strategyClock").withIndex("by_key", (q) => q.eq("key", "main")).unique();
 }
 
-/** Claims a minute for one run. False if another run already has it. */
-export const claimMinute = internalMutation({
+/*
+ * WHAT IT COSTS (owner, 2026-10-03: "you overload my convex... over 30K function calls"). Every
+ * Convex function call counts, on prod and dev alike, whether anyone is trading or not. So:
+ *   - nothing armed: the chain stops; the watchdog looks once a minute (1 call) and restarts it
+ *     the minute a rule is armed;
+ *   - rules armed: each run is the action plus ONE mutation that claims the minute, books the
+ *     next run and returns the rules (was four calls), plus a write only when a rule judged a
+ *     newly closed candle.
+ */
+
+const nextBoundary = () => (Math.floor(Date.now() / 60_000) + 1) * 60_000 + AFTER_CLOSE_MS;
+
+/**
+ * One run's start, in one call: claims the minute (null if another run has it - never two for one
+ * minute), books the next run while any rule is armed - before the work, so a run that fails still
+ * leaves the chain going - and returns the armed rules.
+ */
+export const startMinute = internalMutation({
   args: { minute: v.number() },
-  handler: async (ctx, { minute }): Promise<boolean> => {
+  handler: async (ctx, { minute }): Promise<ArmedDraft[] | null> => {
     const clock = await clockRow(ctx);
-    if (clock && clock.lastMinute >= minute) return false;
-    if (clock) await ctx.db.patch(clock._id, { lastMinute: minute });
-    else await ctx.db.insert("strategyClock", { key: "main", nextAt: 0, lastMinute: minute });
-    return true;
+    if (clock && clock.lastMinute >= minute) return null;
+    const armedDrafts = await loadArmed(ctx);
+    const target = nextBoundary();
+    const book = armedDrafts.length > 0 && !(clock && clock.nextAt >= target);
+    if (clock) await ctx.db.patch(clock._id, { lastMinute: minute, ...(book ? { nextAt: target } : {}) });
+    else await ctx.db.insert("strategyClock", { key: "main", nextAt: book ? target : 0, lastMinute: minute });
+    if (book) await ctx.scheduler.runAt(target, internal.strategy.tick, {});
+    return armedDrafts;
   },
 });
 
-/** Books the next run for the next minute boundary, unless one is already booked. */
-export const bookNext = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const target = (Math.floor(Date.now() / 60_000) + 1) * 60_000 + AFTER_CLOSE_MS;
-    const clock = await clockRow(ctx);
-    if (clock && clock.nextAt >= target) return;
-    if (clock) await ctx.db.patch(clock._id, { nextAt: target });
-    else await ctx.db.insert("strategyClock", { key: "main", nextAt: target, lastMinute: 0 });
-    await ctx.scheduler.runAt(target, internal.strategy.tick, {});
-  },
-});
-
-/** The cron's job now: restart the chain if it ever stopped (nothing booked ahead). */
+/** The cron's job: (re)start the chain when a rule is armed and nothing is booked ahead. Otherwise it only looks. */
 export const watchdog = internalMutation({
   args: {},
   handler: async (ctx) => {
     const clock = await clockRow(ctx);
     if (clock && clock.nextAt > Date.now() - 5_000) return;
-    const target = (Math.floor(Date.now() / 60_000) + 1) * 60_000 + AFTER_CLOSE_MS;
+    const drafts = await ctx.db.query("agentDrafts").collect();
+    if (!drafts.some(isArmed)) return;
+    const target = nextBoundary();
     if (clock) await ctx.db.patch(clock._id, { nextAt: target });
     else await ctx.db.insert("strategyClock", { key: "main", nextAt: target, lastMinute: 0 });
     await ctx.scheduler.runAt(target, internal.strategy.tick, {});
@@ -394,12 +404,9 @@ export const watchdog = internalMutation({
 export const tick = internalAction({
   args: {},
   handler: async (ctx): Promise<{ rules: number; trades: number }> => {
-    // Book the next minute first, so a run that fails still leaves the chain going.
-    await ctx.runMutation(internal.strategy.bookNext, {});
-    // One run per minute, ever: a second one for the same minute stops here.
-    if (!(await ctx.runMutation(internal.strategy.claimMinute, { minute: Math.floor(Date.now() / 60_000) }))) return { rules: 0, trades: 0 };
+    const armedDrafts: ArmedDraft[] | null = await ctx.runMutation(internal.strategy.startMinute, { minute: Math.floor(Date.now() / 60_000) });
+    if (!armedDrafts) return { rules: 0, trades: 0 };
     const now = Date.now();
-    const armedDrafts: ArmedDraft[] = await ctx.runQuery(internal.strategy.armed, {});
     // One fetch per market per run, however many rules read it.
     const cache = new Map<string, Promise<Candle[]>>();
     let rulesChecked = 0;

@@ -136,6 +136,22 @@ export const setAutopilot = mutation({
 
 /* ── the scheduler ──────────────────────────────────────────────────────────── */
 
+/**
+ * The cron's job (owner, 2026-10-03: function calls are the budget): one cheap look for a due
+ * trigger, starting the real run only when there is one. Idle, that is 1 call a minute (it was the
+ * action plus its query, 2).
+ */
+export const wake = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const due = await ctx.db
+      .query("agentTriggers")
+      .withIndex("by_next_run", (q) => q.lte("nextRunAt", Date.now()))
+      .first();
+    if (due) await ctx.scheduler.runAfter(0, internal.autopilot.tick, {});
+  },
+});
+
 export const dueTriggers = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, { now }) => {

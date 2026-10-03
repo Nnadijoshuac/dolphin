@@ -66,7 +66,8 @@ crons.interval(
  * AUTOPILOT (2026-09-28): checks only the triggers that are due. Idle, that is
  * one empty index range a minute; see convex/autopilot.ts.
  */
-crons.interval("autopilot (armed agent triggers)", { minutes: 1 }, internal.autopilot.tick, {});
+// Looks for a due trigger and starts the run only then (convex/autopilot.ts wake): 1 call a minute idle.
+crons.interval("autopilot (armed agent triggers)", { minutes: 1 }, internal.autopilot.wake, {});
 
 /*
  * TRADING RULES (fast rules, phase 2): every armed agent's rules judged against
@@ -74,7 +75,7 @@ crons.interval("autopilot (armed agent triggers)", { minutes: 1 }, internal.auto
  * Idle, one indexed read a minute; see convex/strategy.ts.
  */
 // ON the minute (owner, 2026-10-03: "late trading is an undoing"). The engine books its own next
-// run half a second after each minute boundary (convex/strategy.ts bookNext; the scheduler fired
+// run half a second after each minute boundary (convex/strategy.ts startMinute; the scheduler fired
 // within 12-36 ms of its target on dev). An interval ran at an arbitrary second - up to a minute
 // late - and the minute cron itself fired ~7.3 s after the boundary. This cron only restarts the
 // chain if it ever stops.

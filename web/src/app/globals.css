@@ -4552,14 +4552,18 @@ select {
 .docs-figure[data-narrow] img { width: auto; max-width: min(100%, 380px); }
 .docs-figure figcaption { margin-top: 8px; font-size: 0.8rem; color: var(--muted); }
 
-/* Where a search landed: two soft gold pulses, then gone (docs-search.tsx SearchHighlighter). */
+/* Where a search landed (owner, 2026-10-03): the WORDS glow - gold letters with a soft halo,
+   twice, then back to normal. No box, no background behind them. */
 @keyframes docs-hit-glow {
-  0%, 100% { background-color: transparent; box-shadow: 0 0 0 0 transparent; }
-  50% { background-color: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 24px 4px color-mix(in srgb, var(--accent) 30%, transparent); }
+  0%, 100% { color: inherit; text-shadow: none; }
+  50% {
+    color: var(--accent-ink);
+    text-shadow: 0 0 6px color-mix(in srgb, var(--accent) 70%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
 }
-.docs-hit { border-radius: 8px; animation: docs-hit-glow 1.1s ease-in-out 2; }
+.docs-hit, .docs-hit * { animation: docs-hit-glow 1.1s ease-in-out 2; }
 @media (prefers-reduced-motion: reduce) {
-  .docs-hit { animation: none; background-color: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .docs-hit, .docs-hit * { animation: none; color: var(--accent-ink); }
 }
 
 /* Previous / next, restyled (owner, 2026-10-03: the boxed cards looked wrong): quiet text links. */

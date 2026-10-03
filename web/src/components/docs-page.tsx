@@ -74,7 +74,7 @@ export function DocsPage({
 
       {/* Phones: the library as one menu above the page. */}
       <div className="docs-mobile-search">
-        <DocsSearch pages={DOCS_NAV} />
+        <DocsSearch hotkey={false} pages={DOCS_NAV} />
       </div>
       <details className="docs-mobile-nav">
         <summary>

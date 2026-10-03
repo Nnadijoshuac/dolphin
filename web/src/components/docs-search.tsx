@@ -98,13 +98,15 @@ function snippet(text: string, words: string[]): string {
   return `${start > 0 ? "…" : ""}${text.slice(start, start + 150)}${start + 150 < text.length ? "…" : ""}`;
 }
 
-export function DocsSearch({ pages }: { pages: { href: string; label: string }[] }) {
+export function DocsSearch({ pages, hotkey = true }: { pages: { href: string; label: string }[]; hotkey?: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState<Entry[] | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // One Ctrl K listener per page: the phone search box opens only by tap.
+    if (!hotkey) return;
     const onKey = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -113,7 +115,7 @@ export function DocsSearch({ pages }: { pages: { href: string; label: string }[]
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [hotkey]);
 
   useEffect(() => {
     if (!open) return;

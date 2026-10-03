@@ -136,6 +136,15 @@ DOCUMENTS AND THEIR TOOLS. The person can add documents (Markdown, text, PDF) in
 - DESCRIBED TOOLS: when the person asks for a tool in words ("add a tool that writes a storyboard from a style and a length"), put it in \`describedTools\`: a snake_case name starting with a verb (make_storyboard), one sentence a buyer reads, up to three text inputs (style, seconds), and instructions to the model that runs it - which documents or sections to use, and exactly what to return. It runs on the person's own Brain and reads their documents. Only when they asked for a tool; to change one, send it again under the same name.
 - Say it is set up only when you put it in describedTools, and remind them to price it under Knowledge.
 
+TRADING RULES - for an agent that trades on market conditions, write them in \`rules\`. You are the brain that plans; the rules run with NO model call, judged on every CLOSED candle in well under a second. Prefer rules over Schedule + Swap for any "when X happens, trade" agent.
+- venue: binance-futures for anything that shorts or uses leverage; binance-spot to buy on Binance; dolphin-wallet to buy from the Dolphin Wallet on BNB Chain; binance-wallet for the person's Binance Agentic Wallet. market: a Binance pair like BNBUSDT.
+- action: buy (go long) or short (binance-futures only). A rule sells through its exits - \`until\` conditions, stopLossPct, takeProfitPct - never a separate "sell".
+- Conditions (all fields present, unused ones null): rsi (op, value, period), price_vs_ma (op, ma sma/ema, length), ma_cross (direction, fast, slow, ma), macd_cross (direction), trend (direction, candles: "3 lower closes in a row" = trend down 3), price (op, value), change_pct (op, value, candles).
+- Every short needs a stop-loss or an until. Leverage 1 to 3 unless the person asks for more; never above 5 - above 3 Dolphin warns them about liquidation. Keep maxTradesPerDay small (1-3) unless told otherwise.
+- Example - "short BNB on 4-hour candles when the trend turns down, hold until it turns up, 2x, stop at 5%": venue binance-futures, market BNBUSDT, timeframe 4h, when [trend down 3], action short, until [trend up 2], stopLossPct 5, leverage 2.
+- When you write rules, add NO Schedule, Price trigger, Price feed, Indicators, Signal, Risk limits, Swap or Safety block: the rule reads Binance's candles itself and carries its own size, stop and daily cap.
+- Inside Dolphin rules trade on PAPER at live Binance prices while Autopilot is on. Real money comes only when the person runs the agent on their own server (being built now). Never say live trading can be switched on in Dolphin, and never ask for Binance keys in the chat. Say this when you add rules.
+
 RECIPES - the shapes that work; add every block the job needs in one go:
 - Token checker (hired per token): Safety only. Buyer input: a token address. No Schedule, no Memory.
 - Trend or DCA trader: Schedule (240 or 1440), Price feed, Indicators (1d), Safety, Risk limits, Swap; Memory placed so it remembers its position.
@@ -272,6 +281,14 @@ export const getDraft = query({
             purpose: draft.purpose ?? null,
             hirePriceUsd: draft.hirePriceUsd ?? null,
             paperMode: draft.paperMode !== false,
+            /*
+             * What it can do besides catalog tools and blocks: switched-on document tools
+             * (knowledge) and trading rules. The panel's readiness check counts them, as the
+             * server's does (lib/agentSpec.ts capabilityCount) - without it a documents-only
+             * agent could not be tried (found 2026-10-03).
+             */
+            knowledgeToolCount: (draft.knowledgeTools ?? []).filter((tool) => tool.enabled).length,
+            ruleCount: (draft.rules ?? []).length,
             autopilot: draft.autopilot
               ? { on: draft.autopilot.on, conversationKey: draft.autopilot.conversationKey }
               : null,
@@ -938,8 +955,10 @@ async function compileTurn(messages: ChatMessage[]): Promise<{ reply: BuilderRep
       responseSchema: BUILDER_REPLY_SCHEMA,
       temperature: 0.3,
       // Raised from 2,500 when replies began carrying blocks: a reasoning model spent the budget
-      // and the JSON was cut off (finishReason "length", measured 2026-09-29).
-      maxTokens: 4_500,
+      // and the JSON was cut off (finishReason "length", measured 2026-09-29). Raised again from
+      // 4,500 when replies began carrying trading rules: cut off twice on the first rule request
+      // (2026-10-03), the reasoning having spent most of the budget before the JSON began.
+      maxTokens: 12_000,
     });
     const reply = parseBuilderReply(result.content);
     if (reply) return { reply, model: result.model };
@@ -1054,7 +1073,17 @@ export const ask = action({
        * with a BNB Price feed read BNB's price and safety on every CAKE check.
        * So the builder does not add one there (a Price feed the person placed stays).
        */
-      const offeredBlocks = (compiled.reply.blocks ?? []).filter((block) => !(grades && (block.type === "market" || block.type === "indicators" || block.type === "price")));
+      /*
+       * A RULES AGENT NEEDS NO TRADING BLOCKS (fast rules, phase 2). Measured 2026-10-03: asked for a
+       * shorting rule, the model also proposed Price feed, Indicators, Safety, Risk limits and a Price
+       * trigger - which failed and left a confusing reply. The rule reads Binance's candles and carries
+       * its own size, stop and daily cap, so those blocks are dropped when the reply writes rules.
+       */
+      const writesRules = (compiled.reply.rules ?? []).length > 0;
+      const RULE_COVERED = new Set(["schedule", "price", "market", "indicators", "signal", "risk", "swap", "safety"]);
+      const offeredBlocks = (compiled.reply.blocks ?? []).filter(
+        (block) => !(grades && (block.type === "market" || block.type === "indicators" || block.type === "price")) && !(writesRules && RULE_COVERED.has(block.type)),
+      );
       const proposedBlocks =
         needsSafety || offeredBlocks.length !== (compiled.reply.blocks ?? []).length
           ? [...offeredBlocks, ...(needsSafety ? [{ type: "safety", symbol: null, everyMinutes: null, direction: null, priceUsd: null, maxTradeUsd: null, maxTradesPerDay: null }] : [])]
@@ -1083,9 +1112,24 @@ export const ask = action({
         if (result.skipped.length > 0) describedNote = `I could not add ${result.skipped.join("; ")}.`;
       }
 
+      /* Trading rules (fast rules, phase 2): lib/strategy.ts cleanRule decides; problems and warnings are said, never hidden. */
+      let rulesNote = "";
+      if (compiled.reply.rules && compiled.reply.rules.length > 0) {
+        const result: { added: string[]; problems: string[]; warnings: string[] } = await ctx.runMutation(internal.strategy.addRules, {
+          conversationId,
+          rules: compiled.reply.rules,
+        });
+        if (result.added.length > 0) applied.changed.push("tools");
+        rulesNote = [
+          ...(result.problems.length > 0 ? [`I could not add ${result.problems.join("; ")}.`] : []),
+          ...result.warnings.map((warning) => `Warning: ${warning}`),
+        ].join("\n\n");
+      }
+
       let reply = resolveToolIdReferences(stripRawPayloads(compiled.reply.reply), offered).trim();
       if (blockNote) reply = `${reply}${reply ? "\n\n" : ""}${blockNote}`;
       if (describedNote) reply = `${reply}${reply ? "\n\n" : ""}${describedNote}`;
+      if (rulesNote) reply = `${reply}${reply ? "\n\n" : ""}${rulesNote}`;
       /*
        * NEVER CLAIM WORK THAT WAS NOT DONE. Measured 2026-09-29: the free model
        * wrote "I've set up a scheduler, market feed, safety check, risk limits

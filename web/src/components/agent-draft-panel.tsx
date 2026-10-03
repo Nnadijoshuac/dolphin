@@ -4,6 +4,7 @@ import { useMutation } from "convex/react";
 import { useState } from "react";
 
 import { KnowledgeSection } from "@/components/knowledge-section";
+import { TradingRulesSection } from "@/components/trading-rules-section";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { AutoTradeCard } from "@/components/auto-trade-card";
 import { PaperTradingCard } from "@/components/paper-trading-card";
@@ -41,6 +42,9 @@ export type AgentDraft = {
   hirePriceUsd?: number | null;
   /** False only when switched to Live; absent means paper (convex/paperTrading.ts). */
   paperMode?: boolean;
+  /** Switched-on document tools (knowledge) and trading rules: capabilities like tools and blocks. */
+  knowledgeToolCount?: number;
+  ruleCount?: number;
 };
 
 export const EMPTY_AGENT_DRAFT: AgentDraft = {
@@ -56,8 +60,9 @@ export function draftGaps(draft: AgentDraft): string[] {
   if (!draft.name?.trim()) gaps.push("a name");
   if (!draft.description?.trim()) gaps.push("a description of what it does");
   if (!draft.instructions?.trim()) gaps.push("instructions");
-  // A flow built from blocks needs no MCP tool (2026-09-29).
-  if (draft.tools.length === 0 && (draft.blocks?.length ?? 0) === 0) gaps.push("at least one tool or block");
+  // A flow built from blocks needs no MCP tool (2026-09-29); nor does an agent of documents or rules (2026-10-03).
+  const capabilities = (draft.blocks?.length ?? 0) + (draft.knowledgeToolCount ?? 0) + (draft.ruleCount ?? 0);
+  if (draft.tools.length === 0 && capabilities === 0) gaps.push("at least one tool, block, document or rule");
   // No agent runs on Dolphin's model (owner, 2026-09-28).
   if (!draft.brain) gaps.push("a brain (your own model key)");
   return gaps;
@@ -263,6 +268,7 @@ export function AgentDraftPanel({
         </div>
 
         {knowledgeConversation && !trying ? <KnowledgeSection conversationKey={knowledgeConversation} /> : null}
+        {knowledgeConversation && !trying ? <TradingRulesSection conversationKey={knowledgeConversation} /> : null}
       </div>
 
       {onToggleAutopilot ? (
@@ -368,7 +374,10 @@ function AutopilotCard({
   onToggle: (on: boolean) => void;
   onWatchRuns?: () => void;
 }) {
+  // A trading rule is its own trigger (fast rules, phase 2).
   const triggers = (draft.blocks ?? []).filter((block) => TRIGGER_TYPES.includes(block.type));
+  const rules = draft.ruleCount ?? 0;
+  const armable = triggers.length + rules;
   const on = Boolean(draft.autopilot?.on);
   return (
     <div className="mx-2 mt-3 rounded-xl border border-line bg-paper-strong px-3 py-2.5">
@@ -376,10 +385,16 @@ function AutopilotCard({
         <div className="min-w-0 flex-1">
           <p className="text-[12.5px] font-semibold text-ink">Autopilot</p>
           <p className="text-[0.68rem] leading-snug text-muted">
-            {triggers.length === 0
-              ? "Add a Schedule, Price or Wallet watch from the toolbox to let it run on its own."
+            {armable === 0
+              ? "Add a Schedule, Price or Wallet watch from the toolbox, or ask for a trading rule, to let it run on its own."
               : on
-                ? `On · runs on ${triggers.length} trigger${triggers.length === 1 ? "" : "s"}, up to 48 times a day, on your key`
+                ? [
+                    triggers.length ? `${triggers.length} trigger${triggers.length === 1 ? "" : "s"}, up to 48 runs a day on your key` : null,
+                    rules ? `${rules} rule${rules === 1 ? "" : "s"} watching Binance, on paper` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                    .replace(/^/, "On · ")
                 : "Off · it runs only when you ask it"}
           </p>
         </div>
@@ -387,7 +402,7 @@ function AutopilotCard({
           aria-checked={on}
           aria-label="Autopilot"
           className="autopilot-switch"
-          disabled={busy || triggers.length === 0}
+          disabled={busy || armable === 0}
           onClick={() => onToggle(!on)}
           role="switch"
           type="button"

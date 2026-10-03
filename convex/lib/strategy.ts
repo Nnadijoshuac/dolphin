@@ -97,6 +97,8 @@ export const LIMITS = {
   maxConditions: 6,
   maxSizeUsd: 100_000,
   maxLeverage: 5,
+  /** Owner, 2026-10-03: 1-3x is the normal range; up to 5x is allowed, with a warning. */
+  comfortableLeverage: 3,
   maxTradesPerDay: 50,
   maxCooldownMinutes: 7 * 24 * 60,
   maxLength: 400,
@@ -224,6 +226,12 @@ export function afterCandle(state: RuleState, candleOpenTime: number, decision: 
   return { ...next, position: null, lastTradeAt: now };
 }
 
+/** The result of a closed position, in %, leverage included (fees and funding are not). */
+export function resultPct(side: "long" | "short", entry: number, exit: number, leverage: number): number {
+  const move = ((exit - entry) / entry) * 100 * (side === "long" ? 1 : -1);
+  return Math.round(move * leverage * 100) / 100;
+}
+
 /* ── Words: what the builder reads on the canvas ── */
 
 export function describe(condition: Condition): string {
@@ -265,10 +273,30 @@ export function describeRule(rule: Rule): string {
 const num = (value: unknown, min: number, max: number): number | null =>
   typeof value === "number" && Number.isFinite(value) && value >= min && value <= max ? value : null;
 
+/**
+ * The same meaning, written the ways models write it: "<", "lt", "less_than",
+ * "falls below" -> below; "crosses_up", "bullish", "rising" -> up. A level may
+ * come as `value` or `level`. Anything still unclear is refused, never guessed.
+ */
+function opOf(value: unknown): "above" | "below" | null {
+  const text = String(value ?? "").toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  if (/^(above|>|>=|gt|gte|greater( than)?|over|rises above|crosses above|higher|up)$/.test(text)) return "above";
+  if (/^(below|<|<=|lt|lte|less( than)?|under|drops below|falls below|crosses below|lower|down)$/.test(text)) return "below";
+  return null;
+}
+
+function directionOf(value: unknown): "up" | "down" | null {
+  const text = String(value ?? "").toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  if (/^(up|cross up|crosses up|bullish|rising|uptrend|higher|above)$/.test(text)) return "up";
+  if (/^(down|cross down|crosses down|bearish|falling|downtrend|lower|below)$/.test(text)) return "down";
+  return null;
+}
+
 function cleanCondition(raw: unknown): Condition | string {
-  const c = (raw ?? {}) as Record<string, unknown>;
-  const op = c.op === "above" || c.op === "below" ? c.op : null;
-  const direction = c.direction === "up" || c.direction === "down" ? c.direction : null;
+  const c = { ...((raw ?? {}) as Record<string, unknown>) };
+  if ((c.value === null || c.value === undefined) && typeof c.level === "number") c.value = c.level;
+  const op = opOf(c.op) ?? opOf(c.direction);
+  const direction = directionOf(c.direction) ?? directionOf(c.op);
   switch (c.kind) {
     case "price": {
       const value = num(c.value, 0, 1e12);
@@ -311,7 +339,16 @@ function cleanCondition(raw: unknown): Condition | string {
  * Problems come back in words for the builder; nothing out of bounds is
  * ever clamped into a rule silently.
  */
-export function cleanRule(raw: unknown, id: string): { rule: Rule } | { problems: string[] } {
+/**
+ * Roughly how far the price must move against a leveraged position before the
+ * exchange liquidates it: 1 / leverage, before fees and maintenance margin.
+ * Said in the warning so the builder sees the risk as a price move.
+ */
+export function liquidationMovePct(leverage: number): number {
+  return Math.round(100 / leverage);
+}
+
+export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: string[] } | { problems: string[] } {
   const r = (raw ?? {}) as Record<string, unknown>;
   const problems: string[] = [];
   const venue: Venue = (["dolphin-wallet", "binance-wallet", "binance-spot", "binance-futures"] as const).includes(r.venue as Venue)
@@ -360,6 +397,12 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule } | { problems
   if (cooldownMinutes === null) problems.push("the cooldown must be 0 minutes to 7 days");
 
   if (problems.length > 0) return { problems };
+  const warnings: string[] = [];
+  if ((leverage as number) > LIMITS.comfortableLeverage) {
+    warnings.push(
+      `${leverage}x is above the usual 1-3x. A move of about ${liquidationMovePct(leverage as number)}% against the position would liquidate it, and everything in it would be lost.`,
+    );
+  }
   const rule: Rule = {
     id,
     name: "",
@@ -377,5 +420,5 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule } | { problems
     cooldownMinutes: Math.round(cooldownMinutes as number),
   };
   rule.name = typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 80) : describeRule(rule).slice(0, 80);
-  return { rule };
+  return { rule, warnings };
 }

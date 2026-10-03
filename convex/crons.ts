@@ -68,6 +68,13 @@ crons.interval(
  */
 crons.interval("autopilot (armed agent triggers)", { minutes: 1 }, internal.autopilot.tick, {});
 
+/*
+ * TRADING RULES (fast rules, phase 2): every armed agent's rules judged against
+ * newly closed Binance candles, with no model call - paper inside Dolphin.
+ * Idle, one indexed read a minute; see convex/strategy.ts.
+ */
+crons.interval("trading rules (no AI)", { minutes: 1 }, internal.strategy.tick, {});
+
 // Built agents selling over ERC-8183: retry deliveries, settle after the dispute
 // window, forward earnings to builders (convex/erc8183Seller.ts). Gas is the agents' own.
 crons.interval("built agents: collect escrow payouts", { minutes: 10 }, internal.erc8183Seller.tick, {});

@@ -81,6 +81,8 @@ export type BuilderReply = {
    * writes a storyboard". lib/knowledgeTools.ts cleanDescribedTool decides. Null: none.
    */
   describedTools?: { name: string; description: string; inputs: { name: string; description: string }[]; instructions: string }[] | null;
+  /** Trading rules (fast rules, phase 2): raw, checked by lib/strategy.ts cleanRule before anything is saved. Null: none. */
+  rules?: unknown[] | null;
 };
 
 /**
@@ -93,7 +95,7 @@ export const BUILDER_REPLY_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["reply", "name", "description", "instructions", "toolIds", "blocks", "describedTools"],
+    required: ["reply", "name", "description", "instructions", "toolIds", "blocks", "describedTools", "rules"],
     properties: {
       reply: {
         type: "string",
@@ -112,6 +114,63 @@ export const BUILDER_REPLY_SCHEMA = {
         type: ["array", "null"],
         items: { type: "string" },
         description: "The complete set of tool ids the agent should have, or null to keep them.",
+      },
+      rules: {
+        type: ["array", "null"],
+        description:
+          "Trading rules the agent runs with NO model call, or null for none. Only for an agent that trades on market conditions. Each acts on CLOSED candles.",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["name", "venue", "market", "timeframe", "when", "action", "sizeUsd", "until", "stopLossPct", "takeProfitPct", "leverage", "maxTradesPerDay", "cooldownMinutes"],
+          properties: {
+            name: { type: ["string", "null"], description: "A short name, or null to describe it automatically." },
+            venue: { type: "string", enum: ["dolphin-wallet", "binance-wallet", "binance-spot", "binance-futures"] },
+            market: { type: "string", description: "A Binance pair such as BNBUSDT." },
+            timeframe: { type: "string", enum: ["1m", "5m", "15m", "1h", "4h", "1d"] },
+            when: { type: "array", description: "Entry: ALL must hold on the same closed candle.", items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["kind", "op", "direction", "value", "period", "ma", "length", "fast", "slow", "candles"],
+            properties: {
+              kind: { type: "string", enum: ["rsi", "price_vs_ma", "ma_cross", "macd_cross", "trend", "price", "change_pct"] },
+              op: { type: ["string", "null"], description: "above or below (rsi, price_vs_ma, price, change_pct)." },
+              direction: { type: ["string", "null"], description: "up or down (ma_cross, macd_cross, trend)." },
+              value: { type: ["number", "null"], description: "rsi level, price, or % for change_pct (negative for drops)." },
+              period: { type: ["number", "null"], description: "rsi period, usually 14." },
+              ma: { type: ["string", "null"], description: "sma or ema." },
+              length: { type: ["number", "null"], description: "price_vs_ma: the moving average length." },
+              fast: { type: ["number", "null"], description: "ma_cross: fast length." },
+              slow: { type: ["number", "null"], description: "ma_cross: slow length." },
+              candles: { type: ["number", "null"], description: "trend: candles in a row; change_pct: over how many candles." },
+            },
+          } },
+            action: { type: "string", enum: ["buy", "short"], description: "buy goes long; short only on binance-futures. A rule sells by its exits." },
+            sizeUsd: { type: "number", description: "Dollars per entry." },
+            until: { type: "array", description: "Exit: ALL must hold. Empty: only stop-loss / take-profit.", items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["kind", "op", "direction", "value", "period", "ma", "length", "fast", "slow", "candles"],
+            properties: {
+              kind: { type: "string", enum: ["rsi", "price_vs_ma", "ma_cross", "macd_cross", "trend", "price", "change_pct"] },
+              op: { type: ["string", "null"], description: "above or below (rsi, price_vs_ma, price, change_pct)." },
+              direction: { type: ["string", "null"], description: "up or down (ma_cross, macd_cross, trend)." },
+              value: { type: ["number", "null"], description: "rsi level, price, or % for change_pct (negative for drops)." },
+              period: { type: ["number", "null"], description: "rsi period, usually 14." },
+              ma: { type: ["string", "null"], description: "sma or ema." },
+              length: { type: ["number", "null"], description: "price_vs_ma: the moving average length." },
+              fast: { type: ["number", "null"], description: "ma_cross: fast length." },
+              slow: { type: ["number", "null"], description: "ma_cross: slow length." },
+              candles: { type: ["number", "null"], description: "trend: candles in a row; change_pct: over how many candles." },
+            },
+          } },
+            stopLossPct: { type: ["number", "null"] },
+            takeProfitPct: { type: ["number", "null"] },
+            leverage: { type: ["number", "null"], description: "binance-futures only; 1 to 3 unless the person asked for more (max 5)." },
+            maxTradesPerDay: { type: ["number", "null"] },
+            cooldownMinutes: { type: ["number", "null"] },
+          },
+        },
       },
       describedTools: {
         type: ["array", "null"],
@@ -212,6 +271,8 @@ export function parseBuilderReply(content: string): BuilderReply | null {
             level: typeof item.level === "number" ? item.level : null,
           }))
       : null;
+    // Rules pass through raw: lib/strategy.ts cleanRule checks each one before anything is saved.
+    const rules = Array.isArray(record.rules) ? (record.rules as unknown[]).filter((item) => typeof item === "object" && item !== null) : null;
     // Described tools are lenient too: an entry missing its words is dropped, never the reply.
     const describedTools = Array.isArray(record.describedTools)
       ? (record.describedTools as unknown[])
@@ -244,6 +305,7 @@ export function parseBuilderReply(content: string): BuilderReply | null {
       instructions,
       toolIds: toolIds as string[] | null,
       describedTools,
+      rules,
       blocks: blocks && blocks.length ? blocks : null,
       purpose: record.purpose === "private" || record.purpose === "tools" || record.purpose === "hire" ? record.purpose : null,
     };
@@ -391,8 +453,11 @@ function sameTools(a: readonly DraftTool[], b: readonly DraftTool[]): boolean {
  * tools its documents give (step 2 of Agent/PLAN-2026-10-03-knowledge-mcps.md).
  * One count for every readiness check, so they cannot disagree.
  */
-export function capabilityCount(row: { blocks?: unknown[] | null; knowledgeTools?: { enabled: boolean }[] | null } | null): number {
-  return (row?.blocks?.length ?? 0) + (row?.knowledgeTools ?? []).filter((tool) => tool.enabled).length;
+export function capabilityCount(
+  row: { blocks?: unknown[] | null; knowledgeTools?: { enabled: boolean }[] | null; rules?: unknown[] | null } | null,
+): number {
+  // Trading rules (fast rules, phase 2) are a capability too: an agent of rules alone is complete.
+  return (row?.blocks?.length ?? 0) + (row?.knowledgeTools ?? []).filter((tool) => tool.enabled).length + (row?.rules?.length ?? 0);
 }
 
 export function draftGaps(draft: DraftSpec, blockCount = 0): string[] {

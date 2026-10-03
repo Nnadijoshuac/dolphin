@@ -100,8 +100,9 @@ export const setAutopilot = mutation({
       throw new ConvexError("Only the wallet whose key this agent's brain uses can switch its autopilot on.");
     }
     if (!draft.name || !draft.instructions) throw new ConvexError("The agent needs a name and a strategy first.");
-    if (!blocks.some((block) => TRIGGER_TYPES.includes(block.type))) {
-      throw new ConvexError("Add a trigger first: a schedule, a price, or a wallet to watch.");
+    // A trading rule is its own trigger (fast rules, phase 2): rules alone can arm the agent.
+    if (!blocks.some((block) => TRIGGER_TYPES.includes(block.type)) && (draft.rules ?? []).length === 0) {
+      throw new ConvexError("Add a trigger first: a schedule, a price, a wallet to watch, or a trading rule.");
     }
 
     let runKey = draft.autopilot?.conversationKey;

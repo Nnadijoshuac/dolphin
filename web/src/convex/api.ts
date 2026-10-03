@@ -998,6 +998,9 @@ export type AgentDraftData = {
   hirePriceUsd: number | null;
   /** Absent or true: paper trading. */
   paperMode?: boolean;
+  /** Switched-on document tools and trading rules, for the readiness check (convex/agentBuilder.ts getDraft). */
+  knowledgeToolCount?: number;
+  ruleCount?: number;
   updatedAt: number;
 };
 
@@ -1561,5 +1564,45 @@ export const knowledgeApi = anyApi as unknown as {
     tools: Query<{ conversationKey: string }, { tools: KnowledgeTool[]; hasBrain: boolean }>;
     setTool: Mutation<{ conversationKey: string; name: string; price?: string; enabled?: boolean; description?: string }, null>;
     removeTool: Mutation<{ conversationKey: string; name: string }, null>;
+  };
+};
+
+/** A trading rule as the draft panel shows it (convex/strategy.ts forConversation). */
+export type TradingRuleView = {
+  id: string;
+  words: string;
+  venue: "dolphin-wallet" | "binance-wallet" | "binance-spot" | "binance-futures";
+  market: string;
+  action: "buy" | "short";
+  sizeUsd: number;
+  leverage: number;
+  stopLossPct: number | null;
+  warnings: string[];
+  position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null;
+  lastCheckedAt: number | null;
+  lastError: string | null;
+};
+
+export type TradingRuleTrade = {
+  _id: string;
+  ruleId: string;
+  ruleName: string;
+  market: string;
+  side: "long" | "short";
+  kind: "enter" | "exit";
+  price: number;
+  sizeUsd: number;
+  leverage: number;
+  paper: boolean;
+  pnlPct: number | null;
+  reason: string;
+  at: number;
+};
+
+export const strategyApi = anyApi as unknown as {
+  strategy: {
+    forConversation: Query<{ conversationKey: string }, { rules: TradingRuleView[]; trades: TradingRuleTrade[]; running: boolean }>;
+    updateRule: Mutation<{ conversationKey: string; ruleId: string; sizeUsd?: number; leverage?: number; stopLossPct?: number | null }, { warnings: string[] }>;
+    removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
   };
 };

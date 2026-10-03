@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, resultPct, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const H4 = 4 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 9, 1);
@@ -103,6 +103,38 @@ test("rules the AI writes are checked, never clamped silently", () => {
   assert.match(problems({ timeframe: "3s" }), /timeframe must be one of/);
   assert.match(problems({ sizeUsd: 0 }), /size must be/);
   assert.match(problems({ action: "sell" }), /buy or short/);
+});
+
+test("leverage: 1-3x is normal, 4-5x allowed with a liquidation warning, above 5x refused", () => {
+  const base = { venue: "binance-futures", market: "BNBUSDT", timeframe: "4h", when: [{ kind: "trend", direction: "down", candles: 3 }], action: "short", sizeUsd: 50, stopLossPct: 5 };
+  const at = (leverage: number) => cleanRule({ ...base, leverage }, "l");
+  const three = at(3);
+  assert.ok("rule" in three && three.warnings.length === 0);
+  const five = at(5);
+  assert.ok("rule" in five);
+  if ("rule" in five) assert.match(five.warnings[0], /about 20% against the position would liquidate it/);
+  assert.ok("problems" in at(6));
+});
+
+test("conditions written the ways models write them are understood, nonsense is still refused", () => {
+  const rsi = (condition: Record<string, unknown>) =>
+    cleanRule({ venue: "binance-futures", market: "BNBUSDT", timeframe: "1h", action: "buy", sizeUsd: 100, leverage: 5, takeProfitPct: 4, stopLossPct: 2, when: [{ kind: "rsi", ...condition }] }, "m");
+  for (const variant of [{ op: "<", value: 30 }, { op: "less_than", value: 30 }, { op: "below", level: 30 }, { direction: "down", value: 30, op: null }, { op: "drops below", value: 30 }]) {
+    const made = rsi(variant);
+    assert.ok("rule" in made, `${JSON.stringify(variant)} -> ${JSON.stringify(made)}`);
+    if ("rule" in made) assert.deepEqual(made.rule.when[0], { kind: "rsi", op: "below", value: 30, period: 14 });
+  }
+  assert.ok("problems" in rsi({ op: "sideways", value: 30 }));
+  assert.ok("problems" in rsi({ op: "below", value: 300 }));
+  const cross = cleanRule({ venue: "binance-spot", market: "BNBUSDT", timeframe: "1h", action: "buy", sizeUsd: 10, when: [{ kind: "macd_cross", direction: "bullish" }] }, "c");
+  assert.ok("rule" in cross && cross.rule.when[0].kind === "macd_cross");
+});
+
+test("results include leverage, and a short gains when the price falls", () => {
+  assert.equal(resultPct("short", 100, 95, 3), 15);
+  assert.equal(resultPct("short", 100, 105, 3), -15);
+  assert.equal(resultPct("long", 766.08, 772.21, 1), 0.8);
+  assert.equal(resultPct("long", 100, 100, 1), 0);
 });
 
 test("a rule reads in plain words", () => {

@@ -1335,6 +1335,40 @@ export default defineSchema({
    */
   freeCalls: defineTable({ key: v.string(), count: v.number() }).index("by_key", ["key"]),
 
+  /** Each rule's running state (lib/strategy.ts RuleState): its position, last judged candle, daily count. */
+  strategyRuns: defineTable({
+    draftId: v.id("agentDrafts"),
+    ruleId: v.string(),
+    state: v.any(),
+    lastCheckedAt: v.number(),
+    /** Why the last check could not run (market data), or null. */
+    lastError: v.union(v.string(), v.null()),
+  }).index("by_draft_rule", ["draftId", "ruleId"]),
+
+  /**
+   * EVERY TRADE A RULE MADE, as it happened. Phase 2 trades on paper at live
+   * Binance prices (`paper: true`); a real trade carries where it was executed.
+   * Never a fabricated number: the price is the closed candle's close it acted on.
+   */
+  strategyTrades: defineTable({
+    draftId: v.id("agentDrafts"),
+    ruleId: v.string(),
+    ruleName: v.string(),
+    venue: v.string(),
+    market: v.string(),
+    side: v.union(v.literal("long"), v.literal("short")),
+    kind: v.union(v.literal("enter"), v.literal("exit")),
+    price: v.number(),
+    sizeUsd: v.number(),
+    leverage: v.number(),
+    paper: v.boolean(),
+    /** On an exit: the result in %, leverage included (fees and funding not included). */
+    pnlPct: v.union(v.number(), v.null()),
+    reason: v.string(),
+    candleTime: v.number(),
+    at: v.number(),
+  }).index("by_draft", ["draftId", "at"]),
+
   agentKnowledge: defineTable({
     draftId: v.id("agentDrafts"),
     name: v.string(),
@@ -1355,6 +1389,12 @@ export default defineSchema({
      * or removed; the builder's edits survive by name.
      */
     knowledgeTools: v.optional(v.array(knowledgeToolValidator)),
+    /**
+     * TRADING RULES the AI wrote (lib/strategy.ts - fast rules, phase 2): data in a
+     * bounded language, every write checked by cleanRule. Run by convex/strategy.ts
+     * with no model call while autopilot is on.
+     */
+    rules: v.optional(v.array(v.any())),
     conversationId: v.id("dolphinConversations"),
     /**
      * WHO IT IS FOR (mentor review, 2026-09-29: plain language, protocols in an

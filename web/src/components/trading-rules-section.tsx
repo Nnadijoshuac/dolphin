@@ -33,7 +33,27 @@ function price(value: number): string {
 
 export function TradingRulesSection({ conversationKey }: { conversationKey: string }) {
   const view = useQuery(strategyApi.strategy.forConversation, { conversationKey });
+  const exportForRunner = useMutation(strategyApi.strategy.exportForRunner);
+  const [exported, setExported] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   if (!view || view.rules.length === 0) return null;
+
+  /** Downloads agent.json - the rules and a fresh report token - for the builder's own server (phase 4). */
+  const download = async () => {
+    setExportError(null);
+    try {
+      const file = await exportForRunner({ conversationKey });
+      const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "agent.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setExported(true);
+    } catch (cause) {
+      setExportError(reason(cause, "The file could not be made. Try again."));
+    }
+  };
   return (
     <div className="py-3">
       <div className="flex items-baseline justify-between gap-2">
@@ -49,6 +69,64 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
         ))}
       </ul>
       {view.trades.length > 0 ? <Trades trades={view.trades} /> : null}
+
+      <button
+        className="mt-3 flex h-8 w-full items-center justify-center rounded-lg border border-line px-3 !text-[12px] font-semibold text-ink transition-colors hover:border-ink"
+        onClick={() => void download()}
+        type="button"
+      >
+        Run it on your server
+      </button>
+      {exportError ? (
+        <p className="mt-1.5 text-[0.68rem] text-danger" role="alert">
+          {exportError}
+        </p>
+      ) : null}
+      {exported ? <RunnerSteps /> : null}
+    </div>
+  );
+}
+
+/** What to do with agent.json - on any server with Node 20+ that can reach Binance. */
+function RunnerSteps() {
+  const runner = `${typeof window === "undefined" ? "https://dolphinamp.xyz" : window.location.origin}/runner/dolphin-runner.mjs`;
+  const lines = [
+    "# 1. On your server (Node 20+), in a new folder, put the agent.json you just downloaded",
+    `curl -O ${runner}`,
+    "",
+    "# 2. Watch it trade on paper first - no orders, no keys",
+    "node dolphin-runner.mjs",
+    "",
+    "# 3a. Real orders on the Binance Exchange: an API key with trading on and WITHDRAWALS OFF,",
+    "#     restricted to this server's IP",
+    "export BINANCE_API_KEY=...  BINANCE_API_SECRET=...",
+    "node dolphin-runner.mjs --live",
+    "",
+    "# 3b. Real orders from your Binance Wallet (Agentic Wallet): sign in once, approve in the Binance app",
+    "npm i -g @binance/agentic-wallet && baw auth signin",
+    "node dolphin-runner.mjs --live",
+  ].join("\n");
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-2 rounded-lg border border-line/80 bg-paper px-3 py-2">
+      <p className="text-[0.7rem] font-semibold text-ink">agent.json downloaded</p>
+      <p className="mt-0.5 text-[0.66rem] leading-relaxed text-muted">
+        Your keys and wallet session stay on your server; Dolphin never sees them. Each trade is reported back here. Downloading again gives a new file and the old one stops reporting.
+      </p>
+      <pre className="mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-paper-muted px-2 py-1.5 font-mono text-[0.62rem] leading-relaxed text-ink-soft">{lines}</pre>
+      <button
+        className="mt-1.5 !text-[0.68rem] font-semibold text-accent-ink hover:underline"
+        onClick={() =>
+          void navigator.clipboard?.writeText(lines).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          })
+        }
+        type="button"
+      >
+        {copied ? "Copied" : "Copy the steps"}
+      </button>
+      <p className="mt-1 text-[0.62rem] leading-relaxed text-faint">Keep it running with pm2 or Docker. Futures stops are also placed on Binance, so they hold if your server goes down.</p>
     </div>
   );
 }
@@ -157,13 +235,15 @@ function NumberBox({
 function Trades({ trades }: { trades: TradingRuleTrade[] }) {
   return (
     <div className="mt-3">
-      <p className="text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-muted">Recent paper trades</p>
+      <p className="text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-muted">Recent trades</p>
       <ul className="mt-1 divide-y divide-line/60">
         {trades.slice(0, 8).map((trade) => (
           <li className="flex items-baseline justify-between gap-2 py-1 text-[0.68rem]" key={trade._id}>
             <span className="min-w-0 truncate text-ink-soft" title={trade.reason}>
               {trade.kind === "enter" ? (trade.side === "short" ? "Shorted" : "Bought") : "Closed"} {trade.market} at {price(trade.price)}
               {trade.leverage > 1 ? ` · ${trade.leverage}x` : ""}
+              {/* Where it happened: Dolphin's paper run, or the builder's server - reported, so never shown as verified. */}
+              <span className="ml-1 text-muted">· {trade.source === "runner" ? `your server${trade.paper ? ", paper" : ", live - reported"}` : "paper"}</span>
             </span>
             <span
               className={`shrink-0 tabular-nums ${

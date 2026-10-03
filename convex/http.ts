@@ -31,6 +31,7 @@ import {
 } from "./builtAgentServer";
 import { apiBase } from "./builtAgents";
 import { PaymentRejected, decodePayment, formatU, paymentChallenge, paymentResponseHeader, textToBase64, type DecodedPayment } from "./lib/x402";
+import { runnerTokenHash } from "./strategy";
 import { checkPayment, settlePayment } from "./x402";
 
 const http = httpRouter();
@@ -422,6 +423,32 @@ http.route({
   pathPrefix: BUILT_PREFIX,
   method: "OPTIONS",
   handler: httpAction(async () => new Response(null, { status: 204, headers: BUILT_CORS })),
+});
+
+/*
+ * A RUNNER REPORTS A TRADE (fast rules, phase 4). The builder's own server runs the
+ * agent's rules and posts each trade here with the token from agent.json. The token
+ * only adds trade reports to that one agent; it reads nothing and moves nothing.
+ */
+http.route({
+  path: "/api/v1/runner/report",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const reply = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8" } });
+    const text = await request.text();
+    if (text.length > 4_000) return reply(413, { ok: false, reason: "Too large." });
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return reply(400, { ok: false, reason: "Send JSON." });
+    }
+    const token = typeof body.token === "string" ? body.token : "";
+    if (!/^[0-9a-f]{64}$/.test(token)) return reply(401, { ok: false, reason: "A runner token is required." });
+    const result = await ctx.runMutation(internal.strategy.recordRunnerReport, { tokenHash: await runnerTokenHash(token), report: body });
+    return reply(result.ok ? 200 : 403, result);
+  }),
 });
 
 export default http;

@@ -1599,6 +1599,9 @@ export type TradingRuleTrade = {
   pnlPct: number | null;
   reason: string;
   at: number;
+  /** "runner": reported by the builder's own server (phase 4); absent or "dolphin": Dolphin's paper run. */
+  source?: "dolphin" | "runner";
+  latencyMs?: number | null;
 };
 
 export const strategyApi = anyApi as unknown as {
@@ -1606,5 +1609,7 @@ export const strategyApi = anyApi as unknown as {
     forConversation: Query<{ conversationKey: string }, { rules: TradingRuleView[]; trades: TradingRuleTrade[]; running: boolean }>;
     updateRule: Mutation<{ conversationKey: string; ruleId: string; sizeUsd?: number; leverage?: number; stopLossPct?: number | null }, { warnings: string[] }>;
     removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
+    /** agent.json for the runner: the rules and a fresh report token (the old one stops working). */
+    exportForRunner: Mutation<{ conversationKey: string }, { version: number; agent: { name: string }; rules: unknown[]; report: { url: string; token: string } }>;
   };
 };

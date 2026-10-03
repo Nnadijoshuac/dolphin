@@ -1367,6 +1367,15 @@ export default defineSchema({
     reason: v.string(),
     candleTime: v.number(),
     at: v.number(),
+    /**
+     * Who made it: "dolphin" (the paper run inside Dolphin; absent on older rows) or
+     * "runner" (the builder's own server, reported back). A runner's exchange trade
+     * cannot be checked on-chain, so it is shown as reported, never as verified.
+     */
+    source: v.optional(v.union(v.literal("dolphin"), v.literal("runner"))),
+    orderRef: v.optional(v.union(v.string(), v.null())),
+    txHash: v.optional(v.union(v.string(), v.null())),
+    latencyMs: v.optional(v.union(v.number(), v.null())),
   }).index("by_draft", ["draftId", "at"]),
 
   agentKnowledge: defineTable({
@@ -1395,6 +1404,11 @@ export default defineSchema({
      * with no model call while autopilot is on.
      */
     rules: v.optional(v.array(v.any())),
+    /**
+     * The runner's report token, hashed (fast rules, phase 4). The builder downloads it
+     * once in agent.json; a new download replaces it, so an old file stops reporting.
+     */
+    runnerTokenHash: v.optional(v.string()),
     conversationId: v.id("dolphinConversations"),
     /**
      * WHO IT IS FOR (mentor review, 2026-09-29: plain language, protocols in an
@@ -1470,7 +1484,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_conversation", ["conversationId"])
-    .index("by_owner", ["ownerAddress", "updatedAt"]),
+    .index("by_owner", ["ownerAddress", "updatedAt"])
+    .index("by_runner_token", ["runnerTokenHash"]),
 
   /**
    * One turn. Assistant turns are written empty and filled in by the action, so

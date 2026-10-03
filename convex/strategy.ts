@@ -3,6 +3,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
+import { apiBase } from "./builtAgents";
 import { ensureDraft } from "./knowledge";
 import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } from "./lib/agentBlocks";
 import { closedCandles, MarketDataError } from "./lib/binanceMarket";
@@ -241,7 +242,7 @@ export const record = internalMutation({
       .unique();
     if (run) await ctx.db.patch(run._id, { state, lastCheckedAt: now, lastError });
     else await ctx.db.insert("strategyRuns", { draftId, ruleId, state, lastCheckedAt: now, lastError });
-    if (trade) await ctx.db.insert("strategyTrades", { draftId, ruleId, ...trade, paper: true, at: now });
+    if (trade) await ctx.db.insert("strategyTrades", { draftId, ruleId, ...trade, paper: true, at: now, source: "dolphin" });
   },
 });
 
@@ -314,3 +315,95 @@ export const tick = internalAction({
     return { rules: rulesChecked, trades };
   },
 });
+
+/* ── Phase 4: "Run it on your server" ── */
+
+const MAX_RUNNER_REPORTS_PER_DAY = 500;
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function randomToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Everything the runner needs, as agent.json: the rules and a report token.
+ * The token is stored only hashed; downloading again replaces it, so an old
+ * file can no longer report. It can only add trade reports to this agent -
+ * it reads nothing and moves nothing.
+ */
+export const exportForRunner = mutation({
+  args: { conversationKey: v.string() },
+  handler: async (ctx, { conversationKey }) => {
+    const draft = await draftOfKey(ctx, conversationKey);
+    const rules = rulesOf(draft);
+    if (!draft || rules.length === 0) throw new ConvexError("This agent has no trading rules to run yet.");
+    const token = randomToken();
+    await ctx.db.patch(draft._id, { runnerTokenHash: await sha256Hex(token), updatedAt: Date.now() });
+    return {
+      version: 1,
+      agent: { name: draft.name ?? "Dolphin agent" },
+      rules,
+      report: { url: `${apiBase()}/api/v1/runner/report`, token },
+    };
+  },
+});
+
+export const recordRunnerReport = internalMutation({
+  args: { tokenHash: v.string(), report: v.any() },
+  handler: async (ctx, { tokenHash, report }): Promise<{ ok: boolean; reason: string | null }> => {
+    const draft = await ctx.db
+      .query("agentDrafts")
+      .withIndex("by_runner_token", (q) => q.eq("runnerTokenHash", tokenHash))
+      .unique();
+    if (!draft) return { ok: false, reason: "That runner token is not current. Download agent.json again from the agent." };
+    const r = (report ?? {}) as Record<string, unknown>;
+    const rule = rulesOf(draft).find((candidate) => candidate.id === r.ruleId);
+    if (!rule) return { ok: false, reason: "That rule is no longer in the agent." };
+    const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+    const price = num(r.price);
+    if ((r.kind !== "enter" && r.kind !== "exit") || (r.side !== "long" && r.side !== "short") || price === null || price <= 0) {
+      return { ok: false, reason: "The report is not a trade." };
+    }
+    const since = Date.now() - 24 * 60 * 60 * 1000;
+    const recent = await ctx.db
+      .query("strategyTrades")
+      .withIndex("by_draft", (q) => q.eq("draftId", draft._id).gte("at", since))
+      .take(MAX_RUNNER_REPORTS_PER_DAY + 1);
+    if (recent.length > MAX_RUNNER_REPORTS_PER_DAY) return { ok: false, reason: "Too many reports today." };
+    const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
+    await ctx.db.insert("strategyTrades", {
+      draftId: draft._id,
+      ruleId: rule.id,
+      ruleName: rule.name,
+      // The rule's own venue, market, size and leverage - what Dolphin knows - not what the report claims.
+      venue: rule.venue,
+      market: rule.market,
+      side: r.side,
+      kind: r.kind,
+      price,
+      sizeUsd: rule.sizeUsd,
+      leverage: rule.leverage,
+      paper: r.paper !== false,
+      pnlPct: num(r.pnlPct),
+      reason: text(r.reason, 300) ?? "",
+      candleTime: num(r.candleTime) ?? 0,
+      at: Date.now(),
+      source: "runner",
+      orderRef: text(r.orderRef, 80),
+      txHash: typeof r.txHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(r.txHash) ? r.txHash : null,
+      latencyMs: num(r.latencyMs),
+    });
+    return { ok: true, reason: null };
+  },
+});
+
+/** The http route's helper: hash the bearer token here so it is never stored or compared in the clear. */
+export async function runnerTokenHash(token: string): Promise<string> {
+  return sha256Hex(token);
+}

@@ -344,7 +344,7 @@ function signalTitle(condition: SignalCondition, level: number | null): string {
 }
 
 /** A block's one-line summary on the canvas. */
-function blockSummary(block: AgentBlockData): { title: string; detail: string } {
+export function blockSummary(block: AgentBlockData): { title: string; detail: string } {
   switch (block.type) {
     case "schedule": {
       const minutes = block.config.everyMinutes;

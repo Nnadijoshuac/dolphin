@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useState } from "react";
 
+import { RuleView } from "@/components/rule-view";
 import { strategyApi, type TradingRuleTrade, type TradingRuleView } from "@/convex/api";
 
 /**
@@ -65,7 +66,7 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
       </p>
       <ul className="mt-2 space-y-1.5">
         {view.rules.map((rule) => (
-          <RuleRow conversationKey={conversationKey} key={rule.id} rule={rule} />
+          <RuleRow conversationKey={conversationKey} key={rule.id} rule={rule} trades={view.trades.filter((trade) => trade.ruleId === rule.id)} />
         ))}
       </ul>
       <Timeline rules={view.rules} running={view.running} trades={view.trades} />
@@ -131,10 +132,12 @@ function RunnerSteps() {
   );
 }
 
-function RuleRow({ conversationKey, rule }: { conversationKey: string; rule: TradingRuleView }) {
+function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; rule: TradingRuleView; trades: TradingRuleTrade[] }) {
   const update = useMutation(strategyApi.strategy.updateRule);
   const remove = useMutation(strategyApi.strategy.removeRule);
+  const setPaused = useMutation(strategyApi.strategy.setRulePaused);
   const [error, setError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
   const futures = rule.venue === "binance-futures";
 
   const save = async (change: { sizeUsd?: number; leverage?: number; stopLossPct?: number | null }) => {
@@ -163,14 +166,29 @@ function RuleRow({ conversationKey, rule }: { conversationKey: string; rule: Tra
         {VENUE_WORDS[rule.venue]}
         {rule.position
           ? ` · holding a ${rule.position.side} from ${price(rule.position.entryPrice)}`
-          : rule.lastCheckedAt
-            ? " · watching"
-            : " · not started"}
+          : rule.paused
+            ? ""
+            : rule.lastCheckedAt
+              ? " · watching"
+              : " · not started"}
+        {rule.paused ? <span className="font-semibold text-ink-soft"> · paused</span> : null}
       </p>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         <NumberBox label="Size" onSave={(value) => value !== null && void save({ sizeUsd: value })} prefix="$" value={rule.sizeUsd} />
         {futures ? <NumberBox label="Leverage" onSave={(value) => value !== null && void save({ leverage: value })} suffix="x" value={rule.leverage} /> : null}
         <NumberBox allowEmpty label="Stop" onSave={(value) => void save({ stopLossPct: value })} suffix="%" value={rule.stopLossPct} />
+        <span className="ml-auto flex items-center gap-1">
+          <button
+            className="rounded-md px-1.5 py-0.5 !text-[0.68rem] font-semibold text-muted transition-colors hover:bg-paper hover:text-ink"
+            onClick={() => void setPaused({ conversationKey, ruleId: rule.id, paused: !rule.paused }).catch((cause) => setError(reason(cause, "That did not save.")))}
+            type="button"
+          >
+            {rule.paused ? "Resume" : "Pause"}
+          </button>
+          <button className="rounded-md border border-line/80 bg-paper px-2 py-0.5 !text-[0.68rem] font-semibold text-ink transition-colors hover:border-ink" onClick={() => setViewing(true)} type="button">
+            View
+          </button>
+        </span>
       </div>
       {rule.warnings.map((warning) => (
         <p className="mt-1.5 rounded-md border border-[#d9901a]/40 bg-[#d9901a]/10 px-2 py-1 text-[0.66rem] leading-relaxed text-ink-soft" key={warning}>
@@ -183,6 +201,7 @@ function RuleRow({ conversationKey, rule }: { conversationKey: string; rule: Tra
           {error}
         </p>
       ) : null}
+      {viewing ? <RuleView conversationKey={conversationKey} onClose={() => setViewing(false)} rule={rule} trades={trades} /> : null}
     </li>
   );
 }

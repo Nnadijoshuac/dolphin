@@ -23,13 +23,48 @@ const SECTIONS: LegalSection[] = [
     ),
   },
   {
+    id: "automated",
+    title: "Automated trading acts without asking",
+    body: (
+      <p>
+        Trading rules and Autopilot act on every closed candle without asking you first, including at night and in fast
+        markets. A rule does exactly what it says, even when the market makes that a bad idea. Paper results inside
+        Dolphin use the candle&rsquo;s closing price with no fees, slippage or funding, so real results on your own
+        server can be worse.
+      </p>
+    ),
+  },
+  {
+    id: "leverage",
+    title: "Leverage and short selling",
+    body: (
+      <p>
+        Futures trades with leverage multiply losses as well as gains. At 5x, a move of about 20% against you can wipe
+        out the position (liquidation). A short loses money when the price rises, and the rise has no ceiling. A stop-loss
+        can fill at a worse price than you set, or not at all in a gap.
+      </p>
+    ),
+  },
+  {
+    id: "own-server",
+    title: "Running your agent on your own server",
+    body: (
+      <p>
+        When you run the Dolphin runner yourself, it uses your exchange key or Binance wallet on your machine. If that
+        machine or key is compromised, someone else can trade your account. Give the key trading only - never
+        withdrawals - and restrict it to your server&rsquo;s IP address. Dolphin cannot see or stop what the runner does.
+      </p>
+    ),
+  },
+  {
     id: "ai",
     title: "AI agents make mistakes",
     body: (
       <p>
         Agents are built on AI models that can misread data, invent facts, or act on instructions hidden in text they
-        read. Dolphin enforces your risk limits and quiet hours in code, not by asking the AI, but those limits only
-        bound the damage - they do not make an agent right.
+        read - and Dolphin&rsquo;s own AI is no exception, including when it writes trading rules for you. Check what it
+        built before you switch it on. Dolphin enforces your risk limits, daily loss limit and quiet hours in code, not
+        by asking the AI, but those limits only bound the damage - they do not make an agent right.
       </p>
     ),
   },
@@ -118,7 +153,7 @@ export default function RiskPage() {
       summary={
         <p>
           Hiring and building agents that touch real money is risky. This page lists the main risks in plain words. It is
-          not a complete list, and it is not advice.
+          not a complete list, and it is not advice. Every trade is your own responsibility - see the Disclaimer.
         </p>
       }
       title="Risk Disclosure"

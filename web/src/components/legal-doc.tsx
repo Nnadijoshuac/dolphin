@@ -9,6 +9,7 @@ const DOCS = [
   { href: "/policies/terms", label: "Terms of Use" },
   { href: "/policies/privacy", label: "Privacy Policy" },
   { href: "/policies/risk", label: "Risk Disclosure" },
+  { href: "/policies/disclaimer", label: "Disclaimer" },
   { href: "/policies/security", label: "Security Policy" },
   { href: "/policies/conflicts", label: "Conflicts of interest" },
 ] as const;

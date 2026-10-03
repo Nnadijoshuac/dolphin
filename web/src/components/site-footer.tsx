@@ -65,6 +65,7 @@ const COLUMNS = [
       { href: "/policies/terms", label: "Terms of Use" },
       { href: "/policies/privacy", label: "Privacy Policy" },
       { href: "/policies/risk", label: "Risk Disclosure" },
+      { href: "/policies/disclaimer", label: "Disclaimer" },
       { href: "/policies/security", label: "Security" },
       { href: "/policies/conflicts", label: "Conflicts of interest" },
     ],
@@ -143,7 +144,14 @@ export function SiteFooter() {
         </div>
 
         <div className="site-footer__bottom">
-          <p>© 2026 Dolphin · Built for the BNB Chain Smart Money Era Hackathon</p>
+          <p>
+            © 2026 Dolphin · Built for the BNB Chain Smart Money Era Hackathon
+            {/* The one-line disclaimer (owner, 2026-10-03), quiet, on every page with a footer. */}
+            <span className="site-footer__disclaimer">
+              Not financial, legal or tax advice. Every trade is your own decision and responsibility.{" "}
+              <Link href="/policies/disclaimer">Disclaimer</Link>
+            </span>
+          </p>
           <div className="site-footer__bottom-links">
             <span className="inline-flex items-center gap-2">
               <BnbLogo size={14} />

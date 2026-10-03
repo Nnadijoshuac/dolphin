@@ -21,7 +21,7 @@ export const LEGAL = {
   /** The public channel that exists today. */
   x: "https://x.com/dolphin_Agents",
   xHandle: "@dolphin_Agents",
-  updated: "29 September 2026",
+  updated: "3 October 2026",
 } as const;
 
 /** How to reach us, stated with whatever channel really exists. */

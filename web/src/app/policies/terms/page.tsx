@@ -29,8 +29,9 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           Dolphin is not a bank, broker, exchange, custodian, investment adviser or fiduciary. We do not hold your money,
-          we do not trade on your behalf except in the narrow, opt-in way described in section 4, and nothing on Dolphin
-          is a recommendation to buy, sell or hold anything.
+          we do not trade on your behalf except in the narrow, opt-in ways you switch on yourself (sections 4 and 5), and
+          nothing on Dolphin is a recommendation to buy, sell or hold anything. Every trade made with Dolphin is your
+          own decision and your own responsibility - see the <Link href="/policies/disclaimer">Disclaimer</Link>.
         </p>
         <p>
           By using Dolphin you agree to these terms. If you do not agree, do not use it. Dolphin is new and still
@@ -91,6 +92,40 @@ const SECTIONS: LegalSection[] = [
           wallet, so someone who stole the key could send swapped tokens elsewhere, up to your allowances and daily
           limit. A contract that closes this gap is written but not deployed or audited.
         </p>
+      </>
+    ),
+  },
+  {
+    id: "rules",
+    title: "Trading rules, Autopilot and your own server",
+    body: (
+      <>
+        <p>
+          An agent you build can carry trading rules - conditions written as data, such as &ldquo;buy when the hourly RSI
+          falls below 30&rdquo; - that act on each closed market candle without asking you or an AI model.
+        </p>
+        <ul>
+          <li>
+            <strong>Inside Dolphin they trade on paper.</strong> With Autopilot on, Dolphin checks your rules against
+            live Binance prices and records pretend trades. No real order is placed and no money moves.
+          </li>
+          <li>
+            <strong>Real orders only run on your own server.</strong> If you download your agent and run the Dolphin
+            runner on a machine you control, it places real orders on Binance with your own API key or your Binance
+            wallet. Those keys stay on your machine; Dolphin never receives them and cannot see, change or stop those
+            orders. What the runner reports back to Dolphin is shown as reported, not verified.
+          </li>
+          <li>
+            <strong>Limits are yours to set.</strong> Leverage, size, stop-loss, a daily loss limit and other limits work
+            as described in the builder, but you choose them, they can be set wrongly, and they do not guarantee you will
+            not lose money. A daily loss limit counts closed trades only and resets at 00:00 UTC.
+          </li>
+          <li>
+            <strong>Autopilot runs without asking.</strong> Once you switch it on, your agent acts on its triggers and
+            rules until you switch it off. Each run of its AI uses your own model key.
+          </li>
+        </ul>
+        <p>Every trade these features make, on paper or real, is yours. Dolphin is not responsible for any of them.</p>
       </>
     ),
   },
@@ -168,6 +203,15 @@ const SECTIONS: LegalSection[] = [
             <strong>Getting paid.</strong> If you set a price, payments go to the payout wallet you choose. Dolphin never
             holds your earnings.
           </li>
+          <li>
+            <strong>Your documents.</strong> If you give your agent documents to answer from, you must have the right to
+            use and share what is in them. Their text is stored by Dolphin to answer questions, and anyone who can use
+            your agent&rsquo;s tools can receive passages from them.
+          </li>
+          <li>
+            <strong>Paid tools.</strong> If you price your agent&rsquo;s tools, each call is paid for in U on BNB Chain
+            before the answer is returned. Payments are final; there are no refunds for an answer someone did not like.
+          </li>
         </ul>
         <p>
           You must not publish an agent that is deceptive, impersonates someone, infringes others&rsquo; rights, or is
@@ -182,12 +226,18 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          Nothing on Dolphin - including anything an agent says, any number, chart, backtest, ranking or label - is
-          financial, investment, legal or tax advice, and none of it is a promise of profit. AI agents make mistakes,
-          and markets move against people. Only use money you can afford to lose.
+          Nothing on Dolphin - including anything Dolphin&rsquo;s AI or an agent says, any trading rule it writes for
+          you, any number, chart, backtest, paper result, ranking or label - is financial, investment, legal or tax
+          advice, and none of it is a promise of profit. AI models make mistakes, and markets move against people. Only
+          use money you can afford to lose.
         </p>
         <p>
-          Read the <Link href="/policies/risk">Risk Disclosure</Link> before you hire an agent or turn on trading.
+          You alone decide whether to make any trade or transaction, and you alone are responsible for it and its
+          result, including trades an agent, rule or program you set up makes for you.
+        </p>
+        <p>
+          Read the <Link href="/policies/risk">Risk Disclosure</Link> and the{" "}
+          <Link href="/policies/disclaimer">Disclaimer</Link> before you hire an agent or turn on trading.
         </p>
       </>
     ),
@@ -210,8 +260,8 @@ const SECTIONS: LegalSection[] = [
     title: "Fees",
     body: (
       <p>
-        Dolphin does not currently charge you a fee. You pay the price an agent quotes for a job, and the network fees
-        (gas) for your transactions. If we introduce a fee, we will show it before you pay it.
+        Dolphin does not currently charge you a fee. You pay the price an agent quotes for a job or a call, and the
+        network fees (gas) for your transactions. If we introduce a fee, we will show it before you pay it.
       </p>
     ),
   },
@@ -243,9 +293,10 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          To the fullest extent the law allows, Dolphin and the people behind it are not liable for any indirect,
-          incidental, special or consequential loss, or for any loss of funds, tokens, profits, data or opportunity,
-          arising from your use of Dolphin, any agent, any trade or any blockchain transaction.
+          Dolphin is not a party to your transactions and is not responsible for them. To the fullest extent the law
+          allows, Dolphin and the people behind it are not liable for any indirect, incidental, special or consequential
+          loss, or for any loss of funds, tokens, profits, data or opportunity, arising from your use of Dolphin, any
+          agent, any trading rule, Autopilot, the runner, any trade, any exchange or any blockchain transaction.
         </p>
         <p>
           Where liability cannot be excluded, it is limited to the greater of the fees you paid Dolphin in the twelve

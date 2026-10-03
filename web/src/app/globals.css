@@ -4313,3 +4313,7 @@ select {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), 0 16px 34px -18px rgba(15, 23, 42, 0.38);
 }
+
+/* The footer's one-line disclaimer: present, quiet (owner, 2026-10-03). */
+.site-footer__disclaimer { display: block; margin-top: 0.3rem; font-size: 0.72rem; opacity: 0.8; }
+.site-footer__disclaimer a { text-decoration: underline; text-underline-offset: 2px; }

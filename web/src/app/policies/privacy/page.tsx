@@ -37,6 +37,15 @@ const SECTIONS: LegalSection[] = [
             and a record of wallet actions taken from their on-chain receipts.
           </li>
           <li>
+            <strong>Documents you give your agent:</strong> only their text, which your browser extracts before
+            anything is sent; the file itself is not uploaded. The text is stored compressed to answer questions, and a
+            fingerprint of it goes into your agent&rsquo;s public registration when you put it on-chain.
+          </li>
+          <li>
+            <strong>Your agent&rsquo;s trading rules, its paper trades and limits,</strong> and the trades your own
+            server reports back. The token your server reports with is stored only as a one-way hash.
+          </li>
+          <li>
             <strong>API keys you save</strong> for your own agents, encrypted (AES-256-GCM). We only ever show you their
             name and last four characters, and we decrypt them only to run your agent.
           </li>
@@ -99,7 +108,12 @@ const SECTIONS: LegalSection[] = [
           </li>
           <li>
             <strong>Market data:</strong> charts and prices are loaded by your browser directly from DexScreener and
-            GeckoTerminal, and security checks come from GoPlus. These services can see your IP address.
+            GeckoTerminal, and security checks come from GoPlus. These services can see your IP address. Dolphin&rsquo;s
+            servers read public candles from Binance to check trading rules; nothing about you is sent.
+          </li>
+          <li>
+            <strong>Your own server:</strong> if you run your agent yourself, it talks to Binance directly with your keys.
+            Those keys and your exchange account details are never sent to Dolphin; only the trades it reports.
           </li>
           <li>
             <strong>Hosting and delivery:</strong> Vercel hosts the site and provides cookieless analytics; Resend sends

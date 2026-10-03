@@ -465,7 +465,7 @@ function AutopilotCard({
         ? `It can trade from your Dolphin Wallet without asking, if you have given it a trade key${risk && risk.type === "risk" ? ` - at most $${risk.config.maxTradeUsd} a trade and ${risk.config.maxTradesPerDay} a day` : ""}.`
         : "Its Dolphin Wallet trades stay on paper: Paper trading is on."
       : null,
-    "You can switch Autopilot off at any time.",
+    "You can switch Autopilot off at any time. What it does is your decision and your responsibility - not financial advice.",
   ].filter((line): line is string => Boolean(line));
 
   return (

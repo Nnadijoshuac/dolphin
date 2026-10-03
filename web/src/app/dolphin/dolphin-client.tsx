@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 /* React Flow's stylesheet, for the Build canvas. External stylesheets are imported from app/ (Next CSS docs). */
 import "@xyflow/react/dist/style.css";
@@ -10,7 +10,6 @@ import "@xyflow/react/dist/style.css";
 import styles from "@/app/dolphin/dolphin-chat.module.css";
 import { AgentCanvas, type CanvasRun } from "@/components/agent-canvas";
 import { AgentDraftPanel, EMPTY_AGENT_DRAFT } from "@/components/agent-draft-panel";
-import { BuiltSummary } from "@/components/built-summary";
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
@@ -867,8 +866,6 @@ export function DolphinClient({
       }
     : EMPTY_AGENT_DRAFT;
   const draftName = agentDraft.name?.trim() || "your agent";
-  const lastBuiltIndex =
-    building && BUILD_BACKEND_CONNECTED ? turns.findLastIndex((turn) => turn.role === "assistant" && turn.status === "complete") : -1;
 
   const buildConversationKey = builder?.buildConversationKey ?? null;
   /* Where this draft already lives on-chain (convex/builtAgents.ts forDraft). */
@@ -1381,10 +1378,10 @@ export function DolphinClient({
           ) : (
             <div className="mx-auto w-full max-w-[44rem] px-5 pb-8 pt-8">
               {turns.map((turn, index) => (
-                <Fragment key={turn.id}>
                 <Turn
                   askedPrompts={askedPrompts}
                   dynamicAgents={agentDirectory}
+                  key={turn.id}
                   onSelectPrompt={
                     /*
                      * The follow-up chips are questions for Dolphin. Under a
@@ -1403,11 +1400,6 @@ export function DolphinClient({
                   }
                   turn={turn}
                 />
-                {/* What the agent really is now, from the saved draft - under the latest build reply that finished. */}
-                {index === lastBuiltIndex && buildConversationKey ? (
-                  <BuiltSummary conversationKey={buildConversationKey} draft={agentDraft} onReview={() => setDraftOpen(true)} />
-                ) : null}
-                </Fragment>
               ))}
               <div ref={bottomRef} />
             </div>

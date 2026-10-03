@@ -4127,20 +4127,6 @@ select {
 .confirm-scrim { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(10, 10, 10, 0.42); backdrop-filter: blur(3px); }
 .confirm-card { width: min(420px, 100%); padding: 20px; border-radius: 18px; background: var(--paper); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22), inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent); }
 
-/* "What I built": the saved agent, under the builder's latest reply (built-summary.tsx). */
-.built-summary {
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: var(--paper);
-  padding: 0.85rem 1rem 0.9rem;
-  animation: built-summary-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-@keyframes built-summary-in {
-  from { opacity: 0; transform: translateY(4px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .built-summary { animation: none; }
-}
 
 /* Maximize and pop out (owner, 2026-10-03): quiet icon buttons, desktop only. */
 .panel-icon-button {
@@ -4228,7 +4214,10 @@ select {
   background: var(--paper-muted);
   font-size: 0.68rem;
   line-height: 1.45;
-  animation: built-summary-in 200ms ease both;
+  animation: trade-why-in 200ms ease both;
+}
+@keyframes trade-why-in {
+  from { opacity: 0; transform: translateY(3px); }
 }
 
 /* The build (agent-canvas.tsx BUILD_STEP_MS): quick enough to read as one motion. */

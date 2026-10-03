@@ -14,7 +14,9 @@ import {
 } from "./_generated/server";
 import { executeToolCalls, humanizeError } from "./dolphin";
 import {
+  asksForRule,
   BUILDER_REPLY_SCHEMA,
+  RULES_ONLY_SCHEMA,
   DESCRIPTION_MAX_CHARS,
   EMPTY_DRAFT,
   INSTRUCTIONS_MAX_CHARS,
@@ -143,8 +145,9 @@ TRADING RULES - for an agent that trades on market conditions, write them in \`r
 - Conditions (all fields present, unused ones null): rsi (op, value, period), price_vs_ma (op, ma sma/ema, length), ma_cross (direction, fast, slow, ma), macd_cross (direction), trend (direction, candles: "3 lower closes in a row" = trend down 3), price (op, value), change_pct (op, value, candles).
 - Every short needs a stop-loss or an until. Leverage is 1 unless the person asks for leverage; never above 5 - above 3 Dolphin warns them about liquidation. Keep maxTradesPerDay small (1-3) unless told otherwise.
 - Example - "short BNB on 4-hour candles when the trend turns down, hold until it turns up, 2x, stop at 5%": venue binance-futures, market BNBUSDT, timeframe 4h, when [trend down 3], action short, until [trend up 2], stopLossPct 5, leverage 2.
-- When you write rules, add NO Schedule, Price trigger, Price feed, Indicators, Signal, Risk limits, Swap or Safety block: the rule reads Binance's candles itself and carries its own size, stop and daily cap.
-- Inside Dolphin rules trade on PAPER at live Binance prices while Autopilot is on. Real money comes only when the person runs the agent on their own server (being built now). Never say live trading can be switched on in Dolphin, and never ask for Binance keys in the chat. Say this when you add rules.
+- When you write rules, add NO Schedule, Price trigger, Indicators, Signal, Risk limits, Swap or Safety block: the rule reads Binance's candles itself and carries its own size, stop and daily cap. A Price feed for the rule's token is welcome - it draws the live chart on the canvas.
+- Put the rule in \`rules\`, never only in the instructions: a rule written as prose does not trade.
+- Rules start on PAPER (pretend money at live prices) while Autopilot is on. The person can switch Trading mode to Live in the agent panel - after accepting a real-money notice - to trade real funds from the Dolphin Wallet or their Binance account. Never ask for keys in the chat. Say this when you add rules.
 
 RECIPES - the shapes that work; add every block the job needs in one go:
 - Token checker (hired per token): Safety only. Buyer input: a token address. No Schedule, no Memory.
@@ -972,6 +975,38 @@ async function compileTurn(messages: ChatMessage[], ledger: KeyLedger): Promise<
   return null;
 }
 
+const RULES_ONLY_PROMPT = `You turn a person's description of a trading rule into Dolphin's rule format. Return JSON with one field, "rules": one entry per rule they described.
+- venue: dolphin-wallet to buy from the Dolphin Wallet on BNB Chain; binance-spot to buy on Binance; binance-futures for anything that shorts or uses leverage; binance-wallet for their Binance Agentic Wallet. If they do not say, dolphin-wallet.
+- market: a Binance pair such as BNBUSDT. timeframe: 1m, 5m, 15m, 1h, 4h or 1d.
+- when: entry conditions, ALL must hold. until: exit conditions, ALL must hold (empty if only a stop or target).
+- Conditions (every field present, unused ones null): rsi (op above/below, value, period - 14 unless said), price_vs_ma (op, ma sma/ema, length), ma_cross (direction up/down, fast, slow, ma), macd_cross (direction), trend (direction, candles), price (op, value), change_pct (op, value, candles).
+- action: buy, or short (binance-futures only). sizeUsd: dollars per entry. stopLossPct / takeProfitPct: % price move, or null. leverage: 1 unless they asked. maxTradesPerDay: what they said, else 2. cooldownMinutes: what they said, else 0. name: null.
+- "Get out when X, or at a 0.3% gain, or at a 0.5% loss" means until [X], takeProfitPct 0.3, stopLossPct 0.5.
+Write only what they described; never invent a rule.`;
+
+/** Asks for the rules alone, when the person described one and the build reply wrote none. */
+async function extractRules(text: string, ledger: KeyLedger): Promise<unknown[]> {
+  const result = await chatCompletion({
+    messages: [
+      { role: "system", content: RULES_ONLY_PROMPT },
+      { role: "user", content: text },
+    ],
+    ledger,
+    responseSchema: RULES_ONLY_SCHEMA,
+    temperature: 0.1,
+    maxTokens: 6_000,
+  }).catch(() => null);
+  if (!result) return [];
+  const body = result.content.slice(result.content.indexOf("{"), result.content.lastIndexOf("}") + 1);
+  try {
+    const parsed = JSON.parse(body) as { rules?: unknown };
+    return Array.isArray(parsed.rules) ? parsed.rules.filter((rule) => typeof rule === "object" && rule !== null) : [];
+  } catch {
+    console.warn("[agentBuilder] rules-only reply was not JSON:", JSON.stringify({ model: result.model, content: result.content.slice(0, 300) }));
+    return [];
+  }
+}
+
 /**
  * One turn of a build conversation: the person says something, the draft
  * moves, and the builder answers.
@@ -1041,6 +1076,24 @@ export const ask = action({
         return { messageId: assistantId };
       }
 
+      /*
+       * A RULE ASKED FOR, NOT WRITTEN (owner, 2026-10-03; measured on prod): the reply put the rule
+       * in the instructions as prose, so the agent described trading and never traded. When the
+       * person's words ask for a rule and the reply has none, the rules alone are asked for.
+       */
+      if (asksForRule(text) && (compiled.reply.rules ?? []).length === 0) {
+        const rules = await extractRules(text, keyLedger(ctx));
+        if (rules.length > 0) compiled.reply.rules = rules;
+      }
+      /* A rule's live chart: a Price feed for the rule's token when the reply did not offer one. */
+      const firstRule = (compiled.reply.rules ?? [])[0] as { market?: unknown } | undefined;
+      if (firstRule && typeof firstRule.market === "string" && !(compiled.reply.blocks ?? []).some((block) => block.type === "market")) {
+        const symbol = firstRule.market.toUpperCase().replace(/(USDT|USDC|FDUSD|BUSD|USD1)$/, "");
+        if (symbol) {
+          compiled.reply.blocks = [...(compiled.reply.blocks ?? []), { type: "market", symbol, everyMinutes: null, direction: null, priceUsd: null, maxTradeUsd: null, maxTradesPerDay: null }];
+        }
+      }
+
       const applied = applyBuilderReply(current, compiled.reply, offered);
       // A token-verdict agent always carries real conditions (lib/builderBlocks.ts TOKEN_VERDICT_RULES).
       const repairedInstructions = withVerdictRules(applied.draft.instructions ?? "");
@@ -1082,7 +1135,8 @@ export const ask = action({
        * its own size, stop and daily cap, so those blocks are dropped when the reply writes rules.
        */
       const writesRules = (compiled.reply.rules ?? []).length > 0;
-      const RULE_COVERED = new Set(["schedule", "price", "market", "indicators", "signal", "risk", "swap", "safety"]);
+      // A Price feed (market) stays: it draws the rule's live chart on the canvas (owner, 2026-10-03).
+      const RULE_COVERED = new Set(["schedule", "price", "indicators", "signal", "risk", "swap", "safety"]);
       const offeredBlocks = (compiled.reply.blocks ?? []).filter(
         (block) => !(grades && (block.type === "market" || block.type === "indicators" || block.type === "price")) && !(writesRules && RULE_COVERED.has(block.type)),
       );

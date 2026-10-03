@@ -469,3 +469,25 @@ export function draftGaps(draft: DraftSpec, blockCount = 0): string[] {
   if (draft.tools.length === 0 && blockCount === 0) gaps.push("at least one tool, block or document");
   return gaps;
 }
+
+/**
+ * THE RULES, ASKED FOR ON THEIR OWN (owner, 2026-10-03). Measured on prod: asked for "on BNBUSDT
+ * 1-minute candles, when the RSI drops below 50, buy $2...", a free model answered the whole build
+ * schema with rules null and wrote the rule into the agent's instructions as prose - an agent that
+ * describes trading and never trades. When the person's words ask for a rule and the reply has
+ * none, convex/agentBuilder.ts asks again with only this: one field, the same rule shape.
+ */
+export const RULES_ONLY_SCHEMA = {
+  name: "trading_rules",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["rules"],
+    properties: { rules: { ...BUILDER_REPLY_SCHEMA.schema.properties.rules, type: "array" } },
+  },
+} as const;
+
+/** Whether a person's message asks for a trading rule: candles or an indicator, and an entry. */
+export function asksForRule(text: string): boolean {
+  return /\b(candles?|rsi|moving average|macd|[0-9]+\s*-?\s*(minute|min|hour|h|day)\b)/i.test(text) && /\b(buy|short|go long|long)\b/i.test(text);
+}

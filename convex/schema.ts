@@ -1360,6 +1360,11 @@ export default defineSchema({
     held: v.optional(v.any()),
     /** How long after the judged candle closed the last decision ran, in ms (owner, 2026-10-03: "late trading is an undoing"). */
     lastLagMs: v.optional(v.number()),
+    /**
+     * When this rule's order in flight was sent (ms), or absent. While set (for ORDER_LOCK_MS), no other
+     * run touches the rule and only the run that set it may save the rule's state - see strategy.ts claimOrder.
+     */
+    orderInFlight: v.optional(v.number()),
   }).index("by_draft_rule", ["draftId", "ruleId"]),
 
   /**

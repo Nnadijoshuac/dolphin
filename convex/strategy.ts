@@ -248,6 +248,8 @@ type ArmedDraft = {
   acknowledged: boolean;
   /** Rules the owner paused: no new entries. */
   paused: string[];
+  /** Rules with an order still in flight: no run touches them until it settles (claimOrder). */
+  inFlight: string[];
   /** The wallet whose Keys tab holds the agent's keys (the one that switched Autopilot on). */
   owner: string | null;
   binance: BinanceConfig | null;
@@ -264,6 +266,7 @@ async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
   for (const draft of drafts) {
     const rules = rulesOf(draft);
     if (!draft.autopilot?.on || rules.length === 0) continue;
+    const inFlight: string[] = [];
     const states: Record<string, RuleState> = {};
     const helds: Record<string, Held | null> = {};
     for (const rule of rules) {
@@ -273,6 +276,7 @@ async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
         .unique();
       states[rule.id] = (run?.state as RuleState | undefined) ?? EMPTY_STATE;
       helds[rule.id] = (run?.held as Held | undefined) ?? null;
+      if (run?.orderInFlight && Date.now() - run.orderInFlight < ORDER_LOCK_MS) inFlight.push(rule.id);
     }
     // The block may have changed since the rule was written: a rule that no longer fits is held, with the reason.
     const binance = binanceOf(draft);
@@ -290,6 +294,7 @@ async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
       guard: { limitUsd: draft.dailyLossLimitUsd ?? null, lossTodayUsd: await lossTodayUsd(ctx, draft._id, "dolphin") },
       live: draft.paperMode === false,
       paused: draft.pausedRuleIds ?? [],
+      inFlight,
       acknowledged: Boolean(draft.liveAcknowledgedAt),
       owner: draft.autopilot?.walletAddress ?? null,
       binance,
@@ -309,6 +314,10 @@ export const record = internalMutation({
     /** Set only when it changes: what a real position holds (null once closed). */
     held: v.optional(v.any()),
     lagMs: v.optional(v.number()),
+    /** The claimOrder stamp of the run that sent an order: lets it write while its lock is held, and releases it. */
+    order: v.optional(v.number()),
+    /** Keep the lock (an order that may still land): the stamp stays until ORDER_LOCK_MS passes. */
+    keepLock: v.optional(v.boolean()),
     trade: v.union(
       v.null(),
       v.object({
@@ -329,20 +338,55 @@ export const record = internalMutation({
       }),
     ),
   },
-  handler: async (ctx, { draftId, ruleId, state, lastError, lastReason, held, lagMs, trade }) => {
+  handler: async (ctx, { draftId, ruleId, state, lastError, lastReason, held, lagMs, order, keepLock, trade }) => {
     const now = Date.now();
     const run = await ctx.db
       .query("strategyRuns")
       .withIndex("by_draft_rule", (q) => q.eq("draftId", draftId).eq("ruleId", ruleId))
       .unique();
+    /*
+     * ONE WRITER WHILE AN ORDER IS IN FLIGHT (owner's first live test, 2026-10-04): three swaps sat
+     * "pending" for 4 minutes each; when they gave up they saved the rule's state from before a buy
+     * that had landed meanwhile, and the next run bought again. While a lock is held, only the run
+     * holding it writes; every other write is dropped.
+     */
+    const locked = run?.orderInFlight !== undefined && now - run.orderInFlight < ORDER_LOCK_MS;
+    if (locked && run?.orderInFlight !== order) return;
+    const lock = order !== undefined && !keepLock ? { orderInFlight: undefined } : {};
     const reason = lastReason === undefined ? {} : { lastReason };
     const holding = { ...(held === undefined ? {} : { held }), ...(lagMs === undefined ? {} : { lastLagMs: lagMs }) };
-    if (run) await ctx.db.patch(run._id, { state, lastCheckedAt: now, lastError, ...reason, ...holding });
+    if (run) await ctx.db.patch(run._id, { state, lastCheckedAt: now, lastError, ...reason, ...holding, ...lock });
     else await ctx.db.insert("strategyRuns", { draftId, ruleId, state, lastCheckedAt: now, lastError, ...reason, ...holding });
     if (trade) {
       const { paper, ...rest } = trade;
       await ctx.db.insert("strategyTrades", { draftId, ruleId, ...rest, paper: paper ?? true, at: now, source: "dolphin" });
     }
+  },
+});
+
+/* ── One order per rule at a time ── */
+
+/** How long an order may stay in flight before the rule may trade again: past the relay's 4-minute wait. */
+const ORDER_LOCK_MS = 6 * 60_000;
+
+/**
+ * Takes a rule's order lock before an order is sent: false if another run holds it, or if the rule's
+ * state has moved since this run read it (another run judged a newer candle). The stamp it returns
+ * is what lets this run - and only this run - save the rule's state afterwards (record's `order`).
+ */
+export const claimOrder = internalMutation({
+  args: { draftId: v.id("agentDrafts"), ruleId: v.string(), lastCandle: v.union(v.number(), v.null()) },
+  handler: async (ctx, { draftId, ruleId, lastCandle }): Promise<number | null> => {
+    const run = await ctx.db
+      .query("strategyRuns")
+      .withIndex("by_draft_rule", (q) => q.eq("draftId", draftId).eq("ruleId", ruleId))
+      .unique();
+    if (!run) return null;
+    const now = Date.now();
+    if (run.orderInFlight !== undefined && now - run.orderInFlight < ORDER_LOCK_MS) return null;
+    if (((run.state as RuleState | undefined)?.lastCandle ?? null) !== lastCandle) return null;
+    await ctx.db.patch(run._id, { orderInFlight: now });
+    return now;
   },
 });
 
@@ -436,6 +480,8 @@ export const tick = internalAction({
           });
           continue;
         }
+        // An order of this rule is still in flight: this run leaves the rule alone entirely.
+        if (armedDraft.inFlight.includes(rule.id)) continue;
         const judged = candles[candles.length - 1];
         if (!judged) continue;
         // Arming never trades on history: the first look only records where the market stands.
@@ -461,17 +507,26 @@ export const tick = internalAction({
         // On paper every decision "executes" at the closed candle's price; Live sends a real order first.
         const held = armedDraft.helds[rule.id] ?? null;
         let execution: Execution = { real: false };
+        let order: number | undefined;
         if (decision.type !== "none") {
+          // One order per rule at a time: take the lock, or leave the rule to the run that has it.
+          const claimed: number | null = await ctx.runMutation(internal.strategy.claimOrder, { draftId, ruleId: rule.id, lastCandle: state.lastCandle });
+          if (claimed === null) continue;
+          order = claimed;
           const outcome = await execute(ctx, armedDraft, rule, decision, held);
           if ("error" in outcome) {
+            // A swap the relay left pending may still land: the lock stays, so nothing else trades on this rule until it lapses.
+            const pending = /status PENDING/i.test(outcome.error);
             // Not traded: the candle is judged, the position is unchanged, and the reason is shown.
             await ctx.runMutation(internal.strategy.record, {
               draftId,
               ruleId: rule.id,
               state: afterCandle(state, judged.openTime, decision, false, now),
-              lastError: outcome.error,
+              lastError: pending ? "The order is still confirming on BNB Chain. This rule waits a few minutes before it trades again." : outcome.error,
               lastReason: decision.reason,
               lagMs,
+              order,
+              keepLock: pending,
               trade: null,
             });
             continue;
@@ -512,6 +567,7 @@ export const tick = internalAction({
           lastReason: decision.reason,
           lagMs,
           ...(execution.real ? { held: execution.held } : decision.type === "exit" ? { held: null } : {}),
+          ...(order !== undefined ? { order } : {}),
           trade,
         });
       }

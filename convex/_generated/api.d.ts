@@ -74,6 +74,7 @@ import type * as lib_leakedReasoning from "../lib/leakedReasoning.js";
 import type * as lib_liveMetric from "../lib/liveMetric.js";
 import type * as lib_manualExclusions from "../lib/manualExclusions.js";
 import type * as lib_mcpClient from "../lib/mcpClient.js";
+import type * as lib_mcpMarket from "../lib/mcpMarket.js";
 import type * as lib_openrouter from "../lib/openrouter.js";
 import type * as lib_pancakeswapTrade from "../lib/pancakeswapTrade.js";
 import type * as lib_probe from "../lib/probe.js";
@@ -195,6 +196,7 @@ declare const fullApi: ApiFromModules<{
   "lib/liveMetric": typeof lib_liveMetric;
   "lib/manualExclusions": typeof lib_manualExclusions;
   "lib/mcpClient": typeof lib_mcpClient;
+  "lib/mcpMarket": typeof lib_mcpMarket;
   "lib/openrouter": typeof lib_openrouter;
   "lib/pancakeswapTrade": typeof lib_pancakeswapTrade;
   "lib/probe": typeof lib_probe;

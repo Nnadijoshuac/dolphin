@@ -176,7 +176,7 @@ export function injectionFlags(text: string): Flag[] {
     const match = pattern.exec(text);
     if (!match) continue;
     const start = Math.max(0, (match.index ?? 0) - 40);
-    flags.push({ reason, excerpt: text.slice(start, (match.index ?? 0) + match[0].length + 40).replace(/\s+/g, " ").trim() });
+    flags.push({ reason, excerpt: text.slice(start, (match.index ?? 0) + match[0].length + 40).replace(/^#{1,6}\s+/gm, "").replace(/\s+/g, " ").trim() });
   }
   return flags;
 }

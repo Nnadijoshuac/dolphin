@@ -153,15 +153,17 @@ export function AgentDraftPanel({
       aria-label="Agent draft"
       className="flex h-full min-h-0 flex-col border-l border-line/60 bg-paper px-3 pb-4 pt-3"
     >
-      <div className="flex items-center gap-2.5 px-2 py-1.5">
-        <div className="grid size-8 place-items-center rounded-lg bg-paper-muted text-ink">
-          <CategoryGlyph name="brain" size={16} strokeWidth={1.8} />
+      {/* WHO THIS AGENT IS, AND WHETHER IT ACTS ON ITS OWN (owner, 2026-10-03: UI review points 4 and 6). */}
+      <div className="flex items-start gap-2.5 px-2 py-1.5">
+        <div className="agent-identity__mark grid size-9 shrink-0 place-items-center rounded-xl text-ink">
+          <CategoryGlyph name="brain" size={17} strokeWidth={1.8} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[13px] font-semibold text-ink">
-            {draft.name?.trim() || "Agent draft"}
-          </h2>
-          <p className="text-[11px] text-muted">Private · only you can run it</p>
+          <div className="flex items-center gap-2">
+            <h2 className="truncate text-[14px] font-semibold tracking-[-0.01em] text-ink">{draft.name?.trim() || "Agent draft"}</h2>
+            <StatusPill autopilot={Boolean(draft.autopilot?.on)} live={live.length > 0} paper={draft.paperMode !== false} />
+          </div>
+          <p className="text-[11px] text-muted">{live.length > 0 ? `On ${live[0].networkLabel} · #${live[0].tokenId}` : "Private · only you can run it"}</p>
         </div>
         {onClose ? (
           <button
@@ -174,6 +176,10 @@ export function AgentDraftPanel({
           </button>
         ) : null}
       </div>
+
+      {onToggleAutopilot && !trying ? (
+        <ExecutionSwitch busy={autopilotBusy} draft={draft} onToggle={onToggleAutopilot} onWatchRuns={onWatchRuns} />
+      ) : null}
 
       {/* A visibly darker track and a white selected pill (owner, 2026-09-28: "you can't tell if it's on Keys or Draft"). */}
       <div aria-label="Panel" className="panel-tabs relative mx-2 mt-2 grid grid-cols-2 rounded-full p-[3px]" role="tablist">
@@ -271,15 +277,6 @@ export function AgentDraftPanel({
         {knowledgeConversation && !trying ? <TradingRulesSection conversationKey={knowledgeConversation} /> : null}
       </div>
 
-      {onToggleAutopilot ? (
-        <AutopilotCard
-          busy={autopilotBusy}
-          draft={draft}
-          onToggle={onToggleAutopilot}
-          onWatchRuns={onWatchRuns}
-        />
-      ) : null}
-
       {tradeKeyConversation ? (
         <PaperTradingCard conversationKey={tradeKeyConversation} hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))} />
       ) : null}
@@ -356,14 +353,27 @@ export function AgentDraftPanel({
   );
 }
 
-const TRIGGER_TYPES = ["schedule", "price", "walletWatch"];
+// "signal" was missing here (the backend has always armed on it) - added 2026-10-03.
+const TRIGGER_TYPES = ["schedule", "price", "walletWatch", "signal"];
+
+/** Draft, Autopilot (on paper or live) or Live on-chain - the one word that says what the agent is doing. */
+function StatusPill({ live, autopilot, paper }: { live: boolean; autopilot: boolean; paper: boolean }) {
+  const [label, tone] = live ? ["Live", "live"] : autopilot ? [paper ? "Autopilot · paper" : "Autopilot", "auto"] : ["Draft", "draft"];
+  return (
+    <span className="agent-status shrink-0" data-tone={tone}>
+      {label}
+    </span>
+  );
+}
 
 /**
- * AUTOPILOT (2026-09-28): the agent runs on its own triggers, on its builder's
- * key, up to 48 times a day (convex/autopilot.ts). Shown only once there is a
- * trigger to arm - before that it says how to get one.
+ * MANUAL OR AUTOPILOT, AT THE TOP (owner, 2026-10-03: "one of the most important controls
+ * ... buried near the bottom"). Turning it on asks first, and says exactly what the agent
+ * will then do by itself - only what is true for THIS agent: its triggers, its trading
+ * rules (paper inside Dolphin; real orders only on the builder's own server), and Dolphin
+ * Wallet trading only when its Swap block trades live.
  */
-function AutopilotCard({
+function ExecutionSwitch({
   draft,
   busy,
   onToggle,
@@ -374,46 +384,99 @@ function AutopilotCard({
   onToggle: (on: boolean) => void;
   onWatchRuns?: () => void;
 }) {
-  // A trading rule is its own trigger (fast rules, phase 2).
+  const [asking, setAsking] = useState(false);
   const triggers = (draft.blocks ?? []).filter((block) => TRIGGER_TYPES.includes(block.type));
   const rules = draft.ruleCount ?? 0;
-  const armable = triggers.length + rules;
+  const armable = triggers.length + rules > 0;
   const on = Boolean(draft.autopilot?.on);
+  const risk = draft.blocks?.find((block) => block.type === "risk");
+  const swap = draft.blocks?.some((block) => block.type === "swap");
+
+  const consequences = [
+    triggers.length
+      ? `It runs by itself on ${triggers.length} trigger${triggers.length === 1 ? "" : "s"}, up to 48 times a day. Each run uses your own model key.`
+      : null,
+    rules
+      ? `${rules === 1 ? "Its trading rule watches" : `Its ${rules} trading rules watch`} Binance and acts on every closed candle, with no AI in the way - on paper inside Dolphin. Real orders run only on your own server.`.replace("watch Binance and acts", "watch Binance and act")
+      : null,
+    swap
+      ? draft.paperMode === false
+        ? `It can trade from your Dolphin Wallet without asking, if you have given it a trade key${risk && risk.type === "risk" ? ` - at most $${risk.config.maxTradeUsd} a trade and ${risk.config.maxTradesPerDay} a day` : ""}.`
+        : "Its Dolphin Wallet trades stay on paper: Paper trading is on."
+      : null,
+    "You can switch it back to Manual at any time.",
+  ].filter((line): line is string => Boolean(line));
+
   return (
-    <div className="mx-2 mt-3 rounded-xl border border-line bg-paper-strong px-3 py-2.5">
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-[12.5px] font-semibold text-ink">Autopilot</p>
-          <p className="text-[0.68rem] leading-snug text-muted">
-            {armable === 0
-              ? "Add a Schedule, Price or Wallet watch from the toolbox, or ask for a trading rule, to let it run on its own."
-              : on
-                ? [
-                    triggers.length ? `${triggers.length} trigger${triggers.length === 1 ? "" : "s"}, up to 48 runs a day on your key` : null,
-                    rules ? `${rules} rule${rules === 1 ? "" : "s"} watching Binance, on paper` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")
-                    .replace(/^/, "On · ")
-                : "Off · it runs only when you ask it"}
-          </p>
-        </div>
-        <button
-          aria-checked={on}
-          aria-label="Autopilot"
-          className="autopilot-switch"
-          disabled={busy || armable === 0}
-          onClick={() => onToggle(!on)}
-          role="switch"
-          type="button"
-        >
-          <span className="autopilot-switch__knob" />
-        </button>
+    <div className="mx-2 mt-2.5">
+      <div aria-label="How it runs" className="execution-switch" role="radiogroup">
+        {(["manual", "autopilot"] as const).map((mode) => {
+          const selected = mode === "autopilot" ? on : !on;
+          return (
+            <button
+              aria-checked={selected}
+              className="execution-switch__option"
+              disabled={busy || (mode === "autopilot" && !armable && !on)}
+              key={mode}
+              onClick={() => {
+                if (selected) return;
+                if (mode === "manual") onToggle(false);
+                else setAsking(true);
+              }}
+              role="radio"
+              type="button"
+            >
+              {mode === "autopilot" ? <span aria-hidden className="execution-switch__dot" data-on={on || undefined} /> : null}
+              {mode === "manual" ? "Manual" : "Autopilot"}
+            </button>
+          );
+        })}
       </div>
-      {draft.autopilot && onWatchRuns ? (
-        <button className="mt-1.5 !text-[0.72rem] font-semibold text-accent-ink hover:underline" onClick={onWatchRuns} type="button">
-          Watch its runs →
-        </button>
+      <p className="mt-1 px-1 text-[0.66rem] leading-snug text-muted">
+        {!armable && !on
+          ? "Add a Schedule, Price, Signal or Wallet watch, or ask for a trading rule, to let it run on its own."
+          : on
+            ? "It acts on its own now, within its limits."
+            : "It runs only when you ask it."}
+        {draft.autopilot && onWatchRuns ? (
+          <button className="ml-1.5 !text-[0.66rem] font-semibold text-accent-ink hover:underline" onClick={onWatchRuns} type="button">
+            Watch its runs →
+          </button>
+        ) : null}
+      </p>
+
+      {asking ? (
+        <div aria-labelledby="autopilot-confirm-title" aria-modal className="confirm-scrim" role="dialog">
+          <div className="confirm-card">
+            <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Autopilot</p>
+            <h3 className="mt-1 text-[1.05rem] font-semibold tracking-[-0.01em] text-ink" id="autopilot-confirm-title">
+              Let {draft.name?.trim() || "this agent"} act on its own?
+            </h3>
+            <ul className="mt-3 space-y-2">
+              {consequences.map((line) => (
+                <li className="flex gap-2 text-[0.82rem] leading-relaxed text-ink-soft" key={line}>
+                  <span aria-hidden className="mt-[0.55em] size-1.5 shrink-0 rounded-full bg-ink/40" />
+                  {line}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="h-9 rounded-lg border border-line px-4 !text-[13px] font-semibold text-ink" onClick={() => setAsking(false)} type="button">
+                Cancel
+              </button>
+              <button
+                className="h-9 rounded-lg bg-ink px-4 !text-[13px] font-semibold"
+                onClick={() => {
+                  setAsking(false);
+                  onToggle(true);
+                }}
+                type="button"
+              >
+                <span className="text-canvas">Turn on Autopilot</span>
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

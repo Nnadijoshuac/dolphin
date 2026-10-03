@@ -339,7 +339,11 @@ export function AgentDraftPanel({
       ) : null}
 
       {tradeKeyConversation ? (
-        <PaperTradingCard conversationKey={tradeKeyConversation} hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))} />
+        <PaperTradingCard
+          conversationKey={tradeKeyConversation}
+          hasRules={(draft.ruleCount ?? 0) > 0}
+          hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))}
+        />
       ) : null}
 
       {/* Live trading only: in paper mode no real trade is made, so no trade key is offered. */}

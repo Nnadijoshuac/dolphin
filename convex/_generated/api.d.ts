@@ -53,6 +53,7 @@ import type * as lib_analyticalBlocks from "../lib/analyticalBlocks.js";
 import type * as lib_answerHygiene from "../lib/answerHygiene.js";
 import type * as lib_balanceIntent from "../lib/balanceIntent.js";
 import type * as lib_binanceMarket from "../lib/binanceMarket.js";
+import type * as lib_binanceTrade from "../lib/binanceTrade.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
 import type * as lib_builderBlocks from "../lib/builderBlocks.js";
 import type * as lib_categorize from "../lib/categorize.js";
@@ -173,6 +174,7 @@ declare const fullApi: ApiFromModules<{
   "lib/answerHygiene": typeof lib_answerHygiene;
   "lib/balanceIntent": typeof lib_balanceIntent;
   "lib/binanceMarket": typeof lib_binanceMarket;
+  "lib/binanceTrade": typeof lib_binanceTrade;
   "lib/bscClient": typeof lib_bscClient;
   "lib/builderBlocks": typeof lib_builderBlocks;
   "lib/categorize": typeof lib_categorize;

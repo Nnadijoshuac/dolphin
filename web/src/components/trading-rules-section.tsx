@@ -242,7 +242,15 @@ function TradeWhy({ trade, rule }: { trade: TradingRuleTrade; rule: TradingRuleV
     `$${trade.sizeUsd} a trade`,
     ...(trade.leverage > 1 ? [`${trade.leverage}x`] : []),
     ...(rule && rule.stopLossPct !== null ? [`stop-loss ${rule.stopLossPct}%`] : []),
-    trade.source === "runner" ? "on your server" : "on paper, at Binance's price",
+    trade.source === "runner"
+      ? "on your server"
+      : trade.network === "live"
+        ? `real order on Binance${trade.orderId ? ` #${trade.orderId}` : ""}`
+        : trade.network === "testnet"
+          ? `Binance testnet order${trade.orderId ? ` #${trade.orderId}` : ""}`
+          : trade.network === "bsc"
+            ? "real swap from the Dolphin Wallet"
+            : "on paper, at Binance's price",
   ];
   return (
     <div className="trade-why">
@@ -309,7 +317,16 @@ function Timeline({ trades, rules, running }: { trades: TradingRuleTrade[]; rule
                     {row.trade.leverage > 1 ? ` · ${row.trade.leverage}x` : ""}
                     {/* Where it happened: Dolphin's paper run, or the builder's server - reported, so never shown as verified. */}
                     <span className="ml-1 text-muted">
-                      · {row.trade.source === "runner" ? `your server${row.trade.paper ? ", paper" : ", live - reported"}` : "paper"}
+                      ·{" "}
+                      {row.trade.source === "runner"
+                        ? `your server${row.trade.paper ? ", paper" : ", live - reported"}`
+                        : row.trade.network === "live"
+                          ? "Binance, real"
+                          : row.trade.network === "testnet"
+                            ? "Binance testnet"
+                            : row.trade.network === "bsc"
+                              ? "Dolphin Wallet, real"
+                              : "paper"}
                     </span>
                   </p>
                   <span

@@ -15,7 +15,9 @@ import {
   brainModelsApi,
   BRAIN_PROVIDER_OPTIONS,
   envVarsApi,
+  strategyApi,
   type AgentBlockData,
+  type BinanceConnection,
   type BrainProviderId,
 } from "@/convex/api";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -626,7 +628,7 @@ const BLOCK_ABOUT: Record<BlockType, string> = {
   indicators: "Technical indicators for the Price feed's token, computed in code on closed candles only and read on every run: RSI(14), MACD(12,26,9), Bollinger bands (20,2), the 20- and 50-candle averages, volume against its average, and any cross that just happened.",
   signal: "Makes its own signal: it fires the Trigger when a technical condition turns true on a newly closed candle - an RSI level, a moving-average cross or a MACD cross. Checked every 5 minutes; fires once per candle, never on a candle still forming.",
   memory: "Your agent's memory, kept on your own server - Dolphin stores none of it. Before every run it reads what it did last time; after it, a record of the run is saved. It can also note things down itself.",
-  binance: "Where the agent's trading rules trade for real once you run it on your own server: your Binance Wallet (the keyless Agentic Wallet - spot only) or the Binance Exchange (spot, and futures if you switch them on). Dolphin never sees a Binance key or session - they stay on your server. Inside Dolphin, rules trade on paper at live Binance prices.",
+  binance: "Where the agent's trading rules trade: the Binance Exchange (spot, and futures if you switch them on) - connected here with your own API key, on Binance's testnet or live - or your Binance Wallet (the keyless Agentic Wallet, spot only), which runs on your own server. Rules trade on paper until you switch Trading mode to Live.",
   hire: "A paid agent from Dolphin's catalog that yours can call on. When it asks for work, the agent quotes a price and you confirm each payment from your Dolphin Wallet with your passkey. It delivers on-chain afterwards.",
 };
 
@@ -719,6 +721,12 @@ function BlockEditor({
   const [binanceAccount, setBinanceAccount] = useState<"wallet" | "exchange">(config.account === "wallet" ? "wallet" : "exchange");
   const [binanceFutures, setBinanceFutures] = useState(config.futures === true);
   const [binanceLeverage, setBinanceLeverage] = useState(Number(config.maxLeverage ?? 1) || 1);
+  // Connected to Binance from inside Dolphin (owner, 2026-10-03): testnet first, live when chosen.
+  const [binanceNetwork, setBinanceNetwork] = useState<"testnet" | "live">(config.network === "live" ? "live" : "testnet");
+  const [binanceKey, setBinanceKey] = useState<string>(typeof config.keyName === "string" ? config.keyName : "");
+  const [binanceSecret, setBinanceSecret] = useState<string>(typeof config.secretName === "string" ? config.secretName : "");
+  const [binanceCheck, setBinanceCheck] = useState<BinanceConnection | { error: string } | "checking" | null>(null);
+  const checkBinance = useAction(strategyApi.strategy.checkBinance);
   const [timeframe, setTimeframe] = useState<"1h" | "4h" | "1d">((config.timeframe as "1h" | "4h" | "1d") ?? (type === "signal" ? "1h" : "1d"));
   const [condition, setCondition] = useState<SignalCondition>((config.condition as SignalCondition) ?? "rsiBelow");
   const [level, setLevel] = useState(config.level ? String(config.level) : "");
@@ -728,7 +736,7 @@ function BlockEditor({
   const testMemory = useAction(agentMemoryApi.agentMemoryCheck.test);
   const keys = useQuery(
     envVarsApi.envVars.list,
-    (type === "memory" || type === "dataSource" || type === "news") && session.sessionToken ? { sessionToken: session.sessionToken } : "skip",
+    (type === "memory" || type === "dataSource" || type === "news" || type === "binance") && session.sessionToken ? { sessionToken: session.sessionToken } : "skip",
   );
   // Paid agents a flow can hire: live A2A agents in the catalog.
   const hireResults = useQuery(
@@ -806,7 +814,19 @@ function BlockEditor({
         return { id, type, config: { timeframe } };
       case "binance": {
         const futures = binanceAccount === "exchange" && binanceFutures;
-        return { id, type, config: { account: binanceAccount, futures, maxLeverage: futures ? binanceLeverage : 1 } };
+        const exchange = binanceAccount === "exchange";
+        return {
+          id,
+          type,
+          config: {
+            account: binanceAccount,
+            futures,
+            maxLeverage: futures ? binanceLeverage : 1,
+            network: binanceNetwork,
+            keyName: exchange && binanceKey ? binanceKey : null,
+            secretName: exchange && binanceSecret ? binanceSecret : null,
+          },
+        };
       }
       case "signal":
         return {
@@ -1162,7 +1182,91 @@ function BlockEditor({
               ) : null}
             </div>
           ) : null}
-          <p className="text-[0.7rem] leading-snug text-muted">No key goes in here. When you run the agent on your own server, its key or wallet session stays there.</p>
+          {binanceAccount === "exchange" ? (
+            <div className="binance-connect">
+              <Label>Connect</Label>
+              <ChoiceList
+                ariaLabel="Binance network"
+                choices={[
+                  { value: "testnet", label: "Testnet - pretend funds", hint: "testnet.binance.vision" },
+                  { value: "live", label: "Live - real money" },
+                ]}
+                onChange={(next) => {
+                  setBinanceNetwork(next as "testnet" | "live");
+                  setBinanceCheck(null);
+                }}
+                searchable={false}
+                value={binanceNetwork}
+              />
+              {!session.sessionToken ? (
+                <p className="mt-2 text-[0.7rem] leading-snug text-muted">Sign in with your wallet to choose your saved Binance key.</p>
+              ) : (keys ?? []).length === 0 ? (
+                <p className="mt-2 text-[0.7rem] leading-snug text-muted">
+                  Save your Binance API key and secret in the Keys tab first ({binanceNetwork === "testnet" ? "make them at testnet.binance.vision" : "on Binance: API Management - trading on, withdrawals OFF"}).
+                </p>
+              ) : (
+                <div className="mt-2 grid gap-2">
+                  {(
+                    [
+                      ["API key", binanceKey, setBinanceKey],
+                      ["Secret", binanceSecret, setBinanceSecret],
+                    ] as const
+                  ).map(([label, value, setValue]) => (
+                    <div key={label}>
+                      <p className="mb-1 text-[0.7rem] text-muted">{label}</p>
+                      <ChoiceList
+                        ariaLabel={`Binance ${label}`}
+                        choices={[{ value: "", label: "Choose a saved key" }, ...(keys ?? []).map((key) => ({ value: key.name, label: key.name, hint: key.last4 ? `••••${key.last4}` : undefined }))]}
+                        onChange={(next) => {
+                          setValue(next);
+                          setBinanceCheck(null);
+                        }}
+                        searchable={false}
+                        value={value}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {existing && config.keyName && config.secretName ? (
+                <button
+                  className="mt-2 rounded-lg border border-line px-3 py-1.5 !text-[12px] font-semibold text-ink disabled:opacity-40"
+                  disabled={binanceCheck === "checking" || !session.sessionToken || binanceKey !== config.keyName || binanceSecret !== config.secretName || binanceNetwork !== (config.network ?? "testnet")}
+                  onClick={() => {
+                    if (!session.sessionToken) return;
+                    setBinanceCheck("checking");
+                    checkBinance({ sessionToken: session.sessionToken, conversationKey })
+                      .then(setBinanceCheck)
+                      .catch((cause) => setBinanceCheck({ error: toUserMessage(cause, "The check did not finish. Try again.") }));
+                  }}
+                  type="button"
+                >
+                  {binanceCheck === "checking" ? "Checking…" : "Check connection"}
+                </button>
+              ) : (
+                <p className="mt-2 text-[0.7rem] leading-snug text-muted">Save the block, then check the connection.</p>
+              )}
+              {binanceCheck && binanceCheck !== "checking" ? (
+                "error" in binanceCheck || !binanceCheck.ok ? (
+                  <p className="mt-1.5 rounded-md bg-danger-soft/60 px-2 py-1 text-[0.7rem] leading-snug text-ink-soft" role="alert">
+                    {"error" in binanceCheck ? binanceCheck.error : binanceCheck.problem}
+                  </p>
+                ) : (
+                  <p className="mt-1.5 rounded-md bg-success-soft px-2 py-1 text-[0.7rem] leading-snug text-ink-soft" role="status">
+                    Connected to Binance {binanceCheck.network === "testnet" ? "testnet" : "live"} · spot {binanceCheck.spotUsdt?.toFixed(2) ?? "–"} USDT
+                    {binanceCheck.futuresUsdt !== null ? ` · futures ${binanceCheck.futuresUsdt.toFixed(2)} USDT` : ""}
+                    {binanceCheck.network === "live" ? " · this key cannot withdraw" : ""}
+                  </p>
+                )
+              ) : null}
+              <p className="mt-2 text-[0.7rem] leading-snug text-muted">
+                Your key stays encrypted in your Keys tab; only its name is on this block. Rules trade on paper until you switch Trading mode to Live.
+                {binanceNetwork === "live" ? " Live keys that can withdraw are refused." : ""}
+              </p>
+            </div>
+          ) : (
+            <p className="text-[0.7rem] leading-snug text-muted">The Binance Wallet signs on your own machine: it runs when you run the agent on your server.</p>
+          )}
         </div>
       ) : null}
 

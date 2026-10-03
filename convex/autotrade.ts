@@ -403,7 +403,7 @@ export const executeTrade = internalAction({
       safety: v.any(),
     }),
   },
-  handler: async (ctx, { draftId, agentName, ticket }): Promise<{ attempted: boolean; executed: boolean; text: string; transactionHash?: string }> => {
+  handler: async (ctx, { draftId, agentName, ticket }): Promise<{ attempted: boolean; executed: boolean; text: string; transactionHash?: string; amountOut?: string }> => {
     const key: Doc<"agentTradeKeys"> | null = await ctx.runQuery(internal.autotrade.activeKey, { draftId });
     if (!key || !key.ciphertext || !key.iv) return { attempted: false, executed: false, text: "" };
 
@@ -509,6 +509,8 @@ export const executeTrade = internalAction({
       attempted: true,
       executed: true,
       transactionHash: result.transactionHash,
+      // The quoted output; what arrives can be a little less (slippage), so rule exits sell slightly under it.
+      amountOut: out,
       text: `Traded: sold ${ticket.amountIn} ${tokenIn.symbol} for about ${Number(out).toPrecision(6)} ${tokenOut.symbol} on ${describeRoute(route)}. Transaction ${result.transactionHash}.`,
     };
   },

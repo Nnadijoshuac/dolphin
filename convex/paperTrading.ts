@@ -189,6 +189,7 @@ export const forDraft = query({
       .take(20);
     return {
       paperMode: draft.paperMode !== false,
+      liveAcknowledged: Boolean(draft.liveAcknowledgedAt),
       startUsd: row?.startUsd ?? PAPER_START_USD,
       holdings: row?.holdings ?? [usdtHolding(PAPER_START_USD)],
       trades: trades.map(({ at, sellSymbol, sellAmount, buySymbol, buyAmount, route, gasBnb }) => ({ at, sellSymbol, sellAmount, buySymbol, buyAmount, route, gasBnb })),
@@ -198,11 +199,14 @@ export const forDraft = query({
 
 /** Paper on or off, and a fresh start. Holding the conversation key is the capability, as for the draft itself. */
 export const setMode = mutation({
-  args: { conversationKey: v.string(), paperMode: v.boolean() },
-  handler: async (ctx, { conversationKey, paperMode }) => {
+  args: { conversationKey: v.string(), paperMode: v.boolean(), acknowledge: v.optional(v.boolean()) },
+  handler: async (ctx, { conversationKey, paperMode, acknowledge }) => {
     const draft = await draftFor(ctx, conversationKey);
     if (!draft) throw new ConvexError("That draft is empty.");
-    await ctx.db.patch(draft._id, { paperMode, updatedAt: Date.now() });
+    // Real money only after the owner accepted, once, that every trade is their own responsibility.
+    if (!paperMode && !acknowledge && !draft.liveAcknowledgedAt) throw new ConvexError("Accept the real-money disclaimer to switch to Live.");
+    const now = Date.now();
+    await ctx.db.patch(draft._id, { paperMode, updatedAt: now, ...(!paperMode && acknowledge ? { liveAcknowledgedAt: now } : {}) });
   },
 });
 

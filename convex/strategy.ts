@@ -2,11 +2,13 @@ import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type QueryCtx } from "./_generated/server";
 import { apiBase } from "./builtAgents";
 import { ensureDraft } from "./knowledge";
 import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } from "./lib/agentBlocks";
 import { closedCandles, MarketDataError } from "./lib/binanceMarket";
+import { checkConnection, closePosition, openPosition, type ConnectionReport, type Held } from "./lib/binanceTrade";
+import { verifiedTokenBySymbol } from "./lib/tradeTokens";
 import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, venueProblem, type Candle, type LossGuard, type Rule, type RuleState } from "./lib/strategy";
 
 /**
@@ -214,21 +216,41 @@ export const forConversation = query({
 
 /* ── The run: every minute, with no model call ── */
 
+/** One armed agent as the run sees it: its rules and states, and whether it trades for real. */
+type ArmedDraft = {
+  draftId: Id<"agentDrafts">;
+  rules: Rule[];
+  states: Record<string, RuleState>;
+  helds: Record<string, Held | null>;
+  misfits: Record<string, string>;
+  guard: LossGuard;
+  /** Trading mode Live (paperMode false). Paper otherwise - the default. */
+  live: boolean;
+  /** The owner accepted the real-money disclaimer. */
+  acknowledged: boolean;
+  /** The wallet whose Keys tab holds the agent's keys (the one that switched Autopilot on). */
+  owner: string | null;
+  binance: BinanceConfig | null;
+  agentName: string;
+};
+
 export const armed = internalQuery({
   args: {},
   handler: async (ctx) => {
     const drafts = await ctx.db.query("agentDrafts").collect();
-    const out: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState>; misfits: Record<string, string>; guard: LossGuard }[] = [];
+    const out: ArmedDraft[] = [];
     for (const draft of drafts) {
       const rules = rulesOf(draft);
       if (!draft.autopilot?.on || rules.length === 0) continue;
       const states: Record<string, RuleState> = {};
+      const helds: Record<string, Held | null> = {};
       for (const rule of rules) {
         const run = await ctx.db
           .query("strategyRuns")
           .withIndex("by_draft_rule", (q) => q.eq("draftId", draft._id).eq("ruleId", rule.id))
           .unique();
         states[rule.id] = (run?.state as RuleState | undefined) ?? EMPTY_STATE;
+        helds[rule.id] = (run?.held as Held | undefined) ?? null;
       }
       // The block may have changed since the rule was written: a rule that no longer fits is held, with the reason.
       const binance = binanceOf(draft);
@@ -237,7 +259,19 @@ export const armed = internalQuery({
         const misfit = venueProblem(rule, binance);
         if (misfit) misfits[rule.id] = misfit;
       }
-      out.push({ draftId: draft._id, rules, states, misfits, guard: { limitUsd: draft.dailyLossLimitUsd ?? null, lossTodayUsd: await lossTodayUsd(ctx, draft._id, "dolphin") } });
+      out.push({
+        draftId: draft._id,
+        rules,
+        states,
+        helds,
+        misfits,
+        guard: { limitUsd: draft.dailyLossLimitUsd ?? null, lossTodayUsd: await lossTodayUsd(ctx, draft._id, "dolphin") },
+        live: draft.paperMode === false,
+        acknowledged: Boolean(draft.liveAcknowledgedAt),
+        owner: draft.autopilot?.walletAddress ?? null,
+        binance,
+        agentName: draft.name ?? "Agent",
+      });
     }
     return out;
   },
@@ -250,6 +284,8 @@ export const record = internalMutation({
     state: v.any(),
     lastError: v.union(v.string(), v.null()),
     lastReason: v.optional(v.string()),
+    /** Set only when it changes: what a real position holds (null once closed). */
+    held: v.optional(v.any()),
     trade: v.union(
       v.null(),
       v.object({
@@ -264,19 +300,26 @@ export const record = internalMutation({
         pnlPct: v.union(v.number(), v.null()),
         reason: v.string(),
         candleTime: v.number(),
+        paper: v.optional(v.boolean()),
+        network: v.optional(v.union(v.literal("testnet"), v.literal("live"), v.literal("bsc"))),
+        orderId: v.optional(v.string()),
       }),
     ),
   },
-  handler: async (ctx, { draftId, ruleId, state, lastError, lastReason, trade }) => {
+  handler: async (ctx, { draftId, ruleId, state, lastError, lastReason, held, trade }) => {
     const now = Date.now();
     const run = await ctx.db
       .query("strategyRuns")
       .withIndex("by_draft_rule", (q) => q.eq("draftId", draftId).eq("ruleId", ruleId))
       .unique();
     const reason = lastReason === undefined ? {} : { lastReason };
-    if (run) await ctx.db.patch(run._id, { state, lastCheckedAt: now, lastError, ...reason });
-    else await ctx.db.insert("strategyRuns", { draftId, ruleId, state, lastCheckedAt: now, lastError, ...reason });
-    if (trade) await ctx.db.insert("strategyTrades", { draftId, ruleId, ...trade, paper: true, at: now, source: "dolphin" });
+    const holding = held === undefined ? {} : { held };
+    if (run) await ctx.db.patch(run._id, { state, lastCheckedAt: now, lastError, ...reason, ...holding });
+    else await ctx.db.insert("strategyRuns", { draftId, ruleId, state, lastCheckedAt: now, lastError, ...reason, ...holding });
+    if (trade) {
+      const { paper, ...rest } = trade;
+      await ctx.db.insert("strategyTrades", { draftId, ruleId, ...rest, paper: paper ?? true, at: now, source: "dolphin" });
+    }
   },
 });
 
@@ -284,15 +327,13 @@ export const tick = internalAction({
   args: {},
   handler: async (ctx): Promise<{ rules: number; trades: number }> => {
     const now = Date.now();
-    const armedDrafts: { draftId: Id<"agentDrafts">; rules: Rule[]; states: Record<string, RuleState>; misfits: Record<string, string>; guard: LossGuard }[] = await ctx.runQuery(
-      internal.strategy.armed,
-      {},
-    );
+    const armedDrafts: ArmedDraft[] = await ctx.runQuery(internal.strategy.armed, {});
     // One fetch per market per run, however many rules read it.
     const cache = new Map<string, Promise<Candle[]>>();
     let rulesChecked = 0;
     let trades = 0;
-    for (const { draftId, rules, states, misfits, guard } of armedDrafts) {
+    for (const armedDraft of armedDrafts) {
+      const { draftId, rules, states, misfits, guard } = armedDraft;
       for (const rule of rules) {
         rulesChecked++;
         const state = states[rule.id] ?? EMPTY_STATE;
@@ -330,13 +371,33 @@ export const tick = internalAction({
           continue;
         }
         if (judged.openTime <= state.lastCandle) continue;
-        const decision = decide(rule, candles, state, now, guard);
+        let decision = decide(rule, candles, state, now, guard);
+        // On paper every decision "executes" at the closed candle's price; Live sends a real order first.
+        const held = armedDraft.helds[rule.id] ?? null;
+        let execution: Execution = { real: false };
+        if (decision.type !== "none") {
+          const outcome = await execute(ctx, armedDraft, rule, decision, held);
+          if ("error" in outcome) {
+            // Not traded: the candle is judged, the position is unchanged, and the reason is shown.
+            await ctx.runMutation(internal.strategy.record, {
+              draftId,
+              ruleId: rule.id,
+              state: afterCandle(state, judged.openTime, decision, false, now),
+              lastError: outcome.error,
+              lastReason: decision.reason,
+              trade: null,
+            });
+            continue;
+          }
+          execution = outcome;
+          // What the venue really paid is the price of record.
+          if (outcome.real) decision = { ...decision, price: outcome.price };
+        }
         // A loss closed in this run counts at once toward the next rule's check.
         if (decision.type === "exit" && state.position) {
           const usd = resultUsd(resultPct(state.position.side, state.position.entryPrice, decision.price, rule.leverage), rule.sizeUsd);
           if (usd < 0) guard.lossTodayUsd = Math.round((guard.lossTodayUsd - usd) * 100) / 100;
         }
-        // Paper inside Dolphin: every decision "executes" at the closed candle's price.
         const next = afterCandle(state, judged.openTime, decision, true, now);
         const trade =
           decision.type === "none"
@@ -353,12 +414,107 @@ export const tick = internalAction({
                 pnlPct: decision.type === "exit" && state.position ? resultPct(state.position.side, state.position.entryPrice, decision.price, rule.leverage) : null,
                 reason: decision.reason,
                 candleTime: judged.openTime,
+                ...(execution.real ? { paper: false, network: execution.network, ...(execution.orderId ? { orderId: execution.orderId } : {}) } : {}),
               };
         if (trade) trades++;
-        await ctx.runMutation(internal.strategy.record, { draftId, ruleId: rule.id, state: next, lastError: null, lastReason: decision.reason, trade });
+        await ctx.runMutation(internal.strategy.record, {
+          draftId,
+          ruleId: rule.id,
+          state: next,
+          lastError: null,
+          lastReason: decision.reason,
+          ...(execution.real ? { held: execution.held } : decision.type === "exit" ? { held: null } : {}),
+          trade,
+        });
       }
     }
     return { rules: rulesChecked, trades };
+  },
+});
+
+/* ── Live: real orders from inside Dolphin (owner, 2026-10-03) ── */
+
+type Execution =
+  | { real: false }
+  | { real: true; network: "testnet" | "live" | "bsc"; price: number; orderId: string | null; held: Held | null };
+
+const STABLES = /(USDT|USDC|FDUSD|BUSD|U)$/;
+
+/**
+ * Carries out one decision. Paper unless the agent is in Live mode; then Binance (testnet or live,
+ * with the owner's own key) or the Dolphin Wallet (its trade key). Every way this can refuse comes
+ * back as a sentence that becomes the rule's "Paused:" or "Not traded:" line.
+ */
+async function execute(ctx: ActionCtx, draft: ArmedDraft, rule: Rule, decision: Exclude<ReturnType<typeof decide>, { type: "none" }>, held: Held | null): Promise<Execution | { error: string }> {
+  if (!draft.live) return { real: false };
+  // An exit of a position opened on paper (before the switch to Live) closes on paper.
+  if (decision.type === "exit" && !held) return { real: false };
+
+  if (rule.venue === "binance-spot" || rule.venue === "binance-futures") {
+    const binance = draft.binance;
+    if (!binance?.keyName || !binance.secretName) return { error: "Paused: connect your Binance key on the Binance block, or switch Trading mode back to Paper." };
+    const network = binance.network ?? "testnet";
+    if (network === "live" && !draft.acknowledged) return { error: "Paused: accept the real-money disclaimer (Trading mode → Live) before it trades real funds." };
+    if (!draft.owner) return { error: "Paused: switch Autopilot off and on again, signed in, so Dolphin knows whose keys to use." };
+    const [apiKey, secret] = await Promise.all([
+      ctx.runAction(internal.envVars.reveal, { walletAddress: draft.owner, name: binance.keyName }),
+      ctx.runAction(internal.envVars.reveal, { walletAddress: draft.owner, name: binance.secretName }),
+    ]);
+    if (!apiKey || !secret) return { error: `Paused: ${!apiKey ? binance.keyName : binance.secretName} is not in your Keys tab.` };
+    try {
+      if (decision.type === "enter") {
+        const opened = await openPosition({ apiKey, secret }, network, rule, decision.side, decision.price);
+        return { real: true, network, price: opened.fill.price, orderId: opened.fill.orderId, held: opened.held };
+      }
+      const fill = await closePosition({ apiKey, secret }, network, rule, decision.side, held as Held, decision.price);
+      return { real: true, network, price: fill.price, orderId: fill.orderId, held: null };
+    } catch (cause) {
+      return { error: `Not traded: ${cause instanceof Error ? cause.message : String(cause)}` };
+    }
+  }
+
+  if (rule.venue === "dolphin-wallet") {
+    if (!draft.acknowledged) return { error: "Paused: accept the real-money disclaimer (Trading mode → Live) before it trades real funds." };
+    const token = verifiedTokenBySymbol(rule.market.replace(STABLES, ""));
+    const usdt = verifiedTokenBySymbol("USDT");
+    if (!token || !usdt || token.symbol === "USDT") return { error: `Paused: the Dolphin Wallet trades verified tokens (BNB, CAKE, BTCB, ETH, XVS) against USDT; ${rule.market} is not one of them.` };
+    const ticket =
+      decision.type === "enter"
+        ? { kind: "swap" as const, amountIn: String(rule.sizeUsd), tokenIn: usdt, tokenOut: token, safety: null }
+        : { kind: "swap" as const, amountIn: (held as Held).qty, tokenIn: token, tokenOut: usdt, safety: null };
+    const result = await ctx.runAction(internal.autotrade.executeTrade, { draftId: draft.draftId, agentName: draft.agentName, ticket });
+    if (!result.attempted) return { error: "Paused: let this agent trade without asking (grant its trade key) to trade from the Dolphin Wallet." };
+    if (!result.executed) return { error: result.text };
+    const out = Number(result.amountOut ?? 0);
+    if (decision.type === "enter") {
+      // Sell slightly under the quote later: what arrives can be a little less than quoted.
+      const qty = (Math.floor(out * 0.995 * 1e6) / 1e6).toString();
+      return { real: true, network: "bsc", price: out > 0 ? rule.sizeUsd / out : decision.price, orderId: result.transactionHash ?? null, held: { qty, orderId: result.transactionHash ?? null, stopOrderId: null } };
+    }
+    const sold = Number((held as Held).qty);
+    return { real: true, network: "bsc", price: sold > 0 ? out / sold : decision.price, orderId: result.transactionHash ?? null, held: null };
+  }
+
+  // The Binance Wallet (Agentic Wallet) signs through a CLI on the builder's own machine.
+  return { real: false };
+}
+
+/** Checks the Binance block's saved key against Binance, for the block's own Check button. */
+export const checkBinance = action({
+  args: { sessionToken: v.string(), conversationKey: v.string() },
+  handler: async (ctx, { sessionToken, conversationKey }): Promise<ConnectionReport | { error: string }> => {
+    const owned = await ctx.runQuery(internal.autotrade.ownedDraft, { sessionToken, conversationKey });
+    const block = (owned.blocks as AgentBlock[]).find((candidate) => candidate.type === "binance");
+    if (!block || block.type !== "binance") return { error: "Add a Binance block first." };
+    const config = block.config;
+    if (config.account !== "exchange") return { error: "The Binance Wallet runs on your own server; connect the Exchange to trade from Dolphin." };
+    if (!config.keyName || !config.secretName) return { error: "Name your saved Binance key and secret on the block first." };
+    const [apiKey, secret] = await Promise.all([
+      ctx.runAction(internal.envVars.reveal, { walletAddress: owned.walletAddress, name: config.keyName }),
+      ctx.runAction(internal.envVars.reveal, { walletAddress: owned.walletAddress, name: config.secretName }),
+    ]);
+    if (!apiKey || !secret) return { error: `${!apiKey ? config.keyName : config.secretName} is not in your Keys tab yet.` };
+    return checkConnection({ apiKey, secret }, config.network ?? "testnet", config.futures);
   },
 });
 

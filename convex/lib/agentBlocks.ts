@@ -62,12 +62,24 @@ export type NewsConfig = SourceAuth & { url: string; keywords: string[] };
 export type QuietHoursConfig = { events: QuietEvent[]; marginHours: number };
 /**
  * BINANCE (owner, 2026-10-03; fast rules, phase 3): where the agent's trading
- * rules trade with real money once it runs on the builder's own server. The
- * Binance Wallet is the Agentic Wallet (keyless, on-chain, spot only); the
- * Exchange is the order book, with futures if switched on. NO KEY IS EVER HERE:
- * the wallet session and exchange API keys live only on the builder's server.
+ * rules trade. The Binance Wallet is the Agentic Wallet (keyless, on-chain, spot
+ * only - it runs on the builder's own server); the Exchange is the order book,
+ * with futures if switched on.
+ *
+ * CONNECTED (owner, 2026-10-03: "allow it to go through completely"): the Exchange
+ * can trade from inside Dolphin with the builder's own API key. The key itself is
+ * never here - only the NAMES of the two entries in the builder's Keys tab
+ * (encrypted, convex/envVars.ts) - and `network` picks Binance's testnet (pretend
+ * funds) or live. Live keys that can withdraw are refused (lib/binanceTrade.ts).
  */
-export type BinanceConfig = { account: "wallet" | "exchange"; futures: boolean; maxLeverage: number };
+export type BinanceConfig = {
+  account: "wallet" | "exchange";
+  futures: boolean;
+  maxLeverage: number;
+  network?: "testnet" | "live";
+  keyName?: string | null;
+  secretName?: string | null;
+};
 
 export type AgentBlock =
   | { id: string; type: "market"; config: MarketConfig }
@@ -256,7 +268,13 @@ export function validateBlocks(input: unknown): AgentBlock[] {
         // Owner, 2026-10-03: 1x unless the builder chooses more (1-3x normal, up to 5x with a warning).
         const leverage = Number(config.maxLeverage ?? 1);
         if (futures && !(Number.isInteger(leverage) && leverage >= 1 && leverage <= 5)) fail("The most leverage is a whole number from 1x to 5x.");
-        out.push({ id, type, config: { account, futures, maxLeverage: futures ? leverage : 1 } });
+        const network = config.network === "live" ? "live" : "testnet";
+        const keyName = typeof config.keyName === "string" && config.keyName.trim() ? config.keyName.trim() : null;
+        const secretName = typeof config.secretName === "string" && config.secretName.trim() ? config.secretName.trim() : null;
+        for (const name of [keyName, secretName]) {
+          if (name !== null && !/^[A-Z][A-Z0-9_]{1,63}$/.test(name)) fail("A key name is capitals, digits and underscores, like BINANCE_API_KEY.");
+        }
+        out.push({ id, type, config: { account, futures, maxLeverage: futures ? leverage : 1, network, keyName, secretName } });
         break;
       }
       case "safety":

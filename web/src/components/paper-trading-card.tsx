@@ -1,6 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { paperTradingApi } from "@/convex/api";
@@ -18,8 +19,16 @@ function amount(value: string): string {
   return n >= 1 ? n.toLocaleString("en", { maximumFractionDigits: 4 }) : n.toPrecision(4);
 }
 
-export function PaperTradingCard({ conversationKey, hasSwap }: { conversationKey: string; hasSwap: boolean }) {
-  const state = useQuery(paperTradingApi.paperTrading.forDraft, hasSwap ? { conversationKey } : "skip");
+export function PaperTradingCard({ conversationKey, hasSwap, hasRules = false }: { conversationKey: string; hasSwap: boolean; hasRules?: boolean }) {
+  const trades = hasSwap || hasRules;
+  const state = useQuery(paperTradingApi.paperTrading.forDraft, trades ? { conversationKey } : "skip");
+  // The first switch to real money asks first (owner, 2026-10-03), and the server holds to it.
+  const [asking, setAsking] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const goLive = (acknowledge: boolean) =>
+    void setMode({ conversationKey, paperMode: false, ...(acknowledge ? { acknowledge: true } : {}) })
+      .then(() => toast.success("Live. Real trades from now on - paper until then."))
+      .catch(() => toast.error("Could not switch to Live."));
   const setMode = useMutation(paperTradingApi.paperTrading.setMode);
   const reset = useMutation(paperTradingApi.paperTrading.reset);
   const valuation = useAction(paperTradingApi.paperTrading.valuation);
@@ -43,7 +52,7 @@ export function PaperTradingCard({ conversationKey, hasSwap }: { conversationKey
     };
   }, [conversationKey, hasSwap, state?.paperMode, tradeCount, valuation, version]);
 
-  if (!hasSwap || !state) return null;
+  if (!trades || !state) return null;
   const change = typeof value === "object" && value?.valueUsd != null ? value.valueUsd - value.startUsd : null;
 
   return (
@@ -58,7 +67,13 @@ export function PaperTradingCard({ conversationKey, hasSwap }: { conversationKey
                 state.paperMode === paper ? "bg-white text-[#171813] shadow-sm" : "text-muted hover:text-ink"
               }`}
               key={String(paper)}
-              onClick={() => void setMode({ conversationKey, paperMode: paper }).catch(() => toast.error("Could not switch the mode."))}
+              onClick={() => {
+                if (state.paperMode === paper) return;
+                if (paper) return void setMode({ conversationKey, paperMode: true }).catch(() => toast.error("Could not switch the mode."));
+                if (state.liveAcknowledged) return goLive(false);
+                setAgreed(false);
+                setAsking(true);
+              }}
               role="radio"
               type="button"
             >
@@ -68,7 +83,12 @@ export function PaperTradingCard({ conversationKey, hasSwap }: { conversationKey
         </div>
       </div>
 
-      {state.paperMode ? (
+      {state.paperMode && !hasSwap ? (
+        <p className="mt-1 text-[0.7rem] leading-snug text-muted">
+          Paper: rules trade with pretend money at live Binance prices. Live sends real orders - on Binance&rsquo;s testnet or
+          live, as the Binance block says, or from your Dolphin Wallet.
+        </p>
+      ) : state.paperMode ? (
         <>
           <p className="mt-1 text-[0.7rem] leading-snug text-muted">
             Practice with pretend money at real PancakeSwap prices - fees, price impact and gas included. No real funds move.
@@ -112,9 +132,49 @@ export function PaperTradingCard({ conversationKey, hasSwap }: { conversationKey
         </>
       ) : (
         <p className="mt-1 text-[0.7rem] leading-snug text-muted">
-          Live: every trade comes to you as a ticket to sign, unless you allow &ldquo;Trade without asking&rdquo; below.
+          Live: trading rules send real orders - to Binance (testnet or live, as its block says) or from your Dolphin
+          Wallet with its trade key.{hasSwap ? " AI trades come to you as tickets to sign, unless you allow \u201cTrade without asking\u201d below." : ""}
         </p>
       )}
+
+      {asking ? (
+        <div aria-labelledby="live-confirm-title" aria-modal className="confirm-scrim" role="dialog">
+          <div className="confirm-card">
+            <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-danger">Real money</p>
+            <h3 className="mt-1 text-[1.05rem] font-semibold tracking-[-0.01em] text-ink" id="live-confirm-title">
+              Trade with real funds?
+            </h3>
+            <ul className="mt-3 space-y-2 text-[0.82rem] leading-relaxed text-ink-soft">
+              <li>This agent will place real orders on its own, from your Binance account or your Dolphin Wallet.</li>
+              <li>Every trade it makes - and every gain or loss - is <strong>solely your responsibility</strong>, not Dolphin&rsquo;s.</li>
+              <li>Nothing Dolphin or its AI says is financial advice. Markets can move fast and you can lose everything you trade.</li>
+            </ul>
+            <label className="mt-4 flex items-start gap-2 text-[0.8rem] leading-snug text-ink">
+              <input checked={agreed} className="mt-0.5 size-4 accent-[var(--ink)]" onChange={(event) => setAgreed(event.target.checked)} type="checkbox" />
+              <span>
+                I understand and accept the <Link className="underline" href="/policies/disclaimer" target="_blank">Disclaimer</Link> and the{" "}
+                <Link className="underline" href="/policies/risk" target="_blank">Risk Disclosure</Link>.
+              </span>
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="h-9 rounded-lg border border-line px-4 !text-[13px] font-semibold text-ink" onClick={() => setAsking(false)} type="button">
+                Stay on paper
+              </button>
+              <button
+                className="h-9 rounded-lg bg-ink px-4 !text-[13px] font-semibold disabled:opacity-40"
+                disabled={!agreed}
+                onClick={() => {
+                  setAsking(false);
+                  goLive(true);
+                }}
+                type="button"
+              >
+                <span className="text-canvas">Go live</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

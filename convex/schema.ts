@@ -1349,6 +1349,8 @@ export default defineSchema({
      * per check (AGENTS.md §9: nothing writes a row to record a rejection).
      */
     lastReason: v.optional(v.string()),
+    /** What a real position holds on its venue (lib/binanceTrade.ts Held), so an exit closes exactly that. */
+    held: v.optional(v.any()),
   }).index("by_draft_rule", ["draftId", "ruleId"]),
 
   /**
@@ -1379,6 +1381,10 @@ export default defineSchema({
      * cannot be checked on-chain, so it is shown as reported, never as verified.
      */
     source: v.optional(v.union(v.literal("dolphin"), v.literal("runner"))),
+    /** A real order's network: Binance testnet or live, or BNB Chain for the Dolphin Wallet. Absent on paper. */
+    network: v.optional(v.union(v.literal("testnet"), v.literal("live"), v.literal("bsc"))),
+    /** The venue's own reference: a Binance order id, or a BNB Chain transaction hash. */
+    orderId: v.optional(v.string()),
     orderRef: v.optional(v.union(v.string(), v.null())),
     txHash: v.optional(v.union(v.string(), v.null())),
     latencyMs: v.optional(v.union(v.number(), v.null())),
@@ -1421,6 +1427,12 @@ export default defineSchema({
      * until midnight UTC. Null or absent: none.
      */
     dailyLossLimitUsd: v.optional(v.union(v.number(), v.null())),
+    /**
+     * When the owner accepted the real-money disclaimer for this agent (owner, 2026-10-03: "before
+     * we allow them to start, a disclaimer: this trade is solely your responsibility"). Nothing
+     * trades real funds without it - checked again by the rule engine on every live order.
+     */
+    liveAcknowledgedAt: v.optional(v.number()),
     conversationId: v.id("dolphinConversations"),
     /**
      * WHO IT IS FOR (mentor review, 2026-09-29: plain language, protocols in an

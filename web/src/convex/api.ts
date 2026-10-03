@@ -969,7 +969,32 @@ export type AgentBlockData =
   | { id: string; type: "news"; config: SourceAuth & { url: string; keywords: string[] } }
   | { id: string; type: "quietHours"; config: { events: { label: string; at: string }[]; marginHours: number } }
   /** Where trading rules trade for real once the agent runs on the builder's own server. No key is ever here. */
-  | { id: string; type: "binance"; config: { account: "wallet" | "exchange"; futures: boolean; maxLeverage: number } };
+  | {
+      id: string;
+      type: "binance";
+      config: {
+        account: "wallet" | "exchange";
+        futures: boolean;
+        maxLeverage: number;
+        /** Binance's testnet (pretend funds) or live. Testnet unless chosen (convex/lib/agentBlocks.ts). */
+        network?: "testnet" | "live";
+        /** Names of the builder's saved Keys-tab entries - never the key itself. */
+        keyName?: string | null;
+        secretName?: string | null;
+      };
+    };
+
+/** convex/lib/binanceTrade.ts ConnectionReport. */
+export type BinanceConnection = {
+  ok: boolean;
+  network: "testnet" | "live";
+  spotUsdt: number | null;
+  futuresUsdt: number | null;
+  canTradeSpot: boolean | null;
+  canTradeFutures: boolean | null;
+  canWithdraw: boolean | null;
+  problem: string | null;
+};
 
 /** How a builder's data source takes its key (convex/lib/analyticalBlocks.ts). */
 export type SourceAuth = { authMode: "none" | "bearer" | "header" | "query"; authParam: string | null; keyName: string | null };
@@ -1039,12 +1064,13 @@ export const paperTradingApi = anyApi as unknown as {
       { conversationKey: string },
       {
         paperMode: boolean;
+        liveAcknowledged: boolean;
         startUsd: number;
         holdings: PaperHolding[];
         trades: { at: string; sellSymbol: string; sellAmount: string; buySymbol: string; buyAmount: string; route: string; gasBnb: string }[];
       } | null
     >;
-    setMode: Mutation<{ conversationKey: string; paperMode: boolean }, null>;
+    setMode: Mutation<{ conversationKey: string; paperMode: boolean; acknowledge?: boolean }, null>;
     reset: Mutation<{ conversationKey: string }, null>;
     valuation: Action<{ conversationKey: string }, { valueUsd: number | null; startUsd: number; checkedAt: number } | null>;
   };
@@ -1604,6 +1630,9 @@ export type TradingRuleTrade = {
   at: number;
   /** "runner": reported by the builder's own server (phase 4); absent or "dolphin": Dolphin's paper run. */
   source?: "dolphin" | "runner";
+  /** A real order's network; absent on paper. */
+  network?: "testnet" | "live" | "bsc";
+  orderId?: string;
   latencyMs?: number | null;
 };
 
@@ -1614,6 +1643,8 @@ export const strategyApi = anyApi as unknown as {
       { rules: TradingRuleView[]; trades: TradingRuleTrade[]; running: boolean; dailyLossLimitUsd: number | null; lossTodayUsd: number }
     >;
     setDailyLossLimit: Mutation<{ conversationKey: string; usd: number | null }, null>;
+    /** Checks the Binance block's saved key against Binance (its balance, and on live that it cannot withdraw). */
+    checkBinance: Action<{ sessionToken: string; conversationKey: string }, BinanceConnection | { error: string }>;
     updateRule: Mutation<{ conversationKey: string; ruleId: string; sizeUsd?: number; leverage?: number; stopLossPct?: number | null }, { warnings: string[] }>;
     removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
     /** agent.json for the runner: the rules and a fresh report token (the old one stops working). */

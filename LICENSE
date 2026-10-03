@@ -1,21 +1,63 @@
-The MIT License (MIT)
+Dolphin Source-Available License (View Only) - Version 1.0
 
-Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)
+Copyright (c) 2026 Nnadi (github.com/Nnadijoshuac), trading as Dolphin.
+All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. What this licence is
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+This repository is published so that people - including hackathon judges and
+reviewers - can READ its source code. It is NOT open source. Apart from the
+narrow permission in section 2, no right of any kind is granted to anyone in
+this software, its source code, its designs, its documentation, its smart
+contracts, or the name, logo and branding of Dolphin.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. What you may do
+
+You may view and read the source code in this repository, on GitHub or another
+place where the copyright holder has published it, for the sole purpose of
+understanding and evaluating it.
+
+3. What you may not do
+
+Without the prior written permission of the copyright holder, you may not, in
+whole or in part, directly or indirectly:
+
+  a. use, run, execute, deploy or host the software or any part of it;
+  b. copy, reproduce, download for re-use, or store copies of it, except
+     the transient copies a browser or Git client makes to display it;
+  c. modify it, translate it, or create derivative works based on it;
+  d. distribute, publish, sublicense, sell, lease, lend or otherwise make it
+     available to anyone;
+  e. use it, or anything derived from it, in any product or service, whether
+     commercial or not, including a competing marketplace, agent builder,
+     trading tool or hosted service;
+  f. use it to train, fine-tune or evaluate any machine-learning or AI model,
+     or include it in any dataset;
+  g. remove or alter any copyright, licence or attribution notice.
+
+Forking this repository through GitHub's own interface, where GitHub's Terms
+of Service permit it, grants no right beyond section 2. A fork may be viewed;
+it may not be used for anything in section 3.
+
+4. Third-party code
+
+Parts of this repository come from others under their own licences, which
+continue to apply to those parts only. They are listed in the NOTICE file.
+Nothing in this licence restricts what those licences allow for their own code.
+
+5. No warranty, no liability
+
+The software is provided "as is", without warranty of any kind, express or
+implied. In no event shall the copyright holder be liable for any claim,
+damages or other liability arising from or in connection with the software or
+any use of it.
+
+6. Ending
+
+Any use outside section 2 is unlicensed and infringes the copyright holder's
+rights. The copyright holder may enforce those rights in any court of competent
+jurisdiction.
+
+7. Permission
+
+For any permission not granted here, contact Dolphin on X: @dolphin_Agents.

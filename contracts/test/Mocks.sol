@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-Dolphin-View-Only
 pragma solidity ^0.8.24;
 
 /// Test doubles for DolphinSwapGuard. Never deployed anywhere real.

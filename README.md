@@ -1098,7 +1098,7 @@ contract for the stack, data integrity and verification rules.
 `Agent/project-scope.md` holds the local product scope; the `Agent/` directory
 is git-ignored and will not exist in a fresh clone.
 
-[MIT license](LICENSE) · The license file retains the original Expo template attribution.
+Source-available, view only: you may read this code, not use, copy or modify it - see [LICENSE](LICENSE). Third-party notices, including the original Expo template's MIT licence, are in [NOTICE](NOTICE).
 
 <p align="center">
   <br>

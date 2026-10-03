@@ -84,5 +84,6 @@
     "@react-native-async-storage/async-storage": "$@react-native-async-storage/async-storage",
     "typescript": "$typescript"
   },
-  "private": true
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE"
 }

@@ -3,7 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
-import { autotradeApi } from "@/convex/api";
+import { autotradeApi, strategyApi } from "@/convex/api";
 import { toast } from "@/store/use-toast-store";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -34,13 +34,23 @@ function until(expiry: number): string {
 export function AutoTradeCard({
   conversationKey,
   hasSwap,
-  riskDailyUsd,
+  riskDailyUsd: swapDailyUsd,
 }: {
   conversationKey: string;
-  /** Swap and Risk limits exist: what a key is limited to. */
+  /** Swap and Risk limits exist, or rules that trade from the Dolphin Wallet: what a key is limited to. */
   hasSwap: boolean;
   riskDailyUsd: number | null;
 }) {
+  /*
+   * The key's daily cap, as convex/autotrade.ts prepare computes it: the Risk limits of a swapping
+   * agent plus each Dolphin Wallet rule's size times its trades a day (owner, 2026-10-03: Allow was
+   * greyed out for BNB Pulse, a rules agent with no Risk block).
+   */
+  const ruleView = useQuery(strategyApi.strategy.forConversation, { conversationKey });
+  const rulesDailyUsd = (ruleView?.rules ?? [])
+    .filter((rule) => rule.venue === "dolphin-wallet")
+    .reduce((sum, rule) => sum + rule.sizeUsd * rule.maxTradesPerDay, 0);
+  const riskDailyUsd = (swapDailyUsd ?? 0) + rulesDailyUsd || null;
   const session = useWalletSession();
   const altana = useAltanaWallet();
   const state = useQuery(autotradeApi.autotrade.forDraft, { conversationKey });
@@ -109,10 +119,11 @@ export function AutoTradeCard({
   };
 
   return (
-    <div className="mx-2 mt-2 rounded-xl border border-line bg-paper-strong px-3 py-2.5" data-active={active || undefined}>
+    // Inside the Trading mode card, under a hairline (owner, 2026-10-03: three cards stacked was too crowded).
+    <div className="mt-2.5 border-t border-line/70 pt-2.5" data-active={active || undefined}>
       <div className="flex items-center gap-2">
         <span aria-hidden className={`size-2 shrink-0 rounded-full ${active ? "bg-accent" : "bg-line-strong"}`} />
-        <p className="min-w-0 flex-1 text-[12.5px] font-semibold text-ink">Trade without asking</p>
+        <p className="min-w-0 flex-1 text-[12px] font-semibold text-ink">Trade without asking</p>
       </div>
 
       {active ? (
@@ -145,16 +156,17 @@ export function AutoTradeCard({
         <>
           <p className="mt-1 text-[0.7rem] leading-snug text-muted">
             {state?.status === "expired" ? "The last key expired. " : ""}
-            Off - every trade comes to you as a ticket to sign. Allow it to trade on its own within your Risk limits
-            {riskDailyUsd ? ` (up to $${riskDailyUsd.toLocaleString()} a day)` : ""}, only on PancakeSwap and Dolphin&apos;s verified tokens.
+            {riskDailyUsd ? `Lets it trade by itself, up to $${riskDailyUsd.toLocaleString()} a day, on PancakeSwap only.` : "Add a trading rule or Risk limits first."}
           </p>
           {riskDailyUsd ? (
-            <p className="mt-1.5 rounded-lg bg-paper-muted/70 px-2.5 py-1.5 text-[0.68rem] leading-snug text-muted">
-              Worst case, if someone stole this key: up to ${(riskDailyUsd * durationDays).toLocaleString()} of each token it may
-              trade, taken all at once rather than a day at a time, plus ${riskDailyUsd.toLocaleString()} of BNB a day - until it
-              expires or you revoke it. A shorter key means a smaller worst case. Your passkey approves two things: those capped
-              allowances, then the key.
-            </p>
+            <details className="mt-1 text-[0.68rem] leading-snug text-muted">
+              <summary className="cursor-pointer font-semibold text-ink-soft">Worst case</summary>
+              <p className="mt-1">
+                If someone stole this key: up to ${(riskDailyUsd * durationDays).toLocaleString()} of each token it may trade, all at
+                once, plus ${riskDailyUsd.toLocaleString()} of BNB a day - until it expires or you revoke it. A shorter key means a
+                smaller worst case. Your passkey approves those capped allowances, then the key.
+              </p>
+            </details>
           ) : null}
           <div className="mt-2 flex items-center gap-1.5">
             <div className="panel-tabs grid flex-1 grid-cols-3 rounded-full p-[2px]" role="radiogroup" aria-label="How long">
@@ -169,18 +181,21 @@ export function AutoTradeCard({
                   role="radio"
                   type="button"
                 >
-                  {days} day{days === 1 ? "" : "s"}
+                  <span className={durationDays === days ? "text-[#171813]" : undefined}>
+                    {days} day{days === 1 ? "" : "s"}
+                  </span>
                 </button>
               ))}
             </div>
             <button
-              className="h-8 shrink-0 rounded-lg bg-accent px-3 !text-[12px] font-semibold text-ink hover:bg-accent-hover disabled:opacity-40"
+              className="h-8 shrink-0 rounded-lg bg-accent px-3 !text-[12px] font-semibold hover:bg-accent-hover disabled:opacity-40"
               disabled={busy !== null || !riskDailyUsd}
               onClick={() => void allow()}
-              title={riskDailyUsd ? undefined : "Add Risk limits first"}
+              title={riskDailyUsd ? undefined : "Add a trading rule or Risk limits first"}
               type="button"
             >
-              {busy === "grant" ? "Check your wallet…" : "Allow"}
+              {/* Dark text on the yellow in both themes: the theme's ink is light in dark mode and unreadable here. */}
+              <span className="text-[#171813]">{busy === "grant" ? "Check your wallet…" : "Allow"}</span>
             </button>
           </div>
         </>

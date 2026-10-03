@@ -212,6 +212,7 @@ export const forConversation = query({
         lastReason: run?.lastReason ?? null,
         lastLagMs: run?.lastLagMs ?? null,
         paused: (draft.pausedRuleIds ?? []).includes(rule.id),
+        maxTradesPerDay: rule.maxTradesPerDay,
         timeframe: rule.timeframe,
       });
     }

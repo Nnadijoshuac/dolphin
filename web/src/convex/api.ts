@@ -1616,6 +1616,8 @@ export type TradingRuleView = {
   lastLagMs: number | null;
   /** Paused by the owner: no new entries; an open position still closes by its exits. */
   paused: boolean;
+  /** Entries a UTC day at most: with sizeUsd, what its trade key is limited to. */
+  maxTradesPerDay: number;
   timeframe: string;
 };
 

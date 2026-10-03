@@ -7,7 +7,6 @@ import { KnowledgeSection } from "@/components/knowledge-section";
 import { PermissionsSection } from "@/components/permissions-section";
 import { TradingRulesSection } from "@/components/trading-rules-section";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { AutoTradeCard } from "@/components/auto-trade-card";
 import { PaperTradingCard } from "@/components/paper-trading-card";
 import { EnvVarsPanel } from "@/components/env-vars-panel";
 import { agentBuilderApi, type AgentBlockData, type AgentPurpose } from "@/convex/api";
@@ -343,23 +342,29 @@ export function AgentDraftPanel({
           conversationKey={tradeKeyConversation}
           hasRules={(draft.ruleCount ?? 0) > 0}
           hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap"))}
-        />
-      ) : null}
-
-      {/* Live trading only: in paper mode no real trade is made, so no trade key is offered. */}
-      {tradeKeyConversation && draft.paperMode === false ? (
-        <AutoTradeCard
-          conversationKey={tradeKeyConversation}
-          // A rules agent trades from the Dolphin Wallet with the same key (owner, 2026-10-03).
-          hasSwap={Boolean(draft.blocks?.some((block) => block.type === "swap")) || (draft.ruleCount ?? 0) > 0}
           riskDailyUsd={(() => {
             const risk = draft.blocks?.find((block) => block.type === "risk");
-            return risk && risk.type === "risk" ? risk.config.maxTradeUsd * risk.config.maxTradesPerDay : null;
+            const swaps = draft.blocks?.some((block) => block.type === "swap");
+            return swaps && risk && risk.type === "risk" ? risk.config.maxTradeUsd * risk.config.maxTradesPerDay : null;
           })()}
         />
       ) : null}
 
       <div className="mt-3 space-y-2 border-t border-line/60 px-2 pt-3">
+        {live.map((entry) => (
+          <a
+            className="flex items-center justify-between rounded-lg bg-success/10 px-3 py-2 text-[12px] text-ink no-underline"
+            href={`/agent/${entry.hash}`}
+            key={entry.hash}
+          >
+            <span>
+              On {entry.networkLabel} · #{entry.tokenId}
+            </span>
+            <span className="font-semibold">View</span>
+          </a>
+        ))}
+        {/* Side by side (owner, 2026-10-03: the panel was too crowded to breathe). */}
+        <div className="grid grid-cols-2 gap-2">
         {trying ? (
           <button
             className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line/80 px-4 text-[13px] font-semibold text-ink transition-colors hover:bg-paper-muted disabled:cursor-not-allowed disabled:opacity-30"
@@ -381,18 +386,6 @@ export function AgentDraftPanel({
             <span className="text-canvas">{isStartingTry ? "Opening…" : "Try it privately"}</span>
           </button>
         )}
-        {live.map((entry) => (
-          <a
-            className="flex items-center justify-between rounded-lg bg-success/10 px-3 py-2 text-[12px] text-ink no-underline"
-            href={`/agent/${entry.hash}`}
-            key={entry.hash}
-          >
-            <span>
-              On {entry.networkLabel} · #{entry.tokenId}
-            </span>
-            <span className="font-semibold">View</span>
-          </a>
-        ))}
         <button
           className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-line/80 px-4 text-[13px] font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!ready || !onPublish || trying}
@@ -401,13 +394,9 @@ export function AgentDraftPanel({
         >
           Put on-chain
         </button>
-        <p className="text-[0.7rem] leading-relaxed text-muted">
-          {trying
-            ? "This run is private. Only you can see it, and it uses only the tools in the draft."
-            : ready
-              ? "Putting it on-chain registers it from your own wallet. Until then it stays free and private to you."
-              : `Needs ${listGaps(gaps)} before you can try it. It stays free and private.`}
-        </p>
+        </div>
+        {/* Only what explains a greyed-out button stays. */}
+        {!trying && !ready ? <p className="text-[0.7rem] leading-relaxed text-muted">Needs {listGaps(gaps)} first.</p> : null}
       </div>
       </div>
       <div className="sleek-scroll h-full w-1/2 min-w-0 overflow-y-auto px-2 pb-2 pt-4" inert={tab !== "keys"}>

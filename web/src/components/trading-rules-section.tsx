@@ -61,9 +61,7 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
         <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Trading rules</p>
         <p className={`text-[0.64rem] ${view.running ? "text-success" : "text-faint"}`}>{view.running ? "Watching · paper" : "Off until Autopilot is on"}</p>
       </div>
-      <p className="mt-0.5 text-[0.68rem] leading-relaxed text-faint">
-        They act on every closed candle with no AI in the way. Here they trade on paper at live Binance prices; real money comes when you run the agent on your own server.
-      </p>
+      <p className="mt-0.5 text-[0.68rem] leading-relaxed text-faint">They act on every closed candle, with no AI in the way.</p>
       <ul className="mt-2 space-y-1.5">
         {view.rules.map((rule) => (
           <RuleRow conversationKey={conversationKey} key={rule.id} rule={rule} trades={view.trades.filter((trade) => trade.ruleId === rule.id)} />
@@ -71,12 +69,9 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
       </ul>
       <Timeline rules={view.rules} running={view.running} trades={view.trades} />
 
-      <button
-        className="mt-3 flex h-8 w-full items-center justify-center rounded-lg border border-line px-3 !text-[12px] font-semibold text-ink transition-colors hover:border-ink"
-        onClick={() => void download()}
-        type="button"
-      >
-        Run it on your server
+      {/* A link, not a full-width button: most people never run it themselves (owner, 2026-10-03: give the panel room). */}
+      <button className="mt-2 !text-[0.7rem] font-semibold text-muted hover:text-ink hover:underline" onClick={() => void download()} type="button">
+        Run it on your own server instead
       </button>
       {exportError ? (
         <p className="mt-1.5 text-[0.68rem] text-danger" role="alert">

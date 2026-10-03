@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { AutoTradeCard } from "@/components/auto-trade-card";
 import { ReceiveSheet } from "@/components/receive-sheet";
 import { paperTradingApi, strategyApi } from "@/convex/api";
 import { useWalletTokens } from "@/hooks/use-wallet-tokens";
@@ -64,7 +65,18 @@ function WalletFunds({ needUsdt }: { needUsdt: number | null }) {
   );
 }
 
-export function PaperTradingCard({ conversationKey, hasSwap, hasRules = false }: { conversationKey: string; hasSwap: boolean; hasRules?: boolean }) {
+export function PaperTradingCard({
+  conversationKey,
+  hasSwap,
+  hasRules = false,
+  riskDailyUsd = null,
+}: {
+  conversationKey: string;
+  hasSwap: boolean;
+  hasRules?: boolean;
+  /** A swapping agent's Risk limits per day, for its trade key. */
+  riskDailyUsd?: number | null;
+}) {
   const trades = hasSwap || hasRules;
   // The same query the Trading rules section runs (Convex shares it): which rules trade from the Dolphin Wallet, and their largest size.
   const ruleView = useQuery(strategyApi.strategy.forConversation, hasRules ? { conversationKey } : "skip");
@@ -127,17 +139,15 @@ export function PaperTradingCard({ conversationKey, hasSwap, hasRules = false }:
               role="radio"
               type="button"
             >
-              {paper ? "Paper" : "Live"}
+              {/* The label in a span: globals.css repaints button text light in dark mode, which vanished on the white pill. */}
+              <span className={state.paperMode === paper ? "text-[#171813]" : undefined}>{paper ? "Paper" : "Live"}</span>
             </button>
           ))}
         </div>
       </div>
 
       {state.paperMode && !hasSwap ? (
-        <p className="mt-1 text-[0.7rem] leading-snug text-muted">
-          Paper: rules trade with pretend money at live Binance prices. Live sends real orders - on Binance&rsquo;s testnet or
-          live, as the Binance block says, or from your Dolphin Wallet.
-        </p>
+        <p className="mt-1 text-[0.7rem] leading-snug text-muted">Paper: pretend money at live prices. Live: real funds.</p>
       ) : state.paperMode ? (
         <>
           <p className="mt-1 text-[0.7rem] leading-snug text-muted">
@@ -181,13 +191,13 @@ export function PaperTradingCard({ conversationKey, hasSwap, hasRules = false }:
           </button>
         </>
       ) : (
-        <p className="mt-1 text-[0.7rem] leading-snug text-muted">
-          Live: trading rules send real orders - to Binance (testnet or live, as its block says) or from your Dolphin
-          Wallet with its trade key.{hasSwap ? " AI trades come to you as tickets to sign, unless you allow \u201cTrade without asking\u201d below." : ""}
-        </p>
+        <p className="mt-1 text-[0.7rem] leading-snug text-muted">Live: real orders, with real funds.</p>
       )}
 
       {usesWallet ? <WalletFunds needUsdt={needUsdt} /> : null}
+
+      {/* Live only: in paper mode nothing real is traded, so no key is offered. */}
+      {!state.paperMode && usesWallet ? <AutoTradeCard conversationKey={conversationKey} hasSwap riskDailyUsd={riskDailyUsd} /> : null}
 
       {asking ? (
         <div aria-labelledby="live-confirm-title" aria-modal className="confirm-scrim" role="dialog">

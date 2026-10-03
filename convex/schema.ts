@@ -1442,6 +1442,12 @@ export default defineSchema({
      * trades real funds without it - checked again by the rule engine on every live order.
      */
     liveAcknowledgedAt: v.optional(v.number()),
+    /**
+     * Rules the owner paused from the rule view (owner, 2026-10-03: "you can decide to turn it off").
+     * A paused rule opens nothing new; an open position still closes by its exits and stop, so
+     * pausing never strands live money.
+     */
+    pausedRuleIds: v.optional(v.array(v.string())),
     conversationId: v.id("dolphinConversations"),
     /**
      * WHO IT IS FOR (mentor review, 2026-09-29: plain language, protocols in an

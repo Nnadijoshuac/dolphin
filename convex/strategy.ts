@@ -130,6 +130,19 @@ export const updateRule = mutation({
   },
 });
 
+/** Pause or resume one rule: paused, it opens nothing new but still closes what it holds. */
+export const setRulePaused = mutation({
+  args: { conversationKey: v.string(), ruleId: v.string(), paused: v.boolean() },
+  handler: async (ctx, { conversationKey, ruleId, paused }) => {
+    const draft = await draftOfKey(ctx, conversationKey);
+    if (!draft || !rulesOf(draft).some((rule) => rule.id === ruleId)) throw new ConvexError("That rule is not in this agent.");
+    const current = new Set(draft.pausedRuleIds ?? []);
+    if (paused) current.add(ruleId);
+    else current.delete(ruleId);
+    await ctx.db.patch(draft._id, { pausedRuleIds: [...current], updatedAt: Date.now() });
+  },
+});
+
 export const removeRule = mutation({
   args: { conversationKey: v.string(), ruleId: v.string() },
   handler: async (ctx, { conversationKey, ruleId }) => {
@@ -198,6 +211,7 @@ export const forConversation = query({
         lastError: run?.lastError ?? null,
         lastReason: run?.lastReason ?? null,
         lastLagMs: run?.lastLagMs ?? null,
+        paused: (draft.pausedRuleIds ?? []).includes(rule.id),
         timeframe: rule.timeframe,
       });
     }
@@ -205,7 +219,8 @@ export const forConversation = query({
       .query("strategyTrades")
       .withIndex("by_draft", (q) => q.eq("draftId", draft._id))
       .order("desc")
-      .take(20);
+      // Enough for the rule view's chart markers; the Timeline shows the newest 10.
+      .take(100);
     return {
       rules: views,
       trades,
@@ -230,6 +245,8 @@ type ArmedDraft = {
   live: boolean;
   /** The owner accepted the real-money disclaimer. */
   acknowledged: boolean;
+  /** Rules the owner paused: no new entries. */
+  paused: string[];
   /** The wallet whose Keys tab holds the agent's keys (the one that switched Autopilot on). */
   owner: string | null;
   binance: BinanceConfig | null;
@@ -269,6 +286,7 @@ export const armed = internalQuery({
         misfits,
         guard: { limitUsd: draft.dailyLossLimitUsd ?? null, lossTodayUsd: await lossTodayUsd(ctx, draft._id, "dolphin") },
         live: draft.paperMode === false,
+        paused: draft.pausedRuleIds ?? [],
         acknowledged: Boolean(draft.liveAcknowledgedAt),
         owner: draft.autopilot?.walletAddress ?? null,
         binance,
@@ -428,6 +446,10 @@ export const tick = internalAction({
         // How late this decision is: from the judged candle's close to now.
         const lagMs = Math.max(0, Date.now() - (judged.openTime + TIMEFRAME_MS[rule.timeframe]));
         let decision = decide(rule, candles, state, now, guard);
+        // Paused by the owner: nothing new opens; an open position still closes by its own exits.
+        if (armedDraft.paused.includes(rule.id) && decision.type === "enter") {
+          decision = { type: "none", reason: "Paused by you: no new trades. Resume it from the rule's view." };
+        }
         // On paper every decision "executes" at the closed candle's price; Live sends a real order first.
         const held = armedDraft.helds[rule.id] ?? null;
         let execution: Execution = { real: false };

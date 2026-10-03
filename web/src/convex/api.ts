@@ -1614,6 +1614,8 @@ export type TradingRuleView = {
   lastReason: string | null;
   /** How long after the candle closed that check ran, in ms. */
   lastLagMs: number | null;
+  /** Paused by the owner: no new entries; an open position still closes by its exits. */
+  paused: boolean;
   timeframe: string;
 };
 
@@ -1647,6 +1649,8 @@ export type TradingRuleTrade = {
   paper: boolean;
   pnlPct: number | null;
   reason: string;
+  /** The judged candle's open time, ms. */
+  candleTime: number;
   at: number;
   /** "runner": reported by the builder's own server (phase 4); absent or "dolphin": Dolphin's paper run. */
   source?: "dolphin" | "runner";
@@ -1674,6 +1678,7 @@ export const strategyApi = anyApi as unknown as {
     checkBinance: Action<{ sessionToken: string; conversationKey: string }, BinanceConnection | { error: string }>;
     updateRule: Mutation<{ conversationKey: string; ruleId: string; sizeUsd?: number; leverage?: number; stopLossPct?: number | null }, { warnings: string[] }>;
     removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
+    setRulePaused: Mutation<{ conversationKey: string; ruleId: string; paused: boolean }, null>;
     /** agent.json for the runner: the rules and a fresh report token (the old one stops working). */
     exportForRunner: Mutation<{ conversationKey: string }, { version: number; agent: { name: string }; rules: unknown[]; report: { url: string; token: string } }>;
   };

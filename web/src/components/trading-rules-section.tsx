@@ -303,6 +303,7 @@ function Timeline({ trades, rules, running }: { trades: TradingRuleTrade[]; rule
               <div className="min-w-0">
                 <p className="text-ink-soft">
                   Checked the {row.rule.market} {row.rule.timeframe} candle
+                  {row.rule.lastLagMs !== null ? <span className="text-muted"> · {(row.rule.lastLagMs / 1000).toFixed(1)} s after it closed</span> : null}
                 </p>
                 <p className="text-muted">{row.text}</p>
               </div>

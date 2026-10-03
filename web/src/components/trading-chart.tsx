@@ -44,6 +44,31 @@ const SMALL_COUNT = 64;
 const PAD_SMALL = { top: 10, right: 52, bottom: 18, left: 6 };
 const PAD_LARGE = { top: 16, right: 68, bottom: 26, left: 10 };
 
+/*
+ * LIVE FROM BINANCE (owner, 2026-10-03: "it's behind the real chart... late trading is an
+ * undoing"). GeckoTerminal caches pool candles for about a minute, so candles arrived in jumps.
+ * A token that trades on Binance is drawn from Binance's public market-data hosts instead: the
+ * history once over REST, then every tick of the forming candle over a WebSocket (about one a
+ * second). Tokens Binance does not list keep GeckoTerminal. Binance's own symbols for the
+ * BNB Chain wrappers: WBNB is BNB, BTCB is BTC.
+ */
+const BINANCE_REST = "https://data-api.binance.vision/api/v3/klines";
+const BINANCE_STREAM = "wss://data-stream.binance.vision/ws";
+const BINANCE_ALIASES: Record<string, string> = { WBNB: "BNB", BTCB: "BTC" };
+
+export function binancePair(symbol: string): string | null {
+  const base = (BINANCE_ALIASES[symbol.toUpperCase()] ?? symbol.toUpperCase()).replace(/[^A-Z0-9]/g, "");
+  if (!base || ["USDT", "USDC", "U", "FDUSD", "BUSD"].includes(base)) return null;
+  return `${base}USDT`;
+}
+
+async function binanceCandles(pair: string, frame: Frame, limit = FETCH_LIMIT): Promise<Candle[] | null> {
+  const response = await fetch(`${BINANCE_REST}?symbol=${pair}&interval=${frame}&limit=${limit}`);
+  if (!response.ok) return null; // not a Binance market: the caller falls back to the pool
+  const rows = (await response.json()) as unknown[][];
+  return rows.map((row) => ({ t: Number(row[0]) / 1000, o: Number(row[1]), h: Number(row[2]), l: Number(row[3]), c: Number(row[4]), v: Number(row[7]) }));
+}
+
 export async function findPool(tokenAddress: string): Promise<string | null> {
   const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
   if (!response.ok) return null;
@@ -135,7 +160,9 @@ export function TradingChart({
   useEffect(() => {
     let cancelled = false;
     let timer = 0;
-    const load = async () => {
+    let socket: WebSocket | null = null;
+    // The pool, re-read on a timer: for tokens Binance does not list, or if its stream drops.
+    const poll = async () => {
       try {
         const pool = poolAddress ?? (await findPool(tokenAddress));
         if (!pool) throw new Error("no pool");
@@ -144,14 +171,69 @@ export function TradingChart({
       } catch {
         if (!cancelled) setState((current) => (current.status === "ready" ? current : { status: "error" }));
       }
-      if (!cancelled) timer = window.setTimeout(load, REFRESH_MS[frame]);
+      if (!cancelled) timer = window.setTimeout(poll, REFRESH_MS[frame]);
     };
-    void load();
+    const live = async (pair: string) => {
+      const history = await binanceCandles(pair, frame).catch(() => null);
+      if (cancelled) return;
+      if (!history || history.length === 0) return void poll();
+      setState({ status: "ready", candles: history, at: Date.now() });
+      // Two streams at once: the candle (every 2 s - volume and the roll to a new candle) and every
+      // trade (the price, as it happens). Drawn at most once a frame, so a busy market stays smooth.
+      const name = pair.toLowerCase();
+      socket = new WebSocket(`${BINANCE_STREAM.replace(/\/ws$/, "")}/stream?streams=${name}@kline_${frame}/${name}@aggTrade`);
+      let pendingCandle: Candle | null = null;
+      let pendingPrice: number | null = null;
+      let frameRequest = 0;
+      const flush = () => {
+        frameRequest = 0;
+        const candle = pendingCandle;
+        const price = pendingPrice;
+        pendingCandle = null;
+        pendingPrice = null;
+        setState((current) => {
+          if (current.status !== "ready") return current;
+          let candles = current.candles;
+          if (candle) {
+            const lastCandle = candles[candles.length - 1];
+            candles = lastCandle && lastCandle.t === candle.t ? [...candles.slice(0, -1), candle] : [...candles.slice(-(FETCH_LIMIT - 1)), candle];
+          }
+          if (price !== null && candles.length) {
+            const lastCandle = candles[candles.length - 1];
+            candles = [...candles.slice(0, -1), { ...lastCandle, c: price, h: Math.max(lastCandle.h, price), l: Math.min(lastCandle.l, price) }];
+          }
+          return { status: "ready", candles, at: Date.now() };
+        });
+      };
+      socket.onmessage = (event) => {
+        if (cancelled) return;
+        const message = JSON.parse(String(event.data)) as { data?: { e?: string; p?: string; k?: { t: number; o: string; h: string; l: string; c: string; q: string } } };
+        const data = message.data;
+        if (data?.e === "kline" && data.k) {
+          const k = data.k;
+          pendingCandle = { t: k.t / 1000, o: Number(k.o), h: Number(k.h), l: Number(k.l), c: Number(k.c), v: Number(k.q) };
+        } else if (data?.e === "aggTrade" && data.p) {
+          pendingPrice = Number(data.p);
+        } else return;
+        if (!frameRequest) frameRequest = window.requestAnimationFrame(flush);
+      };
+      // A dropped stream falls back to polling rather than freezing the chart.
+      socket.onclose = () => {
+        if (!cancelled) void poll();
+      };
+    };
+    const pair = binancePair(symbol);
+    if (pair) void live(pair);
+    else void poll();
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      if (socket) {
+        socket.onclose = null;
+        socket.close();
+      }
     };
-  }, [frame, poolAddress, tokenAddress]);
+  }, [frame, poolAddress, tokenAddress, symbol]);
 
   const pad = expanded ? PAD_LARGE : PAD_SMALL;
   const geometry = useMemo(() => {

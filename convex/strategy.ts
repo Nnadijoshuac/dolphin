@@ -9,7 +9,7 @@ import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } fro
 import { closedCandles, MarketDataError } from "./lib/binanceMarket";
 import { checkConnection, closePosition, openPosition, type ConnectionReport, type Held } from "./lib/binanceTrade";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, venueProblem, type Candle, type LossGuard, type Rule, type RuleState } from "./lib/strategy";
+import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, TIMEFRAME_MS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -196,6 +196,7 @@ export const forConversation = query({
         lastCheckedAt: run?.lastCheckedAt ?? null,
         lastError: run?.lastError ?? null,
         lastReason: run?.lastReason ?? null,
+        lastLagMs: run?.lastLagMs ?? null,
         timeframe: rule.timeframe,
       });
     }
@@ -286,6 +287,7 @@ export const record = internalMutation({
     lastReason: v.optional(v.string()),
     /** Set only when it changes: what a real position holds (null once closed). */
     held: v.optional(v.any()),
+    lagMs: v.optional(v.number()),
     trade: v.union(
       v.null(),
       v.object({
@@ -306,14 +308,14 @@ export const record = internalMutation({
       }),
     ),
   },
-  handler: async (ctx, { draftId, ruleId, state, lastError, lastReason, held, trade }) => {
+  handler: async (ctx, { draftId, ruleId, state, lastError, lastReason, held, lagMs, trade }) => {
     const now = Date.now();
     const run = await ctx.db
       .query("strategyRuns")
       .withIndex("by_draft_rule", (q) => q.eq("draftId", draftId).eq("ruleId", ruleId))
       .unique();
     const reason = lastReason === undefined ? {} : { lastReason };
-    const holding = held === undefined ? {} : { held };
+    const holding = { ...(held === undefined ? {} : { held }), ...(lagMs === undefined ? {} : { lastLagMs: lagMs }) };
     if (run) await ctx.db.patch(run._id, { state, lastCheckedAt: now, lastError, ...reason, ...holding });
     else await ctx.db.insert("strategyRuns", { draftId, ruleId, state, lastCheckedAt: now, lastError, ...reason, ...holding });
     if (trade) {
@@ -323,9 +325,60 @@ export const record = internalMutation({
   },
 });
 
+/* ── The clock: a run half a second after every minute boundary, never two for one minute ── */
+
+/** Half a second after the boundary: the candle has closed and Binance has it. */
+const AFTER_CLOSE_MS = 500;
+
+async function clockRow(ctx: { db: QueryCtx["db"] }) {
+  return ctx.db.query("strategyClock").withIndex("by_key", (q) => q.eq("key", "main")).unique();
+}
+
+/** Claims a minute for one run. False if another run already has it. */
+export const claimMinute = internalMutation({
+  args: { minute: v.number() },
+  handler: async (ctx, { minute }): Promise<boolean> => {
+    const clock = await clockRow(ctx);
+    if (clock && clock.lastMinute >= minute) return false;
+    if (clock) await ctx.db.patch(clock._id, { lastMinute: minute });
+    else await ctx.db.insert("strategyClock", { key: "main", nextAt: 0, lastMinute: minute });
+    return true;
+  },
+});
+
+/** Books the next run for the next minute boundary, unless one is already booked. */
+export const bookNext = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const target = (Math.floor(Date.now() / 60_000) + 1) * 60_000 + AFTER_CLOSE_MS;
+    const clock = await clockRow(ctx);
+    if (clock && clock.nextAt >= target) return;
+    if (clock) await ctx.db.patch(clock._id, { nextAt: target });
+    else await ctx.db.insert("strategyClock", { key: "main", nextAt: target, lastMinute: 0 });
+    await ctx.scheduler.runAt(target, internal.strategy.tick, {});
+  },
+});
+
+/** The cron's job now: restart the chain if it ever stopped (nothing booked ahead). */
+export const watchdog = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const clock = await clockRow(ctx);
+    if (clock && clock.nextAt > Date.now() - 5_000) return;
+    const target = (Math.floor(Date.now() / 60_000) + 1) * 60_000 + AFTER_CLOSE_MS;
+    if (clock) await ctx.db.patch(clock._id, { nextAt: target });
+    else await ctx.db.insert("strategyClock", { key: "main", nextAt: target, lastMinute: 0 });
+    await ctx.scheduler.runAt(target, internal.strategy.tick, {});
+  },
+});
+
 export const tick = internalAction({
   args: {},
   handler: async (ctx): Promise<{ rules: number; trades: number }> => {
+    // Book the next minute first, so a run that fails still leaves the chain going.
+    await ctx.runMutation(internal.strategy.bookNext, {});
+    // One run per minute, ever: a second one for the same minute stops here.
+    if (!(await ctx.runMutation(internal.strategy.claimMinute, { minute: Math.floor(Date.now() / 60_000) }))) return { rules: 0, trades: 0 };
     const now = Date.now();
     const armedDrafts: ArmedDraft[] = await ctx.runQuery(internal.strategy.armed, {});
     // One fetch per market per run, however many rules read it.
@@ -371,6 +424,8 @@ export const tick = internalAction({
           continue;
         }
         if (judged.openTime <= state.lastCandle) continue;
+        // How late this decision is: from the judged candle's close to now.
+        const lagMs = Math.max(0, Date.now() - (judged.openTime + TIMEFRAME_MS[rule.timeframe]));
         let decision = decide(rule, candles, state, now, guard);
         // On paper every decision "executes" at the closed candle's price; Live sends a real order first.
         const held = armedDraft.helds[rule.id] ?? null;
@@ -385,6 +440,7 @@ export const tick = internalAction({
               state: afterCandle(state, judged.openTime, decision, false, now),
               lastError: outcome.error,
               lastReason: decision.reason,
+              lagMs,
               trade: null,
             });
             continue;
@@ -423,6 +479,7 @@ export const tick = internalAction({
           state: next,
           lastError: null,
           lastReason: decision.reason,
+          lagMs,
           ...(execution.real ? { held: execution.held } : decision.type === "exit" ? { held: null } : {}),
           trade,
         });

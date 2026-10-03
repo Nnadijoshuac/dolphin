@@ -1611,6 +1611,8 @@ export type TradingRuleView = {
   lastError: string | null;
   /** What the last check saw and decided, with its values. Null before the first check. */
   lastReason: string | null;
+  /** How long after the candle closed that check ran, in ms. */
+  lastLagMs: number | null;
   timeframe: string;
 };
 

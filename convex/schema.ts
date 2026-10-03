@@ -1335,6 +1335,13 @@ export default defineSchema({
    */
   freeCalls: defineTable({ key: v.string(), count: v.number() }).index("by_key", ["key"]),
 
+  /**
+   * THE ENGINE'S CLOCK (owner, 2026-10-03: "late trading is an undoing"). One row. `nextAt` is the
+   * run already booked (the next minute boundary + 500 ms); `lastMinute` is the minute a run has
+   * claimed, so no minute is ever judged twice - two runs could otherwise both place an order.
+   */
+  strategyClock: defineTable({ key: v.string(), nextAt: v.number(), lastMinute: v.number() }).index("by_key", ["key"]),
+
   /** Each rule's running state (lib/strategy.ts RuleState): its position, last judged candle, daily count. */
   strategyRuns: defineTable({
     draftId: v.id("agentDrafts"),
@@ -1351,6 +1358,8 @@ export default defineSchema({
     lastReason: v.optional(v.string()),
     /** What a real position holds on its venue (lib/binanceTrade.ts Held), so an exit closes exactly that. */
     held: v.optional(v.any()),
+    /** How long after the judged candle closed the last decision ran, in ms (owner, 2026-10-03: "late trading is an undoing"). */
+    lastLagMs: v.optional(v.number()),
   }).index("by_draft_rule", ["draftId", "ruleId"]),
 
   /**

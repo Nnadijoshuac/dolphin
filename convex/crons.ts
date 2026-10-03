@@ -73,7 +73,12 @@ crons.interval("autopilot (armed agent triggers)", { minutes: 1 }, internal.auto
  * newly closed Binance candles, with no model call - paper inside Dolphin.
  * Idle, one indexed read a minute; see convex/strategy.ts.
  */
-crons.interval("trading rules (no AI)", { minutes: 1 }, internal.strategy.tick, {});
+// ON the minute (owner, 2026-10-03: "late trading is an undoing"). The engine books its own next
+// run half a second after each minute boundary (convex/strategy.ts bookNext; the scheduler fired
+// within 12-36 ms of its target on dev). An interval ran at an arbitrary second - up to a minute
+// late - and the minute cron itself fired ~7.3 s after the boundary. This cron only restarts the
+// chain if it ever stops.
+crons.cron("trading rules (no AI): watchdog", "* * * * *", internal.strategy.watchdog, {});
 
 // Built agents selling over ERC-8183: retry deliveries, settle after the dispute
 // window, forward earnings to builders (convex/erc8183Seller.ts). Gas is the agents' own.

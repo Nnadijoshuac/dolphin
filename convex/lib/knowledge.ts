@@ -2,17 +2,15 @@
  * KNOWLEDGE: A BUILDER'S DOCUMENTS, AS TEXT (owner, 2026-10-03).
  * Plan: Agent/PLAN-2026-10-03-knowledge-mcps.md.
  *
- * A builder drops Markdown, plain text or a PDF into the build chat. Dolphin
- * keeps only the TEXT, split into sections, and the original file is deleted:
- * nothing uploaded is ever stored or served as a file, so Dolphin cannot be
- * used to host malware, and a PDF's scripts and images never run or count.
+ * A builder drops Markdown, plain text or a PDF into the build chat. Their
+ * BROWSER reads it (web/src/lib/knowledge-extract.ts: a PDF becomes Markdown,
+ * headings recovered from font sizes) and sends only text; no file ever
+ * reaches Dolphin's servers. This file is what the server does with that text,
+ * trusting none of it: normalise, cap, split, flag.
  *
- * Pure string work here, so it is tested without Convex (tests/knowledge.test.ts).
- * PDF reading itself is in convex/knowledgeIngest.ts (unpdf needs the Node runtime).
+ * Pure string work, tested without Convex (tests/knowledge.test.ts).
  */
 
-/** The owner's cap per upload. */
-export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 export const MAX_DOCUMENTS = 10;
 /**
  * Text per agent, all documents together: ~150 pages. The cap is on TEXT,
@@ -21,8 +19,6 @@ export const MAX_DOCUMENTS = 10;
  */
 export const MAX_AGENT_TEXT_CHARS = 300_000;
 export const MAX_SECTIONS = 40;
-/** A PDF longer than this is refused rather than read for minutes. */
-export const MAX_PDF_PAGES = 400;
 /** What one tool call returns at most (~15k tokens); a longer section is served in parts. */
 export const MAX_RESULT_CHARS = 60_000;
 /** A document with no headings is cut into parts of about this size. */
@@ -31,22 +27,6 @@ const UNTITLED_PART_CHARS = 8_000;
 export type DocumentKind = "markdown" | "text" | "pdf";
 
 export type Section = { title: string; slug: string; text: string };
-
-/**
- * What the file really is, from its bytes - never its name alone. A renamed
- * script is just text and is accepted as text (we never run anything); a
- * binary that is not a PDF is refused.
- */
-export function sniffKind(bytes: Uint8Array, fileName: string): DocumentKind | null {
-  if (bytes.length >= 5 && String.fromCharCode(...bytes.slice(0, 5)) === "%PDF-") return "pdf";
-  if (bytes.includes(0)) return null; // NUL bytes: a binary, not text
-  try {
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    return null;
-  }
-  return /\.(md|markdown|mdx)$/i.test(fileName) ? "markdown" : "text";
-}
 
 /** Line endings unified, control characters (except tab and newline) gone, blank runs collapsed. */
 export function normaliseText(text: string): string {
@@ -59,33 +39,6 @@ export function normaliseText(text: string): string {
       .replace(/\n{3,}/g, "\n\n")
       .trim()
   );
-}
-
-export type PdfLine = { text: string; size: number };
-
-/**
- * A PDF's lines back into Markdown. PDFs carry no headings, only font sizes:
- * the body size is the one most of the text is set in, and a line clearly
- * larger is a heading - the largest size "#", the next "##", then "###".
- */
-export function pdfLinesToMarkdown(lines: readonly PdfLine[]): string {
-  const weight = new Map<number, number>();
-  for (const line of lines) {
-    const size = Math.round(line.size);
-    weight.set(size, (weight.get(size) ?? 0) + line.text.length);
-  }
-  const body = [...weight.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 12;
-  const headingSizes = [...weight.keys()].filter((size) => size >= body * 1.15).sort((a, b) => b - a).slice(0, 3);
-  const out: string[] = [];
-  for (const line of lines) {
-    const text = line.text.trim();
-    if (!text) continue;
-    const level = headingSizes.indexOf(Math.round(line.size));
-    // A heading is a short line; a whole paragraph in a big font is still a paragraph.
-    if (level >= 0 && text.length <= 120) out.push(`\n${"#".repeat(level + 1)} ${text}\n`);
-    else out.push(text);
-  }
-  return normaliseText(out.join("\n"));
 }
 
 /** A heading as a tool-name fragment: "Fast-cut Black & White" -> "fast_cut_black_white". */

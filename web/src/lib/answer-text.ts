@@ -8,12 +8,12 @@
  * "Open the original" still shows the exact delivered text.
  */
 export function stripToolNames(text: string): string {
-  const BLOCK = /`?\bblock_[a-z0-9_]+\b`?/gi;
+  const BLOCK = /`?\b(?:block|knowledge)_[a-z0-9_]+\b`?/gi;
   let out = text.replace(/[^\S\n]*\(([^()\n]*)\)/g, (match, inner: string) => {
-    if (!/\bblock_[a-z0-9_]+\b/i.test(inner)) return match;
+    if (!/\b(?:block|knowledge)_[a-z0-9_]+\b/i.test(inner)) return match;
     const rest = inner.replace(BLOCK, "").replace(/\b(source|sources|via|from|per|and|tool|tools)\b|[,:;/&+\s-]/gi, "");
     return rest.length === 0 ? "" : match.replace(BLOCK, "").replace(/\(\s*[,;:]?\s*/, "(").replace(/\s*[,;:]?\s*\)/, ")");
   });
-  out = out.replace(BLOCK, (name) => `the ${name.replace(/`/g, "").replace(/^block_/i, "").replace(/_/g, " ")}`);
+  out = out.replace(BLOCK, (name) => `the ${name.replace(/`/g, "").replace(/^(?:block|knowledge)_/i, "").replace(/_/g, " ")}`);
   return out.replace(/(?<=\S)[^\S\n]+([.,;:])/g, "$1").replace(/(?<=\S)[^\S\n]{2,}(?=\S)/g, " ");
 }

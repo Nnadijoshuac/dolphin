@@ -1,6 +1,8 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+import { knowledgeToolValidator } from "./lib/knowledgeValidators";
+
 import { agentLiveStatsValidator, statsCategoryValidator } from "./categoryStatsValidators";
 
 /** One asset a wallet action moved. See convex/lib/walletActionLogs.ts. */
@@ -1321,6 +1323,12 @@ export default defineSchema({
   }).index("by_draft", ["draftId"]),
 
   agentDrafts: defineTable({
+    /**
+     * The tools its documents give buyers (lib/knowledgeTools.ts), proposed by
+     * Dolphin and priced by the builder. Regenerated when a document is added
+     * or removed; the builder's edits survive by name.
+     */
+    knowledgeTools: v.optional(v.array(knowledgeToolValidator)),
     conversationId: v.id("dolphinConversations"),
     /**
      * WHO IT IS FOR (mentor review, 2026-09-29: plain language, protocols in an

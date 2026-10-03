@@ -242,7 +242,7 @@ export function cleanBlock(value: string, max: number): string | null {
 export type AppliedReply = {
   draft: DraftSpec;
   /** Which fields actually changed, for a reply when the model wrote none. */
-  changed: Array<"name" | "description" | "instructions" | "tools">;
+  changed: ("name" | "description" | "instructions" | "tools")[];
   /** Tool ids the model named that were not offered. Logged, never applied. */
   unknownToolIds: string[];
   /** Offered tools dropped because a cap was reached. */
@@ -340,12 +340,21 @@ function sameTools(a: readonly DraftTool[], b: readonly DraftTool[]): boolean {
 }
 
 /** What a draft still needs before it can be tried. Empty means runnable. */
+/**
+ * What a draft can do besides catalog tools: its blocks, and the knowledge
+ * tools its documents give (step 2 of Agent/PLAN-2026-10-03-knowledge-mcps.md).
+ * One count for every readiness check, so they cannot disagree.
+ */
+export function capabilityCount(row: { blocks?: unknown[] | null; knowledgeTools?: { enabled: boolean }[] | null } | null): number {
+  return (row?.blocks?.length ?? 0) + (row?.knowledgeTools ?? []).filter((tool) => tool.enabled).length;
+}
+
 export function draftGaps(draft: DraftSpec, blockCount = 0): string[] {
   const gaps: string[] = [];
   if (!draft.name) gaps.push("a name");
   if (!draft.description) gaps.push("a description of what it does");
   if (!draft.instructions) gaps.push("instructions");
   // A flow built from blocks (a Price feed, a Market...) needs no MCP tool (2026-09-29).
-  if (draft.tools.length === 0 && blockCount === 0) gaps.push("at least one tool or block");
+  if (draft.tools.length === 0 && blockCount === 0) gaps.push("at least one tool, block or document");
   return gaps;
 }

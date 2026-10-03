@@ -170,15 +170,15 @@ export function stripRawPayloads(text: string): string {
  *   "per `block_market_snapshot`, ..."        -> "per the market snapshot, ..."
  */
 export function stripToolNames(text: string): string {
-  const BLOCK = /`?\bblock_[a-z0-9_]+\b`?/gi;
+  const BLOCK = /`?\b(?:block|knowledge)_[a-z0-9_]+\b`?/gi;
   // A parenthetical that only names tools ("(block_x)", "(source: block_x, block_y)") goes entirely.
   let out = text.replace(/[^\S\n]*\(([^()\n]*)\)/g, (match, inner: string) => {
-    if (!/\bblock_[a-z0-9_]+\b/i.test(inner)) return match;
+    if (!/\b(?:block|knowledge)_[a-z0-9_]+\b/i.test(inner)) return match;
     const rest = inner.replace(BLOCK, "").replace(/\b(source|sources|via|from|per|and|tool|tools)\b|[,:;/&+\s-]/gi, "");
     return rest.length === 0 ? "" : match.replace(BLOCK, "").replace(/\(\s*[,;:]?\s*/, "(").replace(/\s*[,;:]?\s*\)/, ")");
   });
   // Anything left is mid-sentence: say what it is in words.
-  out = out.replace(BLOCK, (name) => `the ${name.replace(/`/g, "").replace(/^block_/i, "").replace(/_/g, " ")}`);
+  out = out.replace(BLOCK, (name) => `the ${name.replace(/`/g, "").replace(/^(?:block|knowledge)_/i, "").replace(/_/g, " ")}`);
   // Only where a citation came out: a space before punctuation, a doubled space between words.
   // Line-start indentation (nested lists) and trailing hard breaks are left alone.
   return out.replace(/(?<=\S)[^\S\n]+([.,;:])/g, "$1").replace(/(?<=\S)[^\S\n]{2,}(?=\S)/g, " ");

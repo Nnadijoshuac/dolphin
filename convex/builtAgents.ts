@@ -6,7 +6,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { PUBLIC_BLOCK_TYPES, activeBlocks, type AgentBlock } from "./lib/agentBlocks";
-import { draftGaps } from "./lib/agentSpec";
+import { capabilityCount, draftGaps } from "./lib/agentSpec";
 import { MAX_ICONS_PER_WALLET_PER_DAY } from "./lib/iconPolicy";
 import { bscPublicClient } from "./lib/bscClient";
 import { screenAgent } from "./lib/screen";
@@ -206,7 +206,7 @@ export const prepareListing = mutation({
       if (!draft.brain) throw new ConvexError("A paid agent answers with your own model. Add a Brain with your API key first.");
       priceRaw = parsed.toString();
     }
-    const gaps = draftGaps(draft, (draft.blocks ?? []).length);
+    const gaps = draftGaps(draft, capabilityCount(draft));
     if (gaps.length > 0) throw new ConvexError(`The agent needs ${gaps.join(", ")} before it can go on-chain.`);
     const name = draft.name as string;
     const description = draft.description as string;

@@ -32,3 +32,8 @@ test("leaves text without tool names untouched", () => {
   const plain = "Safe (on GoPlus's trusted list).\n\n- Holders: 1,204 (top 10 hold 12%).\n  - nested item  \n";
   assert.equal(stripToolNames(plain), plain);
 });
+
+test("knowledge tool names are removed the same way", () => {
+  assert.equal(stripToolNames("Push in slowly (knowledge_get_apple_style)."), "Push in slowly.");
+  assert.equal(stripToolNames("Per knowledge_search_knowledge, cut on the beat."), "Per the search knowledge, cut on the beat.");
+});

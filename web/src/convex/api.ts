@@ -1530,24 +1530,28 @@ export type KnowledgeDocument = {
   flags: { reason: string; excerpt: string }[];
 };
 
+/** A tool a knowledge agent offers buyers (convex/lib/knowledgeTools.ts). */
+export type KnowledgeTool = {
+  name: string;
+  kind: "list" | "get" | "get_any" | "search" | "ask";
+  description: string;
+  section: { documentId: string; slug: string } | null;
+  /** Price per call in U ("0.01"); null is free. */
+  priceU: string | null;
+  enabled: boolean;
+  edited?: boolean;
+};
+
 export const knowledgeApi = anyApi as unknown as {
   knowledge: {
-    uploadUrl: Mutation<{ conversationKey: string }, { uploadUrl: string }>;
     documents: Query<{ conversationKey: string }, KnowledgeDocument[]>;
     removeDocument: Mutation<{ conversationKey: string; documentId: string }, null>;
-  };
-  knowledgeIngest: {
+    /** The browser reads the file; only its text is sent. */
     addDocument: Action<
-      { conversationKey: string; storageId: string; fileName: string },
-      {
-        name: string;
-        kind: "markdown" | "text" | "pdf";
-        textChars: number;
-        storedBytes: number;
-        uploadBytes: number;
-        sections: string[];
-        flags: { reason: string; excerpt: string }[];
-      }
+      { conversationKey: string; fileName: string; kind: "markdown" | "text" | "pdf"; text: string },
+      { name: string; textChars: number; storedBytes: number; sections: string[]; flags: { reason: string; excerpt: string }[] }
     >;
+    tools: Query<{ conversationKey: string }, { tools: KnowledgeTool[]; hasBrain: boolean }>;
+    setTool: Mutation<{ conversationKey: string; name: string; price?: string; enabled?: boolean; description?: string }, null>;
   };
 };

@@ -68,7 +68,7 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
           <RuleRow conversationKey={conversationKey} key={rule.id} rule={rule} />
         ))}
       </ul>
-      {view.trades.length > 0 ? <Trades rules={view.rules} trades={view.trades} /> : null}
+      <Timeline rules={view.rules} running={view.running} trades={view.trades} />
 
       <button
         className="mt-3 flex h-8 w-full items-center justify-center rounded-lg border border-line px-3 !text-[12px] font-semibold text-ink transition-colors hover:border-ink"
@@ -252,41 +252,88 @@ function TradeWhy({ trade, rule }: { trade: TradingRuleTrade; rule: TradingRuleV
   );
 }
 
-function Trades({ trades, rules = [] }: { trades: TradingRuleTrade[]; rules?: TradingRuleView[] }) {
+/** "08:42:11", with the day when it was not today. */
+function clock(at: number): string {
+  const date = new Date(at);
+  const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return date.toDateString() === new Date().toDateString() ? time : `${date.toLocaleDateString("en", { month: "short", day: "numeric" })} ${time}`;
+}
+
+/**
+ * THE EXECUTION TIMELINE (owner, 2026-10-03; UI review point 9): what the agent did, in
+ * order, newest first - each rule's latest check with the values it saw, and every trade
+ * with its Why?. The check is the one stored on the rule's state row, not a log, so only the
+ * latest one per rule appears; trades are every trade.
+ */
+function Timeline({ trades, rules, running }: { trades: TradingRuleTrade[]; rules: TradingRuleView[]; running: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
+  const checks = running
+    ? rules.flatMap((rule) =>
+        // A check that traded is already its trade's row (and its Why?).
+        rule.lastCheckedAt !== null &&
+        (rule.lastReason || rule.lastError) &&
+        !trades.some((trade) => trade.ruleId === rule.id && Math.abs(trade.at - (rule.lastCheckedAt ?? 0)) < 5_000)
+          ? [{ key: `check:${rule.id}`, at: rule.lastCheckedAt, rule, text: rule.lastError ?? rule.lastReason ?? "" }]
+          : [],
+      )
+    : [];
+  const rows = [
+    ...checks.map((check) => ({ kind: "check" as const, ...check })),
+    ...trades.slice(0, 10).map((trade) => ({ kind: "trade" as const, key: trade._id, at: trade.at, trade })),
+  ]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 10);
+  if (rows.length === 0) return null;
   return (
     <div className="mt-3">
-      <p className="text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-muted">Recent trades</p>
-      <ul className="mt-1 divide-y divide-line/60">
-        {trades.slice(0, 8).map((trade) => (
-          <li className="py-1 text-[0.68rem]" key={trade._id}>
-            <div className="flex items-baseline justify-between gap-2">
-            <span className="min-w-0 truncate text-ink-soft">
-              {trade.kind === "enter" ? (trade.side === "short" ? "Shorted" : "Bought") : "Closed"} {trade.market} at {price(trade.price)}
-              {trade.leverage > 1 ? ` · ${trade.leverage}x` : ""}
-              {/* Where it happened: Dolphin's paper run, or the builder's server - reported, so never shown as verified. */}
-              <span className="ml-1 text-muted">· {trade.source === "runner" ? `your server${trade.paper ? ", paper" : ", live - reported"}` : "paper"}</span>
-            </span>
-            <span
-              className={`shrink-0 tabular-nums ${
-                trade.pnlPct === null ? "text-muted" : trade.pnlPct > 0 ? "text-success" : trade.pnlPct < 0 ? "text-danger" : "text-muted"
-              }`}
-            >
-              {trade.pnlPct === null ? `$${trade.sizeUsd}` : `${trade.pnlPct > 0 ? "+" : ""}${trade.pnlPct}%`}
-            </span>
-            <button
-              aria-expanded={open === trade._id}
-              className="shrink-0 !text-[0.66rem] font-semibold text-accent-ink hover:underline"
-              onClick={() => setOpen((current) => (current === trade._id ? null : trade._id))}
-              type="button"
-            >
-              Why?
-            </button>
-            </div>
-            {open === trade._id ? <TradeWhy rule={rules.find((rule) => rule.id === trade.ruleId)} trade={trade} /> : null}
-          </li>
-        ))}
-      </ul>
+      <p className="text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-muted">Timeline</p>
+      <ol className="exec-timeline mt-1.5">
+        {rows.map((row) =>
+          row.kind === "check" ? (
+            <li className="exec-timeline__row" data-kind="check" key={row.key}>
+              <span className="exec-timeline__time">{clock(row.at)}</span>
+              <div className="min-w-0">
+                <p className="text-ink-soft">
+                  Checked the {row.rule.market} {row.rule.timeframe} candle
+                </p>
+                <p className="text-muted">{row.text}</p>
+              </div>
+            </li>
+          ) : (
+            <li className="exec-timeline__row" data-kind={row.trade.kind} key={row.key}>
+              <span className="exec-timeline__time">{clock(row.at)}</span>
+              <div className="min-w-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="min-w-0 truncate text-ink-soft">
+                    {row.trade.kind === "enter" ? (row.trade.side === "short" ? "Shorted" : "Bought") : "Closed"} {row.trade.market} at ${price(row.trade.price)}
+                    {row.trade.leverage > 1 ? ` · ${row.trade.leverage}x` : ""}
+                    {/* Where it happened: Dolphin's paper run, or the builder's server - reported, so never shown as verified. */}
+                    <span className="ml-1 text-muted">
+                      · {row.trade.source === "runner" ? `your server${row.trade.paper ? ", paper" : ", live - reported"}` : "paper"}
+                    </span>
+                  </p>
+                  <span
+                    className={`shrink-0 tabular-nums ${
+                      row.trade.pnlPct === null ? "text-muted" : row.trade.pnlPct > 0 ? "text-success" : row.trade.pnlPct < 0 ? "text-danger" : "text-muted"
+                    }`}
+                  >
+                    {row.trade.pnlPct === null ? `$${row.trade.sizeUsd}` : `${row.trade.pnlPct > 0 ? "+" : ""}${row.trade.pnlPct}%`}
+                  </span>
+                  <button
+                    aria-expanded={open === row.key}
+                    className="shrink-0 !text-[0.66rem] font-semibold text-accent-ink hover:underline"
+                    onClick={() => setOpen((current) => (current === row.key ? null : row.key))}
+                    type="button"
+                  >
+                    Why?
+                  </button>
+                </div>
+                {open === row.key ? <TradeWhy rule={rules.find((rule) => rule.id === row.trade.ruleId)} trade={row.trade} /> : null}
+              </div>
+            </li>
+          ),
+        )}
+      </ol>
     </div>
   );
 }

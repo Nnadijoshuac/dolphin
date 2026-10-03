@@ -1343,6 +1343,12 @@ export default defineSchema({
     lastCheckedAt: v.number(),
     /** Why the last check could not run (market data), or null. */
     lastError: v.union(v.string(), v.null()),
+    /**
+     * What the last check saw and decided, with its values ("No trade: RSI was 45.2, not
+     * below 30"). One field on this row, overwritten once per closed candle - never a row
+     * per check (AGENTS.md §9: nothing writes a row to record a rejection).
+     */
+    lastReason: v.optional(v.string()),
   }).index("by_draft_rule", ["draftId", "ruleId"]),
 
   /**

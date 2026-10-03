@@ -134,41 +134,49 @@ function fig(value) {
   const digits = abs >= 1e3 ? 2 : abs >= 1 ? 4 : 6;
   return String(Number(value.toFixed(digits)));
 }
-function observe(condition, candles) {
+function sawAndWants(condition, candles) {
   const closes = candles.map((candle) => candle.close);
   const n = closes.length;
+  if (n === 0) return null;
   const close = closes[n - 1];
-  if (n === 0) return describe(condition);
   switch (condition.kind) {
     case "price":
-      return `the price was $${fig(close)}, ${condition.op} $${fig(condition.value)}`;
+      return { saw: `the price was $${fig(close)}`, wants: `${condition.op} $${fig(condition.value)}` };
     case "rsi": {
       const rsi = last(rsiSeries(closes, condition.period ?? 14));
-      return rsi === null ? describe(condition) : `RSI was ${fig(Math.round(rsi * 10) / 10)}, ${condition.op} ${condition.value}`;
+      return rsi === null ? null : { saw: `RSI was ${fig(Math.round(rsi * 10) / 10)}`, wants: `${condition.op} ${condition.value}` };
     }
     case "price_vs_ma": {
       const ma = last(condition.ma === "ema" ? emaSeries(closes, condition.length) : smaSeries(closes, condition.length));
-      return ma === null ? describe(condition) : `the price $${fig(close)} was ${condition.op} the ${condition.length} ${condition.ma.toUpperCase()} ($${fig(ma)})`;
+      return ma === null ? null : { saw: `the price was $${fig(close)} and the ${condition.length} ${condition.ma.toUpperCase()} $${fig(ma)}`, wants: `${condition.op} the average` };
     }
     case "ma_cross": {
       const series = (length) => condition.ma === "ema" ? emaSeries(closes, length) : smaSeries(closes, length);
       const fast = last(series(condition.fast));
       const slow = last(series(condition.slow));
-      return fast === null || slow === null ? describe(condition) : `the ${condition.fast} ($${fig(fast)}) crossed ${condition.direction === "up" ? "above" : "below"} the ${condition.slow} ($${fig(slow)})`;
+      return fast === null || slow === null ? null : { saw: `the ${condition.fast} was $${fig(fast)} and the ${condition.slow} $${fig(slow)}`, wants: `a fresh cross ${condition.direction === "up" ? "above" : "below"}` };
     }
     case "macd_cross": {
       const { line, signal } = macdSeries(closes);
       const macd = last(line);
       const sig = last(signal);
-      return macd === null || sig === null ? describe(condition) : `MACD (${fig(macd)}) crossed ${condition.direction === "up" ? "above" : "below"} its signal (${fig(sig)})`;
+      return macd === null || sig === null ? null : { saw: `MACD was ${fig(macd)} and its signal ${fig(sig)}`, wants: `a fresh cross ${condition.direction === "up" ? "above" : "below"}` };
     }
     case "trend":
-      return `the last ${condition.candles} closes each ${condition.direction === "down" ? "fell" : "rose"}: ${closes.slice(Math.max(0, n - condition.candles - 1)).map((value) => `$${fig(value)}`).join(" \u2192 ")}`;
+      return {
+        saw: `the last ${condition.candles} closes went ${closes.slice(Math.max(0, n - condition.candles - 1)).map((value) => `$${fig(value)}`).join(" \u2192 ")}`,
+        wants: `each ${condition.direction === "down" ? "lower" : "higher"}`
+      };
     case "change_pct": {
       const from = closes[n - 1 - condition.candles];
-      return from > 0 ? `the price moved ${fig(Math.round((close - from) / from * 1e4) / 100)}% over ${condition.candles} candles, ${condition.op} ${condition.value}%` : describe(condition);
+      return from > 0 ? { saw: `the price moved ${fig(Math.round((close - from) / from * 1e4) / 100)}% over ${condition.candles} candles`, wants: `${condition.op} ${condition.value}%` } : null;
     }
   }
+}
+function observe(condition, candles) {
+  const parts = sawAndWants(condition, candles);
+  if (!parts) return `not enough candles yet to tell whether ${describe(condition)}`;
+  return `${parts.saw}, ${holds(condition, candles) ? "" : "not "}${parts.wants}`;
 }
 function utcDay(ms) {
   return new Date(ms).toISOString().slice(0, 10);
@@ -193,10 +201,10 @@ function decide(rule, candles, state, now, guard) {
     if (rule.until.length > 0 && rule.until.every((condition) => holds(condition, candles))) {
       return { type: "exit", side: side2, price, reason: `Exit rule met: ${rule.until.map((condition) => observe(condition, candles)).join(" and ")}.` };
     }
-    return { type: "none", reason: "Holding." };
+    return { type: "none", reason: `Holding: in at $${fig(entryPrice)}, now $${fig(price)} (${movePct >= 0 ? "+" : ""}${movePct.toFixed(2)}%).` };
   }
   if (rule.when.length === 0 || !rule.when.every((condition) => holds(condition, candles))) {
-    return { type: "none", reason: "Entry conditions not met." };
+    return { type: "none", reason: rule.when.length ? `No trade: ${rule.when.map((condition) => observe(condition, candles)).join("; ")}.` : "No trade: the rule has no entry condition." };
   }
   const today = utcDay(now);
   if (guard && guard.limitUsd !== null && guard.lossTodayUsd >= guard.limitUsd) {

@@ -185,7 +185,7 @@ test("Why? carries the values the engine saw, not only what the rule asks for", 
   const seen = candles([100, 101, 102, 101, 99, 97]);
   const entry = decide(ownerRule, seen, EMPTY_STATE, seen[5].openTime + H4);
   assert.equal(entry.type, "enter");
-  assert.equal(entry.reason, "Entry rule met: the last 3 closes each fell: $102 → $101 → $99 → $97.");
+  assert.equal(entry.reason, "Entry rule met: the last 3 closes went $102 → $101 → $99 → $97, each lower.");
   // A stop-loss names the entry, the price and the stop it hit.
   const state = afterCandle(EMPTY_STATE, seen[5].openTime, entry, true, seen[5].openTime + H4);
   const later = candles([100, 101, 102, 101, 99, 97, 102]);
@@ -194,4 +194,8 @@ test("Why? carries the values the engine saw, not only what the rule asks for", 
   // RSI reads its own value, to a tenth.
   const falling = candles(Array.from({ length: 30 }, (_, i) => 100 - i));
   assert.match(observe({ kind: "rsi", op: "below", value: 30 }, falling), /^RSI was \d+(\.\d)?, below 30$/);
+  // A candle that does not trade says what it saw, too.
+  const flat = candles([100, 101, 102]);
+  const none = decide(ownerRule, flat, EMPTY_STATE, flat[2].openTime + H4);
+  assert.equal(none.reason, "No trade: the last 3 closes went $100 → $101 → $102, not each lower.");
 });

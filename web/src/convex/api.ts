@@ -1583,6 +1583,9 @@ export type TradingRuleView = {
   position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null;
   lastCheckedAt: number | null;
   lastError: string | null;
+  /** What the last check saw and decided, with its values. Null before the first check. */
+  lastReason: string | null;
+  timeframe: string;
 };
 
 export type TradingRuleTrade = {

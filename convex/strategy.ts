@@ -193,6 +193,8 @@ export const forConversation = query({
         position: ((run?.state as RuleState | undefined)?.position ?? null) as RuleState["position"],
         lastCheckedAt: run?.lastCheckedAt ?? null,
         lastError: run?.lastError ?? null,
+        lastReason: run?.lastReason ?? null,
+        timeframe: rule.timeframe,
       });
     }
     const trades = await ctx.db
@@ -247,6 +249,7 @@ export const record = internalMutation({
     ruleId: v.string(),
     state: v.any(),
     lastError: v.union(v.string(), v.null()),
+    lastReason: v.optional(v.string()),
     trade: v.union(
       v.null(),
       v.object({
@@ -264,14 +267,15 @@ export const record = internalMutation({
       }),
     ),
   },
-  handler: async (ctx, { draftId, ruleId, state, lastError, trade }) => {
+  handler: async (ctx, { draftId, ruleId, state, lastError, lastReason, trade }) => {
     const now = Date.now();
     const run = await ctx.db
       .query("strategyRuns")
       .withIndex("by_draft_rule", (q) => q.eq("draftId", draftId).eq("ruleId", ruleId))
       .unique();
-    if (run) await ctx.db.patch(run._id, { state, lastCheckedAt: now, lastError });
-    else await ctx.db.insert("strategyRuns", { draftId, ruleId, state, lastCheckedAt: now, lastError });
+    const reason = lastReason === undefined ? {} : { lastReason };
+    if (run) await ctx.db.patch(run._id, { state, lastCheckedAt: now, lastError, ...reason });
+    else await ctx.db.insert("strategyRuns", { draftId, ruleId, state, lastCheckedAt: now, lastError, ...reason });
     if (trade) await ctx.db.insert("strategyTrades", { draftId, ruleId, ...trade, paper: true, at: now, source: "dolphin" });
   },
 });
@@ -315,7 +319,14 @@ export const tick = internalAction({
         if (!judged) continue;
         // Arming never trades on history: the first look only records where the market stands.
         if (state.lastCandle === null) {
-          await ctx.runMutation(internal.strategy.record, { draftId, ruleId: rule.id, state: { ...state, lastCandle: judged.openTime }, lastError: null, trade: null });
+          await ctx.runMutation(internal.strategy.record, {
+            draftId,
+            ruleId: rule.id,
+            state: { ...state, lastCandle: judged.openTime },
+            lastError: null,
+            lastReason: "Started watching. It acts from the next closed candle, never on history.",
+            trade: null,
+          });
           continue;
         }
         if (judged.openTime <= state.lastCandle) continue;
@@ -344,7 +355,7 @@ export const tick = internalAction({
                 candleTime: judged.openTime,
               };
         if (trade) trades++;
-        await ctx.runMutation(internal.strategy.record, { draftId, ruleId: rule.id, state: next, lastError: null, trade });
+        await ctx.runMutation(internal.strategy.record, { draftId, ruleId: rule.id, state: next, lastError: null, lastReason: decision.reason, trade });
       }
     }
     return { rules: rulesChecked, trades };

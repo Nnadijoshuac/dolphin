@@ -4230,3 +4230,51 @@ select {
   line-height: 1.45;
   animation: built-summary-in 200ms ease both;
 }
+
+/* The build (agent-canvas.tsx BUILD_STEP_MS): quick enough to read as one motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .agent-canvas .react-flow__node > div { animation-duration: 420ms; }
+  .agent-canvas .agent-edge { animation-duration: 420ms; animation-delay: 0ms; }
+}
+/* The one word that says what a block does, in its colour (owner, 2026-10-03). */
+.agent-block__verb { color: var(--kind); }
+.agent-block[data-block="safety"] { --kind: var(--kind-risk); }
+
+/* The execution timeline (trading-rules-section.tsx): a hairline spine, a dot per event. */
+.exec-timeline { position: relative; display: grid; gap: 0.15rem; }
+.exec-timeline::before {
+  content: "";
+  position: absolute;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  left: 3.55rem;
+  width: 1px;
+  background: var(--line);
+}
+.exec-timeline__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.1rem minmax(0, 1fr);
+  gap: 0.95rem;
+  padding: 0.25rem 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+.exec-timeline__row::before {
+  content: "";
+  position: absolute;
+  top: 0.62rem;
+  left: 3.38rem;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+.exec-timeline__row[data-kind="enter"]::before { background: var(--accent); box-shadow: none; }
+.exec-timeline__row[data-kind="exit"]::before { background: var(--ink-soft); box-shadow: none; }
+.exec-timeline__time { padding-top: 0.05rem; color: var(--faint); font-variant-numeric: tabular-nums; font-size: 0.64rem; white-space: nowrap; }
+
+/* The lifecycle's current stage: gold, and gently alive. */
+.lifecycle-bar { transition: background-color 400ms ease; }
+.lifecycle-bar--active { background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }

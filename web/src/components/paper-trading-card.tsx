@@ -2,10 +2,14 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { paperTradingApi } from "@/convex/api";
+import { ReceiveSheet } from "@/components/receive-sheet";
+import { paperTradingApi, strategyApi } from "@/convex/api";
+import { useWalletTokens } from "@/hooks/use-wallet-tokens";
 import { toast } from "@/store/use-toast-store";
+import { useAltanaWallet } from "@/wallet/altana-provider";
+import { formatTokenAmount } from "@/wallet/erc8183-policy";
 
 /**
  * PAPER TRADING (convex/paperTrading.ts): pretend money, real prices. On by
@@ -19,8 +23,54 @@ function amount(value: string): string {
   return n >= 1 ? n.toLocaleString("en", { maximumFractionDigits: 4 }) : n.toPrecision(4);
 }
 
+/** Below this much BNB a swap's gas may not be covered: about $0.15, several smart-wallet swaps at 0.05 gwei (measured 2026-10-03). */
+const LOW_GAS_WEI = BigInt("200000000000000");
+
+/**
+ * WHAT THE DOLPHIN WALLET HAS FOR THIS AGENT (owner, 2026-10-03: "something... for funding the
+ * Dolphin Wallet"). Shown only when the agent trades from it: its USDT (what rules buy with) and BNB
+ * (gas), a note when either is short, and Add funds - the wallet's own Receive sheet, not a second
+ * funding flow. Read in the browser from BNB Chain.
+ */
+function WalletFunds({ needUsdt }: { needUsdt: number | null }) {
+  const dolphin = useAltanaWallet();
+  const address = dolphin.status === "connected" ? dolphin.address : null;
+  const addresses = useMemo(() => (address ? [address] : []), [address]);
+  const tokens = useWalletTokens(addresses);
+  const [receiving, setReceiving] = useState(false);
+  if (!address) return null;
+  const held = tokens.data?.get(address.toLowerCase());
+  const usdt = held?.get("USDT");
+  const bnb = held?.get("BNB");
+  const shortUsdt = needUsdt !== null && usdt !== undefined && usdt < BigInt(Math.round(needUsdt * 100)) * BigInt(10) ** BigInt(16);
+  const lowGas = bnb !== undefined && bnb < LOW_GAS_WEI;
+  return (
+    <div className="mt-2 rounded-lg bg-paper-muted/70 px-2.5 py-2">
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 text-[11px] text-muted">
+          Dolphin Wallet:{" "}
+          <span className="font-semibold text-ink">{usdt === undefined ? "…" : `${formatTokenAmount(usdt, 18)} USDT`}</span>
+          {" · "}
+          <span className="font-semibold text-ink">{bnb === undefined ? "…" : `${formatTokenAmount(bnb, 18)} BNB`}</span>
+        </p>
+        <button className="shrink-0 !text-[11px] font-semibold text-accent-ink hover:underline" onClick={() => setReceiving(true)} type="button">
+          Add funds
+        </button>
+      </div>
+      {shortUsdt ? <p className="mt-1 text-[10.5px] leading-snug text-danger">Each rule trade spends ${needUsdt} of USDT - add USDT before going Live.</p> : null}
+      {lowGas ? <p className="mt-1 text-[10.5px] leading-snug text-danger">Low on BNB for gas - add a little BNB (about $0.20 covers several trades).</p> : null}
+      {receiving ? <ReceiveSheet address={address} label="Dolphin Wallet" onClose={() => setReceiving(false)} /> : null}
+    </div>
+  );
+}
+
 export function PaperTradingCard({ conversationKey, hasSwap, hasRules = false }: { conversationKey: string; hasSwap: boolean; hasRules?: boolean }) {
   const trades = hasSwap || hasRules;
+  // The same query the Trading rules section runs (Convex shares it): which rules trade from the Dolphin Wallet, and their largest size.
+  const ruleView = useQuery(strategyApi.strategy.forConversation, hasRules ? { conversationKey } : "skip");
+  const walletRules = (ruleView?.rules ?? []).filter((rule) => rule.venue === "dolphin-wallet");
+  const usesWallet = hasSwap || walletRules.length > 0;
+  const needUsdt = walletRules.length > 0 ? Math.max(...walletRules.map((rule) => rule.sizeUsd)) : null;
   const state = useQuery(paperTradingApi.paperTrading.forDraft, trades ? { conversationKey } : "skip");
   // The first switch to real money asks first (owner, 2026-10-03), and the server holds to it.
   const [asking, setAsking] = useState(false);
@@ -136,6 +186,8 @@ export function PaperTradingCard({ conversationKey, hasSwap, hasRules = false }:
           Wallet with its trade key.{hasSwap ? " AI trades come to you as tickets to sign, unless you allow \u201cTrade without asking\u201d below." : ""}
         </p>
       )}
+
+      {usesWallet ? <WalletFunds needUsdt={needUsdt} /> : null}
 
       {asking ? (
         <div aria-labelledby="live-confirm-title" aria-modal className="confirm-scrim" role="dialog">

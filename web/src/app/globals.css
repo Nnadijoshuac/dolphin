@@ -4750,3 +4750,9 @@ select {
   .rule-view__trades li { grid-template-columns: 1fr; gap: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .rule-view, .rule-view__live { animation: none; } }
+
+/* ── Desktop wallet: Wallet history | Assets (components/altana-wallet-panel.tsx HistoryAndAssets) ── */
+.wallet-tabs__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.wallet-tabs__which { display: inline-flex; margin-left: auto; padding: 2px; border-radius: 999px; background: var(--paper-muted); }
+.wallet-tabs__which button { padding: 5px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.wallet-tabs__which button[aria-checked="true"] { background: var(--paper-strong); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }

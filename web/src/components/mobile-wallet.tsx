@@ -17,17 +17,14 @@ import { OptionalFeature } from "@/components/optional-feature";
 import { ReceiveSheet } from "@/components/receive-sheet";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { WalletHistory } from "@/components/wallet-history";
-import { AssetLogo, WithdrawDialog } from "@/components/wallet-withdraw";
+import { TokenList } from "@/components/wallet-token-list";
+import { WithdrawDialog } from "@/components/wallet-withdraw";
 import { useBnbPrice } from "@/hooks/use-bnb-price";
-import { usePaymentRates } from "@/hooks/use-payment-rates";
-import { WALLET_TOKENS, useWalletTokens } from "@/hooks/use-wallet-tokens";
+import { useWalletHoldings } from "@/hooks/use-wallet-holdings";
 import { useWalletErrorToasts } from "@/hooks/use-wallet-error-toasts";
 import { useAppStore } from "@/store/use-app-store";
-import { FEATURE_SESSION_EXECUTION, formatBnb } from "@/wallet/altana-policy";
+import { FEATURE_SESSION_EXECUTION } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
-import { formatTokenAmount } from "@/wallet/erc8183-policy";
-import { formatUsdCents } from "@/wallet/bnb-price";
-import { usdCents, WBNB_BSC, type UsdRate } from "@/wallet/token-usd";
 import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -52,7 +49,6 @@ type View = "dolphin" | "connected" | "total";
 type Tab = "history" | "assets";
 type SheetKind = "fund" | "alerts" | "more";
 
-const HIDDEN = "••••";
 const VIEW_KEY = "dolphin.wallet.view";
 const NAMES: Record<View, string> = { dolphin: "Dolphin Wallet", connected: "Connected wallet", total: "Total balance" };
 
@@ -75,11 +71,6 @@ function saveView(view: View) {
   } catch {
     // A private window: the choice just is not remembered.
   }
-}
-
-/** The USD rate for a token, keyed the way usePaymentRates keys it. BNB reads the BNB feed via WBNB. */
-function rateKey(address: string | null) {
-  return (address ?? WBNB_BSC).toLowerCase();
 }
 
 export function MobileWallet() {
@@ -115,58 +106,8 @@ export function MobileWallet() {
     return [dolphinAddress, identityAddress].filter((a): a is string => Boolean(a));
   }, [view, dolphinAddress, identityAddress]);
 
-  const tokens = useWalletTokens(viewAddresses);
-  const rates = usePaymentRates(useMemo(() => WALLET_TOKENS.map((t) => ({ token: t.address ?? WBNB_BSC, decimals: t.decimals })), []));
-
-  /* Per token, summed over the wallets in view. */
-  const holdings = useMemo(() => {
-    if (!tokens.data) return null;
-    return WALLET_TOKENS.map((token) => {
-      let raw = BigInt(0);
-      let read = true;
-      for (const address of viewAddresses) {
-        const balance = tokens.data.get(address.toLowerCase())?.get(token.symbol);
-        if (balance === undefined) read = false;
-        else raw += balance;
-      }
-      return { token, raw, read };
-    });
-  }, [tokens.data, viewAddresses]);
-
-  /*
-   * The headline is the VALUE of everything held, like any wallet - not just
-   * the BNB line. It is printed only when every held token has a read rate;
-   * a sum missing a token is a wrong total, not a small one (AGENTS.md §5).
-   */
-  const headline = useMemo((): { figure: string; unit: string | null } | "reading" | "unavailable" => {
-    if (!holdings) return tokens.isError ? "unavailable" : "reading";
-    if (holdings.some((h) => !h.read)) return "unavailable";
-    if (hidden) return { figure: HIDDEN, unit: null };
-    const SCALE = BigInt(10) ** BigInt(18);
-    const bnbRate = rates.get(rateKey(null));
-    // Native BNB counts as itself in BNB; only the OTHER assets need a rate.
-    let bnbWei = BigInt(0);
-    let otherUsd18 = BigInt(0); // USD with 18 decimals, so nothing rounds to cents early
-    for (const h of holdings) {
-      if (h.raw === BigInt(0)) continue;
-      if (h.token.address === null) {
-        bnbWei += h.raw;
-        continue;
-      }
-      const rate = rates.get(rateKey(h.token.address));
-      if (!rate) return "reading";
-      otherUsd18 += (h.raw * rate.num * SCALE) / (rate.den * BigInt(10) ** BigInt(h.token.decimals));
-    }
-    if (currency === "USD") {
-      if (!bnbRate) return bnbWei === BigInt(0) ? { figure: formatUsdCents(otherUsd18 / BigInt(10) ** BigInt(16)), unit: null } : "reading";
-      const bnbUsd18 = (bnbWei * bnbRate.num) / bnbRate.den;
-      return { figure: formatUsdCents((bnbUsd18 + otherUsd18) / BigInt(10) ** BigInt(16)), unit: null };
-    }
-    if (otherUsd18 === BigInt(0)) return { figure: formatBnb(bnbWei), unit: "BNB" };
-    if (!bnbRate) return "reading";
-    // The other assets expressed in BNB at the same BNB rate the USD side uses.
-    return { figure: formatBnb(bnbWei + (otherUsd18 * bnbRate.den) / bnbRate.num), unit: "BNB" };
-  }, [holdings, rates, currency, hidden, tokens.isError]);
+  // Every asset and the total, computed once for both wallet screens (hooks/use-wallet-holdings.ts).
+  const { holdings, rates, headline, isError: holdingsError } = useWalletHoldings(viewAddresses, currency, hidden);
 
   const hasAccount = viewAddresses.length > 0;
   const canWithdraw = Boolean(dolphinAddress) && view !== "connected";
@@ -320,7 +261,7 @@ export function MobileWallet() {
         ) : !hasAccount ? (
           <p className="pw-empty">{view === "connected" ? "Connect a wallet to see what it holds." : "Set up your Dolphin Wallet to see what it holds."}</p>
         ) : !holdings ? (
-          tokens.isError ? (
+          holdingsError ? (
             <p className="pw-empty">Balances can&apos;t be read right now.</p>
           ) : (
             <div aria-busy="true" className="space-y-2 py-3">
@@ -482,42 +423,6 @@ function AccountPicker({
         </ul>
       ) : null}
     </div>
-  );
-}
-
-function TokenList({
-  holdings,
-  rates,
-  hidden,
-}: {
-  holdings: { token: (typeof WALLET_TOKENS)[number]; raw: bigint; read: boolean }[];
-  rates: ReadonlyMap<string, UsdRate>;
-  hidden: boolean;
-}) {
-  // BNB and U always, so the wallet's two working currencies are never missing; others once held.
-  const rows = holdings.filter((h) => h.token.symbol === "BNB" || h.token.symbol === "U" || h.raw > BigInt(0) || !h.read);
-  return (
-    <ul className="pw-tokens">
-      {rows.map(({ token, raw, read }) => {
-        const rate = rates.get(rateKey(token.address));
-        return (
-          <li className="pw-token" key={token.symbol}>
-            {token.symbol === "BNB" || token.symbol === "U" ? (
-              <AssetLogo asset={token.symbol} size={36} />
-            ) : (
-              <span aria-hidden="true" className="pw-token__badge">{token.symbol.slice(0, 1)}</span>
-            )}
-            <span className="pw-token__name">
-              <strong>{token.symbol}</strong>
-              <span>{!read ? "Unavailable" : hidden ? HIDDEN : formatTokenAmount(raw, token.decimals)}</span>
-            </span>
-            <span className="pw-token__value">
-              {!read || hidden ? "" : rate ? formatUsdCents(usdCents(raw, token.decimals, rate)) : ""}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 

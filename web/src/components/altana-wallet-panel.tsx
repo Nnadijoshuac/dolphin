@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useBalance } from "wagmi";
 
 import { WalletHistory } from "@/components/wallet-history";
@@ -24,6 +24,8 @@ import { OptionalFeature } from "@/components/optional-feature";
 import { toast } from "@/store/use-toast-store";
 import { useWalletSession } from "@/wallet/wallet-session";
 import { useBnbPrice, type BnbPriceState } from "@/hooks/use-bnb-price";
+import { useWalletHoldings } from "@/hooks/use-wallet-holdings";
+import { TokenList } from "@/components/wallet-token-list";
 import { useNow } from "@/hooks/use-now";
 import { useWalletErrorToasts } from "@/hooks/use-wallet-error-toasts";
 import { usePaymentRates } from "@/hooks/use-payment-rates";
@@ -372,6 +374,71 @@ export function RecoverabilityPanel({ onDeposit }: { onDeposit: () => void }) {
   );
 }
 
+/* ═══════════════ history and assets ═══════════════ */
+
+type AssetsView = "dolphin" | "connected" | "both";
+
+/**
+ * WALLET HISTORY | ASSETS, as on the phone (owner, 2026-10-03: "there should also be a button for
+ * assets" on desktop). Assets lists every token held - USDT included - in the Dolphin Wallet, the
+ * connected wallet, or both, with each one's value.
+ */
+function HistoryAndAssets({ dolphinAddress, identityAddress, hidden }: { dolphinAddress: string | null; identityAddress: string | null; hidden: boolean }) {
+  const [tab, setTab] = useState<"history" | "assets">("history");
+  const [which, setWhich] = useState<AssetsView>("dolphin");
+  const currency = useAppStore((s) => s.displayCurrency);
+  const view: AssetsView = which === "dolphin" && !dolphinAddress ? "connected" : which === "connected" && !identityAddress ? "dolphin" : which;
+  const addresses = useMemo(
+    () => (view === "dolphin" ? [dolphinAddress] : view === "connected" ? [identityAddress] : [dolphinAddress, identityAddress]).filter((address): address is string => Boolean(address)),
+    [view, dolphinAddress, identityAddress],
+  );
+  const { holdings, rates, isError } = useWalletHoldings(addresses, currency, hidden);
+  const choices = [
+    ...(dolphinAddress ? [{ key: "dolphin" as const, label: "Dolphin Wallet" }] : []),
+    ...(identityAddress ? [{ key: "connected" as const, label: "Connected wallet" }] : []),
+    ...(dolphinAddress && identityAddress ? [{ key: "both" as const, label: "Both" }] : []),
+  ];
+  return (
+    <section className="wallet-tabs">
+      <div aria-label="Wallet details" className="wallet-tabs__bar" role="tablist">
+        {(["history", "assets"] as const).map((key) => (
+          <button aria-selected={tab === key} className="pw-tab" key={key} onClick={() => setTab(key)} role="tab" type="button">
+            {key === "history" ? "Wallet history" : "Assets"}
+          </button>
+        ))}
+        {tab === "assets" && choices.length > 1 ? (
+          <div aria-label="Which wallet" className="wallet-tabs__which" role="radiogroup">
+            {choices.map((choice) => (
+              <button aria-checked={view === choice.key} key={choice.key} onClick={() => setWhich(choice.key)} role="radio" type="button">
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <div role="tabpanel">
+        {tab === "history" ? (
+          <WalletHistory hidden={hidden} />
+        ) : addresses.length === 0 ? (
+          <p className="pw-empty">Set up your Dolphin Wallet or connect a wallet to see what it holds.</p>
+        ) : !holdings ? (
+          isError ? (
+            <p className="pw-empty">Balances can&apos;t be read right now.</p>
+          ) : (
+            <div aria-busy="true" className="space-y-2 py-3">
+              {Array.from({ length: 3 }, (_, i) => (
+                <div className="skeleton h-12 rounded-xl" key={i} />
+              ))}
+            </div>
+          )
+        ) : (
+          <TokenList hidden={hidden} holdings={holdings} rates={rates} />
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* ═══════════════ hero ═══════════════ */
 
 /**
@@ -470,8 +537,15 @@ function WalletHero({
           ? "One balance could not be read — see the accounts below."
           : "Connect an account to see a balance.";
 
-  const amount =
-    total.kind === "ready" ? renderAmount(total.wei, currency, price, hidden) : null;
+  /*
+   * THE FIGURE IS EVERYTHING HELD, not the BNB line (owner, 2026-10-03: 4 USDT in the Dolphin
+   * Wallet, the phone said $5.15, this said about $1). Computed by the same hook as the phone
+   * screen; summariseTotal still says how many wallets were read and whether one failed.
+   */
+  const dolphinHeld = dolphin.status === "connected" ? dolphin.address : null;
+  const heldAddresses = useMemo(() => [dolphinHeld, identityAddress ?? null].filter((address): address is string => Boolean(address)), [dolphinHeld, identityAddress]);
+  const held = useWalletHoldings(heldAddresses, currency, hidden);
+  const amount = total.kind === "ready" && typeof held.headline === "object" ? held.headline : null;
 
   return (
     <section aria-labelledby="wallet-total-heading" className="wallet-hero">
@@ -1180,8 +1254,8 @@ export function AltanaWalletPanel() {
           price={price}
           receiveTarget={heroTarget}
         />
-        {/* Every movement of the Dolphin Wallet, from the chain (2026-10-02). Agent activity stays on My Agents. */}
-        <WalletHistory hidden={hidden} />
+        {/* Every movement of the Dolphin Wallet, from the chain (2026-10-02), and every asset held (2026-10-03). */}
+        <HistoryAndAssets dolphinAddress={dolphinAddress} hidden={hidden} identityAddress={identityAddress ?? null} />
         <OptionalFeature label="Liquidation alerts">
           <LiquidationAlertPanel />
         </OptionalFeature>

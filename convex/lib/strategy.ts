@@ -230,7 +230,8 @@ export function afterCandle(state: RuleState, candleOpenTime: number, decision: 
 /** The result of a closed position, in %, leverage included (fees and funding are not). */
 export function resultPct(side: "long" | "short", entry: number, exit: number, leverage: number): number {
   const move = ((exit - entry) / entry) * 100 * (side === "long" ? 1 : -1);
-  return Math.round(move * leverage * 100) / 100;
+  // "+ 0" turns -0 into 0: a flat short is 0%, and Convex stores -0 as a special value (seen on dev, 2026-10-03).
+  return Math.round(move * leverage * 100) / 100 + 0;
 }
 
 /* ── Words: what the builder reads on the canvas ── */

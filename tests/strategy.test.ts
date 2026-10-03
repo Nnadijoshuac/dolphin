@@ -135,6 +135,7 @@ test("results include leverage, and a short gains when the price falls", () => {
   assert.equal(resultPct("short", 100, 105, 3), -15);
   assert.equal(resultPct("long", 766.08, 772.21, 1), 0.8);
   assert.equal(resultPct("long", 100, 100, 1), 0);
+  assert.ok(Object.is(resultPct("short", 100, 100, 3), 0), "a flat short is 0, never -0");
 });
 
 test("a rule may not reach past its Binance block", () => {

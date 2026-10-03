@@ -178,7 +178,7 @@ function afterCandle(state, candleOpenTime, decision, executed, now) {
 }
 function resultPct(side, entry, exit, leverage) {
   const move = (exit - entry) / entry * 100 * (side === "long" ? 1 : -1);
-  return Math.round(move * leverage * 100) / 100;
+  return Math.round(move * leverage * 100) / 100 + 0;
 }
 function describe(condition) {
   switch (condition.kind) {

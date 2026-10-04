@@ -88,3 +88,8 @@ skills-lock.json
 # generated native folders
 /ios
 /android
+
+# Marketing campaign working folder: competitor research, screenshots, post copy and the
+# daily posting tracker. Git-ignored like Agent/ - working context, not source. Anchored
+# (/campaign/) for the same reason as /Agent/ above: Windows matches names case-insensitively.
+/campaign/

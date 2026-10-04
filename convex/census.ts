@@ -95,41 +95,15 @@ export const funnel = query({
       .unique();
 
     /*
-     * Publishers are counted from the live agents themselves rather than
-     * stored, because there is no facet for it and one pass over ~43 indexed
-     * rows is cheaper than a new denormalised counter that can drift.
-     *
-     * `.take(500)` rather than `.collect()`: the catalog is 43 today and this
-     * is a public endpoint. A bound that is an order of magnitude above the
-     * real figure keeps a future catalog growth from turning a landing-page
-     * query into a full table scan.
+     * Publishers come from catalogFacets, written by facets.recompute (2026-10-04). Counting them here
+     * read every live agent's full row on every page view, and a probe's patch to any agent re-ran it
+     * for every open homepage: ~100 MB of database I/O in four days.
      */
-    const live = await ctx.db
-      .query("agents")
-      .withIndex("by_status_rank", (q) => q.eq("status", "live"))
-      .take(500);
-
-    /*
-     * Keyed on `ownerAddress`, not on the `publisher` NAME.
-     *
-     * `publisher` is "a human-readable publisher name when the indexer has
-     * one" — nullable, and null for part of this catalog. Counting distinct
-     * names would silently drop every agent whose publisher the indexer could
-     * not name, which under-reports concentration in exactly the direction
-     * that flatters us. `ownerAddress` is required on the table and is the
-     * registering identity, so it is present for every row.
-     */
-    const publishers = new Set<string>();
-    for (const agent of live) {
-      const owner = agent.ownerAddress.trim().toLowerCase();
-      if (owner) publishers.add(owner);
-    }
-
     return {
       assessed: cursor?.seenTotal ?? 0,
       candidates: cursor?.candidatesFound ?? 0,
-      live: facets?.totalLive ?? live.length,
-      publishers: publishers.size,
+      live: facets?.totalLive ?? 0,
+      publishers: facets?.livePublishers ?? 0,
       lastRunAt: cursor?.lastRunAt ?? null,
     };
   },

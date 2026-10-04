@@ -40,12 +40,16 @@ export const countPage = internalQuery({
       .paginate({ cursor, numItems: PAGE_SIZE });
 
     const counts: Record<string, number> = {};
+    const owners: string[] = [];
     for (const row of page.page) {
       counts[row.categorySlug] = (counts[row.categorySlug] ?? 0) + 1;
+      const owner = row.ownerAddress.trim().toLowerCase();
+      if (owner) owners.push(owner);
     }
 
     return {
       counts,
+      owners,
       total: page.page.length,
       cursor: page.continueCursor,
       isDone: page.isDone,
@@ -58,11 +62,14 @@ export const recompute = internalAction({
   handler: async (ctx): Promise<{ totalLive: number; categories: number }> => {
     const totals: Record<string, number> = {};
     let totalLive = 0;
+    // Distinct publishers behind the live agents, for the census (census.funnel used to count them per page view).
+    const publishers = new Set<string>();
     let cursor: string | null = null;
 
     for (;;) {
       const page: {
         counts: Record<string, number>;
+        owners: string[];
         total: number;
         cursor: string;
         isDone: boolean;
@@ -72,6 +79,7 @@ export const recompute = internalAction({
         totals[slug] = (totals[slug] ?? 0) + count;
       }
       totalLive += page.total;
+      for (const owner of page.owners) publishers.add(owner);
 
       if (page.isDone) break;
       cursor = page.cursor;
@@ -93,7 +101,7 @@ export const recompute = internalAction({
         return lead(a.slug) - lead(b.slug) || b.count - a.count || a.slug.localeCompare(b.slug);
       });
 
-    await ctx.runMutation(internal.facets.write, { categories, totalLive });
+    await ctx.runMutation(internal.facets.write, { categories, totalLive, livePublishers: publishers.size });
     return { totalLive, categories: categories.length };
   },
 });
@@ -104,13 +112,14 @@ export const write = internalMutation({
       v.object({ slug: v.string(), label: v.string(), count: v.number() }),
     ),
     totalLive: v.number(),
+    livePublishers: v.number(),
   },
-  handler: async (ctx, { categories, totalLive }) => {
+  handler: async (ctx, { categories, totalLive, livePublishers }) => {
     const existing = await ctx.db
       .query("catalogFacets")
       .withIndex("by_key", (q) => q.eq("key", FACETS_KEY))
       .unique();
-    const document = { categories, totalLive, updatedAt: new Date().toISOString() };
+    const document = { categories, totalLive, livePublishers, updatedAt: new Date().toISOString() };
 
     if (existing) {
       // Same guard as the catalog upsert: this document is subscribed to by
@@ -118,6 +127,7 @@ export const write = internalMutation({
       // not invalidate it.
       const unchanged =
         existing.totalLive === totalLive &&
+        existing.livePublishers === livePublishers &&
         JSON.stringify(existing.categories) === JSON.stringify(categories);
       if (unchanged) return;
       await ctx.db.patch(existing._id, document);

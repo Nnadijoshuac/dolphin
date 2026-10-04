@@ -462,6 +462,8 @@ export default defineSchema({
       v.object({ slug: v.string(), label: v.string(), count: v.number() }),
     ),
     totalLive: v.number(),
+    /** Distinct owners behind the live agents, for the homepage census (convex/census.ts). */
+    livePublishers: v.optional(v.number()),
     updatedAt: v.string(),
   }).index("by_key", ["key"]),
 

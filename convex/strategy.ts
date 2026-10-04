@@ -9,6 +9,7 @@ import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } fro
 import { closedCandles, historyCandles, MarketDataError } from "./lib/binanceMarket";
 import { checkConnection, closePosition, openPosition, type ConnectionReport, type Held } from "./lib/binanceTrade";
 import { RULE_TEMPLATES } from "./lib/ruleTemplates";
+import { requireWalletAddress } from "./lib/walletAuth";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
 import { afterCandle, cleanRule, decide, describeLocked, describeRule, EMPTY_STATE, redactReason, resultPct, resultUsd, simulate, TIMEFRAME_MS, TIMEFRAMES, VENUE_FEE_BPS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
 
@@ -330,8 +331,17 @@ async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
   const drafts = await ctx.db.query("agentDrafts").collect();
   const out: ArmedDraft[] = [];
   for (const draft of drafts) {
+    if (!draft.autopilot?.on || rulesOf(draft).length === 0) continue;
+    out.push(await armedOf(ctx, draft));
+  }
+  return out;
+}
+
+/** One agent as the engine sees it - for the minute run and for a close the owner asks for. */
+async function armedOf(ctx: QueryCtx, draft: Doc<"agentDrafts">): Promise<ArmedDraft> {
+  const out: ArmedDraft[] = [];
+  {
     const rules = rulesOf(draft);
-    if (!draft.autopilot?.on || rules.length === 0) continue;
     const inFlight: string[] = [];
     /*
      * THE TRADE LOG IS THE SECOND WITNESS (owner, 2026-10-04: "this thing must never happen again").
@@ -378,7 +388,7 @@ async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
       agentName: draft.name ?? "Agent",
     });
   }
-  return out;
+  return out[0];
 }
 
 export const record = internalMutation({
@@ -438,6 +448,181 @@ export const record = internalMutation({
       const { paper, ...rest } = trade;
       await ctx.db.insert("strategyTrades", { draftId, ruleId, ...rest, paper: paper ?? true, at: now, source: "dolphin" });
     }
+  },
+});
+
+/* ── The Wallet's Trades tab: every open position of a wallet's agents, and closing one now ── */
+
+/** The agents a signed-in wallet built (its build conversations), with their drafts. */
+async function walletDrafts(ctx: QueryCtx, wallet: string) {
+  // Conversations store the address as the session gave it (checksummed) or lowercased: both are looked up.
+  const forms = [...new Set([wallet, wallet.toLowerCase()])];
+  const conversations = (await Promise.all(forms.map((form) => ctx.db.query("dolphinConversations").withIndex("by_owner", (q) => q.eq("ownerAddress", form)).collect()))).flat();
+  const out: { draft: Doc<"agentDrafts">; conversationKey: string }[] = [];
+  for (const conversation of conversations) {
+    if ((conversation.mode ?? "chat") !== "build") continue;
+    const draft = await ctx.db.query("agentDrafts").withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id)).unique();
+    if (draft && rulesOf(draft).length > 0) out.push({ draft, conversationKey: conversation.conversationKey });
+  }
+  return out;
+}
+
+/**
+ * EVERY TRADE AN AGENT TOOK FOR YOU (owner, 2026-10-04: "a clean way for people to view their trades...
+ * through their wallet page... and stop a trade immediately once the person feels it is going the wrong
+ * way"). Open positions with what they hold, and the latest trades - a locked setup's reasons redacted.
+ */
+export const myTrades = query({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const wallet = await requireWalletAddress(ctx, sessionToken, "Your trades").catch(() => null);
+    if (!wallet) return null;
+    const open = [];
+    const recent = [];
+    for (const { draft, conversationKey } of await walletDrafts(ctx, wallet)) {
+      const rules = rulesOf(draft);
+      for (const rule of rules) {
+        const run = await ctx.db
+          .query("strategyRuns")
+          .withIndex("by_draft_rule", (q) => q.eq("draftId", draft._id).eq("ruleId", rule.id))
+          .unique();
+        const position = ((run?.state as RuleState | undefined)?.position ?? null) as RuleState["position"];
+        if (!position) continue;
+        const heldQty = typeof (run?.held as { qty?: unknown } | undefined)?.qty === "string" ? (run?.held as { qty: string }).qty : null;
+        open.push({
+          draftId: draft._id,
+          conversationKey,
+          agentName: draft.name ?? "Agent",
+          ruleId: rule.id,
+          words: rule.locked ? describeLocked(rule) : describeRule(rule),
+          locked: Boolean(rule.locked),
+          venue: rule.venue,
+          market: rule.market,
+          action: rule.action,
+          timeframe: rule.timeframe,
+          sizeUsd: rule.sizeUsd,
+          leverage: rule.leverage,
+          stopLossPct: rule.stopLossPct,
+          takeProfitPct: rule.takeProfitPct,
+          position,
+          heldQty,
+          // Real only when Live and something is actually held on the venue; a position opened on paper closes on paper.
+          real: draft.paperMode === false && heldQty !== null,
+          autopilot: Boolean(draft.autopilot?.on),
+          confirming: Boolean(run?.orderInFlight && Date.now() - run.orderInFlight < ORDER_LOCK_MS),
+        });
+      }
+      const lockedIds = new Set(rules.filter((rule) => rule.locked).map((rule) => rule.id));
+      for (const trade of await ctx.db.query("strategyTrades").withIndex("by_draft", (q) => q.eq("draftId", draft._id)).order("desc").take(30)) {
+        recent.push({
+          id: trade._id,
+          agentName: draft.name ?? "Agent",
+          market: trade.market,
+          side: trade.side,
+          kind: trade.kind,
+          price: trade.price,
+          sizeUsd: trade.sizeUsd,
+          pnlPct: trade.pnlPct,
+          paper: trade.paper,
+          network: trade.network ?? null,
+          orderId: trade.orderId ?? null,
+          reason: lockedIds.has(trade.ruleId) ? redactReason(trade.reason) : trade.reason,
+          at: trade.at,
+        });
+      }
+    }
+    recent.sort((a, b) => b.at - a.at);
+    return { open, recent: recent.slice(0, 40) };
+  },
+});
+
+export const ownsDraft = internalQuery({
+  args: { sessionToken: v.string(), draftId: v.id("agentDrafts") },
+  handler: async (ctx, { sessionToken, draftId }) => {
+    const wallet = (await requireWalletAddress(ctx, sessionToken, "Closing a trade")).toLowerCase();
+    const draft = await ctx.db.get(draftId);
+    if (!draft) return false;
+    const conversation = await ctx.db.get(draft.conversationId);
+    return [conversation?.ownerAddress, draft.brain?.walletAddress, draft.autopilot?.walletAddress].some((owner) => owner && owner.toLowerCase() === wallet);
+  },
+});
+
+export const armedFor = internalQuery({
+  args: { draftId: v.id("agentDrafts") },
+  handler: async (ctx, { draftId }) => {
+    const draft = await ctx.db.get(draftId);
+    return draft ? armedOf(ctx, draft) : null;
+  },
+});
+
+/**
+ * CLOSE IT NOW, whatever the rule would do (owner, 2026-10-04: "stop a trade immediately"). Through the
+ * same order lock and execution as the engine's own exits, so it can never sell twice or race a run:
+ * a real position sells what it holds on its venue; one opened on paper closes on paper. Works with
+ * Autopilot off.
+ */
+export const closeNow = action({
+  args: { sessionToken: v.string(), draftId: v.id("agentDrafts"), ruleId: v.string() },
+  handler: async (ctx, { sessionToken, draftId, ruleId }): Promise<{ price: number; pnlPct: number; real: boolean }> => {
+    if (!(await ctx.runQuery(internal.strategy.ownsDraft, { sessionToken, draftId }))) throw new ConvexError("That agent is not yours.");
+    const armed: ArmedDraft | null = await ctx.runQuery(internal.strategy.armedFor, { draftId });
+    const rule = armed?.rules.find((candidate) => candidate.id === ruleId);
+    const state = armed?.states[ruleId];
+    if (!armed || !rule || !state) throw new ConvexError("That trade is not in this agent.");
+    if (!state.position) throw new ConvexError("Nothing is open on that rule any more.");
+    if (armed.inFlight.includes(ruleId)) throw new ConvexError("An order of this rule is still confirming. Try again in a few minutes.");
+    const order: number | null = await ctx.runMutation(internal.strategy.claimOrder, { draftId, ruleId, lastCandle: state.lastCandle });
+    if (order === null) throw new ConvexError("The rule is acting right now. Try again in a moment.");
+    const position = state.position;
+    let price: number;
+    try {
+      const candles = await closedCandles(rule.venue, rule.market, "1m", 2);
+      price = candles[candles.length - 1].close;
+    } catch {
+      await ctx.runMutation(internal.strategy.record, { draftId, ruleId, state, lastError: "Could not read the price to close. Try again.", order, trade: null });
+      throw new ConvexError("The price could not be read just now. Try again.");
+    }
+    const decision = { type: "exit" as const, side: position.side, price, reason: "Closed by you from the Wallet." };
+    const outcome = await execute(ctx, armed, rule, decision, armed.helds[ruleId] ?? null);
+    if ("error" in outcome) {
+      const pending = /status PENDING/i.test(outcome.error);
+      await ctx.runMutation(internal.strategy.record, {
+        draftId,
+        ruleId,
+        state,
+        lastError: pending ? "The sale is still confirming on BNB Chain. This rule waits a few minutes before it trades again." : outcome.error,
+        order,
+        keepLock: pending,
+        trade: null,
+      });
+      throw new ConvexError(pending ? "The sale is still confirming on BNB Chain - check again in a few minutes before trying again." : outcome.error);
+    }
+    const filled = outcome.real ? outcome.price : price;
+    const pnlPct = resultPct(position.side, position.entryPrice, filled, rule.leverage);
+    await ctx.runMutation(internal.strategy.record, {
+      draftId,
+      ruleId,
+      state: { ...state, position: null, lastTradeAt: Date.now() },
+      lastError: null,
+      lastReason: "Closed by you from the Wallet.",
+      held: null,
+      order,
+      trade: {
+        ruleName: rule.name,
+        venue: rule.venue,
+        market: rule.market,
+        side: position.side,
+        kind: "exit",
+        price: filled,
+        sizeUsd: rule.sizeUsd,
+        leverage: rule.leverage,
+        pnlPct,
+        reason: "Closed by you from the Wallet.",
+        candleTime: Date.now(),
+        ...(outcome.real ? { paper: false, network: outcome.network, ...(outcome.orderId ? { orderId: outcome.orderId } : {}) } : {}),
+      },
+    });
+    return { price: filled, pnlPct, real: outcome.real };
   },
 });
 

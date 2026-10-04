@@ -1625,6 +1625,45 @@ export type TradingRuleView = {
   timeframe: string;
 };
 
+/** An open position of one of your agents, for the Wallet's Trades tab (convex/strategy.ts myTrades). */
+export type WalletOpenTrade = {
+  draftId: string;
+  conversationKey: string;
+  agentName: string;
+  ruleId: string;
+  words: string;
+  locked: boolean;
+  venue: TradingRuleView["venue"];
+  market: string;
+  action: "buy" | "short";
+  timeframe: string;
+  sizeUsd: number;
+  leverage: number;
+  stopLossPct: number | null;
+  takeProfitPct: number | null;
+  position: { side: "long" | "short"; entryPrice: number; openedAt: number };
+  heldQty: string | null;
+  real: boolean;
+  autopilot: boolean;
+  confirming: boolean;
+};
+
+export type WalletTrade = {
+  id: string;
+  agentName: string;
+  market: string;
+  side: "long" | "short";
+  kind: "enter" | "exit";
+  price: number;
+  sizeUsd: number;
+  pnlPct: number | null;
+  paper: boolean;
+  network: string | null;
+  orderId: string | null;
+  reason: string;
+  at: number;
+};
+
 /** A strategy template for the picker (convex/lib/ruleTemplates.ts). */
 export type RuleTemplateView = { id: string; name: string; idea: string; timeframe: string; stopLossPct: number; takeProfitPct: number };
 
@@ -1690,6 +1729,8 @@ export const strategyApi = anyApi as unknown as {
     removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
     setRulePaused: Mutation<{ conversationKey: string; ruleId: string; paused: boolean }, null>;
     templates: Query<Record<string, never>, RuleTemplateView[]>;
+    myTrades: Query<{ sessionToken: string }, { open: WalletOpenTrade[]; recent: WalletTrade[] } | null>;
+    closeNow: Action<{ sessionToken: string; draftId: string; ruleId: string }, { price: number; pnlPct: number; real: boolean }>;
     addTemplate: Mutation<
       { conversationKey: string; templateId: string; market: string; venue: "dolphin-wallet" | "binance-spot"; sizeUsd: number },
       { added: string[]; problems: string[]; warnings: string[] }

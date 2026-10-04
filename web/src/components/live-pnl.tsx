@@ -32,7 +32,9 @@ function Triangle({ up }: { up: boolean }) {
   );
 }
 
-export function LivePnl({ rule, size = "small" }: { rule: TradingRuleView; size?: "small" | "large" }) {
+type PnlRule = Pick<TradingRuleView, "market" | "venue" | "sizeUsd" | "leverage" | "heldQty"> & { position: TradingRuleView["position"] };
+
+export function LivePnl({ rule, size = "small" }: { rule: PnlRule; size?: "small" | "large" }) {
   const now = useLivePrice(rule.position ? rule.market : null);
   if (!rule.position) return null;
   const base = rule.market.replace(/(USDT|USDC|FDUSD|BUSD|USD1)$/, "");

@@ -18,6 +18,7 @@ import { ReceiveSheet } from "@/components/receive-sheet";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { WalletHistory } from "@/components/wallet-history";
 import { TokenList } from "@/components/wallet-token-list";
+import { WalletTrades } from "@/components/wallet-trades";
 import { WithdrawDialog } from "@/components/wallet-withdraw";
 import { useBnbPrice } from "@/hooks/use-bnb-price";
 import { useWalletHoldings } from "@/hooks/use-wallet-holdings";
@@ -46,7 +47,7 @@ import { WalletConnectButton, useWallet } from "@/wallet/wallet-provider";
    ═══════════════════════════════════════════════════════════════════════════ */
 
 type View = "dolphin" | "connected" | "total";
-type Tab = "history" | "assets";
+type Tab = "history" | "assets" | "trades";
 type SheetKind = "fund" | "alerts" | "more";
 
 const VIEW_KEY = "dolphin.wallet.view";
@@ -248,9 +249,9 @@ export function MobileWallet() {
       ) : null}
 
       <div aria-label="Wallet details" className="pw-tabs" role="tablist">
-        {(["history", "assets"] as const).map((key) => (
+        {(["history", "assets", "trades"] as const).map((key) => (
           <button aria-selected={tab === key} className="pw-tab" key={key} onClick={() => setTab(key)} role="tab" type="button">
-            {key === "history" ? "Wallet history" : "Assets"}
+            {key === "history" ? "Wallet history" : key === "assets" ? "Assets" : "Trades"}
           </button>
         ))}
       </div>
@@ -258,6 +259,8 @@ export function MobileWallet() {
       <div className="pw-panel" role="tabpanel">
         {tab === "history" ? (
           <WalletHistory addresses={viewAddresses} bare hidden={hidden} />
+        ) : tab === "trades" ? (
+          <WalletTrades />
         ) : !hasAccount ? (
           <p className="pw-empty">{view === "connected" ? "Connect a wallet to see what it holds." : "Set up your Dolphin Wallet to see what it holds."}</p>
         ) : !holdings ? (

@@ -26,6 +26,7 @@ import { useWalletSession } from "@/wallet/wallet-session";
 import { useBnbPrice, type BnbPriceState } from "@/hooks/use-bnb-price";
 import { useWalletHoldings } from "@/hooks/use-wallet-holdings";
 import { TokenList } from "@/components/wallet-token-list";
+import { WalletTrades } from "@/components/wallet-trades";
 import { useNow } from "@/hooks/use-now";
 import { useWalletErrorToasts } from "@/hooks/use-wallet-error-toasts";
 import { usePaymentRates } from "@/hooks/use-payment-rates";
@@ -384,7 +385,7 @@ type AssetsView = "dolphin" | "connected" | "both";
  * connected wallet, or both, with each one's value.
  */
 function HistoryAndAssets({ dolphinAddress, identityAddress, hidden }: { dolphinAddress: string | null; identityAddress: string | null; hidden: boolean }) {
-  const [tab, setTab] = useState<"history" | "assets">("history");
+  const [tab, setTab] = useState<"history" | "assets" | "trades">("history");
   const [which, setWhich] = useState<AssetsView>("dolphin");
   const currency = useAppStore((s) => s.displayCurrency);
   const view: AssetsView = which === "dolphin" && !dolphinAddress ? "connected" : which === "connected" && !identityAddress ? "dolphin" : which;
@@ -401,9 +402,9 @@ function HistoryAndAssets({ dolphinAddress, identityAddress, hidden }: { dolphin
   return (
     <section className="wallet-tabs">
       <div aria-label="Wallet details" className="wallet-tabs__bar" role="tablist">
-        {(["history", "assets"] as const).map((key) => (
+        {(["history", "assets", "trades"] as const).map((key) => (
           <button aria-selected={tab === key} className="pw-tab" key={key} onClick={() => setTab(key)} role="tab" type="button">
-            {key === "history" ? "Wallet history" : "Assets"}
+            {key === "history" ? "Wallet history" : key === "assets" ? "Assets" : "Trades"}
           </button>
         ))}
         {tab === "assets" && choices.length > 1 ? (
@@ -419,6 +420,8 @@ function HistoryAndAssets({ dolphinAddress, identityAddress, hidden }: { dolphin
       <div role="tabpanel">
         {tab === "history" ? (
           <WalletHistory hidden={hidden} />
+        ) : tab === "trades" ? (
+          <WalletTrades />
         ) : addresses.length === 0 ? (
           <p className="pw-empty">Set up your Dolphin Wallet or connect a wallet to see what it holds.</p>
         ) : !holdings ? (

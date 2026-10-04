@@ -18,7 +18,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * Nothing here touches the database: it is per-browser layout, like the panel sizes.
  */
 
-export type PopKind = "draft" | "canvas";
+/** "rule:<id>": one trading rule's view in its own tab (owner, 2026-10-04), on the same beat as the panels. */
+export type PopKind = "draft" | "canvas" | `rule:${string}`;
 
 type Message =
   | { type: "alive"; kind: PopKind; key: string }
@@ -128,6 +129,60 @@ export function usePopouts(enabled: boolean, conversationKey: string | null, onA
     seen.current[kind] = 0;
     setAway((current) => ({ ...current, [kind]: false }));
   }, []);
+
+  return { away, popOut, bringBack };
+}
+
+/**
+ * A rule view in its own tab, from the main window's side: pop it out, see whether it is still away,
+ * and get it back when its tab closes or stops beating - then `onBack` reopens the view where it was.
+ */
+export function useRuleTab(ruleId: string, conversationKey: string, onBack: () => void) {
+  const kind: PopKind = `rule:${ruleId}`;
+  const [away, setAway] = useState(false);
+  const seen = useRef(0);
+  const backRef = useRef(onBack);
+  useEffect(() => {
+    backRef.current = onBack;
+  }, [onBack]);
+
+  useEffect(() => {
+    if (!away) return;
+    const bc = openChannel();
+    const back = () => {
+      setAway(false);
+      backRef.current();
+    };
+    const onMessage = (event: MessageEvent<Message>) => {
+      const message = event.data;
+      if (message.type === "alive" && message.kind === kind) seen.current = Date.now();
+      else if (message.type === "closed" && message.kind === kind) back();
+    };
+    bc?.addEventListener("message", onMessage);
+    const check = window.setInterval(() => {
+      if (Date.now() - seen.current > STALE_MS) back();
+    }, BEAT_MS);
+    return () => {
+      window.clearInterval(check);
+      bc?.removeEventListener("message", onMessage);
+      bc?.close();
+    };
+  }, [away, kind]);
+
+  const popOut = useCallback(() => {
+    const opened = window.open(`/dolphin/rule?c=${encodeURIComponent(conversationKey)}&r=${encodeURIComponent(ruleId)}`, `dolphin-${kind}`);
+    if (!opened) return false;
+    // Grace for the new tab to load before its first beat counts.
+    seen.current = Date.now() + 8000;
+    setAway(true);
+    return true;
+  }, [conversationKey, kind, ruleId]);
+
+  const bringBack = useCallback(() => {
+    const bc = openChannel();
+    bc?.postMessage({ type: "return", kind } satisfies Message);
+    bc?.close();
+  }, [kind]);
 
   return { away, popOut, bringBack };
 }

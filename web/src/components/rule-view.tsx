@@ -55,13 +55,16 @@ export function RuleView({
   trades,
   onClose,
   standalone = false,
+  onPopOut,
 }: {
   conversationKey: string;
   rule: TradingRuleView;
   trades: TradingRuleTrade[];
   onClose: () => void;
-  /** Its own window (/dolphin/rule, owner 2026-10-04: "it deserves its own pop-out"): a page, not a dialog. */
+  /** Its own tab (/dolphin/rule, owner 2026-10-04: "it deserves its own pop-out"): a page, not a dialog. */
   standalone?: boolean;
+  /** Moves the view to its own tab (hooks/use-popout.ts useRuleTab); absent in the tab itself. */
+  onPopOut?: () => void;
 }) {
   const [tab, setTab] = useState<"live" | "backtest">("live");
   const setPaused = useMutation(strategyApi.strategy.setRulePaused);
@@ -83,12 +86,6 @@ export function RuleView({
       window.removeEventListener("keydown", escape);
     };
   }, [standalone]);
-
-  /** Its own window, for a second screen: the same live data, read by the same subscriptions. */
-  const popOut = () => {
-    const opened = window.open(`/dolphin/rule?c=${encodeURIComponent(conversationKey)}&r=${encodeURIComponent(rule.id)}`, `dolphin-rule-${rule.id}`, "popup,width=1180,height=860");
-    if (opened) onClose();
-  };
 
   const togglePause = async () => {
     setPauseError(null);
@@ -119,8 +116,8 @@ export function RuleView({
           <button className="rule-view__pause" data-paused={rule.paused || undefined} onClick={() => void togglePause()} type="button">
             {rule.paused ? "Resume" : "Pause"}
           </button>
-          {standalone ? null : (
-            <button aria-label="Open in its own window" className="grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-paper-muted hover:text-ink" onClick={popOut} title="Open in its own window" type="button">
+          {standalone || !onPopOut ? null : (
+            <button aria-label="Open in its own tab" className="grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-paper-muted hover:text-ink" onClick={onPopOut} title="Open in its own tab" type="button">
               <svg aria-hidden fill="none" height="15" viewBox="0 0 16 16" width="15">
                 <path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
               </svg>

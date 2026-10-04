@@ -5,10 +5,15 @@ import { useEffect } from "react";
 
 import { RuleView } from "@/components/rule-view";
 import { strategyApi } from "@/convex/api";
+import { usePopoutBeat } from "@/hooks/use-popout";
+
+const stay = () => undefined;
 
 export function RulePopout({ conversationKey, ruleId }: { conversationKey: string | null; ruleId: string | null }) {
   const view = useQuery(strategyApi.strategy.forConversation, conversationKey ? { conversationKey } : "skip");
   const rule = view?.rules.find((candidate) => candidate.id === ruleId) ?? null;
+  // The heartbeat the main tab listens for: when this tab closes, the view goes back where it was.
+  usePopoutBeat(ruleId ? `rule:${ruleId}` : null, conversationKey, stay);
   useEffect(() => {
     if (rule) document.title = `${rule.market} ${rule.timeframe} · Trading rule`;
   }, [rule]);

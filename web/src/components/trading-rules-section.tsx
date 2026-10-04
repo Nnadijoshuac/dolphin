@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { LivePnl } from "@/components/live-pnl";
 import { RuleView } from "@/components/rule-view";
+import { useRuleTab } from "@/hooks/use-popout";
 import { strategyApi, type TradingRuleTrade, type TradingRuleView } from "@/convex/api";
 
 /**
@@ -134,6 +135,8 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
   const setPaused = useMutation(strategyApi.strategy.setRulePaused);
   const [error, setError] = useState<string | null>(null);
   const [viewing, setViewing] = useState(false);
+  // In its own tab, like the canvas and the agent panel: closing that tab brings the view back here.
+  const tab = useRuleTab(rule.id, conversationKey, () => setViewing(true));
   const futures = rule.venue === "binance-futures";
 
   const save = async (change: { sizeUsd?: number; leverage?: number; stopLossPct?: number | null }) => {
@@ -199,7 +202,25 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
           {error}
         </p>
       ) : null}
-      {viewing ? <RuleView conversationKey={conversationKey} onClose={() => setViewing(false)} rule={rule} trades={trades} /> : null}
+      {tab.away ? (
+        <p className="mt-1.5 flex items-center justify-between rounded-md bg-paper px-2 py-1 text-[0.66rem] text-muted">
+          Open in another tab
+          <button className="font-semibold text-ink hover:underline" onClick={tab.bringBack} type="button">
+            Bring back
+          </button>
+        </p>
+      ) : null}
+      {viewing && !tab.away ? (
+        <RuleView
+          conversationKey={conversationKey}
+          onClose={() => setViewing(false)}
+          onPopOut={() => {
+            if (tab.popOut()) setViewing(false);
+          }}
+          rule={rule}
+          trades={trades}
+        />
+      ) : null}
     </li>
   );
 }

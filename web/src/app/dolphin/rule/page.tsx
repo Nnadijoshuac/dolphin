@@ -3,9 +3,10 @@ import type { Metadata } from "next";
 import { RulePopout } from "@/app/dolphin/rule/rule-popout";
 
 /**
- * ONE TRADING RULE IN ITS OWN WINDOW (owner, 2026-10-04: "it deserves its own pop-out... so that it can
- * just monitor it"). Opened from the rule view's pop-out button; the same live view, as a page, for a
- * second screen. `?c=` is the build conversation (as /dolphin's own `?c=`), `?r=` the rule.
+ * ONE TRADING RULE IN ITS OWN TAB (owner, 2026-10-04: "it deserves its own pop-out... not a new
+ * browser - a new tab... if you close that tab, it comes back to where it was"). Opened from the rule
+ * view; it beats on the same channel as the popped canvas and agent panel (hooks/use-popout.ts), and
+ * the main tab reopens the view when this one closes. `?c=` the build conversation, `?r=` the rule.
  */
 export const metadata: Metadata = { title: "Trading rule · Dolphin", robots: { index: false } };
 

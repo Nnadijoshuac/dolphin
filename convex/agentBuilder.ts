@@ -47,6 +47,7 @@ import {
   type AgentBlock,
 } from "./lib/agentBlocks";
 import { stripRawPayloads, stripToolNames } from "./lib/answerHygiene";
+import { parseGridRequest } from "./lib/grid";
 import { knowledgeFunctionDefinitions, MODEL_PREFIX as KNOWLEDGE_PREFIX, runKnowledgeTool, type ServedKnowledge } from "./lib/knowledgeServe";
 import { syncTriggers } from "./lib/triggerSync";
 import { buildToolMenu, type CandidateAgent } from "./lib/decisionTools";
@@ -1081,12 +1082,28 @@ export const ask = action({
        * in the instructions as prose, so the agent described trading and never traded. When the
        * person's words ask for a rule and the reply has none, the rules alone are asked for.
        */
-      if (asksForRule(text) && (compiled.reply.rules ?? []).length === 0) {
+      /*
+       * A GRID ASKED FOR (owner, 2026-10-04). Read from the person's words by code (lib/grid.ts
+       * parseGridRequest), never from the model: its levels are arithmetic. The model's own rules for
+       * the same message are dropped, so a grid never arrives with a stray single rule beside it.
+       */
+      const gridAsk = parseGridRequest(text);
+      if (gridAsk) compiled.reply.rules = [];
+      /*
+       * A grid is the whole trading plan (measured on dev, 2026-10-04: asked for a grid, the model ALSO
+       * wrote a 15-minute schedule, a swap block, risk limits and a memory block - an AI trader beside
+       * the grid, on the same money). Only its price feed is kept, and the reply is the grid's own words.
+       */
+      if (gridAsk && "spec" in gridAsk) {
+        compiled.reply.blocks = (compiled.reply.blocks ?? []).filter((block) => block.type === "market");
+        compiled.reply.reply = "";
+      }
+      if (!gridAsk && asksForRule(text) && (compiled.reply.rules ?? []).length === 0) {
         const rules = await extractRules(text, keyLedger(ctx));
         if (rules.length > 0) compiled.reply.rules = rules;
       }
       /* A rule's live chart: a Price feed for the rule's token when the reply did not offer one. */
-      const firstRule = (compiled.reply.rules ?? [])[0] as { market?: unknown } | undefined;
+      const firstRule = (gridAsk && "spec" in gridAsk ? { market: gridAsk.spec.market } : (compiled.reply.rules ?? [])[0]) as { market?: unknown } | undefined;
       if (firstRule && typeof firstRule.market === "string" && !(compiled.reply.blocks ?? []).some((block) => block.type === "market")) {
         const symbol = firstRule.market.toUpperCase().replace(/(USDT|USDC|FDUSD|BUSD|USD1)$/, "");
         if (symbol) {
@@ -1182,10 +1199,27 @@ export const ask = action({
         ].join("\n\n");
       }
 
+      let gridNote = "";
+      if (gridAsk && "missing" in gridAsk) {
+        gridNote = `To set up the grid I still need ${gridAsk.missing.join(" and ")}.`;
+      } else if (gridAsk) {
+        const made: { levels: number; warnings: string[] } | { problem: string } = await ctx.runMutation(internal.strategy.addGridFor, { conversationId, ...gridAsk.spec });
+        if ("levels" in made) applied.changed.push("tools");
+        const { market, lower, upper, totalUsd, stopBelowPct } = gridAsk.spec;
+        gridNote =
+          "problem" in made
+            ? `I could not set up that grid: ${made.problem}.`
+            : [
+                `Grid added: ${made.levels} levels on ${market} from $${lower} to $${upper}, $${totalUsd} in total${stopBelowPct === null ? ", no stop" : `, stop ${stopBelowPct}% below the range`}. It starts on paper. Open it to see the levels and how it would have done over the last few days.`,
+                ...made.warnings.map((warning) => `Note: ${warning}`),
+              ].join("\n\n");
+      }
+
       let reply = resolveToolIdReferences(stripRawPayloads(compiled.reply.reply), offered).trim();
       if (blockNote) reply = `${reply}${reply ? "\n\n" : ""}${blockNote}`;
       if (describedNote) reply = `${reply}${reply ? "\n\n" : ""}${describedNote}`;
       if (rulesNote) reply = `${reply}${reply ? "\n\n" : ""}${rulesNote}`;
+      if (gridNote) reply = `${reply}${reply ? "\n\n" : ""}${gridNote}`;
       /*
        * NEVER CLAIM WORK THAT WAS NOT DONE. Measured 2026-09-29: the free model
        * wrote "I've set up a scheduler, market feed, safety check, risk limits

@@ -27,6 +27,7 @@ import { AgentCanvasInspector } from "@/components/agent-canvas-inspector";
 import { AgentIcon } from "@/components/agent-icon";
 import type { AgentDraft } from "@/components/agent-draft-panel";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
+import { GridPicker } from "@/components/grid-picker";
 import { StrategyTemplatePicker } from "@/components/strategy-template-picker";
 import { TradingChart } from "@/components/trading-chart";
 import { agentBuilderApi, brainProviderLabel, strategyApi, type AgentBlockData, type RuleTemplateView, type SignalCondition } from "@/convex/api";
@@ -800,6 +801,7 @@ function Toolbox({
   // Strategy templates, as their own group at the top (owner, 2026-10-04: "put it into a box").
   const templates = useQuery(strategyApi.strategy.templates, {});
   const [template, setTemplate] = useState<RuleTemplateView | null>(null);
+  const [gridOpen, setGridOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -835,10 +837,32 @@ function Toolbox({
             <div className="block-panel__scroll sleek-scroll">
               {(() => {
                 const matching = (templates ?? []).filter((item) => !needle || item.name.toLowerCase().includes(needle) || item.idea.toLowerCase().includes(needle) || "strategy".includes(needle));
-                return matching.length > 0 ? (
+                const gridMatches = !needle || "grid trading strategy range".includes(needle);
+                return matching.length > 0 || gridMatches ? (
                   <section>
                     <p className="block-panel__group">Strategies</p>
                     <div className="grid grid-cols-2 gap-1.5">
+                      {gridMatches ? (
+                        <button
+                          className="block-card"
+                          onClick={() => {
+                            setGridOpen(true);
+                            setOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <span className="block-card__icon">
+                            <CategoryGlyph color="currentColor" name="layers" size={15} strokeWidth={2} />
+                          </span>
+                          <span className="min-w-0 flex-1 text-left">
+                            <span className="flex items-center gap-1.5">
+                              <span className="block-card__name">Grid trading</span>
+                              <span className="block-card__badge">5m</span>
+                            </span>
+                            <span className="block-card__about">Buy low, sell high in a range</span>
+                          </span>
+                        </button>
+                      ) : null}
                       {matching.map((item) => (
                         <button
                           className="block-card"
@@ -930,6 +954,7 @@ function Toolbox({
         </>
       ) : null}
       {template ? <StrategyTemplatePicker conversationKey={conversationKey} onClose={() => setTemplate(null)} template={template} /> : null}
+      {gridOpen ? <GridPicker conversationKey={conversationKey} onClose={() => setGridOpen(false)} /> : null}
       <button
         aria-expanded={open}
         className="add-block-button"

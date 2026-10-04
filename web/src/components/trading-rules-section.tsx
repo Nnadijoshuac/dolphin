@@ -69,9 +69,17 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
       </div>
       <p className="mt-0.5 text-[0.68rem] leading-relaxed text-faint">They act on every closed candle, with no AI in the way.</p>
       <ul className="mt-2 space-y-1.5">
-        {view.rules.map((rule) => (
-          <RuleRow conversationKey={conversationKey} key={rule.id} rule={rule} trades={view.trades.filter((trade) => trade.ruleId === rule.id)} />
-        ))}
+        {view.rules
+          .filter((rule) => !rule.grid)
+          .map((rule) => (
+            <RuleRow conversationKey={conversationKey} key={rule.id} rule={rule} trades={view.trades.filter((trade) => trade.ruleId === rule.id)} />
+          ))}
+        {/* A grid's levels are rules underneath; here they are one card (lib/grid.ts). */}
+        {[...new Set(view.rules.filter((rule) => rule.grid).map((rule) => rule.grid!.id))].map((gridId) => {
+          const levels = view.rules.filter((rule) => rule.grid?.id === gridId);
+          const ids = new Set(levels.map((rule) => rule.id));
+          return <GridCard conversationKey={conversationKey} key={gridId} levels={levels} trades={view.trades.filter((trade) => ids.has(trade.ruleId))} />;
+        })}
       </ul>
       <Timeline rules={view.rules} running={view.running} trades={view.trades} />
 
@@ -239,6 +247,87 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
           rule={rule}
           trades={trades}
         />
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * A GRID, AS ONE CARD (owner, 2026-10-04). Its levels top to bottom: the price each buys under and
+ * sells at, and which hold coins right now. Realised result from its closed trades; pause or remove
+ * the whole grid. A level that holds is closed from the Wallet's Trades tab, like any trade.
+ */
+function GridCard({ conversationKey, levels, trades }: { conversationKey: string; levels: TradingRuleView[]; trades: TradingRuleTrade[] }) {
+  const removeGrid = useMutation(strategyApi.strategy.removeGrid);
+  const setGridPaused = useMutation(strategyApi.strategy.setGridPaused);
+  const [error, setError] = useState<string | null>(null);
+  const tag = levels[0].grid!;
+  const sorted = [...levels].sort((a, b) => b.grid!.level - a.grid!.level);
+  const holding = levels.filter((rule) => rule.position).length;
+  const paused = levels.every((rule) => rule.paused);
+  const exits = trades.filter((trade) => trade.kind === "exit" && trade.pnlPct !== null);
+  const realisedUsd = exits.reduce((sum, trade) => sum + ((trade.pnlPct as number) * trade.sizeUsd) / 100, 0);
+  const step = (rule: TradingRuleView) => {
+    const buy = rule.grid!.lower + ((rule.grid!.upper - rule.grid!.lower) * (rule.grid!.level - 1)) / rule.grid!.of;
+    return { buy, sell: buy + (rule.grid!.upper - rule.grid!.lower) / rule.grid!.of };
+  };
+  // Per-level risk/reward warnings repeat with slightly different numbers on every level; the grid's own
+  // warnings are said once when it is added. A level's error still shows.
+  const lastError = levels.find((rule) => rule.lastError)?.lastError ?? null;
+
+  return (
+    <li className="rounded-lg bg-paper-muted/70 px-3 py-2">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.78rem] font-semibold text-ink">
+            Grid · {levels[0].market.replace(/USDT$/, "")} ${price(tag.lower)} to ${price(tag.upper)}
+          </p>
+          <p className="mt-0.5 text-[0.66rem] text-muted">
+            {VENUE_WORDS[levels[0].venue]} · {tag.of} levels of ${levels[0].sizeUsd} · {holding} holding
+            {paused ? <span className="font-semibold text-ink-soft"> · paused</span> : null}
+          </p>
+        </div>
+        <button
+          aria-label="Remove this grid"
+          className="grid size-6 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-paper hover:text-ink"
+          onClick={() => void removeGrid({ conversationKey, gridId: tag.id }).catch((cause) => setError(reason(cause, "The grid could not be removed.")))}
+          type="button"
+        >
+          <span aria-hidden className="text-base leading-none">×</span>
+        </button>
+      </div>
+      <ol className="mt-2 space-y-0.5">
+        {sorted.map((rule) => {
+          const { buy, sell } = step(rule);
+          return (
+            <li className="flex items-center gap-2 text-[0.68rem]" key={rule.id}>
+              <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${rule.position ? "bg-success" : "bg-line"}`} />
+              <span className="tabular-nums text-ink-soft">
+                Buy under ${price(buy)}, sell at ${price(sell)}
+              </span>
+              <span className="ml-auto tabular-nums text-muted">{rule.position ? `holding from ${price(rule.position.entryPrice)}` : "waiting"}</span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="mt-2 flex items-center gap-2">
+        <span className="text-[0.68rem] text-muted">
+          {exits.length === 0 ? "No round trips yet" : `${exits.length} round ${exits.length === 1 ? "trip" : "trips"} · `}
+          {exits.length > 0 ? <b className={realisedUsd >= 0 ? "pnl-up" : "pnl-down"}>{`${realisedUsd >= 0 ? "+" : "−"}$${Math.abs(realisedUsd).toFixed(2)}`}</b> : null}
+        </span>
+        <button
+          className="ml-auto rounded-md px-1.5 py-0.5 !text-[0.68rem] font-semibold text-muted transition-colors hover:bg-paper hover:text-ink"
+          onClick={() => void setGridPaused({ conversationKey, gridId: tag.id, paused: !paused }).catch((cause) => setError(reason(cause, "That did not save.")))}
+          type="button"
+        >
+          {paused ? "Resume" : "Pause"}
+        </button>
+      </div>
+      {lastError ? <p className="mt-1 text-[0.66rem] text-danger">{lastError}</p> : null}
+      {error ? (
+        <p className="mt-1 text-[0.66rem] text-danger" role="alert">
+          {error}
+        </p>
       ) : null}
     </li>
   );

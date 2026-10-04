@@ -1623,7 +1623,48 @@ export type TradingRuleView = {
   /** The amount a real position holds (e.g. BNB), or null on paper or when flat. */
   heldQty: string | null;
   timeframe: string;
+  /** One level of a grid (convex/lib/grid.ts); the panel shows a grid's levels as one card. */
+  grid: GridTag | null;
 };
+
+export type GridTag = { id: string; level: number; of: number; lower: number; upper: number };
+
+export type GridSpecArgs = {
+  market: string;
+  venue: "dolphin-wallet" | "binance-spot";
+  lower: number;
+  upper: number;
+  levels: number;
+  totalUsd: number;
+  stopBelowPct: number | null;
+};
+
+export type GridPreview =
+  | { problems: string[] }
+  | {
+      problems: [];
+      buyPrices: number[];
+      stepPcts: number[];
+      perLevelUsd: number;
+      costPerRoundTripUsd: number;
+      worstNetPerRoundTripUsd: number;
+      stopPrice: number | null;
+      warnings: string[];
+      price: number | null;
+      buysAtStart: number | null;
+      backtest: {
+        totalUsd: number;
+        returnPct: number;
+        roundTrips: number;
+        feesUsd: number;
+        gasUsd: number;
+        maxDrawdownUsd: number;
+        buyHoldPct: number;
+        investedUsd: number;
+        fromTime: number | null;
+        toTime: number | null;
+      } | null;
+    };
 
 /** An open position of one of your agents, for the Wallet's Trades tab (convex/strategy.ts myTrades). */
 export type WalletOpenTrade = {
@@ -1729,6 +1770,10 @@ export const strategyApi = anyApi as unknown as {
     removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
     setRulePaused: Mutation<{ conversationKey: string; ruleId: string; paused: boolean }, null>;
     templates: Query<Record<string, never>, RuleTemplateView[]>;
+    previewGrid: Action<GridSpecArgs, GridPreview>;
+    addGrid: Mutation<{ conversationKey: string } & GridSpecArgs, { levels: number; warnings: string[] }>;
+    removeGrid: Mutation<{ conversationKey: string; gridId: string }, null>;
+    setGridPaused: Mutation<{ conversationKey: string; gridId: string; paused: boolean }, null>;
     myTrades: Query<{ sessionToken: string }, { open: WalletOpenTrade[]; recent: WalletTrade[] } | null>;
     closeNow: Action<{ sessionToken: string; draftId: string; ruleId: string }, { price: number; pnlPct: number; real: boolean }>;
     addTemplate: Mutation<

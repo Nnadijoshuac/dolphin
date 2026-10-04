@@ -8,6 +8,7 @@ import { ensureDraft } from "./knowledge";
 import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } from "./lib/agentBlocks";
 import { closedCandles, historyCandles, MarketDataError } from "./lib/binanceMarket";
 import { checkConnection, closePosition, openPosition, type ConnectionReport, type Held } from "./lib/binanceTrade";
+import { DOLPHIN_SWAP_GAS_USD, GRID_TIMEFRAME, gridTagOf, planGrid, simulateGrid } from "./lib/grid";
 import { RULE_TEMPLATES } from "./lib/ruleTemplates";
 import { requireWalletAddress } from "./lib/walletAuth";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
@@ -47,6 +48,11 @@ function binanceOf(draft: Pick<Doc<"agentDrafts">, "blocks" | "detached"> | null
   return block && block.type === "binance" ? block.config : null;
 }
 
+/** How many rules an agent holds, a grid counted once - the MAX_RULES budget. */
+function slotsUsed(rules: Rule[]): number {
+  return rules.filter((rule) => !rule.grid).length + new Set(rules.filter((rule) => rule.grid).map((rule) => rule.grid!.id)).size;
+}
+
 function newRuleId(): string {
   return `rule-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -75,18 +81,25 @@ async function addRulesTo(ctx: MutationCtx, conversationId: Id<"dolphinConversat
     const warnings: string[] = [];
     let blocks = (draft.blocks ?? []) as AgentBlock[];
     let binance = binanceOf(draft);
-    for (const raw of rules.slice(0, MAX_RULES)) {
-      const same = current.find(
-        (rule) => rule.market === String((raw as { market?: unknown }).market ?? "").trim() && rule.timeframe === (raw as { timeframe?: unknown }).timeframe && rule.action === (raw as { action?: unknown }).action,
-      );
-      const made = cleanRule(raw, same?.id ?? newRuleId());
+    const gridRaw = rules.some((raw) => gridTagOf(raw));
+    for (const raw of rules.slice(0, gridRaw ? rules.length : MAX_RULES)) {
+      const tag = gridTagOf(raw);
+      // A grid level replaces only the same level of the same grid; any other rule, one with the same market, timeframe and action.
+      const same = tag
+        ? current.find((rule) => rule.grid?.id === tag.id && rule.grid.level === tag.level)
+        : current.find(
+            (rule) => !rule.grid && rule.market === String((raw as { market?: unknown }).market ?? "").trim() && rule.timeframe === (raw as { timeframe?: unknown }).timeframe && rule.action === (raw as { action?: unknown }).action,
+          );
+      const cleaned = cleanRule(raw, same?.id ?? newRuleId());
+      const made = "problems" in cleaned || !tag ? cleaned : { ...cleaned, rule: { ...cleaned.rule, grid: tag } };
       if ("problems" in made) {
         problems.push(`a rule (${made.problems.join("; ")})`);
         // What the model actually wrote, for whoever tunes the prompt or the checker.
         console.warn("[strategy] rule refused:", made.problems, JSON.stringify(raw).slice(0, 1_500));
         continue;
       }
-      if (!same && current.length >= MAX_RULES) {
+      const joinsGrid = tag && current.some((rule) => rule.grid?.id === tag.id);
+      if (!same && !joinsGrid && slotsUsed(current) >= MAX_RULES) {
         problems.push(`a rule (an agent holds at most ${MAX_RULES})`);
         continue;
       }
@@ -162,6 +175,144 @@ export const addTemplate = mutation({
   },
 });
 
+const gridArgs = {
+  market: v.string(),
+  venue: v.union(v.literal("dolphin-wallet"), v.literal("binance-spot")),
+  lower: v.number(),
+  upper: v.number(),
+  levels: v.number(),
+  totalUsd: v.number(),
+  stopBelowPct: v.union(v.number(), v.null()),
+};
+
+/**
+ * A GRID BEFORE IT IS ADDED: its levels, what fees take, and a backtest of those very rules over the last
+ * ~3.5 days of 5-minute candles (lib/grid.ts). Nothing is saved.
+ */
+export const previewGrid = action({
+  args: gridArgs,
+  handler: async (_ctx, spec) => {
+    const plan = planGrid(spec, "grid-preview");
+    if ("problems" in plan) return { problems: plan.problems };
+    const rules = plan.rules.map((raw, index) => {
+      const made = cleanRule(raw, `preview-${index}`);
+      if ("problems" in made) throw new ConvexError(`A grid level did not pass the rule checks: ${made.problems.join("; ")}.`);
+      return made.rule;
+    });
+    let backtest: ReturnType<typeof simulateGrid> | null = null;
+    let price: number | null = null;
+    try {
+      const candles = await historyCandles("binance-spot", rules[0].market, GRID_TIMEFRAME, 1000);
+      price = candles[candles.length - 1]?.close ?? null;
+      backtest = simulateGrid(rules, candles, {
+        feeBps: VENUE_FEE_BPS[spec.venue],
+        gasUsd: spec.venue === "dolphin-wallet" ? DOLPHIN_SWAP_GAS_USD : 0,
+        dailyLossLimitUsd: null,
+      });
+    } catch {
+      backtest = null;
+    }
+    return {
+      problems: [] as string[],
+      buyPrices: plan.buyPrices,
+      stepPcts: plan.stepPcts,
+      perLevelUsd: plan.perLevelUsd,
+      costPerRoundTripUsd: plan.costPerRoundTripUsd,
+      worstNetPerRoundTripUsd: plan.worstNetPerRoundTripUsd,
+      stopPrice: plan.stopPrice,
+      warnings: plan.warnings,
+      price,
+      buysAtStart: price === null ? null : plan.buyPrices.filter((buyAt) => price! < buyAt).length,
+      backtest: backtest && {
+        totalUsd: backtest.totalUsd,
+        returnPct: backtest.returnPct,
+        roundTrips: backtest.roundTrips,
+        feesUsd: backtest.feesUsd,
+        gasUsd: backtest.gasUsd,
+        maxDrawdownUsd: backtest.maxDrawdownUsd,
+        buyHoldPct: backtest.buyHoldPct,
+        investedUsd: backtest.investedUsd,
+        fromTime: backtest.equity[0]?.time ?? null,
+        toTime: backtest.equity[backtest.equity.length - 1]?.time ?? null,
+      },
+    };
+  },
+});
+
+/** Adds a grid to an agent you are building: one rule per level, on paper like every rule, counted as one. */
+export const addGrid = mutation({
+  args: { conversationKey: v.string(), ...gridArgs },
+  handler: async (ctx, { conversationKey, ...spec }) => {
+    const conversation = await ctx.db
+      .query("dolphinConversations")
+      .withIndex("by_key", (q) => q.eq("conversationKey", conversationKey))
+      .unique();
+    if (!conversation || (conversation.mode ?? "chat") !== "build") throw new ConvexError("A grid is added to an agent you are building.");
+    const plan = planGrid(spec, `grid-${Math.random().toString(36).slice(2, 8)}`);
+    if ("problems" in plan) throw new ConvexError(`That grid does not work: ${plan.problems.join("; ")}.`);
+    const result = await addRulesTo(ctx, conversation._id, plan.rules);
+    if (result.problems.length > 0) throw new ConvexError(`Could not add it: ${result.problems.join("; ")}.`);
+    return { levels: result.added.length, warnings: plan.warnings };
+  },
+});
+
+/** The build chat's door to a grid (agentBuilder.ts reads it from the person's words): a refusal comes back as words, not a throw. */
+export const addGridFor = internalMutation({
+  args: { conversationId: v.id("dolphinConversations"), ...gridArgs },
+  handler: async (ctx, { conversationId, ...spec }): Promise<{ levels: number; warnings: string[] } | { problem: string }> => {
+    const plan = planGrid(spec, `grid-${Math.random().toString(36).slice(2, 8)}`);
+    if ("problems" in plan) return { problem: plan.problems.join("; ") };
+    const result = await addRulesTo(ctx, conversationId, plan.rules);
+    if (result.problems.length > 0) return { problem: result.problems.join("; ") };
+    return { levels: result.added.length, warnings: plan.warnings };
+  },
+});
+
+/**
+ * Removes a whole grid. A level still holding coins is refused: close it first (Sell now on the Wallet's
+ * Trades tab), so removing a grid can never strand a real position the engine no longer watches.
+ */
+export const removeGrid = mutation({
+  args: { conversationKey: v.string(), gridId: v.string() },
+  handler: async (ctx, { conversationKey, gridId }) => {
+    const draft = await draftOfKey(ctx, conversationKey);
+    const levels = rulesOf(draft).filter((rule) => rule.grid?.id === gridId);
+    if (!draft || levels.length === 0) throw new ConvexError("That grid is not in this agent.");
+    const runs = [];
+    for (const rule of levels) {
+      const run = await ctx.db
+        .query("strategyRuns")
+        .withIndex("by_draft_rule", (q) => q.eq("draftId", draft._id).eq("ruleId", rule.id))
+        .unique();
+      if ((run?.state as RuleState | undefined)?.position) throw new ConvexError(`Level ${rule.grid!.level} still holds a position. Sell it first, then remove the grid.`);
+      if (run) runs.push(run._id);
+    }
+    const ids = new Set(levels.map((rule) => rule.id));
+    await ctx.db.patch(draft._id, {
+      rules: rulesOf(draft).filter((rule) => !ids.has(rule.id)),
+      pausedRuleIds: (draft.pausedRuleIds ?? []).filter((id) => !ids.has(id)),
+      updatedAt: Date.now(),
+    });
+    for (const id of runs) await ctx.db.delete(id);
+  },
+});
+
+/** Pause or resume every level of a grid at once. */
+export const setGridPaused = mutation({
+  args: { conversationKey: v.string(), gridId: v.string(), paused: v.boolean() },
+  handler: async (ctx, { conversationKey, gridId, paused }) => {
+    const draft = await draftOfKey(ctx, conversationKey);
+    const ids = rulesOf(draft).filter((rule) => rule.grid?.id === gridId).map((rule) => rule.id);
+    if (!draft || ids.length === 0) throw new ConvexError("That grid is not in this agent.");
+    const current = new Set(draft.pausedRuleIds ?? []);
+    for (const id of ids) {
+      if (paused) current.add(id);
+      else current.delete(id);
+    }
+    await ctx.db.patch(draft._id, { pausedRuleIds: [...current], updatedAt: Date.now() });
+  },
+});
+
 /** The builder changes a rule's size, leverage or stop-loss in the draft panel - re-checked like any rule. */
 export const updateRule = mutation({
   args: {
@@ -178,7 +329,7 @@ export const updateRule = mutation({
     if (!draft || !rule) throw new ConvexError("That rule is not in this agent.");
     const cleaned = cleanRule({ ...rule, ...change }, rule.id);
     // A copied setup's strategy stays locked through an edit of its size, leverage or stop.
-    const made = "problems" in cleaned ? cleaned : { ...cleaned, rule: { ...cleaned.rule, ...(rule.locked ? { locked: rule.locked } : {}) } };
+    const made = "problems" in cleaned ? cleaned : { ...cleaned, rule: { ...cleaned.rule, ...(rule.locked ? { locked: rule.locked } : {}), ...(rule.grid ? { grid: rule.grid } : {}) } };
     if ("problems" in made) throw new ConvexError(`That change does not fit the rule: ${made.problems.join("; ")}.`);
     const misfit = venueProblem(made.rule, binanceOf(draft));
     if (misfit) throw new ConvexError(`That change does not fit: ${misfit}.`);
@@ -276,6 +427,7 @@ export const forConversation = query({
         // What a real position holds on its venue, so the panel shows its value live; null on paper or flat.
         heldQty: typeof (run?.held as { qty?: unknown } | undefined)?.qty === "string" ? (run?.held as { qty: string }).qty : null,
         timeframe: rule.timeframe,
+        grid: rule.grid ?? null,
       });
     }
     const lockedIds = new Set(rules.filter((rule) => rule.locked).map((rule) => rule.id));

@@ -1,4 +1,5 @@
 import type { BinanceConfig } from "./agentBlocks";
+import type { GridTag } from "./grid";
 import { emaSeries, macdSeries, rsiSeries, smaSeries } from "./indicators";
 
 /**
@@ -78,6 +79,8 @@ export type Rule = {
    * Never set by cleanRule: only a copy sets it, and an edit carries it over.
    */
   locked?: string;
+  /** One level of a grid (lib/grid.ts): the agent counts the grid as one rule and the panel shows it as one card. */
+  grid?: GridTag;
 };
 
 /** `quoteVolume`: the candle's traded value in the quote currency (USDT), when the source gives it. Rules never read it. */

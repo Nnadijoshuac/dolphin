@@ -77,7 +77,15 @@ describe("the on-chain policy a trade key is granted", () => {
     assert.ok(approvals.length > 0);
     for (const approval of approvals) assert.equal(getAddress(approval.spender), PANCAKE_V2_ROUTER);
     const usdt = approvals.find((approval) => approval.symbol === "USDT")!;
-    assert.equal(usdt.amount, parseUnits("70", 18).toString(), "$10 a day x 7 days at $1");
+    assert.equal(usdt.amount, parseUnits("87.5", 18).toString(), "$10 a day x 7 days at $1, x1.25 room to sell after a price move");
+  });
+
+  it("leaves room to sell a full day's buys after a price move, plus gas in BNB (BNB Pulse, 2026-10-04)", () => {
+    const { spend } = policy();
+    const native = spend.find((cap) => !cap.token)!;
+    // $10 a day: what a day of rules can buy, sold back 20% higher, still fits, with gas on top.
+    const boughtBnb = 10 / 600;
+    assert.ok(BigInt(native.limit) > parseUnits((boughtBnb * 1.2).toFixed(18), 18) + BigInt(30_000_000_000_000));
   });
 
   it("leaves out a token it cannot price, rather than leaving it uncapped", () => {

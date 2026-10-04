@@ -64,7 +64,7 @@ import {
 } from "./lib/pancakeswapTrade";
 import { open, seal } from "./lib/secretBox";
 import { verifiedTokens } from "./lib/tradeTokens";
-import { tradeKeyPolicy } from "./lib/tradeKeyPolicy";
+import { SELL_HEADROOM, tradeKeyPolicy } from "./lib/tradeKeyPolicy";
 import { requireWalletAddress } from "./lib/walletAuth";
 
 export const TRADE_KEY_DURATIONS = [1, 7, 30] as const;
@@ -221,7 +221,8 @@ export const prepare = action({
       expiry,
       dailyUsd,
       approvals,
-      worstCaseUsdPerToken: dailyUsd * args.durationDays,
+      // The caps carry room to sell after a price move (lib/tradeKeyPolicy.ts SELL_HEADROOM), so the worst case says so.
+      worstCaseUsdPerToken: Math.round(dailyUsd * SELL_HEADROOM * args.durationDays * 100) / 100,
     };
   },
 });

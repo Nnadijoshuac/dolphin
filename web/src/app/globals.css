@@ -806,7 +806,10 @@ select {
 }
 :root[data-theme="dark"] .mm-item--active .mm-tile .brand-mark--auto { filter: none; }
 
-.mm-foot { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: auto; padding-top: 28px; font-size: 0.74rem; color: var(--muted); }
+.mm-legal { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin-top: auto; padding-top: 28px; font-size: 0.78rem; font-weight: 600; }
+.mm-legal a { color: var(--ink-soft); }
+.mm-legal__note { margin-top: 8px; text-align: center; font-size: 0.7rem; line-height: 1.45; color: var(--muted); }
+.mm-foot { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; padding-top: 0; font-size: 0.74rem; color: var(--muted); }
 
 @keyframes mobile-menu-in {
   from { opacity: 0; transform: translateY(1.75rem); clip-path: inset(0 0 100% 0); }

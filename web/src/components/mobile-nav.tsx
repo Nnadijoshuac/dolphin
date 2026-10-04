@@ -60,6 +60,15 @@ const DESTINATIONS: ReadonlyArray<{
   { path: "/wallet", label: "Wallet", icon: "wallet", hint: "Balances, history, assets" },
 ];
 
+const LEGAL = [
+  { href: "/docs", label: "Docs" },
+  { href: "/policies/terms", label: "Terms" },
+  { href: "/policies/privacy", label: "Privacy" },
+  { href: "/policies/risk", label: "Risk" },
+  { href: "/policies/disclaimer", label: "Disclaimer" },
+  { href: "/policies/security", label: "Security" },
+];
+
 const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
 /**
@@ -277,6 +286,16 @@ export function MobileNavDrawer() {
             })}
           </ul>
         </nav>
+
+        {/* The site footer is not shown on a phone, so its docs and legal pages live here too (owner, 2026-10-04). */}
+        <nav aria-label="Docs and legal" className="mm-legal">
+          {LEGAL.map((item) => (
+            <Link href={item.href} key={item.href} onClick={closeMenu}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+        <p className="mm-legal__note">Not financial, legal or tax advice. Every trade is your own decision.</p>
 
         <p className="mm-foot">
           <span aria-hidden="true" className="mm-dot" />

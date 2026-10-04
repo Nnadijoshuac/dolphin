@@ -707,6 +707,24 @@ async function execute(ctx: ActionCtx, draft: ArmedDraft, rule: Rule, decision: 
 
   if (rule.venue === "dolphin-wallet") {
     if (!draft.acknowledged) return { error: "Paused: accept the real-money disclaimer (Trading mode → Live) before it trades real funds." };
+    /*
+     * THE KEY MUST OUTLIVE THE TRADE (owner, 2026-10-04: "the person's agent key expires... what
+     * happens?"). Without its trade key the rule cannot sell, so it opens nothing it might not be
+     * able to close: no entry when the key expires within four of the rule's candles (at least 2 h).
+     */
+    const tradeKey = await ctx.runQuery(internal.autotrade.activeKey, { draftId: draft.draftId });
+    if (!tradeKey) {
+      return {
+        error:
+          decision.type === "exit"
+            ? "Can't sell: this agent's trade key has expired or was stopped. Renew it under Trading mode → Trade without asking, or sell from your Wallet."
+            : "Paused: let this agent trade without asking (grant its trade key) to trade from the Dolphin Wallet.",
+      };
+    }
+    const keyLeftMs = tradeKey.expiry * 1000 - Date.now();
+    if (decision.type === "enter" && keyLeftMs < Math.max(2 * 3_600_000, 4 * TIMEFRAME_MS[rule.timeframe])) {
+      return { error: `Not traded: the trade key expires in ${Math.max(0, Math.round(keyLeftMs / 60_000))} minutes - too soon to be sure it can sell what it buys. Renew it under Trading mode → Trade without asking.` };
+    }
     const token = verifiedTokenBySymbol(rule.market.replace(STABLES, ""));
     const usdt = verifiedTokenBySymbol("USDT");
     if (!token || !usdt || token.symbol === "USDT") return { error: `Paused: the Dolphin Wallet trades verified tokens (BNB, CAKE, BTCB, ETH, XVS) against USDT; ${rule.market} is not one of them.` };

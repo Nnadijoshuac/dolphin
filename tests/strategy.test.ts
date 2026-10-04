@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, holds, observe, resultPct, simulate, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, breakEvenWinPct, cleanRule, contradiction, decide, describeRule, EMPTY_STATE, holds, observe, resultPct, simulate, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const H4 = 4 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 9, 1);
@@ -223,4 +223,43 @@ test("a backtest honours the daily loss limit across the day", () => {
   const free = simulate(stopRule, minuteCandles, { feeBps: 0, dailyLossLimitUsd: null, warmup: 1 });
   const limited = simulate(stopRule, minuteCandles, { feeBps: 0, dailyLossLimitUsd: 1, warmup: 1 });
   assert.ok(free.trades.filter((t) => t.kind === "enter").length > limited.trades.filter((t) => t.kind === "enter").length);
+});
+
+test("a rule whose conditions can never all hold is refused (BNB Pulse's first build, 2026-10-04)", () => {
+  const made = cleanRule(
+    {
+      venue: "dolphin-wallet", market: "BNBUSDT", timeframe: "1m", action: "buy", sizeUsd: 2,
+      when: [
+        { kind: "rsi", op: "below", value: 50, period: 14 },
+        { kind: "change_pct", op: "above", value: 0.3, candles: 1 },
+        { kind: "change_pct", op: "below", value: -0.5, candles: 1 },
+      ],
+      until: [{ kind: "rsi", op: "above", value: 55 }], stopLossPct: 0.5, takeProfitPct: 0.3,
+    },
+    "r",
+  );
+  assert.ok("problems" in made);
+  assert.match((made as { problems: string[] }).problems.join(" "), /entry can never happen/);
+  assert.equal(contradiction([{ kind: "rsi", op: "below", value: 30 }, { kind: "rsi", op: "above", value: 25 }]), null, "RSI between 25 and 30 can hold");
+});
+
+test("risk against reward and fees are warned about, in the person's own numbers", () => {
+  const made = cleanRule(
+    { venue: "dolphin-wallet", market: "BNBUSDT", timeframe: "1m", action: "buy", sizeUsd: 2, when: [{ kind: "rsi", op: "below", value: 50 }], until: [{ kind: "rsi", op: "above", value: 55 }], stopLossPct: 0.5, takeProfitPct: 0.3 },
+    "r",
+  );
+  assert.ok(!("problems" in made));
+  const warnings = (made as { warnings: string[] }).warnings.join(" ");
+  assert.match(warnings, /even a winning trade loses money/);
+  assert.match(warnings, /risks 0.5% to make 0.3%. After fees it cannot break even/);
+  // (0.5 + 0.5 fees) / (0.5 + 0.3) - more than every trade: it cannot break even at all.
+  assert.equal(breakEvenWinPct(0.5, 0.3, 25), 125);
+  const healthy = cleanRule({ venue: "binance-spot", market: "BNBUSDT", timeframe: "1h", action: "buy", sizeUsd: 50, when: [{ kind: "rsi", op: "below", value: 30 }], until: [], stopLossPct: 2, takeProfitPct: 4 }, "h");
+  assert.deepEqual((healthy as { warnings: string[] }).warnings, []);
+});
+
+test("a futures rule must carry a stop-loss", () => {
+  const made = cleanRule({ venue: "binance-futures", market: "BNBUSDT", timeframe: "4h", action: "short", sizeUsd: 50, leverage: 2, when: [{ kind: "trend", direction: "down", candles: 3 }], until: [{ kind: "trend", direction: "up", candles: 2 }], stopLossPct: null }, "f");
+  assert.ok("problems" in made);
+  assert.match((made as { problems: string[] }).problems.join(" "), /futures rule needs a stop-loss/);
 });

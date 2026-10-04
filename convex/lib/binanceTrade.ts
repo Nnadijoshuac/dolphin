@@ -177,6 +177,18 @@ export async function openPosition(
     };
   }
   const base = BASES[network].futures;
+  /*
+   * ISOLATED MARGIN, ALWAYS (owner, 2026-10-04): on cross margin a liquidation can draw on the whole
+   * futures balance; isolated, a position can lose only its own margin. "No need to change margin
+   * type" means it already is. Any other refusal (e.g. an open cross position on this symbol) stops
+   * the trade rather than opening it on cross.
+   */
+  try {
+    await signed(keys, base, "POST", "/fapi/v1/marginType", { symbol: rule.market, marginType: "ISOLATED" });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    if (!/no need to change margin type|-4046/i.test(message)) throw new BinanceError(`Could not set isolated margin on ${rule.market}, so nothing was opened: ${message.slice(0, 160)}`);
+  }
   await signed(keys, base, "POST", "/fapi/v1/leverage", { symbol: rule.market, leverage: rule.leverage });
   const qty = roundDown((rule.sizeUsd * rule.leverage) / refPrice, step);
   if (Number(qty) < minQty || Number(qty) <= 0) throw new BinanceError(`$${rule.sizeUsd} at ${rule.leverage}x is below Binance's smallest ${rule.market} order.`);

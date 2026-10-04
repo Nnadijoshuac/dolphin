@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { autotradeApi, strategyApi } from "@/convex/api";
+import { useNow } from "@/hooks/use-now";
 import { toast } from "@/store/use-toast-store";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -51,6 +52,9 @@ export function AutoTradeCard({
     .filter((rule) => rule.venue === "dolphin-wallet")
     .reduce((sum, rule) => sum + rule.sizeUsd * rule.maxTradesPerDay, 0);
   const riskDailyUsd = (swapDailyUsd ?? 0) + rulesDailyUsd || null;
+  const now = useNow();
+  // Holding something this key must sell (owner, 2026-10-04: "the key expires in each trading...").
+  const holding = (ruleView?.rules ?? []).some((rule) => rule.venue === "dolphin-wallet" && rule.position !== null);
   const session = useWalletSession();
   const altana = useAltanaWallet();
   const state = useQuery(autotradeApi.autotrade.forDraft, { conversationKey });
@@ -129,10 +133,15 @@ export function AutoTradeCard({
       {active ? (
         <>
           <p className="mt-1 text-[0.7rem] leading-snug text-muted">
-            On until {until(state.expiry)}. Trades within your Risk limits
-            {riskDailyUsd ? ` (up to $${riskDailyUsd.toLocaleString()} a day)` : ""} execute from your Dolphin Wallet without a tap.
-            Only PancakeSwap and Dolphin&apos;s verified tokens.
+            On until {until(state.expiry)}
+            {riskDailyUsd ? `, up to $${riskDailyUsd.toLocaleString()} a day` : ""}. PancakeSwap and Dolphin&apos;s verified tokens only.
           </p>
+          {holding && state.expiry * 1000 - now < 6 * 3_600_000 ? (
+            <p className="mt-1.5 rounded-lg bg-danger/10 px-2.5 py-1.5 text-[0.7rem] font-semibold leading-snug text-danger">
+              It expires in {Math.max(0, Math.round((state.expiry * 1000 - now) / 3_600_000 * 10) / 10)} h while this agent holds a position. Without the key it
+              cannot sell - renew it below, or sell from your Wallet.
+            </p>
+          ) : null}
           <div className="mt-2 grid grid-cols-2 gap-1.5">
             <button
               className="h-8 rounded-lg bg-ink !text-[12px] font-semibold disabled:opacity-40"

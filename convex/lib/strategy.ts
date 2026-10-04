@@ -444,6 +444,40 @@ export function liquidationMovePct(leverage: number): number {
   return Math.round(100 / leverage);
 }
 
+/**
+ * CONDITIONS THAT CAN NEVER ALL HOLD (owner's BNB Pulse, 2026-10-04: the build model wrote "the last
+ * candle up more than 0.3% AND down more than 0.5%" as an entry - a rule that could never trade). Two
+ * conditions on the same measure pointing in opposite ways, with no room between them, are a clash.
+ */
+export function contradiction(conditions: readonly Condition[]): string | null {
+  for (let i = 0; i < conditions.length; i++) {
+    for (let j = i + 1; j < conditions.length; j++) {
+      const a = conditions[i];
+      const b = conditions[j];
+      if (a.kind !== b.kind) continue;
+      const opposite = (x: { op: "above" | "below"; value: number }, y: { op: "above" | "below"; value: number }) => {
+        if (x.op === y.op) return false;
+        const above = x.op === "above" ? x : y;
+        const below = x.op === "above" ? y : x;
+        return above.value >= below.value;
+      };
+      if (a.kind === "rsi" && b.kind === "rsi" && (a.period ?? 14) === (b.period ?? 14) && opposite(a, b)) return `RSI cannot be above ${a.op === "above" ? a.value : b.value} and below ${a.op === "below" ? a.value : b.value} at once`;
+      if (a.kind === "price" && b.kind === "price" && opposite(a, b)) return "the price cannot be above and below those levels at once";
+      if (a.kind === "change_pct" && b.kind === "change_pct" && a.candles === b.candles && opposite(a, b)) return `a ${a.candles}-candle move cannot be above ${a.op === "above" ? a.value : b.value}% and below ${a.op === "below" ? a.value : b.value}% at once`;
+      if (a.kind === "price_vs_ma" && b.kind === "price_vs_ma" && a.ma === b.ma && a.length === b.length && a.op !== b.op) return "the price cannot be above and below the same moving average at once";
+      if ((a.kind === "ma_cross" || a.kind === "macd_cross") && a.kind === b.kind && a.direction !== b.direction) return "a line cannot cross up and down on the same candle";
+      if (a.kind === "trend" && b.kind === "trend" && a.direction !== b.direction) return "the closes cannot rise and fall in a row at once";
+    }
+  }
+  return null;
+}
+
+/** The win rate a rule needs to break even with its stop, target and the venue's fee each way. */
+export function breakEvenWinPct(stopLossPct: number, takeProfitPct: number, feeBps: number): number {
+  const fees = (2 * feeBps) / 100;
+  return Math.round(((stopLossPct + fees) / (stopLossPct + takeProfitPct)) * 1000) / 10;
+}
+
 export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: string[] } | { problems: string[] } {
   const r = (raw ?? {}) as Record<string, unknown>;
   const problems: string[] = [];
@@ -472,6 +506,10 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
   const when = conditions(r.when, "when");
   if (when.length === 0) problems.push("it needs at least one condition to act on");
   const until = conditions(r.until, "until");
+  const whenClash = contradiction(when);
+  if (whenClash) problems.push(`its entry can never happen: ${whenClash}`);
+  const untilClash = contradiction(until);
+  if (untilClash) problems.push(`its exit can never happen: ${untilClash}`);
 
   const sizeUsd = num(r.sizeUsd, 1, LIMITS.maxSizeUsd);
   if (sizeUsd === null) problems.push(`the size must be $1 to $${LIMITS.maxSizeUsd.toLocaleString("en")}`);
@@ -487,6 +525,8 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
   if (leverage === null) problems.push(`leverage must be 1x to ${LIMITS.maxLeverage}x`);
   // A short with no way out is refused: losses on a short have no ceiling.
   if (action === "short" && until.length === 0 && stopLossPct === null) problems.push("a short needs a stop-loss or an exit condition");
+  // A futures position with leverage and no resting stop is how accounts are liquidated: the stop is placed on Binance itself.
+  if (venue === "binance-futures" && stopLossPct === null) problems.push("a futures rule needs a stop-loss - Dolphin places it on Binance itself, so it holds even if Dolphin or your key is down");
   const maxTradesPerDay = num(r.maxTradesPerDay ?? 2, 1, LIMITS.maxTradesPerDay);
   if (maxTradesPerDay === null) problems.push(`at most ${LIMITS.maxTradesPerDay} trades a day`);
   const cooldownMinutes = num(r.cooldownMinutes ?? 0, 0, LIMITS.maxCooldownMinutes);
@@ -497,6 +537,22 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
   if ((leverage as number) > LIMITS.comfortableLeverage) {
     warnings.push(
       `${leverage}x is above the usual 1-3x. A move of about ${liquidationMovePct(leverage as number)}% against the position would liquidate it, and everything in it would be lost.`,
+    );
+  }
+  /*
+   * RISK AGAINST REWARD, AND FEES (owner, 2026-10-04: "your stop loss should never be more... than your
+   * take profit"). Warnings, not refusals: the strategy stays the person's. Both in price moves.
+   */
+  const roundTripPct = (2 * VENUE_FEE_BPS[venue]) / 100;
+  if (takeProfitPct !== null && takeProfitPct <= roundTripPct) {
+    warnings.push(`At a ${takeProfitPct}% target, even a winning trade loses money: buying and selling cost about ${roundTripPct}% in fees.`);
+  }
+  if (stopLossPct !== null && takeProfitPct !== null && stopLossPct >= takeProfitPct) {
+    const needed = breakEvenWinPct(stopLossPct, takeProfitPct, VENUE_FEE_BPS[venue]);
+    warnings.push(
+      needed >= 100
+        ? `It risks ${stopLossPct}% to make ${takeProfitPct}%. After fees it cannot break even, even if every trade wins.`
+        : `It risks ${stopLossPct}% to make ${takeProfitPct}%. After fees it must win about ${needed}% of its trades just to break even - check the backtest's win rate.`,
     );
   }
   const rule: Rule = {

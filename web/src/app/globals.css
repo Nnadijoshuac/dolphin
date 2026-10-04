@@ -4714,14 +4714,17 @@ select {
 .rule-chart__zoom { display: inline-flex; gap: 4px; margin-left: auto; }
 .rule-chart__zoom button { min-width: 24px; height: 22px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--ink-soft); font-size: 12px; font-weight: 650; }
 .rule-chart__zoom button:hover { border-color: var(--ink); color: var(--ink); }
-.rule-chart__svg { display: block; max-width: 100%; cursor: crosshair; touch-action: pan-y; border-radius: 10px; background: color-mix(in srgb, var(--paper-muted) 45%, transparent); }
+.rule-chart__svg { display: block; max-width: 100%; cursor: crosshair; touch-action: none; outline: none; border-radius: 10px; background: color-mix(in srgb, var(--paper-muted) 45%, transparent); }
 .rule-chart__svg:active { cursor: grabbing; }
+/* In a small card the page keeps vertical scrolling; the full chart takes every gesture. */
+.rule-chart__svg[data-compact] { touch-action: pan-y; }
 .rule-chart__up { color: var(--candle-up); }
 .rule-chart__down { color: var(--candle-down); }
 .rule-chart__grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
 .rule-chart__axis { fill: var(--muted); font-size: 9.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .rule-chart__leg { stroke: currentColor; stroke-width: 1.4; stroke-dasharray: 4 3; opacity: 0.75; }
 .rule-chart__enter path { fill: currentColor; stroke: var(--paper); stroke-width: 1; }
+.rule-chart__fill { stroke: currentColor; stroke-width: 1.6; }
 .rule-chart__exit path { fill: var(--ink); stroke: var(--paper); stroke-width: 1; }
 .rule-chart__level line { stroke-width: 1.2; stroke-dasharray: 6 4; }
 .rule-chart__level text, .rule-chart__last text, .rule-chart__cross text { font-size: 9.5px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #fff; }

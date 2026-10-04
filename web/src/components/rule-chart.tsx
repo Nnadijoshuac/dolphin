@@ -93,6 +93,9 @@ export function RuleChart({
   const [offset, setOffset] = useState(0);
   const [hover, setHover] = useState<{ index: number; y: number } | null>(null);
   const drag = useRef<{ x: number; offset: number } | null>(null);
+  // Fingers on the chart (touch pinch), and the pinch as it started.
+  const touches = useRef(new Map<number, number>());
+  const pinch = useRef<{ distance: number; span: number; lag: number; anchor: number } | null>(null);
 
   useEffect(() => {
     const element = wrap.current;
@@ -102,27 +105,50 @@ export function RuleChart({
     return () => observer.disconnect();
   }, []);
 
-  // Wheel zoom needs a non-passive listener (React's onWheel cannot preventDefault). Re-bound each
-  // render, so it always sees the current candle count.
-  const available = candles.length;
-  useEffect(() => {
-    const element = svg.current;
-    // In a compact card the wheel stays with the page (the canvas zooms with it).
-    if (!element || compact) return;
-    const wheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
-      event.preventDefault();
-      setSpan((current) => Math.round(Math.min(Math.max(current * (event.deltaY > 0 ? 1.15 : 1 / 1.15), MIN_SPAN), Math.max(MIN_SPAN, available))));
-    };
-    element.addEventListener("wheel", wheel, { passive: false });
-    return () => element.removeEventListener("wheel", wheel);
-  });
-
   const total = candles.length;
   const shown = Math.min(Math.max(span, MIN_SPAN), total);
   const lag = Math.min(Math.max(offset, 0), total - shown);
   const end = total - lag;
   const start = end - shown;
+  const plotWidth = width - PAD.left - PAD.right;
+
+  /*
+   * MOVE LIKE A TRADING CHART (owner, 2026-10-04: "pinch... the candles shrink... you can't go
+   * backward, you can't go forward"). Drag, or swipe sideways on a trackpad, to move through time;
+   * scroll or pinch (trackpad or touch) to zoom around the point under the fingers; arrow keys and
+   * + / - when the chart has focus; double-click returns to the latest candles. `anchor` is how far
+   * from the right edge the zoom centres, 0 to 1.
+   */
+  const panBy = (candlesBack: number, fromLag = lag) => setOffset(Math.round(Math.min(Math.max(fromLag + candlesBack, 0), Math.max(0, total - shown))));
+  const zoomTo = (nextShown: number, anchor: number, fromShown = shown, fromLag = lag) => {
+    const bounded = Math.round(Math.min(Math.max(nextShown, MIN_SPAN), Math.max(MIN_SPAN, total)));
+    const pivot = fromLag + anchor * fromShown;
+    setSpan(bounded);
+    setOffset(Math.round(Math.min(Math.max(pivot - anchor * bounded, 0), Math.max(0, total - bounded))));
+  };
+  const anchorAt = (clientX: number, rect: DOMRect) => Math.min(Math.max(1 - (((clientX - rect.left) / rect.width) * width - PAD.left) / plotWidth, 0), 1);
+
+  // The wheel needs a non-passive listener (React's onWheel cannot preventDefault). Re-bound each
+  // render, so it always sees the current view.
+  useEffect(() => {
+    const element = svg.current;
+    // In a compact card the wheel stays with the page (the canvas zooms with it).
+    if (!element || compact) return;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = element.getBoundingClientRect();
+      if (!event.ctrlKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+        // A sideways swipe: right moves to newer candles, left to older ones.
+        panBy(-event.deltaX / (plotWidth / shown));
+        return;
+      }
+      // A trackpad pinch arrives as a wheel with ctrlKey and small deltas; a mouse wheel as big ones.
+      const factor = Math.exp(Math.max(-0.5, Math.min(0.5, event.deltaY * (event.ctrlKey ? 0.01 : 0.0015))));
+      zoomTo(shown * factor, anchorAt(event.clientX, rect));
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  });
 
   // Panned to the first candle: ask for older history (once per history length).
   const askedAt = useRef(-1);
@@ -137,7 +163,7 @@ export function RuleChart({
 
   const visible = candles.slice(start, end);
 
-  const plotW = width - PAD.left - PAD.right;
+  const plotW = plotWidth;
   const fullH = height - PAD.top - PAD.bottom;
   // With volume, the bottom fifth holds its bars.
   const plotH = volume ? fullH * 0.8 : fullH;
@@ -195,8 +221,6 @@ export function RuleChart({
         <span>L <b>{fmt(hoveredCandle.l)}</b></span>
         <span>C <b className={hoveredCandle.c >= hoveredCandle.o ? "rule-chart__up" : "rule-chart__down"}>{fmt(hoveredCandle.c)}</b></span>
         <span className="rule-chart__zoom">
-          <button aria-label="Zoom out" onClick={() => setSpan((current) => Math.min(Math.round(current * 1.4), total))} type="button">−</button>
-          <button aria-label="Zoom in" onClick={() => setSpan((current) => Math.max(Math.round(current / 1.4), MIN_SPAN))} type="button">+</button>
           {lag > 0 ? (
             <button onClick={() => setOffset(0)} type="button">
               Latest →
@@ -207,29 +231,65 @@ export function RuleChart({
       <svg
         aria-label="Price chart with the rule's trades"
         className="rule-chart__svg"
+        ref={svg}
         height={height}
+        data-compact={compact || undefined}
         onDoubleClick={() => {
           setOffset(0);
           setSpan(initialSpan);
         }}
+        onKeyDown={(event) => {
+          const nudge = Math.max(1, Math.round(shown * 0.1));
+          if (event.key === "ArrowLeft") panBy(nudge);
+          else if (event.key === "ArrowRight") panBy(-nudge);
+          else if (event.key === "+" || event.key === "=") zoomTo(shown / 1.25, 0.5);
+          else if (event.key === "-" || event.key === "_") zoomTo(shown * 1.25, 0.5);
+          else if (event.key === "End") setOffset(0);
+          else return;
+          event.preventDefault();
+        }}
+        onPointerCancel={(event) => {
+          touches.current.delete(event.pointerId);
+          pinch.current = null;
+          drag.current = null;
+        }}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId);
+          if (event.pointerType === "touch") touches.current.set(event.pointerId, event.clientX);
+          if (touches.current.size === 2) {
+            // A second finger: a pinch begins, centred between the two.
+            const [a, b] = [...touches.current.values()];
+            const rect = event.currentTarget.getBoundingClientRect();
+            pinch.current = { distance: Math.max(8, Math.abs(a - b)), span: shown, lag, anchor: anchorAt((a + b) / 2, rect) };
+            drag.current = null;
+            return;
+          }
           drag.current = { x: event.clientX, offset: lag };
         }}
         onPointerLeave={() => setHover(null)}
         onPointerMove={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
+          if (touches.current.has(event.pointerId)) touches.current.set(event.pointerId, event.clientX);
+          if (pinch.current && touches.current.size === 2) {
+            const [a, b] = [...touches.current.values()];
+            const begun = pinch.current;
+            zoomTo((begun.span * begun.distance) / Math.max(8, Math.abs(a - b)), begun.anchor, begun.span, begun.lag);
+            return;
+          }
           if (drag.current) {
             const moved = ((event.clientX - drag.current.x) / rect.width) * width;
-            setOffset(Math.round(drag.current.offset + moved / step));
+            panBy(moved / step, drag.current.offset);
             return;
           }
           const index = pointerIndex(event.clientX, rect);
           setHover(index >= 0 && index < shown ? { index, y: ((event.clientY - rect.top) / rect.height) * height } : null);
         }}
-        onPointerUp={() => {
+        onPointerUp={(event) => {
+          touches.current.delete(event.pointerId);
+          if (touches.current.size < 2) pinch.current = null;
           drag.current = null;
         }}
+        tabIndex={0}
         role="img"
         viewBox={`0 0 ${width} ${height}`}
         width={width}
@@ -306,7 +366,6 @@ export function RuleChart({
         })}
 
         {placed.map(({ marker, index }) => {
-          const candle = visible[index];
           const x = xAt(index);
           const size = Math.max(5, Math.min(8, step * 0.9));
           if (marker.kind === "exit") {
@@ -318,12 +377,19 @@ export function RuleChart({
               </g>
             );
           }
+          /*
+           * AT THE PRICE PAID (owner, 2026-10-04: the arrows sat under the candle and did not meet the
+           * entry line). The arrow's tip touches the fill price, with a short tick across the candle at
+           * that price - so an arrow and its entry line meet, as on any trading chart.
+           */
           const long = marker.side === "long";
-          const tip = long ? y(candle.l) + 4 : y(candle.h) - 4;
+          const at = y(marker.price);
+          const tip = long ? at + 2 : at - 2;
           const base = long ? tip + size * 1.6 : tip - size * 1.6;
           return (
             <g className={long ? "rule-chart__enter rule-chart__up" : "rule-chart__enter rule-chart__down"} key={`e${marker.time}-${marker.price}`}>
               <title>{marker.title}</title>
+              <line className="rule-chart__fill" x1={x - size * 1.3} x2={x + size * 1.3} y1={at} y2={at} />
               <path d={`M${x} ${tip}L${x + size} ${base}L${x - size} ${base}Z`} />
             </g>
           );

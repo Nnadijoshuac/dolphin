@@ -83,6 +83,10 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
       "concentrated liquidity", "liquidity range", "lp position", "tick range",
       "position manager", "impermanent loss", "reposition", "fee tier",
       "rebalance", "rebalancing", "v3 pool", "liquidity provider",
+      // Added 2026-10-04: Marque's Bound ("PancakeSwap V3 range health and bounded re-centre
+      // planning") matched none of the above and was filed under General; every other marketplace
+      // lists it as rebalancing.
+      "v3 range", "v3 position", "out of range", "re-centre", "re-center", "recentre", "recenter",
     ],
   },
   {

@@ -1570,7 +1570,9 @@ export default defineSchema({
   })
     .index("by_conversation", ["conversationId"])
     .index("by_owner", ["ownerAddress", "updatedAt"])
-    .index("by_runner_token", ["runnerTokenHash"]),
+    .index("by_runner_token", ["runnerTokenHash"])
+    // The trading engine's every-minute look (convex/strategy.ts): only armed drafts, never the whole table.
+    .index("by_autopilot_on", ["autopilot.on"]),
 
   /**
    * One turn. Assistant turns are written empty and filled in by the action, so

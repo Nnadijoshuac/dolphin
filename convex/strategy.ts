@@ -478,12 +478,21 @@ type ArmedDraft = {
 /** A draft whose rules are running: Autopilot on and at least one rule. */
 const isArmed = (draft: Doc<"agentDrafts">) => Boolean(draft.autopilot?.on) && rulesOf(draft).length > 0;
 
+/** Drafts with Autopilot on, through the index - the database I/O budget is spent on these, not the whole table. */
+function armedDrafts(ctx: QueryCtx) {
+  return ctx.db
+    .query("agentDrafts")
+    .withIndex("by_autopilot_on", (q) => q.eq("autopilot.on", true))
+    .collect();
+}
+
 /** Every armed agent with its rules' states - what one run of the engine works on. */
 async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
-  const drafts = await ctx.db.query("agentDrafts").collect();
+  // Only armed drafts (measured 2026-10-04: reading the whole table every minute was ~110 MB a day on dev).
+  const drafts = await armedDrafts(ctx);
   const out: ArmedDraft[] = [];
   for (const draft of drafts) {
-    if (!draft.autopilot?.on || rulesOf(draft).length === 0) continue;
+    if (rulesOf(draft).length === 0) continue;
     out.push(await armedOf(ctx, draft));
   }
   return out;
@@ -851,8 +860,7 @@ export const watchdog = internalMutation({
   handler: async (ctx) => {
     const clock = await clockRow(ctx);
     if (clock && clock.nextAt > Date.now() - 5_000) return;
-    const drafts = await ctx.db.query("agentDrafts").collect();
-    if (!drafts.some(isArmed)) return;
+    if (!(await armedDrafts(ctx)).some(isArmed)) return;
     const target = nextBoundary();
     if (clock) await ctx.db.patch(clock._id, { nextAt: target });
     else await ctx.db.insert("strategyClock", { key: "main", nextAt: target, lastMinute: 0 });

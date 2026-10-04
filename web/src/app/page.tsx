@@ -548,6 +548,12 @@ export default function DiscoverPage() {
                       </button>
                     );
                   })}
+              {/* Not a catalog filter: whole trading setups have their own page (owner, 2026-10-04: "a new category"). */}
+              {facets.isLoading ? null : (
+                <Link className={styles.filterChip} href="/setups">
+                  Trading setups
+                </Link>
+              )}
             </div>
 
             <div className={styles.readingGuide}>

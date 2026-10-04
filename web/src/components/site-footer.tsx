@@ -48,6 +48,7 @@ const COLUMNS = [
     title: "Product",
     links: [
       { href: "/", label: "Discover" },
+      { href: "/setups", label: "Trading setups" },
       { href: "/search", label: "Search agents" },
       { href: "/dolphin", label: "Build an agent" },
       { href: "/docs", label: "Docs" },

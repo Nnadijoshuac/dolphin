@@ -359,8 +359,8 @@ export function describeRule(rule: Rule): string {
   const verb = rule.action === "short" ? "short" : "buy";
   const exits = [
     ...(rule.until.length ? [`when ${rule.until.map(describe).join(" and ")}`] : []),
-    ...(rule.stopLossPct !== null ? [`at a ${rule.stopLossPct}% loss`] : []),
-    ...(rule.takeProfitPct !== null ? [`at a ${rule.takeProfitPct}% gain`] : []),
+    ...(rule.stopLossPct !== null ? [`at ${aOrAn(rule.stopLossPct)} ${rule.stopLossPct}% loss`] : []),
+    ...(rule.takeProfitPct !== null ? [`at ${aOrAn(rule.takeProfitPct)} ${rule.takeProfitPct}% gain`] : []),
   ];
   return (
     `On ${rule.market} ${rule.timeframe} candles: when ${rule.when.map(describe).join(" and ")}, ${verb} $${rule.sizeUsd}` +
@@ -379,8 +379,8 @@ export function describeLocked(rule: Rule): string {
   const verb = rule.action === "short" ? "short" : "buy";
   const exits = [
     ...(rule.until.length ? ["by its locked exit"] : []),
-    ...(rule.stopLossPct !== null ? [`at a ${rule.stopLossPct}% loss`] : []),
-    ...(rule.takeProfitPct !== null ? [`at a ${rule.takeProfitPct}% gain`] : []),
+    ...(rule.stopLossPct !== null ? [`at ${aOrAn(rule.stopLossPct)} ${rule.stopLossPct}% loss`] : []),
+    ...(rule.takeProfitPct !== null ? [`at ${aOrAn(rule.takeProfitPct)} ${rule.takeProfitPct}% gain`] : []),
   ];
   return (
     `On ${rule.market} ${rule.timeframe} candles: when its locked conditions hold, ${verb} $${rule.sizeUsd}` +
@@ -399,6 +399,11 @@ export function redactReason(reason: string): string {
   if (/^Exit rule met/.test(reason)) return "Exit rule met (its conditions are locked).";
   if (/^No trade/.test(reason)) return "No trade: its locked conditions were not met.";
   return reason;
+}
+
+/** "a 4%" / "an 8%" / "an 11%" - the article a spoken percentage takes. */
+function aOrAn(pct: number): string {
+  return /^(8|11|18|80|800)/.test(String(pct)) ? "an" : "a";
 }
 
 /* ── Checking a rule the AI wrote: data in a bounded language, or a reason why not ── */

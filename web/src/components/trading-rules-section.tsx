@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useState } from "react";
 
+import { ListSetupDialog } from "@/components/list-setup-dialog";
 import { LivePnl } from "@/components/live-pnl";
 import { RuleView } from "@/components/rule-view";
 import { useRuleTab } from "@/hooks/use-popout";
@@ -39,7 +40,10 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
   const exportForRunner = useMutation(strategyApi.strategy.exportForRunner);
   const [exported, setExported] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [listing, setListing] = useState(false);
   if (!view || view.rules.length === 0) return null;
+  // A copied setup's strategy is locked: it runs on Dolphin only, and is not listed again.
+  const locked = view.rules.some((rule) => rule.locked);
 
   /** Downloads agent.json - the rules and a fresh report token - for the builder's own server (phase 4). */
   const download = async () => {
@@ -71,10 +75,18 @@ export function TradingRulesSection({ conversationKey }: { conversationKey: stri
       </ul>
       <Timeline rules={view.rules} running={view.running} trades={view.trades} />
 
-      {/* A link, not a full-width button: most people never run it themselves (owner, 2026-10-03: give the panel room). */}
-      <button className="mt-2 !text-[0.7rem] font-semibold text-muted hover:text-ink hover:underline" onClick={() => void download()} type="button">
-        Run it on your own server instead
-      </button>
+      {/* Links, not full-width buttons: most people never use them (owner, 2026-10-03: give the panel room). */}
+      {locked ? null : (
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          <button className="!text-[0.7rem] font-semibold text-muted hover:text-ink hover:underline" onClick={() => setListing(true)} type="button">
+            List as a setup
+          </button>
+          <button className="!text-[0.7rem] font-semibold text-muted hover:text-ink hover:underline" onClick={() => void download()} type="button">
+            Run it on your own server instead
+          </button>
+        </div>
+      )}
+      {listing ? <ListSetupDialog agentName={null} conversationKey={conversationKey} onClose={() => setListing(false)} /> : null}
       {exportError ? (
         <p className="mt-1.5 text-[0.68rem] text-danger" role="alert">
           {exportError}
@@ -151,7 +163,14 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
   return (
     <li className="rounded-lg bg-paper-muted/70 px-3 py-2">
       <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 text-[0.76rem] leading-relaxed text-ink">{rule.words}</p>
+        <p className="min-w-0 flex-1 text-[0.76rem] leading-relaxed text-ink">
+          {rule.locked ? (
+            <span className="mr-1.5 inline-flex items-center gap-1 rounded-full bg-paper px-1.5 py-px align-[1px] !text-[0.6rem] font-semibold uppercase tracking-[0.06em] text-muted" title="Copied from a trading setup: its conditions stay with its seller">
+              🔒 Strategy locked
+            </span>
+          ) : null}
+          {rule.words}
+        </p>
         <button
           aria-label="Remove this rule"
           className="grid size-6 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-paper hover:text-ink"

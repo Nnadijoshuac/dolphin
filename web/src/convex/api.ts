@@ -1698,3 +1698,44 @@ export const strategyApi = anyApi as unknown as {
     exportForRunner: Mutation<{ conversationKey: string }, { version: number; agent: { name: string }; rules: unknown[]; report: { url: string; token: string } }>;
   };
 };
+
+/** One rule of a listed trading setup, as anyone may see it: no conditions (convex/setups.ts publicRule). */
+export type SetupRule = {
+  words: string;
+  market: string;
+  timeframe: string;
+  venue: TradingRuleView["venue"];
+  action: "buy" | "short";
+  sizeUsd: number;
+  leverage: number;
+  stopLossPct: number | null;
+  takeProfitPct: number | null;
+  maxTradesPerDay: number;
+};
+
+/** Dolphin's own backtest of a listed rule, run when it was listed. */
+export type SetupRuleStats =
+  | { market: string; timeframe: string; error: string }
+  | { market: string; timeframe: string; from: number; to: number; resultPct: number; holdPct: number; trades: number; winPct: number | null; worstDropUsd: number; sizeUsd: number };
+
+export type SetupCard = {
+  id: string;
+  title: string;
+  summary: string;
+  seller: string;
+  rules: SetupRule[];
+  stats: { at: number; rules: SetupRuleStats[] } | null;
+  copies: number;
+  listedAt: number;
+};
+
+export const setupsApi = anyApi as unknown as {
+  setups: {
+    list: Query<Record<string, never>, SetupCard[]>;
+    get: Query<{ listingId: string }, (SetupCard & { sinceListed: { trades: number; closed: number; won: number; real: number; sumPct: number } }) | null>;
+    mine: Query<{ sessionToken: string }, SetupCard[]>;
+    publish: Mutation<{ sessionToken: string; conversationKey: string; title: string; summary: string }, string>;
+    withdraw: Mutation<{ sessionToken: string; listingId: string }, null>;
+    copy: Mutation<{ sessionToken: string; listingId: string }, { conversationKey: string }>;
+  };
+};

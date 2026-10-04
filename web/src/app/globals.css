@@ -4795,3 +4795,42 @@ select {
 .template-pick button:hover { border-color: var(--ink); color: var(--ink); }
 .template-pick button[aria-checked="true"] { border-color: var(--ink); background: var(--ink); }
 .template-pick button[aria-checked="true"] span { color: var(--canvas); }
+
+/* ── Trading setups (app/setups) ── */
+.setups-head { margin: 8px 0 22px; }
+.setups-head h1 { margin-top: 4px; font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+.setups-lede { margin-top: 8px; max-width: 62ch; font-size: 0.95rem; line-height: 1.6; color: var(--ink-soft); }
+.setups-back { display: inline-block; margin-top: 4px; font-size: 0.82rem; font-weight: 600; color: var(--muted); }
+.setups-empty { padding: 28px; text-align: center; }
+.setups-note { margin-top: 14px; font-size: 0.74rem; line-height: 1.5; color: var(--faint); }
+.setup-card { display: block; padding: 18px 18px 16px; color: inherit; transition: transform 160ms ease; }
+.setup-card:hover { transform: translateY(-1px); }
+.setup-card__title { font-size: 1.05rem; font-weight: 650; color: var(--ink); }
+.setup-card__result { font-family: var(--font-doto), ui-monospace, monospace; font-weight: 900; font-size: 1.25rem; }
+.setup-card__summary { margin-top: 6px; font-size: 0.86rem; line-height: 1.5; color: var(--ink-soft); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.setup-card__rules { margin-top: 10px; display: grid; gap: 6px; }
+.setup-card__rules li { display: flex; flex-wrap: wrap; gap: 5px; }
+.setup-chip { padding: 2px 8px; border-radius: 999px; background: var(--paper-muted); font-size: 0.72rem; font-weight: 600; color: var(--ink-soft); }
+.setup-card__foot { margin-top: 10px; font-size: 0.78rem; }
+.setup-card__meta { margin-top: 6px; font-size: 0.74rem; color: var(--muted); }
+.setup-up { color: #1f9d8a; }
+.setup-down { color: #e0564b; }
+.setup-stats b { font-weight: 700; }
+.setup-detail { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .setup-detail { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; } }
+.setup-side { display: grid; gap: 14px; }
+.setup-section { padding: 18px; }
+.setup-section h2 { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.setup-rules { margin-top: 10px; display: grid; gap: 12px; }
+.setup-rules li { padding: 12px; border-radius: 12px; background: var(--paper-muted); }
+.setup-rules__words { font-size: 0.92rem; line-height: 1.5; color: var(--ink); }
+.setup-rules__meta { margin-top: 4px; font-size: 0.76rem; color: var(--muted); }
+.setup-rules__stats { margin-top: 6px; font-size: 0.8rem; }
+.setup-since { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.setup-since dt { font-size: 0.68rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.setup-since dd { margin-top: 2px; font-family: var(--font-doto), ui-monospace, monospace; font-weight: 900; font-size: 1.2rem; color: var(--ink); }
+.setup-copy-notes { margin-top: 8px; display: grid; gap: 6px; padding-left: 18px; list-style: disc; font-size: 0.82rem; line-height: 1.5; color: var(--ink-soft); }
+.setup-copy { margin-top: 14px; width: 100%; height: 42px; border-radius: 12px; background: var(--accent); font-weight: 700; }
+.setup-copy span { color: #171813; }
+.setup-copy:hover { background: var(--accent-hover); }
+.setup-copy:disabled { opacity: 0.5; }

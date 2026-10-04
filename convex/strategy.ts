@@ -10,7 +10,7 @@ import { closedCandles, historyCandles, MarketDataError } from "./lib/binanceMar
 import { checkConnection, closePosition, openPosition, type ConnectionReport, type Held } from "./lib/binanceTrade";
 import { RULE_TEMPLATES } from "./lib/ruleTemplates";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
-import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, simulate, TIMEFRAMES, TIMEFRAME_MS, VENUE_FEE_BPS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
+import { afterCandle, cleanRule, decide, describeLocked, describeRule, EMPTY_STATE, redactReason, resultPct, resultUsd, simulate, TIMEFRAME_MS, TIMEFRAMES, VENUE_FEE_BPS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -175,7 +175,9 @@ export const updateRule = mutation({
     const rules = rulesOf(draft);
     const rule = rules.find((candidate) => candidate.id === ruleId);
     if (!draft || !rule) throw new ConvexError("That rule is not in this agent.");
-    const made = cleanRule({ ...rule, ...change }, rule.id);
+    const cleaned = cleanRule({ ...rule, ...change }, rule.id);
+    // A copied setup's strategy stays locked through an edit of its size, leverage or stop.
+    const made = "problems" in cleaned ? cleaned : { ...cleaned, rule: { ...cleaned.rule, ...(rule.locked ? { locked: rule.locked } : {}) } };
     if ("problems" in made) throw new ConvexError(`That change does not fit the rule: ${made.problems.join("; ")}.`);
     const misfit = venueProblem(made.rule, binanceOf(draft));
     if (misfit) throw new ConvexError(`That change does not fit: ${misfit}.`);
@@ -249,9 +251,12 @@ export const forConversation = query({
         .withIndex("by_draft_rule", (q) => q.eq("draftId", draft._id).eq("ruleId", rule.id))
         .unique();
       const made = cleanRule(rule, rule.id);
+      // A copied setup's strategy: its conditions never reach the browser (lib/strategy.ts describeLocked).
+      const locked = Boolean(rule.locked);
       views.push({
         id: rule.id,
-        words: describeRule(rule),
+        locked,
+        words: locked ? describeLocked(rule) : describeRule(rule),
         venue: rule.venue,
         market: rule.market,
         action: rule.action,
@@ -263,7 +268,7 @@ export const forConversation = query({
         position: ((run?.state as RuleState | undefined)?.position ?? null) as RuleState["position"],
         lastCheckedAt: run?.lastCheckedAt ?? null,
         lastError: run?.lastError ?? null,
-        lastReason: run?.lastReason ?? null,
+        lastReason: run?.lastReason ? (locked ? redactReason(run.lastReason) : run.lastReason) : null,
         lastLagMs: run?.lastLagMs ?? null,
         paused: (draft.pausedRuleIds ?? []).includes(rule.id),
         maxTradesPerDay: rule.maxTradesPerDay,
@@ -272,12 +277,15 @@ export const forConversation = query({
         timeframe: rule.timeframe,
       });
     }
-    const trades = await ctx.db
-      .query("strategyTrades")
-      .withIndex("by_draft", (q) => q.eq("draftId", draft._id))
-      .order("desc")
-      // Enough for the rule view's chart markers; the Timeline shows the newest 10.
-      .take(100);
+    const lockedIds = new Set(rules.filter((rule) => rule.locked).map((rule) => rule.id));
+    const trades = (
+      await ctx.db
+        .query("strategyTrades")
+        .withIndex("by_draft", (q) => q.eq("draftId", draft._id))
+        .order("desc")
+        // Enough for the rule view's chart markers; the Timeline shows the newest 10.
+        .take(100)
+    ).map((trade) => (lockedIds.has(trade.ruleId) ? { ...trade, reason: redactReason(trade.reason) } : trade));
     return {
       rules: views,
       trades,
@@ -700,7 +708,10 @@ export const backtestRule = action({
     }
     if (candles.length < 80) return { error: "Not enough history yet for this market and timeframe." };
     const feeBps = VENUE_FEE_BPS[rule.venue];
-    return { candles: candles.map(toChart), result: simulate(rule, candles, { feeBps, dailyLossLimitUsd }), feeBps, market: rule.market, timeframe: rule.timeframe };
+    const result = simulate(rule, candles, { feeBps, dailyLossLimitUsd });
+    // A locked setup's backtest shows every trade and result, not the values its conditions saw.
+    if (rule.locked) result.trades = result.trades.map((trade) => ({ ...trade, reason: redactReason(trade.reason) }));
+    return { candles: candles.map(toChart), result, feeBps, market: rule.market, timeframe: rule.timeframe };
   },
 });
 
@@ -849,6 +860,8 @@ export const exportForRunner = mutation({
     const draft = await draftOfKey(ctx, conversationKey);
     const rules = rulesOf(draft);
     if (!draft || rules.length === 0) throw new ConvexError("This agent has no trading rules to run yet.");
+    // The runner file carries every condition: a copied setup's locked strategy runs on Dolphin only.
+    if (rules.some((rule) => rule.locked)) throw new ConvexError("This agent includes a copied setup whose strategy is locked, so it runs on Dolphin only.");
     const token = randomToken();
     await ctx.db.patch(draft._id, { runnerTokenHash: await sha256Hex(token), updatedAt: Date.now() });
     return {

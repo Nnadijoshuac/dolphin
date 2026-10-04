@@ -1598,6 +1598,8 @@ export const knowledgeApi = anyApi as unknown as {
 /** A trading rule as the draft panel shows it (convex/strategy.ts forConversation). */
 export type TradingRuleView = {
   id: string;
+  /** Copied from a trading setup: its conditions stay on Dolphin's servers; `words` and reasons leave them out. */
+  locked: boolean;
   words: string;
   venue: "dolphin-wallet" | "binance-wallet" | "binance-spot" | "binance-futures";
   market: string;

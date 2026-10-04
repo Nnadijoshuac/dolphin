@@ -72,6 +72,12 @@ export type Rule = {
   maxTradesPerDay: number;
   /** After any trade, wait this long before the next entry. */
   cooldownMinutes: number;
+  /**
+   * The trading setup this rule was copied from (convex/setups.ts), when its strategy is LOCKED: its
+   * conditions run on Dolphin's servers and never reach the buyer - see describeLocked, redactReason.
+   * Never set by cleanRule: only a copy sets it, and an edit carries it over.
+   */
+  locked?: string;
 };
 
 /** `quoteVolume`: the candle's traded value in the quote currency (USDT), when the source gives it. Rules never read it. */
@@ -362,6 +368,37 @@ export function describeRule(rule: Rule): string {
     (exits.length ? `; get out ${exits.join(", or ")}` : "") +
     `. At most ${rule.maxTradesPerDay} a day.`
   );
+}
+
+/**
+ * A LOCKED RULE IN WORDS (owner, 2026-10-04: "the strategy will be locked... you can only see this
+ * part"). Everything a buyer may judge it by - market, candles, size, leverage, stop, target, daily
+ * cap - and none of its conditions.
+ */
+export function describeLocked(rule: Rule): string {
+  const verb = rule.action === "short" ? "short" : "buy";
+  const exits = [
+    ...(rule.until.length ? ["by its locked exit"] : []),
+    ...(rule.stopLossPct !== null ? [`at a ${rule.stopLossPct}% loss`] : []),
+    ...(rule.takeProfitPct !== null ? [`at a ${rule.takeProfitPct}% gain`] : []),
+  ];
+  return (
+    `On ${rule.market} ${rule.timeframe} candles: when its locked conditions hold, ${verb} $${rule.sizeUsd}` +
+    (rule.leverage > 1 ? ` at ${rule.leverage}x` : "") +
+    (exits.length ? `; get out ${exits.join(", or ")}` : "") +
+    `. At most ${rule.maxTradesPerDay} a day.`
+  );
+}
+
+/**
+ * A locked rule's reason, without the values that would give its conditions away ("RSI was 36.4,
+ * below 50"). Stops, targets, holding and limits reveal nothing and stay as they are.
+ */
+export function redactReason(reason: string): string {
+  if (/^Entry rule met/.test(reason)) return "Entry rule met (its conditions are locked).";
+  if (/^Exit rule met/.test(reason)) return "Exit rule met (its conditions are locked).";
+  if (/^No trade/.test(reason)) return "No trade: its locked conditions were not met.";
+  return reason;
 }
 
 /* ── Checking a rule the AI wrote: data in a bounded language, or a reason why not ── */

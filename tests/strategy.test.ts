@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { afterCandle, breakEvenWinPct, cleanRule, contradiction, decide, describeRule, EMPTY_STATE, holds, observe, resultPct, simulate, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, breakEvenWinPct, cleanRule, contradiction, decide, describeLocked, redactReason, describeRule, EMPTY_STATE, holds, observe, resultPct, simulate, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const H4 = 4 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 9, 1);
@@ -274,4 +274,24 @@ test("every strategy template is a valid rule, with a target larger than its sto
       assert.ok(template.takeProfitPct > template.stopLossPct, template.id);
     }
   }
+});
+
+test("a locked rule's words and reasons never carry its conditions", () => {
+  const made = cleanRule(
+    { venue: "binance-spot", market: "BNBUSDT", timeframe: "4h", action: "buy", sizeUsd: 50, when: [{ kind: "rsi", op: "below", value: 37, period: 14 }, { kind: "price_vs_ma", op: "above", ma: "sma", length: 200 }], until: [{ kind: "rsi", op: "above", value: 66 }], stopLossPct: 4, takeProfitPct: 8 },
+    "secret",
+  );
+  assert.ok(!("problems" in made));
+  const rule = (made as { rule: Rule }).rule;
+  const words = describeLocked(rule);
+  assert.doesNotMatch(words, /RSI|37|66|200|average/i, "no condition in the words");
+  assert.match(words, /BNBUSDT 4h/);
+  assert.match(words, /\$50/);
+  assert.match(words, /4% loss/);
+  assert.match(words, /8% gain/);
+  // Every reason decide() can give, redacted where it carries values.
+  const candlesUp = candles([100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116]);
+  const reasons = [decide(rule, candlesUp, EMPTY_STATE, T0).reason, "Entry rule met: RSI was 36.4, below 37.", "Exit rule met: RSI was 66.2, above 66.", "No trade: RSI was 45.2, not below 37"];
+  for (const reason of reasons.map(redactReason)) assert.doesNotMatch(reason, /RSI|\d+\.\d|below 37|above 66/, reason);
+  assert.equal(redactReason("Stop-loss: in at $790, now $758 - 4.05% against the position; your stop is 4%."), "Stop-loss: in at $790, now $758 - 4.05% against the position; your stop is 4%.");
 });

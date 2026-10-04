@@ -1274,6 +1274,29 @@ export default defineSchema({
    * by anything but its owner - an anonymous one is reachable only by someone
    * who already holds its key.
    */
+  /**
+   * A TRADING SETUP LISTED FOR OTHERS TO COPY (owner, 2026-10-04) - convex/setups.ts. `snapshot` holds the
+   * rules with their conditions and is NEVER returned to a client; buyers see `publicRules` (no
+   * conditions), `stats` (Dolphin's own backtest) and the source agent's trades since `listedAt`.
+   */
+  setupListings: defineTable({
+    sourceDraftId: v.id("agentDrafts"),
+    ownerAddress: v.string(),
+    title: v.string(),
+    summary: v.string(),
+    snapshot: v.any(),
+    publicRules: v.array(v.any()),
+    stats: v.union(v.any(), v.null()),
+    status: v.union(v.literal("listed"), v.literal("withdrawn")),
+    copies: v.number(),
+    createdAt: v.number(),
+    listedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status_listed", ["status", "listedAt"])
+    .index("by_owner", ["ownerAddress"])
+    .index("by_source", ["sourceDraftId"]),
+
   dolphinConversations: defineTable({
     conversationKey: v.string(),
     /** Lowercased wallet address when a session was present, else null. */

@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
-import type { PropsWithChildren } from "react";
+import { type PropsWithChildren, useEffect } from "react";
 import { ConsoleBanner } from "@/components/console-banner";
+import { captureRef } from "@/lib/campaign-ref";
 import { ConvexClientProvider } from "@/providers/convex-provider";
 import { QueryProvider } from "@/providers/query-provider";
 import { AltanaWalletProvider } from "@/wallet/altana-provider";
@@ -25,7 +26,7 @@ import { WalletSessionProvider } from "@/wallet/wallet-session";
  * Altana sits INSIDE both QueryProvider and ConvexClientProvider, because it
  * needs each for a different thing: TanStack Query for its balance (a live
  * on-chain value with a refetch cycle, which is what this stack already uses
- * for exactly that, project-scope.md §3), and Convex for its session grants,
+ * for exactly that, project-scope.md Â§3), and Convex for its session grants,
  * which are backend-owned so the wallet screen and a hire record cannot end up
  * telling two different stories about the same authority.
  *
@@ -44,6 +45,7 @@ export function AppProviders({ children }: PropsWithChildren) {
       <ConsoleBanner />
       <QueryProvider>
         <ConvexClientProvider>
+          <RefCapture />
           <WalletSessionProvider>
             <AltanaWalletProvider>{children}</AltanaWalletProvider>
           </WalletSessionProvider>
@@ -51,4 +53,10 @@ export function AppProviders({ children }: PropsWithChildren) {
       </QueryProvider>
     </WalletProvider>
   );
+}
+
+/** Keeps a `?ref=` tag from a post we made and counts the visit (lib/campaign-ref.ts). */
+function RefCapture() {
+  useEffect(() => captureRef(), []);
+  return null;
 }

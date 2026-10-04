@@ -17,6 +17,7 @@ import { walletAuthApi } from "@/convex/api";
 import { convexClient } from "@/providers/convex-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { useWallet } from "@/wallet/wallet-provider";
+import { recordRefEvent } from "@/lib/campaign-ref";
 
 /**
  * The signed-in session: proof that the person using the site controls the
@@ -275,6 +276,7 @@ function BackendWalletSession({ children }: PropsWithChildren) {
         });
 
         writeStoredToken(issued.token);
+        recordRefEvent("signIn");
         return issued.token;
       } catch (cause) {
         setError(toUserMessage(cause, "Could not complete sign-in."));

@@ -33,6 +33,7 @@ import { useAltanaWallet, type PaidJob } from "@/wallet/altana-provider";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
+import { recordRefEvent } from "@/lib/campaign-ref";
 import { reportToConsole } from "@/lib/console-report";
 
 function shortAddress(value: string | null) {
@@ -386,6 +387,8 @@ export function HireAction({ agent, bare = false }: { agent: Agent; bare?: boole
       category: agent.category,
       paid: jobId !== null,
     });
+    // Only a paid hire is an on-chain job, the one Set and Earn counts.
+    if (jobId !== null) recordRefEvent("hire");
   }
 
   async function payForHire(hirerWalletAddress: string, taskDescription: string): Promise<PaidJob> {

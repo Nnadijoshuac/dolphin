@@ -14,6 +14,7 @@ import { BSC_RPC_URL } from "@/constants/agents";
 import { BSC_TESTNET_RPC_URL, useWallet, wagmiConfig } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
 import { ExternalArrow } from "@/components/external-arrow";
+import { recordRefEvent } from "@/lib/campaign-ref";
 
 /**
  * PUT A BUILT AGENT ON-CHAIN. (2026-09-26, owner's decisions in
@@ -275,6 +276,7 @@ export function PublishAgentDialog({
         hash: review.prepared.hash,
         transactionHash: txHash,
       });
+      recordRefEvent("agentRegistered");
       let linked = false;
       if (agentWallet) {
         // The second signature: point the identity's wallet at the agent's own, so any escrow buyer pays it.

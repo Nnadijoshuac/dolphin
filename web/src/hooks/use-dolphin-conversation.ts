@@ -13,6 +13,7 @@ import {
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
+import { recordRefEvent } from "@/lib/campaign-ref";
 
 /**
  * The Dolphin agent's conversation state, for the website.
@@ -145,6 +146,7 @@ export function useDolphinChat(
           });
           key = created.conversationKey;
           setConversationKey(key);
+          if (mode === "build") recordRefEvent("buildStart");
         }
         if (!key) return;
         await ask({

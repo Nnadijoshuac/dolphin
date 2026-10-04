@@ -422,6 +422,20 @@ export default defineSchema({
     .index("by_agent_day", ["agentKey", "day"])
     .index("by_day", ["day"]),
 
+  /** Which post brought people: anonymous counts per `?ref=` tag per UTC day (convex/campaignRefs.ts). */
+  campaignRefs: defineTable({
+    ref: v.string(),
+    /** UTC "YYYY-MM-DD". */
+    day: v.string(),
+    visits: v.number(),
+    signIns: v.number(),
+    buildStarts: v.number(),
+    agentsRegistered: v.number(),
+    hires: v.number(),
+  })
+    .index("by_ref_day", ["ref", "day"])
+    .index("by_day", ["day"]),
+
   /**
    * Discover's shelves, as data (2026-09-25). One row, rebuilt after every
    * ranking run, so the store front costs one read and never sorts the catalog

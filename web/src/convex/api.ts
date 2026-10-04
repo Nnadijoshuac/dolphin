@@ -1780,3 +1780,12 @@ export const setupsApi = anyApi as unknown as {
     copy: Mutation<{ sessionToken: string; listingId: string }, { conversationKey: string }>;
   };
 };
+
+/** Which post brought people (convex/campaignRefs.ts). */
+export type RefKind = "visit" | "signIn" | "buildStart" | "agentRegistered" | "hire";
+
+export const campaignRefsApi = anyApi as unknown as {
+  campaignRefs: {
+    record: Mutation<{ ref: string; kind: RefKind }, null>;
+  };
+};

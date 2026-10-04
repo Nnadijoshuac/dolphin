@@ -250,6 +250,8 @@ type ArmedDraft = {
   paused: string[];
   /** Rules with an order still in flight: no run touches them until it settles (claimOrder). */
   inFlight: string[];
+  /** Rules whose last real trade is a buy never sold: by the trade log they hold a position. */
+  openByLog: string[];
   /** The wallet whose Keys tab holds the agent's keys (the one that switched Autopilot on). */
   owner: string | null;
   binance: BinanceConfig | null;
@@ -267,6 +269,16 @@ async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
     const rules = rulesOf(draft);
     if (!draft.autopilot?.on || rules.length === 0) continue;
     const inFlight: string[] = [];
+    /*
+     * THE TRADE LOG IS THE SECOND WITNESS (owner, 2026-10-04: "this thing must never happen again").
+     * strategyTrades is only ever appended to, in the same write as the trade, so a run that saves a
+     * stale rule state cannot rewrite it. A rule whose last REAL trade is a buy never sold still
+     * holds that position, whatever its state says.
+     */
+    const realTrades = (await ctx.db.query("strategyTrades").withIndex("by_draft", (q) => q.eq("draftId", draft._id)).order("desc").take(200)).filter(
+      (trade) => trade.paper === false && (trade.source ?? "dolphin") === "dolphin",
+    );
+    const openByLog: string[] = rules.filter((rule) => realTrades.find((trade) => trade.ruleId === rule.id)?.kind === "enter").map((rule) => rule.id);
     const states: Record<string, RuleState> = {};
     const helds: Record<string, Held | null> = {};
     for (const rule of rules) {
@@ -295,6 +307,7 @@ async function loadArmed(ctx: QueryCtx): Promise<ArmedDraft[]> {
       live: draft.paperMode === false,
       paused: draft.pausedRuleIds ?? [],
       inFlight,
+      openByLog,
       acknowledged: Boolean(draft.liveAcknowledgedAt),
       owner: draft.autopilot?.walletAddress ?? null,
       binance,
@@ -503,6 +516,19 @@ export const tick = internalAction({
         // Paused by the owner: nothing new opens; an open position still closes by its own exits.
         if (armedDraft.paused.includes(rule.id) && decision.type === "enter") {
           decision = { type: "none", reason: "Paused by you: no new trades. Resume it from the rule's view." };
+        }
+        // The trade log says it already holds what its state forgot: it never buys again on top of it.
+        if (decision.type === "enter" && armedDraft.live && armedDraft.openByLog.includes(rule.id) && !state.position) {
+          await ctx.runMutation(internal.strategy.record, {
+            draftId,
+            ruleId: rule.id,
+            state: { ...state, lastCandle: judged.openTime },
+            lastError: "Not traded: this rule's trade log says it still holds a position its record lost. It will not buy again until that is put right.",
+            lastReason: decision.reason,
+            lagMs,
+            trade: null,
+          });
+          continue;
         }
         // On paper every decision "executes" at the closed candle's price; Live sends a real order first.
         const held = armedDraft.helds[rule.id] ?? null;

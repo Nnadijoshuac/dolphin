@@ -12,7 +12,6 @@ import type { AgentSignals } from "@/hooks/use-agents";
 import { useImpression } from "@/hooks/use-impression";
 import { track, type AnalyticsSurface } from "@/lib/analytics";
 import type { Agent, LiveMetric, LiveMetricStatus } from "@/types/agent";
-import { useHireTotal } from "@/hooks/use-hire-total";
 
 type AgentCardProps = {
   agent: Agent;
@@ -96,11 +95,11 @@ function getMetricPreview(agent: Agent): MetricPreview | null {
  * signed quote (priceLabel), and a hire agent with no published quote says the
  * price comes at checkout - which is what the hire flow actually does.
  */
-function getOffer(agent: Agent, total: string | null): { kind: string; price: string | null; unit: string } {
+function getOffer(agent: Agent): { kind: string; price: string | null; unit: string } {
   if (agent.protocol === "mcp") return { kind: "Tools", price: null, unit: "Call its tools directly" };
   const price = priceLabel(agent);
   if (price === "Free") return { kind: "Hire", price: "Free", unit: "per job" };
-  return price ? { kind: "Hire", price: total ?? "…", unit: "per job" } : { kind: "Hire", price: null, unit: "Price quoted at checkout" };
+  return price ? { kind: "Hire", price, unit: "per job" } : { kind: "Hire", price: null, unit: "Price quoted at checkout" };
 }
 
 export function AgentCard({
@@ -109,8 +108,6 @@ export function AgentCard({
   surface = "search",
   signals,
 }: AgentCardProps) {
-  // The same total the hire button charges (owner, 2026-10-02: one price everywhere).
-  const total = useHireTotal(agent);
   /*
    * `categoryLabel()` is TOTAL. This looked the slug up in a hardcoded list of
    * five and fell back to the literal string "Monitoring" - so every research,
@@ -120,7 +117,8 @@ export function AgentCard({
    */
   const label = categoryLabel(agent.category);
   const preview = getMetricPreview(agent);
-  const offer = getOffer(agent, total.text);
+  // The agent's own price (owner, 2026-10-04): network fees are shown at the hire step, not folded in here.
+  const offer = getOffer(agent);
   const displayPublisher = agent.publisher?.startsWith("0x")
     ? `${agent.publisher.slice(0, 6)}…${agent.publisher.slice(-4)}`
     : agent.publisher || null;

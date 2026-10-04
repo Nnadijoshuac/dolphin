@@ -29,7 +29,6 @@ import { useNow } from "@/hooks/use-now";
 import { convexClient } from "@/providers/convex-provider";
 import { ESCROW_REFUND_DAYS } from "@/wallet/erc8183-policy";
 import type { Agent } from "@/types/agent";
-import { useHireTotal } from "@/hooks/use-hire-total";
 
 /** A tool name written for code, said in words. Names that already have spaces are left alone. */
 /**
@@ -78,8 +77,7 @@ export function AtAGlance({ agent }: { agent: Agent }) {
   // The total a hire costs, the same figure as every card and the hire button.
   // A tool server's price is per call (knowledge, step 4); none published reads Free, as before.
   const label = priceLabel(agent);
-  const total = useHireTotal(agent);
-  const price = label && label !== "Free" ? total.text ?? "…" : label;
+  const price = label;
   const paidTools = isTools && Boolean(label) && label !== "Free";
   const checked = ago(agent.verification?.lastProbeAt ?? agent.verifiedAt, now);
   const online = agent.status === "live";
@@ -131,8 +129,7 @@ export function AtAGlance({ agent }: { agent: Agent }) {
 
 function PublisherRow({ agent }: { agent: Agent }) {
   const label = agent.protocol === "mcp" ? priceLabel(agent) ?? "Tools" : priceLabel(agent);
-  const total = useHireTotal(agent);
-  const price = label && label !== "Free" && label !== "Tools" ? total.text ?? "…" : label;
+  const price = label;
   return (
     <li>
       <Link className="publisher-row" href={`/agent/${agent.tokenId}`}>
@@ -262,8 +259,7 @@ export function HowItWorks({ agent }: { agent: Agent }) {
 
   const isTools = agent.protocol === "mcp";
   const label = priceLabel(agent);
-  const total = useHireTotal(agent);
-  const price = label && label !== "Free" ? total.text ?? label : label;
+  const price = label;
   const paidTools = isTools && Boolean(label) && label !== "Free";
   const days = ESCROW_REFUND_DAYS;
   const steps = isTools

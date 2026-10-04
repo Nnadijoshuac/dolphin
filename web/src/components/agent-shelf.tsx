@@ -14,7 +14,6 @@ import { track } from "@/lib/analytics";
 import type { Agent } from "@/types/agent";
 
 import styles from "./agent-shelf.module.css";
-import { useHireTotal } from "@/hooks/use-hire-total";
 
 /**
  * The agent's own quoted price, or null. Never a default: a MISSING quote is
@@ -51,9 +50,8 @@ function signalLabel(agent: Agent, signals: AgentSignals | undefined): string {
 function ShelfTile({ agent, signals }: { agent: Agent; signals?: AgentSignals }) {
   const ref = useImpression<HTMLAnchorElement>(agent.agentKey);
   const label = priceLabel(agent);
-  const total = useHireTotal(agent);
-  // One price everywhere: the total the hire button charges.
-  const price = label && label !== "Free" ? total.text ?? "…" : label;
+  // The agent's own price, the same number every marketplace shows (owner, 2026-10-04).
+  const price = label;
 
   return (
     <li className={styles.item}>

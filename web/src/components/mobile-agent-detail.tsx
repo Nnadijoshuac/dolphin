@@ -16,7 +16,6 @@ import { useAgentReviews } from "@/hooks/use-agent-reviews";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { convexClient } from "@/providers/convex-provider";
 import { usePriceText } from "@/hooks/use-price-text";
-import { useHireTotal } from "@/hooks/use-hire-total";
 import type { Agent } from "@/types/agent";
 
 function Reviews({ agent }: { agent: Agent }) {
@@ -47,8 +46,6 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
     symbol: agent.pricing?.tokenSymbol || live?.symbol || null,
   });
 
-  // The same total every card and the hire button show (hooks/use-hire-total.ts).
-  const hireTotal = useHireTotal(agent);
   const priceText = (() => {
     if (agent.protocol === "mcp") {
       const label = priceLabel(agent);
@@ -107,7 +104,7 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
       {/* The tagline is usually the description's first sentence; showing both said it twice. */}
       {agent.tagline && !agent.description.trim().startsWith(agent.tagline.trim()) && <p className="mobile-detail-tagline">{agent.tagline}</p>}
       <section className="mobile-detail-action">
-        <div><p>{agent.protocol === "mcp" ? "MCP server" : "Price"}</p><h2>{agent.protocol !== "mcp" && hireTotal.text && rawAmount != null && Number(rawAmount) > 0 ? hireTotal.text : priceText}</h2></div>
+        <div><p>{agent.protocol === "mcp" ? "MCP server" : "Price"}</p><h2>{priceText}</h2></div>
         <button className="mobile-pearl" type="button" onClick={() => setOpen(true)}>{agent.protocol === "mcp" ? "Use" : "Hire this agent"}</button>
         <p>{agent.protocol === "mcp" ? "Connect to your AI client" : "Fees included."}</p>
       </section>

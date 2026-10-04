@@ -935,9 +935,16 @@ function HireCost({
 
   return (
     <div className="py-3">
+      {/* The agent's price first, as every card shows it; what paying adds is listed under it, never hidden (owner, 2026-10-04). */}
       <div className="flex items-baseline justify-between gap-4">
+        <span className="text-xs text-muted">Agent&rsquo;s price</span>
+        <span className="text-lg font-semibold text-ink">{priceText}</span>
+      </div>
+      {detail("Network fee", typicalFeeWei !== null ? `${formatBnb(typicalFeeWei)} BNB${usd(typicalFeeWei)}` : "…")}
+      {needsWalletSetup ? detail("One-time wallet setup", setupWei !== null ? `${formatBnb(setupWei)} BNB${usd(setupWei)}` : "…") : null}
+      <div className="flex items-baseline justify-between gap-4 border-t border-line pt-1.5">
         <span className="text-xs text-muted">Total</span>
-        <span className="text-lg font-semibold text-ink">{totalText ?? "Working it out…"}</span>
+        <span className="text-sm font-semibold text-ink">{totalText ?? "Working it out…"}</span>
       </div>
       {line ? <p className="mt-1 text-xs leading-5 text-muted">{line}</p> : null}
       {shortWei !== null ? (
@@ -951,10 +958,8 @@ function HireCost({
       <details className="mt-2 text-xs">
         <summary className="cursor-pointer text-muted hover:text-ink">See details</summary>
         <div className="mt-1">
-          {detail("Agent's price", `${priceText}${uRate.status === "ready" && decimals !== null ? ` (${formatUsdCents(usdCents(priceRaw, decimals, uRate.rate))})` : ""}`)}
-          {converting ? detail("Paid by swapping", swapWei !== null ? `about ${formatBnb(swapWei)} BNB for the U${usd(swapWei)}` : "BNB for the U, when you hire") : null}
-          {detail("Network fees", typicalFeeWei !== null ? `${formatBnb(typicalFeeWei)} BNB${usd(typicalFeeWei)}` : "…")}
-          {needsWalletSetup ? detail("One-time wallet setup", setupWei !== null ? `${formatBnb(setupWei)} BNB${usd(setupWei)}` : "…") : null}
+          {detail("Agent's price in dollars", uRate.status === "ready" && decimals !== null ? formatUsdCents(usdCents(priceRaw, decimals, uRate.rate)) : "…")}
+          {converting ? detail("Paid by swapping on PancakeSwap", swapWei !== null ? `about ${formatBnb(swapWei)} BNB for the U${usd(swapWei)}` : "BNB for the U, when you hire") : null}
           {detail("Held in your Dolphin Wallet", heldWei !== null ? `${formatBnb(heldWei)} BNB${heldU !== null && heldU > BigInt(0) && decimals !== null ? ` · ${formatTokenAmount(heldU, decimals)} U` : ""}` : "not set up")}
         </div>
       </details>

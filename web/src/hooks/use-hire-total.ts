@@ -3,6 +3,11 @@
 /**
  * WHAT HIRING AN AGENT COSTS, ONE NUMBER, EVERYWHERE (owner, 2026-10-02).
  *
+ * SUPERSEDED FOR LISTINGS (owner, 2026-10-04): cards, shelves and agent pages show the agent's own
+ * price, the number other marketplaces show for the same agent (Keel read 0.14 U here, 0.05 U on
+ * Marque). This total is now shown only on the hire step, under the agent's price, with each fee
+ * listed. The history below is why it was built.
+ *
  * A search card said "0.05 U" and the hire card beside the button said
  * "0.11 U" for the same agent - which reads as broken. Every surface that
  * shows a hire's price now calls this hook, so a card, the agent page and the

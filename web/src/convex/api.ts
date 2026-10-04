@@ -1623,6 +1623,9 @@ export type TradingRuleView = {
   timeframe: string;
 };
 
+/** A strategy template for the picker (convex/lib/ruleTemplates.ts). */
+export type RuleTemplateView = { id: string; name: string; idea: string; timeframe: string; stopLossPct: number; takeProfitPct: number };
+
 /** A candle for the rule chart: open time in ms. */
 /** `v`: traded value in USDT, when Binance gave it. */
 export type ChartCandle = { t: number; o: number; h: number; l: number; c: number; v?: number };
@@ -1684,6 +1687,11 @@ export const strategyApi = anyApi as unknown as {
     updateRule: Mutation<{ conversationKey: string; ruleId: string; sizeUsd?: number; leverage?: number; stopLossPct?: number | null }, { warnings: string[] }>;
     removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
     setRulePaused: Mutation<{ conversationKey: string; ruleId: string; paused: boolean }, null>;
+    templates: Query<Record<string, never>, RuleTemplateView[]>;
+    addTemplate: Mutation<
+      { conversationKey: string; templateId: string; market: string; venue: "dolphin-wallet" | "binance-spot"; sizeUsd: number },
+      { added: string[]; problems: string[]; warnings: string[] }
+    >;
     /** agent.json for the runner: the rules and a fresh report token (the old one stops working). */
     exportForRunner: Mutation<{ conversationKey: string }, { version: number; agent: { name: string }; rules: unknown[]; report: { url: string; token: string } }>;
   };

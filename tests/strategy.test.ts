@@ -263,3 +263,15 @@ test("a futures rule must carry a stop-loss", () => {
   assert.ok("problems" in made);
   assert.match((made as { problems: string[] }).problems.join(" "), /futures rule needs a stop-loss/);
 });
+
+test("every strategy template is a valid rule, with a target larger than its stop and no fee or ratio warning", async () => {
+  const { RULE_TEMPLATES } = await import("../convex/lib/ruleTemplates");
+  for (const template of RULE_TEMPLATES) {
+    for (const venue of ["dolphin-wallet", "binance-spot"]) {
+      const made = cleanRule({ ...template, venue, market: "BNBUSDT", action: "buy", sizeUsd: 50, leverage: 1, maxTradesPerDay: 2, cooldownMinutes: 0 }, template.id);
+      assert.ok(!("problems" in made), `${template.id} on ${venue}: ${"problems" in made ? made.problems.join("; ") : ""}`);
+      assert.deepEqual((made as { warnings: string[] }).warnings, [], `${template.id} on ${venue} warns`);
+      assert.ok(template.takeProfitPct > template.stopLossPct, template.id);
+    }
+  }
+});

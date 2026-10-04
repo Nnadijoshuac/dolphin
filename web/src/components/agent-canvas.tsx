@@ -20,15 +20,16 @@ import {
   useReactFlow,
   useStore,
 } from "@xyflow/react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { AgentCanvasInspector } from "@/components/agent-canvas-inspector";
 import { AgentIcon } from "@/components/agent-icon";
 import type { AgentDraft } from "@/components/agent-draft-panel";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
+import { StrategyTemplatePicker } from "@/components/strategy-template-picker";
 import { TradingChart } from "@/components/trading-chart";
-import { agentBuilderApi, brainProviderLabel, type AgentBlockData, type SignalCondition } from "@/convex/api";
+import { agentBuilderApi, brainProviderLabel, strategyApi, type AgentBlockData, type RuleTemplateView, type SignalCondition } from "@/convex/api";
 import { useAgentsByKeys } from "@/hooks/use-agents";
 import type { Agent } from "@/types/agent";
 import { toast } from "@/store/use-toast-store";
@@ -785,14 +786,20 @@ function Toolbox({
   toolCount,
   selected,
   onPick,
+  conversationKey,
 }: {
   blocks: readonly AgentBlockData[];
   toolCount: number;
   selected: string | null;
   onPick: (id: string) => void;
+  /** The agent being edited: strategy templates are added to it. */
+  conversationKey: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // Strategy templates, as their own group at the top (owner, 2026-10-04: "put it into a box").
+  const templates = useQuery(strategyApi.strategy.templates, {});
+  const [template, setTemplate] = useState<RuleTemplateView | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -826,6 +833,40 @@ function Toolbox({
               value={query}
             />
             <div className="block-panel__scroll sleek-scroll">
+              {(() => {
+                const matching = (templates ?? []).filter((item) => !needle || item.name.toLowerCase().includes(needle) || item.idea.toLowerCase().includes(needle) || "strategy".includes(needle));
+                return matching.length > 0 ? (
+                  <section>
+                    <p className="block-panel__group">Strategies</p>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {matching.map((item) => (
+                        <button
+                          className="block-card"
+                          key={item.id}
+                          onClick={() => {
+                            setTemplate(item);
+                            setOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <span className="block-card__icon">
+                            <CategoryGlyph color="currentColor" name="layers" size={15} strokeWidth={2} />
+                          </span>
+                          <span className="min-w-0 flex-1 text-left">
+                            <span className="flex items-center gap-1.5">
+                              <span className="block-card__name">{item.name}</span>
+                              <span className="block-card__badge">{item.timeframe}</span>
+                            </span>
+                            <span className="block-card__about">
+                              Stop {item.stopLossPct}% · target {item.takeProfitPct}%
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                ) : null;
+              })()}
               {groups.map((group) => (
                 <section key={group.title}>
                   <p className="block-panel__group">{group.title}</p>
@@ -888,6 +929,7 @@ function Toolbox({
           </div>
         </>
       ) : null}
+      {template ? <StrategyTemplatePicker conversationKey={conversationKey} onClose={() => setTemplate(null)} template={template} /> : null}
       <button
         aria-expanded={open}
         className="add-block-button"
@@ -1249,6 +1291,7 @@ export function AgentCanvas({
           <div className="pointer-events-auto">
             <Toolbox
               blocks={draft.blocks ?? []}
+              conversationKey={editKey}
               onPick={(id) => setSelectedId(id)}
               selected={selected}
               toolCount={draft.tools.length}

@@ -4788,3 +4788,10 @@ select {
 .rule-view__frames button[aria-checked="true"] { background: var(--paper-strong); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
 .rule-view__frames button[aria-checked="true"] span { color: var(--ink); }
 .rule-view[data-standalone] { width: 100%; max-width: 1240px; max-height: none; margin: 0 auto; border-radius: 0; box-shadow: none; animation: none; background: transparent; }
+
+/* Strategy template picker (components/strategy-template-picker.tsx) */
+.template-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.template-pick button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.template-pick button:hover { border-color: var(--ink); color: var(--ink); }
+.template-pick button[aria-checked="true"] { border-color: var(--ink); background: var(--ink); }
+.template-pick button[aria-checked="true"] span { color: var(--canvas); }

@@ -2,12 +2,13 @@ import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type QueryCtx } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { apiBase } from "./builtAgents";
 import { ensureDraft } from "./knowledge";
 import { activeBlocks, validateBlocks, type AgentBlock, type BinanceConfig } from "./lib/agentBlocks";
 import { closedCandles, historyCandles, MarketDataError } from "./lib/binanceMarket";
 import { checkConnection, closePosition, openPosition, type ConnectionReport, type Held } from "./lib/binanceTrade";
+import { RULE_TEMPLATES } from "./lib/ruleTemplates";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
 import { afterCandle, cleanRule, decide, describeRule, EMPTY_STATE, resultPct, resultUsd, simulate, TIMEFRAMES, TIMEFRAME_MS, VENUE_FEE_BPS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
 
@@ -56,7 +57,12 @@ function newRuleId(): string {
  */
 export const addRules = internalMutation({
   args: { conversationId: v.id("dolphinConversations"), rules: v.array(v.any()) },
-  handler: async (ctx, { conversationId, rules }): Promise<{ added: string[]; problems: string[]; warnings: string[] }> => {
+  handler: async (ctx, { conversationId, rules }) => addRulesTo(ctx, conversationId, rules),
+});
+
+/** One path for every new rule - the build chat's and a template's - so every one passes the same checks. */
+async function addRulesTo(ctx: MutationCtx, conversationId: Id<"dolphinConversations">, rules: unknown[]): Promise<{ added: string[]; problems: string[]; warnings: string[] }> {
+  {
     // A first message that only asks for a rule still has a draft to hold it (as documents do).
     const conversation = await ctx.db.get(conversationId);
     if (!conversation) return { added: [], problems: ["the conversation is gone"], warnings: [] };
@@ -104,6 +110,54 @@ export const addRules = internalMutation({
     }
     if (added.length > 0) await ctx.db.patch(draft._id, { rules: current, blocks: validateBlocks(blocks), updatedAt: Date.now() });
     return { added, problems, warnings };
+  }
+}
+
+/** The strategy templates, for the picker (lib/ruleTemplates.ts). No results: the person backtests their own pick. */
+export const templates = query({
+  args: {},
+  handler: async () => RULE_TEMPLATES.map(({ id, name, idea, timeframe, stopLossPct, takeProfitPct }) => ({ id, name, idea, timeframe, stopLossPct, takeProfitPct })),
+});
+
+/**
+ * Adds a strategy template to an agent as a rule, on the market, venue and size the person picked.
+ * It goes through the same checks as a rule the build chat writes, and starts on paper like any rule.
+ */
+export const addTemplate = mutation({
+  args: {
+    conversationKey: v.string(),
+    templateId: v.string(),
+    market: v.string(),
+    venue: v.union(v.literal("dolphin-wallet"), v.literal("binance-spot")),
+    sizeUsd: v.number(),
+  },
+  handler: async (ctx, { conversationKey, templateId, market, venue, sizeUsd }) => {
+    const template = RULE_TEMPLATES.find((candidate) => candidate.id === templateId);
+    if (!template) throw new ConvexError("That template is not on the list.");
+    const conversation = await ctx.db
+      .query("dolphinConversations")
+      .withIndex("by_key", (q) => q.eq("conversationKey", conversationKey))
+      .unique();
+    if (!conversation || (conversation.mode ?? "chat") !== "build") throw new ConvexError("Templates are added to an agent you are building.");
+    const result = await addRulesTo(ctx, conversation._id, [
+      {
+        name: template.name,
+        venue,
+        market,
+        timeframe: template.timeframe,
+        action: "buy",
+        sizeUsd,
+        when: template.when,
+        until: template.until,
+        stopLossPct: template.stopLossPct,
+        takeProfitPct: template.takeProfitPct,
+        leverage: 1,
+        maxTradesPerDay: 2,
+        cooldownMinutes: 0,
+      },
+    ]);
+    if (result.problems.length > 0) throw new ConvexError(`Could not add it: ${result.problems.join("; ")}.`);
+    return result;
   },
 });
 

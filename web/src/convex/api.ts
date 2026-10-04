@@ -1618,6 +1618,8 @@ export type TradingRuleView = {
   paused: boolean;
   /** Entries a UTC day at most: with sizeUsd, what its trade key is limited to. */
   maxTradesPerDay: number;
+  /** The amount a real position holds (e.g. BNB), or null on paper or when flat. */
+  heldQty: string | null;
   timeframe: string;
 };
 

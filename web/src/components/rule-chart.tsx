@@ -174,9 +174,11 @@ export function RuleChart({
   const bodyW = Math.max(1, Math.min(14, step * 0.66));
   let low = Math.min(...visible.map((candle) => candle.l));
   let high = Math.max(...visible.map((candle) => candle.h));
-  // Levels widen the range when near, so a stop just off-screen still shows; far ones are pinned to the edge.
+  // Levels widen the range only when near the candles in view (within half their range); a far one -
+  // a 5% stop on a 1-minute chart - is pinned to the edge with its label, rather than squashing the candles flat.
+  const near = (high - low) * 0.5;
   for (const level of levels) {
-    if (level.price > low * 0.8 && level.price < high * 1.2) {
+    if (level.price > low - near && level.price < high + near) {
       low = Math.min(low, level.price);
       high = Math.max(high, level.price);
     }

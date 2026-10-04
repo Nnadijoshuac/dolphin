@@ -4759,3 +4759,32 @@ select {
 .wallet-tabs__which { display: inline-flex; margin-left: auto; padding: 2px; border-radius: 999px; background: var(--paper-muted); }
 .wallet-tabs__which button { padding: 5px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; color: var(--muted); }
 .wallet-tabs__which button[aria-checked="true"] { background: var(--paper-strong); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+
+/* ── An open position, live (components/live-pnl.tsx) ── */
+.pnl { --pnl-up: #1f9d8a; --pnl-down: #e0564b; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--paper-muted); }
+.pnl__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pnl__cell { display: grid; gap: 2px; min-width: 0; }
+.pnl__label { font-size: 0.6rem; font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pnl__digits {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-doto), ui-monospace, monospace; font-weight: 900; font-size: 1.25rem; line-height: 1.1;
+  font-variant-numeric: tabular-nums; color: var(--ink); letter-spacing: 0.01em;
+  animation: pnl-tick 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.pnl[data-size="large"] .pnl__digits { font-size: 1.9rem; }
+.pnl[data-size="large"] .pnl__label { font-size: 0.66rem; }
+.pnl[data-tone="up"] .pnl__tone, .pnl__own[data-tone="up"] { color: var(--pnl-up); }
+.pnl[data-tone="down"] .pnl__tone, .pnl__own[data-tone="down"] { color: var(--pnl-down); }
+.pnl__arrow { flex-shrink: 0; }
+.pnl[data-size="large"] .pnl__arrow { width: 14px; height: 14px; }
+.pnl__sub { margin-top: 6px; font-size: 0.66rem; line-height: 1.4; color: var(--muted); }
+@keyframes pnl-tick { 0% { opacity: 0.35; transform: translateY(3px); } 100% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pnl__digits { animation: none; } }
+
+/* The rule view's candle lengths, and its own window (components/rule-view.tsx). */
+.rule-view__frames { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--paper-muted); }
+.rule-view__frames button { padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 650; color: var(--muted); }
+.rule-view__frames button:hover { color: var(--ink); }
+.rule-view__frames button[aria-checked="true"] { background: var(--paper-strong); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
+.rule-view__frames button[aria-checked="true"] span { color: var(--ink); }
+.rule-view[data-standalone] { width: 100%; max-width: 1240px; max-height: none; margin: 0 auto; border-radius: 0; box-shadow: none; animation: none; background: transparent; }

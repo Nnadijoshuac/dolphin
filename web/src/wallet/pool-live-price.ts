@@ -102,6 +102,26 @@ const readCall = (leg: Leg) =>
     : ({ address: leg.pool, abi: POOL_ABI, functionName: "getReserves" } as const);
 
 /**
+ * A reader for a token's live USD price through its deepest V3 pool against USDT, else against WBNB -
+ * found through the verified PancakeSwap factory, never a pasted pool address. WBNB itself prices
+ * through its USDT pool. Null when neither pool exists or carries liquidity.
+ */
+export async function tokenUsdPricer(client: PublicClient, token: Address): Promise<LivePricer | null> {
+  const deepest = async (other: Address): Promise<Address | null> => {
+    let best: { pool: Address; liquidity: bigint } | null = null;
+    for (const fee of FEE_TIERS) {
+      const pool = await client.readContract({ address: PANCAKE_V3_FACTORY, abi: FACTORY_ABI, functionName: "getPool", args: [token, other, fee] });
+      if (/^0x0+$/.test(pool)) continue;
+      const liquidity = await client.readContract({ address: pool, abi: POOL_ABI, functionName: "liquidity" });
+      if (liquidity > BigInt(0) && (!best || liquidity > best.liquidity)) best = { pool, liquidity };
+    }
+    return best?.pool ?? null;
+  };
+  const pool = (await deepest(USDT_BSC).catch(() => null)) ?? (same(token, WBNB_BSC) ? null : await deepest(WBNB_BSC).catch(() => null));
+  return pool ? livePricer(client, pool, token) : null;
+}
+
+/**
  * A reader for one token's live USD price through one pool, or null when that pool cannot be priced
  * in dollars from verified sources. Each `read` is one batched request to BNB Chain.
  */

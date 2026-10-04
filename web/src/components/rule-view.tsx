@@ -5,6 +5,7 @@ import { ConvexError } from "convex/values";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { LivePnl } from "@/components/live-pnl";
 import { EquityCurve, RuleChart, type ChartLevel, type ChartMarker } from "@/components/rule-chart";
 import { strategyApi, type ChartCandle, type RuleBacktest, type TradingRuleTrade, type TradingRuleView } from "@/convex/api";
 
@@ -48,7 +49,20 @@ function levelsOf(position: { side: "long" | "short"; entryPrice: number } | nul
   ];
 }
 
-export function RuleView({ conversationKey, rule, trades, onClose }: { conversationKey: string; rule: TradingRuleView; trades: TradingRuleTrade[]; onClose: () => void }) {
+export function RuleView({
+  conversationKey,
+  rule,
+  trades,
+  onClose,
+  standalone = false,
+}: {
+  conversationKey: string;
+  rule: TradingRuleView;
+  trades: TradingRuleTrade[];
+  onClose: () => void;
+  /** Its own window (/dolphin/rule, owner 2026-10-04: "it deserves its own pop-out"): a page, not a dialog. */
+  standalone?: boolean;
+}) {
   const [tab, setTab] = useState<"live" | "backtest">("live");
   const setPaused = useMutation(strategyApi.strategy.setRulePaused);
   const [pauseError, setPauseError] = useState<string | null>(null);
@@ -59,6 +73,7 @@ export function RuleView({ conversationKey, rule, trades, onClose }: { conversat
   });
 
   useEffect(() => {
+    if (standalone) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const escape = (event: KeyboardEvent) => event.key === "Escape" && close.current();
@@ -67,7 +82,13 @@ export function RuleView({ conversationKey, rule, trades, onClose }: { conversat
       document.body.style.overflow = previous;
       window.removeEventListener("keydown", escape);
     };
-  }, []);
+  }, [standalone]);
+
+  /** Its own window, for a second screen: the same live data, read by the same subscriptions. */
+  const popOut = () => {
+    const opened = window.open(`/dolphin/rule?c=${encodeURIComponent(conversationKey)}&r=${encodeURIComponent(rule.id)}`, `dolphin-rule-${rule.id}`, "popup,width=1180,height=860");
+    if (opened) onClose();
+  };
 
   const togglePause = async () => {
     setPauseError(null);
@@ -80,9 +101,8 @@ export function RuleView({ conversationKey, rule, trades, onClose }: { conversat
 
   const status = rule.paused ? (rule.position ? "Paused · still closing its position" : "Paused") : rule.position ? `Holding a ${rule.position.side}` : rule.lastCheckedAt ? "Watching" : "Not started";
 
-  return createPortal(
-    <div aria-labelledby="rule-view-title" aria-modal className="confirm-scrim" onMouseDown={(event) => event.target === event.currentTarget && onClose()} role="dialog">
-      <div className="rule-view">
+  const body = (
+      <div className="rule-view" data-standalone={standalone || undefined}>
         <div className="rule-view__top">
           <div className="min-w-0 flex-1">
             <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">
@@ -99,9 +119,18 @@ export function RuleView({ conversationKey, rule, trades, onClose }: { conversat
           <button className="rule-view__pause" data-paused={rule.paused || undefined} onClick={() => void togglePause()} type="button">
             {rule.paused ? "Resume" : "Pause"}
           </button>
-          <button aria-label="Close" className="grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-paper-muted hover:text-ink" onClick={onClose} type="button">
-            <span aria-hidden className="text-lg leading-none">×</span>
-          </button>
+          {standalone ? null : (
+            <button aria-label="Open in its own window" className="grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-paper-muted hover:text-ink" onClick={popOut} title="Open in its own window" type="button">
+              <svg aria-hidden fill="none" height="15" viewBox="0 0 16 16" width="15">
+                <path d="M9.5 2.5h4v4M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+              </svg>
+            </button>
+          )}
+          {standalone ? null : (
+            <button aria-label="Close" className="grid size-8 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-paper-muted hover:text-ink" onClick={onClose} type="button">
+              <span aria-hidden className="text-lg leading-none">×</span>
+            </button>
+          )}
         </div>
         {pauseError ? (
           <p className="mt-1 text-[0.7rem] text-danger" role="alert">
@@ -120,6 +149,11 @@ export function RuleView({ conversationKey, rule, trades, onClose }: { conversat
 
         {tab === "live" ? <LiveTab rule={rule} trades={trades} /> : <BacktestTab conversationKey={conversationKey} rule={rule} />}
       </div>
+  );
+  if (standalone) return body;
+  return createPortal(
+    <div aria-labelledby="rule-view-title" aria-modal className="confirm-scrim" onMouseDown={(event) => event.target === event.currentTarget && onClose()} role="dialog">
+      {body}
     </div>,
     document.body,
   );
@@ -138,10 +172,10 @@ function streamUrls(venue: TradingRuleView["venue"], market: string, timeframe: 
 }
 
 /** The rule's market: closed history from Dolphin, then every tick over Binance's stream; polling if the stream cannot connect. */
-function useLiveCandles(rule: TradingRuleView): LiveState {
+function useLiveCandles(rule: TradingRuleView, timeframe: string): LiveState {
   const loadCandles = useAction(strategyApi.strategy.marketCandles);
   const [state, setState] = useState<LiveState>({ status: "loading" });
-  const { venue, market, timeframe } = rule;
+  const { venue, market } = rule;
 
   useEffect(() => {
     let cancelled = false;
@@ -216,14 +250,18 @@ function useLiveCandles(rule: TradingRuleView): LiveState {
   return state;
 }
 
+const FRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
+
 function LiveTab({ rule, trades }: { rule: TradingRuleView; trades: TradingRuleTrade[] }) {
-  const state = useLiveCandles(rule);
-  const frame = TIMEFRAME_MS[rule.timeframe] ?? 60_000;
-  // Oldest first, on the candle each decision judged (older rows without it: the candle before the trade).
+  // Any candle length, starting from the rule's own (owner, 2026-10-04: "one minute... ten minutes - the normal standard").
+  const [chartFrame, setChartFrame] = useState<string>(rule.timeframe);
+  const state = useLiveCandles(rule, chartFrame);
+  // Oldest first, at the moment each order filled and the price it filled at - so a marker lands on the right
+  // candle of any candle length, and meets its entry line.
   const markers: ChartMarker[] = [...trades]
     .sort((a, b) => a.at - b.at)
     .map((trade) => ({
-      time: trade.candleTime || trade.at - frame,
+      time: trade.at,
       kind: trade.kind,
       side: trade.side,
       price: trade.price,
@@ -241,17 +279,28 @@ function LiveTab({ rule, trades }: { rule: TradingRuleView; trades: TradingRuleT
         <div className="rule-view__empty">{state.message}</div>
       ) : (
         <>
-          <div className="mb-1.5 flex items-center justify-between gap-2 text-[0.7rem] text-muted">
-            <span>{trades.length === 0 ? "No trades yet. Each one will appear on the candle it acted on." : `${trades.length} trade${trades.length === 1 ? "" : "s"} on the chart`}</span>
-            {state.streaming ? (
-              <span className="flex items-center gap-1.5 text-ink-soft">
-                <span className="rule-view__live" /> Live
-              </span>
-            ) : null}
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 text-[0.7rem] text-muted">
+            <div aria-label="Candle length" className="rule-view__frames" role="radiogroup">
+              {FRAMES.map((option) => (
+                <button aria-checked={chartFrame === option} key={option} onClick={() => setChartFrame(option)} role="radio" type="button">
+                  <span>{option}</span>
+                </button>
+              ))}
+            </div>
+            <span className="flex items-center gap-3">
+              <span>{trades.length === 0 ? "No trades yet" : `${trades.length} trade${trades.length === 1 ? "" : "s"}`}</span>
+              {state.streaming ? (
+                <span className="flex items-center gap-1.5 text-ink-soft">
+                  <span className="rule-view__live" /> Live
+                </span>
+              ) : null}
+            </span>
           </div>
-          <RuleChart candles={state.candles} levels={levelsOf(rule.position, rule.stopLossPct, rule.takeProfitPct)} markers={markers} timeframe={rule.timeframe} />
+          <RuleChart candles={state.candles} key={chartFrame} levels={levelsOf(rule.position, rule.stopLossPct, rule.takeProfitPct)} markers={markers} timeframe={chartFrame} />
         </>
       )}
+
+      <LivePnl rule={rule} size="large" />
 
       <div className="rule-view__stats">
         <Stat label="Position" value={rule.position ? `${rule.position.side === "long" ? "Long" : "Short"} from ${fmt(rule.position.entryPrice)}` : "None"} />

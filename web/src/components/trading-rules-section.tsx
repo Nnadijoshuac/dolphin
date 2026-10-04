@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useState } from "react";
 
+import { LivePnl } from "@/components/live-pnl";
 import { RuleView } from "@/components/rule-view";
 import { strategyApi, type TradingRuleTrade, type TradingRuleView } from "@/convex/api";
 
@@ -168,6 +169,8 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
               : " · not started"}
         {rule.paused ? <span className="font-semibold text-ink-soft"> · paused</span> : null}
       </p>
+      {/* Holding: the price now, the move since the buy, and what selling now would return - live. */}
+      <LivePnl rule={rule} />
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         <NumberBox label="Size" onSave={(value) => value !== null && void save({ sizeUsd: value })} prefix="$" value={rule.sizeUsd} />
         {futures ? <NumberBox label="Leverage" onSave={(value) => value !== null && void save({ leverage: value })} suffix="x" value={rule.leverage} /> : null}

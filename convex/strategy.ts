@@ -213,6 +213,8 @@ export const forConversation = query({
         lastLagMs: run?.lastLagMs ?? null,
         paused: (draft.pausedRuleIds ?? []).includes(rule.id),
         maxTradesPerDay: rule.maxTradesPerDay,
+        // What a real position holds on its venue, so the panel shows its value live; null on paper or flat.
+        heldQty: typeof (run?.held as { qty?: unknown } | undefined)?.qty === "string" ? (run?.held as { qty: string }).qty : null,
         timeframe: rule.timeframe,
       });
     }

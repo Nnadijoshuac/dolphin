@@ -1114,6 +1114,10 @@ export default defineSchema({
     /** The owner's latest setAgentURI, once the chain confirmed it (builtAgentMoves.ts). */
     uriTxHash: v.optional(v.string()),
     uriUpdatedAt: v.optional(v.string()),
+    /** Its public GitHub repository (convex/agentRepos.ts), and why the last attempt failed if it did. */
+    repoUrl: v.optional(v.string()),
+    repoError: v.optional(v.string()),
+    repoSyncedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

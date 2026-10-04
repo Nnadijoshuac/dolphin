@@ -1442,6 +1442,8 @@ export type BuiltAgentPublic = {
   /** Price per call in U base units, paid with x402; null is free. */
   priceRaw: string | null;
   priceDisplay: string | null;
+  /** Its public GitHub repository, once made (convex/agentRepos.ts). */
+  repoUrl: string | null;
   /** Its documents' tools as published, each with its own price (knowledge, step 3); null for other agents. */
   knowledgeTools: { name: string; description: string; priceU: string | null }[] | null;
   /** Whether any call costs U - its single price or any priced knowledge tool. */

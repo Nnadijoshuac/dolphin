@@ -440,6 +440,8 @@ export const confirmRegistration = action({
     });
     // Its own wallet, for collecting payments while the builder is offline (x402.ts, option A).
     if (listing.network === "bsc") await ensureAgentWallet(ctx, listing.hash);
+    // Its public repository, with its registry id and chain (Set and Earn; convex/agentRepos.ts). Never blocks the confirmation.
+    await ctx.scheduler.runAfter(0, internal.agentRepos.publish, { hash: listing.hash });
     return { tokenId: tokenId.toString(), agentKey };
   },
 });
@@ -525,6 +527,8 @@ async function publicView(ctx: { storage: { getUrl: (id: Doc<"builtAgents">["ico
         : `${apiBase()}/api/v1/built/${row.hash}/mcp`,
     priceRaw: row.priceRaw ?? null,
     priceDisplay: row.priceRaw ? `${formatU(row.priceRaw)} U` : null,
+    /** Its public GitHub repository, once made (convex/agentRepos.ts). */
+    repoUrl: row.repoUrl ?? null,
     /** Its documents' tools as published, each with its own price (step 3); null for other agents. */
     knowledgeTools: row.knowledge
       ? row.knowledge.tools.filter((tool) => tool.enabled).map((tool) => ({ name: tool.name, description: tool.description, priceU: tool.priceU }))

@@ -230,6 +230,13 @@ function BuiltAgentView({ agent, owner }: { agent: BuiltAgentPublic; owner: bool
                 </a>
               </p>
             ) : null}
+            {agent.repoUrl ? (
+              <p>
+                <a className="underline" href={agent.repoUrl} rel="noopener noreferrer" target="_blank">
+                  Source on GitHub<ExternalArrow />
+                </a>
+              </p>
+            ) : null}
             {agent.links.website ? (
               <p>
                 <a className="underline" href={agent.links.website} rel="noopener noreferrer nofollow" target="_blank">

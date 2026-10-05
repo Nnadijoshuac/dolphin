@@ -422,6 +422,9 @@ export default defineSchema({
     .index("by_agent_day", ["agentKey", "day"])
     .index("by_day", ["day"]),
 
+  /** Dolphin's own backtest of its hireable traders, one row, re-run at most every 6 hours (convex/traders.ts). */
+  traderStats: defineTable({ stats: v.any(), at: v.number() }),
+
   /** Which post brought people: anonymous counts per `?ref=` tag per UTC day (convex/campaignRefs.ts). */
   campaignRefs: defineTable({
     ref: v.string(),
@@ -1508,6 +1511,8 @@ export default defineSchema({
     hirePriceUsd: v.optional(v.union(v.number(), v.null())),
     /** Paper trading (convex/paperTrading.ts). Absent means ON: an agent practises before it touches funds. */
     paperMode: v.optional(v.boolean()),
+    /** One of Dolphin's own traders a person hired (convex/traders.ts, lib/traders.ts): "steady" or "bold". */
+    trader: v.optional(v.string()),
     ownerAddress: v.union(v.string(), v.null()),
     name: v.union(v.string(), v.null()),
     description: v.union(v.string(), v.null()),

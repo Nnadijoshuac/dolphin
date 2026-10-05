@@ -1836,3 +1836,52 @@ export const campaignRefsApi = anyApi as unknown as {
     record: Mutation<{ ref: string; kind: RefKind }, null>;
   };
 };
+
+/** convex/traders.ts - Dolphin's own hireable traders (lib/traders.ts). */
+export type TraderBacktestWindow = { days: number; resultPct: number; trades: number; winPct: number | null; worstDropPct: number; holdPct: number };
+
+export type TraderCard = {
+  id: "steady" | "bold";
+  name: string;
+  tagline: string;
+  risk: "Lower" | "Higher";
+  desk: { watches: string; buys: string; sells: string; protects: string };
+  timeframe: string;
+  stopLossPct: number;
+  takeProfitPct: number;
+  backtest: TraderBacktestWindow[] | null;
+};
+
+export type MyTrader = {
+  conversationKey: string;
+  traderId: string;
+  name: string;
+  sizeUsd: number;
+  real: boolean;
+  on: boolean;
+  startedAt: number;
+  position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null;
+  heldQty: string | null;
+  lastCheckedAt: number | null;
+  lastReason: string | null;
+  lastError: string | null;
+  closed: number;
+  won: number;
+  resultUsd: number;
+  market: string;
+  venue: TradingRuleView["venue"];
+  leverage: number;
+  ruleId: string;
+  draftId: string;
+};
+
+export const tradersApi = anyApi as unknown as {
+  traders: {
+    list: Query<Record<string, never>, { market: string; minUsd: number; statsAt: number | null; traders: TraderCard[] }>;
+    refreshStats: Action<Record<string, never>, { refreshed: boolean }>;
+    start: Mutation<{ sessionToken: string; traderId: string; amountUsd: number; real: boolean; acknowledge?: boolean }, { conversationKey: string }>;
+    arm: Mutation<{ sessionToken: string; conversationKey: string }, null>;
+    stop: Mutation<{ sessionToken: string; conversationKey: string }, null>;
+    mine: Query<{ sessionToken: string }, MyTrader[] | null>;
+  };
+};

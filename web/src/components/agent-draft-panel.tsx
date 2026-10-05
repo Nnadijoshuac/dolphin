@@ -63,8 +63,10 @@ export function draftGaps(draft: AgentDraft): string[] {
   // A flow built from blocks needs no MCP tool (2026-09-29); nor does an agent of documents or rules (2026-10-03).
   const capabilities = (draft.blocks?.length ?? 0) + (draft.knowledgeToolCount ?? 0) + (draft.ruleCount ?? 0);
   if (draft.tools.length === 0 && capabilities === 0) gaps.push("at least one tool, block, document or rule");
-  // No agent runs on Dolphin's model (owner, 2026-09-28).
-  if (!draft.brain) gaps.push("a brain (your own model key)");
+  // No agent runs on Dolphin's model (owner, 2026-09-28) - except one that trades by rules: its rules
+  // run with no model at all, and the server asks for a Brain only when the agent charges (owner,
+  // 2026-10-05: Put on-chain was greyed out for Dolphin Steady and Bold).
+  if (!draft.brain && !((draft.ruleCount ?? 0) > 0)) gaps.push("a brain (your own model key)");
   return gaps;
 }
 

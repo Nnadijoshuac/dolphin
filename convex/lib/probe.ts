@@ -482,6 +482,10 @@ async function probeA2A(
       const envelope = JSON.parse(listed.body) as { result?: { services?: unknown } };
       const menu = envelope?.result?.services;
       if (Array.isArray(menu) && menu.length > 0) {
+        // A menu whose every service is priced "0" in a stated token is a FREE agent, shown as Free.
+        const prices = menu.map((item) => (item as { price?: { amount?: unknown; asset?: unknown; symbol?: unknown; decimals?: unknown } } | null)?.price);
+        const free =
+          prices.every((price) => price && price.amount === "0" && typeof price.asset === "string" && /^0x[0-9a-fA-F]{40}$/.test(price.asset));
         return {
           state: "live",
           failureClass: null,
@@ -492,7 +496,16 @@ async function probeA2A(
           probedEndpoint: target,
           skills,
           cardName,
-          pricing: null,
+          pricing: free
+            ? {
+                amountRaw: "0",
+                token: prices[0]!.asset as string,
+                tokenSymbol: typeof prices[0]!.symbol === "string" ? prices[0]!.symbol : "U",
+                tokenDecimals: typeof prices[0]!.decimals === "number" ? prices[0]!.decimals : 18,
+                display: null,
+                escrowContract: null,
+              }
+            : null,
         };
       }
     } catch {

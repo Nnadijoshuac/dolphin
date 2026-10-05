@@ -200,6 +200,40 @@ export function callPrice(listing: Listing, message: RpcRequest): string | null 
   return isPaidCall(listing, message) ? (listing.priceRaw as string) : null;
 }
 
+/**
+ * Whether a message asks for the service menu ({"skill":"list"}) - the call marketplaces and Dolphin's
+ * own probe begin with. Found 2026-10-05: built agents treated it as an empty question and answered
+ * with an error, so every FREE built agent (BNB Pulse #364411) failed the probe and was never listed.
+ */
+function asksForMenu(params: Record<string, unknown> | undefined): boolean {
+  const message = (params?.message ?? {}) as { parts?: Record<string, unknown>[] };
+  for (const part of Array.isArray(message.parts) ? message.parts : []) {
+    let data = (part.kind === "data" || part.type === "data") && part.data && typeof part.data === "object" ? (part.data as Record<string, unknown>) : null;
+    if (!data && (part.kind === "text" || part.type === "text") && typeof part.text === "string" && part.text.trim().startsWith("{")) {
+      try {
+        data = JSON.parse(part.text) as Record<string, unknown>;
+      } catch {
+        data = null;
+      }
+    }
+    if (data && data.skill === "list") return true;
+  }
+  return false;
+}
+
+/** What this agent offers, priced: a free agent says "0" so a marketplace can show it as free. */
+export function serviceMenu(listing: Listing) {
+  return [
+    {
+      id: "ask",
+      name: listing.name,
+      description: listing.description,
+      category: listing.category,
+      price: { amount: listing.priceRaw ?? "0", asset: U_TOKEN, decimals: 18, symbol: "U", model: listing.priceRaw ? "per-call (x402)" : "free" },
+    },
+  ];
+}
+
 /** The escrow skill a message asks for, from its data part, or null for a plain ask. */
 export function sellerSkill(params: Record<string, unknown> | undefined): { skill: string; data: Record<string, unknown> } | null {
   const message = (params?.message ?? {}) as { parts?: Record<string, unknown>[] };
@@ -309,6 +343,10 @@ export async function handleA2A(ctx: ActionCtx, listing: Listing, message: RpcRe
 
   switch (message.method) {
     case "message/send": {
+      if (asksForMenu(message.params)) {
+        const services = serviceMenu(listing);
+        return { jsonrpc: "2.0", id, result: { kind: "message", role: "agent", messageId: crypto.randomUUID(), parts: [{ kind: "data", data: { services } }], services } };
+      }
       const escrow = sellerSkill(message.params);
       if (escrow) {
         const result = NEGOTIATE_SKILLS.has(escrow.skill)

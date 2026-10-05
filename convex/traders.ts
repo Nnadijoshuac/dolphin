@@ -5,7 +5,7 @@ import type { Doc } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { historyCandles } from "./lib/binanceMarket";
 import { DOLPHIN_SWAP_GAS_USD } from "./lib/grid";
-import { cleanRule, describeRule, simulate, TIMEFRAME_MS, VENUE_FEE_BPS, type Rule, type RuleState } from "./lib/strategy";
+import { cleanRule, describeLocked, describeRule, simulate, TIMEFRAME_MS, VENUE_FEE_BPS, type Rule, type RuleState } from "./lib/strategy";
 import { TRADER_MARKET, TRADER_MAX_USD, TRADER_MIN_USD, traderById, traderRule, TRADERS } from "./lib/traders";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 
@@ -241,6 +241,150 @@ export const mine = query({
         ruleId: rule.id,
         draftId: draft._id,
       });
+    }
+    return out;
+  },
+});
+
+
+/* ── Any trading agent built on Dolphin, run in your own wallet (owner, 2026-10-05: "Hire = it runs in your own wallet") ── */
+
+/** The built agent behind a catalog key, with the rules its draft trades by - or null when it trades nothing. */
+async function runnable(ctx: QueryCtx, agentKey: string) {
+  const listing = await ctx.db
+    .query("builtAgents")
+    .withIndex("by_agent_key", (q) => q.eq("agentKey", agentKey.toLowerCase()))
+    .first();
+  if (!listing || listing.status !== "registered") return null;
+  const draft = await ctx.db.get(listing.draftId);
+  const rules = ((draft?.rules ?? []) as Rule[]).filter((rule) => rule && typeof rule.id === "string" && rule.venue === "dolphin-wallet" && !rule.grid);
+  if (!draft || rules.length === 0) return null;
+  return { listing, draft, rules };
+}
+
+/**
+ * What a hirer sees before running a Dolphin-built trading agent: each rule's public parts, never its
+ * conditions (the builder's strategy stays theirs - lib/strategy.ts describeLocked).
+ */
+export const runnableFor = query({
+  args: { agentKey: v.string() },
+  handler: async (ctx, { agentKey }) => {
+    const found = await runnable(ctx, agentKey);
+    if (!found) return null;
+    return {
+      name: found.listing.name,
+      traderId: found.draft.trader ?? null,
+      minUsd: TRADER_MIN_USD,
+      rules: found.rules.map((rule) => ({
+        // The hirer chooses the amount, so the builder's own size is not shown as theirs.
+        words: describeLocked(rule).replace(/(buy|short) \$[\d,.]+( at \d+x)?/, "$1 with your amount$2"),
+        market: rule.market,
+        timeframe: rule.timeframe,
+        stopLossPct: rule.stopLossPct,
+        takeProfitPct: rule.takeProfitPct,
+        maxTradesPerDay: rule.maxTradesPerDay,
+      })),
+    };
+  },
+});
+
+/**
+ * HIRE A TRADING AGENT: copies a Dolphin-built agent's rules into the hirer's own agents, its strategy
+ * locked, sized to the hirer's amount (split evenly across its rules). Same paper/real path as Steady
+ * and Bold: paper runs at once; real money arms after the trade key (`arm`).
+ */
+export const startFromAgent = mutation({
+  args: { sessionToken: v.string(), agentKey: v.string(), amountUsd: v.number(), real: v.boolean(), acknowledge: v.optional(v.boolean()) },
+  handler: async (ctx, { sessionToken, agentKey, amountUsd, real, acknowledge }): Promise<{ conversationKey: string }> => {
+    const wallet = (await requireWalletAddress(ctx, sessionToken, "Hiring a trading agent")).toLowerCase();
+    const found = await runnable(ctx, agentKey);
+    if (!found) throw new ConvexError("That agent has no trading rules to run.");
+    if (!(Number.isFinite(amountUsd) && amountUsd >= TRADER_MIN_USD && amountUsd <= TRADER_MAX_USD)) {
+      throw new ConvexError(`Choose $${TRADER_MIN_USD} to $${TRADER_MAX_USD.toLocaleString("en")}.`);
+    }
+    if (real && !acknowledge) throw new ConvexError("Accept the real-money terms first.");
+    const each = Math.floor((amountUsd / found.rules.length) * 100) / 100;
+    if (each < 1) throw new ConvexError("That amount is too small to split across this agent's rules.");
+    // Its builder, and Dolphin's own traders (their rules are public on /trade), run unlocked.
+    const own = found.listing.ownerAddress.toLowerCase() === wallet || traderById(found.draft.trader ?? "") !== null;
+    const rules: Rule[] = [];
+    for (const rule of found.rules) {
+      const made = cleanRule({ ...rule, sizeUsd: each }, `rule-${randomHex(4)}`);
+      if ("problems" in made) throw new ConvexError(`This agent's rules could not be copied: ${made.problems.join("; ")}.`);
+      // Locked for anyone but its builder: the hirer runs it without seeing its conditions.
+      rules.push(own ? made.rule : { ...made.rule, locked: `built:${found.listing.hash}` });
+    }
+    const now = Date.now();
+    const conversationKey = randomHex(32);
+    const conversationId = await ctx.db.insert("dolphinConversations", {
+      conversationKey,
+      ownerAddress: wallet,
+      title: found.listing.name,
+      seedAgentKey: found.listing.agentKey,
+      mode: "build",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("agentDrafts", {
+      conversationId,
+      ownerAddress: wallet,
+      trader: found.draft.trader ?? `agent:${found.listing.agentKey}`,
+      name: found.listing.name,
+      description: found.listing.description,
+      instructions: null,
+      tools: [],
+      blocks: [],
+      rules,
+      paperMode: !real,
+      ...(real ? { liveAcknowledgedAt: now } : {}),
+      ...(real ? {} : { autopilot: { on: true, conversationKey, walletAddress: wallet, runsDay: new Date().toISOString().slice(0, 10), runs: 0 } }),
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { conversationKey };
+  },
+});
+
+/**
+ * Dolphin's own Steady and Bold as ordinary agents for the owner to put on-chain (owner, 2026-10-05:
+ * "list those agents as our agents in the marketplace... arrange it so I can sign it"). Creates two
+ * build drafts in the given wallet; the owner opens each and presses Put on-chain. Run by an operator:
+ *   npx convex run --prod traders:seedHouseDrafts '{"wallet":"0x..."}'
+ */
+export const seedHouseDrafts = internalMutation({
+  args: { wallet: v.string() },
+  handler: async (ctx, { wallet }) => {
+    const owner = wallet.toLowerCase();
+    const out: { name: string; conversationKey: string }[] = [];
+    for (const trader of TRADERS) {
+      const made = cleanRule(traderRule(trader, 50), `rule-${randomHex(4)}`);
+      if ("problems" in made) throw new ConvexError(made.problems.join("; "));
+      const now = Date.now();
+      const conversationKey = randomHex(32);
+      const conversationId = await ctx.db.insert("dolphinConversations", {
+        conversationKey,
+        ownerAddress: owner,
+        title: `Dolphin ${trader.name}`,
+        seedAgentKey: null,
+        mode: "build",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("agentDrafts", {
+        conversationId,
+        ownerAddress: owner,
+        trader: trader.id,
+        name: `Dolphin ${trader.name}`,
+        description: `${trader.tagline} Trades BNB from your own wallet by fixed rules: ${trader.desk.buys} ${trader.desk.protects}`,
+        instructions: describeRule(made.rule),
+        tools: [],
+        blocks: [{ id: `market-${randomHex(3)}`, type: "market", config: { symbol: "BNB", everyMinutes: null, direction: null, priceUsd: null, maxTradeUsd: null, maxTradesPerDay: null } }],
+        rules: [made.rule],
+        paperMode: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      out.push({ name: `Dolphin ${trader.name}`, conversationKey });
     }
     return out;
   },

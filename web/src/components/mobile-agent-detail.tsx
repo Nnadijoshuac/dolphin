@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { RunTradingAgent, useRunnableAgent } from "@/components/run-trading-agent";
 import { createPortal } from "react-dom";
 import { AgentIcon } from "@/components/agent-icon";
 import { priceLabel } from "@/components/agent-shelf";
@@ -27,6 +28,7 @@ function Reviews({ agent }: { agent: Agent }) {
 export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
   const [open, setOpen] = useState(false);
+  const runnable = useRunnableAgent(agent.agentKey);
   const dialog = useRef<HTMLDivElement>(null);
   const price = agent.priceModel.status === "live" || agent.priceModel.status === "stale" ? agent.priceModel.value : null;
   const token = agent.pricing?.token || (price?.token.startsWith("0x") ? price.token : null);
@@ -131,7 +133,7 @@ export function MobileAgentDetail({ agent, registry }: { agent: Agent; registry:
     {open && createPortal(<div className="mobile-sheet-backdrop" onClick={event => { if (event.target === event.currentTarget) setOpen(false); }}><div ref={dialog} role="dialog" aria-modal="true" className="mobile-action-sheet" aria-labelledby="mobile-action-title">
       <header><h2 id="mobile-action-title">{agent.protocol === "mcp" ? "Use" : "Hire"} {agent.name}</h2><button className="mobile-circle" type="button" aria-label="Close" onClick={() => setOpen(false)}><CategoryGlyph name="close" size={18} /></button></header>
       {/* Same rule as the desktop page: a delisted agent is not offered for hire. */}
-      {agent.status === "unavailable" ? null : agent.protocol === "mcp" ? <McpUseAction agent={agent} /> : <HireAction agent={agent} bare />}
+      {agent.status === "unavailable" ? null : runnable ? <RunTradingAgent agentKey={agent.agentKey} bare /> : agent.protocol === "mcp" ? <McpUseAction agent={agent} /> : <HireAction agent={agent} bare />}
     </div></div>, document.body)}
   </>;
 }

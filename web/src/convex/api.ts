@@ -1883,5 +1883,15 @@ export const tradersApi = anyApi as unknown as {
     arm: Mutation<{ sessionToken: string; conversationKey: string }, null>;
     stop: Mutation<{ sessionToken: string; conversationKey: string }, null>;
     mine: Query<{ sessionToken: string }, MyTrader[] | null>;
+    runnableFor: Query<
+      { agentKey: string },
+      {
+        name: string;
+        traderId: string | null;
+        minUsd: number;
+        rules: { words: string; market: string; timeframe: string; stopLossPct: number | null; takeProfitPct: number | null; maxTradesPerDay: number }[];
+      } | null
+    >;
+    startFromAgent: Mutation<{ sessionToken: string; agentKey: string; amountUsd: number; real: boolean; acknowledge?: boolean }, { conversationKey: string }>;
   };
 };

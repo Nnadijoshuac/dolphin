@@ -3,6 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -74,7 +75,7 @@ export function TradeClient() {
 
       <MyTraders />
 
-      {starting && data ? <StartDialog minUsd={data.minUsd} onClose={() => setStarting(null)} trader={starting} /> : null}
+      {starting && data ? <TraderStartDialog minUsd={data.minUsd} onClose={() => setStarting(null)} trader={starting} /> : null}
     </div>
   );
 }
@@ -153,11 +154,41 @@ function TraderCardView({ trader, onStart }: { trader: TraderCard; onStart: () =
 
 const LOW_GAS_WEI = BigInt("200000000000000");
 
-function StartDialog({ trader, minUsd, onClose }: { trader: TraderCard; minUsd: number; onClose: () => void }) {
+function TraderStartDialog({ trader, minUsd, onClose }: { trader: TraderCard; minUsd: number; onClose: () => void }) {
+  const start = useMutation(tradersApi.traders.start);
+  return (
+    <StartDialog
+      begin={(sessionToken, amountUsd, real) => start({ sessionToken, traderId: trader.id, amountUsd, real, ...(real ? { acknowledge: true } : {}) })}
+      minUsd={minUsd}
+      name={trader.name}
+      onClose={onClose}
+      riskLabel={`${trader.risk} risk`}
+    />
+  );
+}
+
+/**
+ * STARTING A TRADER, anywhere (owner, 2026-10-05: "Hire = it runs in your own wallet"): Steady and Bold
+ * here, and any trading agent built on Dolphin from its agent page. `begin` makes the agent; this dialog
+ * does the rest - paper at once, or real money behind the terms, a Dolphin Wallet, funds and a trade key.
+ */
+export function StartDialog({
+  name,
+  riskLabel,
+  minUsd,
+  begin,
+  onClose,
+}: {
+  name: string;
+  riskLabel: string;
+  minUsd: number;
+  begin: (sessionToken: string, amountUsd: number, real: boolean) => Promise<{ conversationKey: string }>;
+  onClose: () => void;
+}) {
+  const router = useRouter();
   const session = useWalletSession();
   const wallet = useWallet();
   const dolphin = useAltanaWallet();
-  const start = useMutation(tradersApi.traders.start);
   const arm = useMutation(tradersApi.traders.arm);
   const prepare = useAction(autotradeApi.autotrade.prepare);
   const confirmGrant = useMutation(autotradeApi.autotrade.confirmGrant);
@@ -186,7 +217,7 @@ function StartDialog({ trader, minUsd, onClose }: { trader: TraderCard; minUsd: 
     try {
       const sessionToken = session.sessionToken ?? (await session.signIn());
       if (!sessionToken) return;
-      const { conversationKey } = await start({ sessionToken, traderId: trader.id, amountUsd, real, ...(real ? { acknowledge: true } : {}) });
+      const { conversationKey } = await begin(sessionToken, amountUsd, real);
       if (real && address) {
         setBusy("Approve with your passkey…");
         const prepared = await prepare({ sessionToken, conversationKey, altanaWalletAddress: address, durationDays: 7 });
@@ -194,9 +225,11 @@ function StartDialog({ trader, minUsd, onClose }: { trader: TraderCard; minUsd: 
         await confirmGrant({ sessionToken, keyId: prepared.keyId, transactionHash });
         await arm({ sessionToken, conversationKey });
       }
-      toast.success(real ? `${trader.name} is trading with $${amountUsd}. It checks BNB every 4 hours.` : `${trader.name} started on paper with $${amountUsd} of pretend money.`);
+      toast.success(real ? `${name} is trading with $${amountUsd}. Follow it under Your traders.` : `${name} started on paper with $${amountUsd} of pretend money.`);
       onClose();
-      document.getElementById("my-traders")?.scrollIntoView({ behavior: "smooth" });
+      const list = document.getElementById("my-traders");
+      if (list) list.scrollIntoView({ behavior: "smooth" });
+      else router.push("/trade#my-traders");
     } catch (cause) {
       toast.error(reason(cause, "It could not start. Nothing was charged."));
     } finally {
@@ -207,9 +240,9 @@ function StartDialog({ trader, minUsd, onClose }: { trader: TraderCard; minUsd: 
   return createPortal(
     <div aria-labelledby="start-title" aria-modal className="confirm-scrim" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()} role="dialog">
       <div className="confirm-card trade-dialog">
-        <p className="trade-label">{trader.risk} risk</p>
+        <p className="trade-label">{riskLabel}</p>
         <h3 className="trade-dialog__title" id="start-title">
-          Start {trader.name}
+          Start {name}
         </h3>
 
         <label className="trade-amount">

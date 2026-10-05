@@ -4,6 +4,7 @@ import { ByDolphin } from "@/components/by-dolphin";
 import Link from "next/link";
 import { useState } from "react";
 
+import { RunTradingAgent, useRunnableAgent } from "@/components/run-trading-agent";
 import { AgentIcon } from "@/components/agent-icon";
 import { AtAGlance, HowItWorks, OneLine, PublisherAgents, SimilarAgents, buyerSkills, plainSkillName } from "@/components/agent-detail-extras";
 import { CategoryGlyph } from "@/components/category-glyph";
@@ -367,6 +368,7 @@ export function AgentDetail({ agent }: { agent: Agent }) {
   const showDescription =
     Boolean(agent.description?.trim()) && normalized(agent.description) !== normalized(agent.tagline ?? "");
 
+  const runnable = useRunnableAgent(agent.agentKey);
   const publisherDisplay = agent.publisher?.startsWith("0x")
     ? shortAddress(agent.publisher)
     : agent.publisher || "Unlisted publisher";
@@ -461,7 +463,10 @@ export function AgentDetail({ agent }: { agent: Agent }) {
         <aside className="order-1 lg:order-2 lg:sticky lg:top-24 space-y-4">
           {/* A delisted agent failed its last several probes: a hire would start
               a quote request nothing answers. The notice above says why. */}
-          {agent.status === "unavailable" ? null : agent.protocol === "mcp" ? (
+          {/* A trading agent built on Dolphin is hired by running it in your own wallet (owner, 2026-10-05). */}
+          {agent.status === "unavailable" ? null : runnable ? (
+            <RunTradingAgent agentKey={agent.agentKey} />
+          ) : agent.protocol === "mcp" ? (
             <McpUseAction agent={agent} />
           ) : (
             <HireAction agent={agent} />

@@ -93,3 +93,7 @@ skills-lock.json
 # daily posting tracker. Git-ignored like Agent/ - working context, not source. Anchored
 # (/campaign/) for the same reason as /Agent/ above: Windows matches names case-insensitively.
 /campaign/
+
+# Employee briefs: one folder per role an agent can step into (social media, community, design...).
+# Git-ignored working context like /Agent/ and /campaign/. Anchored for the same reason.
+/employees/

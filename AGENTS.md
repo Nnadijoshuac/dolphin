@@ -50,6 +50,8 @@ The full product/screen spec, tech stack decisions, and build strategy live in *
 
 `campaign/` is the marketing working folder: competitor research with screenshots, drafted posts, the daily posting tracker and the `?ref=` tag convention. Git-ignored, same as `Agent/`. **For any marketing, social media or Set and Earn outreach task, read `campaign/README.md` first**, and update `campaign/TRACKER.md` and `campaign/posts/QUEUE.md` before you finish.
 
+`employees/` (git-ignored) holds one folder per growth role: social media, community, content design, growth and partnerships, builder success, analyst. **When a task is one of those jobs, read `employees/README.md` and that role's `ROLE.md` first**, and add a dated line to its `LOG.md` when you finish.
+
 **At the start of every session, read "Open items" at the top of `Agent/AGENT_INDEX.md` and ask the owner about each one that is not marked DONE.** Each item says what to do with the answer. When the owner confirms an item is done, mark it DONE there and in its brief, so later agents stop asking.
 
 ## 2. Hard Rule: Version Truth Before Code

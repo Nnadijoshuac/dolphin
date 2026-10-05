@@ -126,8 +126,32 @@ function holds(condition, candles) {
       const change = (close - from) / from * 100;
       return condition.op === "above" ? change > condition.value : change < condition.value;
     }
+    case "fib": {
+      const level = fibLevel(candles, condition.candles, condition.value);
+      if (!level) return false;
+      if (condition.op === "near") return Math.abs(close - level.price) / level.price * 100 <= FIB_NEAR_PCT;
+      return condition.op === "above" ? close > level.price : close < level.price;
+    }
   }
 }
+// Mirrors convex/lib/strategy.ts fibLevel: the swing of the last `lookback` closed candles.
+const FIB_NEAR_PCT = 0.5;
+function fibLevel(candles, lookback, ratio) {
+  if (candles.length < lookback) return null;
+  const window = candles.slice(-lookback);
+  let hi = 0;
+  let lo = 0;
+  for (let i = 1; i < window.length; i++) {
+    if (window[i].high > window[hi].high) hi = i;
+    if (window[i].low < window[lo].low) lo = i;
+  }
+  const high = window[hi].high;
+  const low = window[lo].low;
+  if (!(high > low)) return null;
+  const upSwing = lo < hi;
+  return { price: upSwing ? high - ratio * (high - low) : low + ratio * (high - low), high, low, upSwing };
+}
+const fibName = (ratio) => `${Math.round(ratio * 1000) / 10}%`;
 function fig(value) {
   if (!Number.isFinite(value)) return String(value);
   const abs = Math.abs(value);
@@ -170,6 +194,10 @@ function sawAndWants(condition, candles) {
     case "change_pct": {
       const from = closes[n - 1 - condition.candles];
       return from > 0 ? { saw: `the price moved ${fig(Math.round((close - from) / from * 1e4) / 100)}% over ${condition.candles} candles`, wants: `${condition.op} ${condition.value}%` } : null;
+    }
+    case "fib": {
+      const level = fibLevel(candles, condition.candles, condition.value);
+      return level ? { saw: `the price was $${fig(close)} and the ${fibName(condition.value)} level $${fig(level.price)} (swing $${fig(level.low)}-$${fig(level.high)})`, wants: condition.op === "near" ? `within ${FIB_NEAR_PCT}% of it` : `${condition.op} it` } : null;
     }
   }
 }
@@ -252,6 +280,8 @@ function describe(condition) {
       return `${condition.candles} candles in a row close ${condition.direction === "down" ? "lower" : "higher"}`;
     case "change_pct":
       return `the price moves ${condition.op} ${condition.value}% over ${condition.candles} candles`;
+    case "fib":
+      return `the price is ${condition.op === "near" ? "at" : condition.op} the ${fibName(condition.value)} Fibonacci level of the last ${condition.candles} candles`;
   }
 }
 function describeRule(rule) {

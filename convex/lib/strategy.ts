@@ -40,7 +40,34 @@ export type Condition =
   /** The close above or below a price. */
   | { kind: "price"; op: "above" | "below"; value: number }
   /** The % change over the last N candles above or below a value (negative for drops). */
-  | { kind: "change_pct"; op: "above" | "below"; value: number; candles: number };
+  | { kind: "change_pct"; op: "above" | "below"; value: number; candles: number }
+  /**
+   * FIBONACCI RETRACEMENT (a trader's request, 2026-10-05: "RSI, EMA and Fibonacci... sniper entries").
+   * The swing is the highest high and lowest low of the last `candles` closed candles. After an up-swing
+   * (low first) the level is that far back DOWN from the high - a pullback to buy; after a down-swing it is
+   * that far back UP from the low. `near`: the close is within 0.5% of the level.
+   */
+  | { kind: "fib"; op: "near" | "above" | "below"; value: number; candles: number };
+
+/** How close "near" a Fibonacci level is, in % of the level's price. */
+export const FIB_NEAR_PCT = 0.5;
+
+/** The Fibonacci level's price over the last `candles` closed candles, or null with too little history. */
+export function fibLevel(candles: readonly Candle[], lookback: number, ratio: number): { price: number; high: number; low: number; upSwing: boolean } | null {
+  if (candles.length < lookback) return null;
+  const window = candles.slice(-lookback);
+  let hi = 0;
+  let lo = 0;
+  for (let i = 1; i < window.length; i++) {
+    if (window[i].high > window[hi].high) hi = i;
+    if (window[i].low < window[lo].low) lo = i;
+  }
+  const high = window[hi].high;
+  const low = window[lo].low;
+  if (!(high > low)) return null;
+  const upSwing = lo < hi;
+  return { price: upSwing ? high - ratio * (high - low) : low + ratio * (high - low), high, low, upSwing };
+}
 
 /**
  * How a rule ENTERS: buy (go long) or short (Binance Futures only). It always
@@ -175,6 +202,12 @@ export function holds(condition: Condition, candles: readonly Candle[]): boolean
       const change = ((close - from) / from) * 100;
       return condition.op === "above" ? change > condition.value : change < condition.value;
     }
+    case "fib": {
+      const level = fibLevel(candles, condition.candles, condition.value);
+      if (!level) return false;
+      if (condition.op === "near") return (Math.abs(close - level.price) / level.price) * 100 <= FIB_NEAR_PCT;
+      return condition.op === "above" ? close > level.price : close < level.price;
+    }
   }
 }
 
@@ -239,7 +272,21 @@ function sawAndWants(condition: Condition, candles: readonly Candle[]): { saw: s
         ? { saw: `the price moved ${fig(Math.round(((close - from) / from) * 10000) / 100)}% over ${condition.candles} candles`, wants: `${condition.op} ${condition.value}%` }
         : null;
     }
+    case "fib": {
+      const level = fibLevel(candles, condition.candles, condition.value);
+      return level
+        ? {
+            saw: `the price was $${fig(close)} and the ${fibName(condition.value)} level $${fig(level.price)} (swing $${fig(level.low)}-$${fig(level.high)})`,
+            wants: condition.op === "near" ? `within ${FIB_NEAR_PCT}% of it` : `${condition.op} it`,
+          }
+        : null;
+    }
   }
+}
+
+/** 0.618 -> "61.8%". */
+function fibName(ratio: number): string {
+  return `${Math.round(ratio * 1000) / 10}%`;
 }
 
 /** What a condition saw, and whether that met it: "RSI was 28.4, below 30" or "RSI was 45.2, not below 30". */
@@ -355,6 +402,8 @@ export function describe(condition: Condition): string {
       return `${condition.candles} candles in a row close ${condition.direction === "down" ? "lower" : "higher"}`;
     case "change_pct":
       return `the price moves ${condition.op} ${condition.value}% over ${condition.candles} candles`;
+    case "fib":
+      return `the price is ${condition.op === "near" ? "at" : condition.op} the ${fibName(condition.value)} Fibonacci level of the last ${condition.candles} candles`;
   }
 }
 
@@ -469,6 +518,16 @@ function cleanCondition(raw: unknown): Condition | string {
       const value = num(c.value, -99, 1000);
       const candles = num(c.candles, 1, 200);
       return op && value !== null && candles !== null ? { kind: "change_pct", op, value, candles: Math.round(candles) } : "a % change needs above/below, a % and a number of candles";
+    }
+    case "fib": {
+      // A level as a ratio (0.618) or a percent (61.8).
+      const raw = typeof c.value === "number" ? (c.value > 1 ? c.value / 100 : c.value) : null;
+      const ratio = num(raw, 0.1, 0.95);
+      const candles = num(c.candles ?? 50, 5, LIMITS.maxLength);
+      const fibOp = String(c.op ?? "").toLowerCase().trim() === "near" || /^(at|touch|touches|equals|=)$/.test(String(c.op ?? "").toLowerCase().trim()) ? "near" : op;
+      return fibOp && ratio !== null && candles !== null
+        ? { kind: "fib", op: fibOp, value: Math.round(ratio * 1000) / 1000, candles: Math.round(candles) }
+        : "a Fibonacci condition needs near/above/below, a level like 0.618, and how many candles the swing spans";
     }
     default:
       return `"${String(c.kind)}" is not a condition Dolphin knows`;

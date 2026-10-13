@@ -85,12 +85,12 @@ export function strategySentence(args: StrategyTestArgs): string {
 
 /**
  * One artwork per title (public/test, renders reviewed by the owner), shared by the page and the share card
- * so both are the same picture. The Survivor borrows the leap and The Ghost the seabed until they get their own.
+ * so both are the same picture. Style method: campaign/assets/ART-STYLE.md.
  */
 export const PERSONA_ART: Record<string, string> = {
   "Market Assassin": "/test/art-assassin.jpg",
-  "The Survivor": "/test/art-assassin.jpg",
+  "The Survivor": "/test/art-survivor.jpg",
   "Bruised, not broken": "/test/art-bruised.jpg",
   "Should've just held": "/test/art-held.jpg",
-  "The Ghost": "/test/art-held.jpg",
+  "The Ghost": "/test/art-ghost.jpg",
 };

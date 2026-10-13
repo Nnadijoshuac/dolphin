@@ -23,7 +23,6 @@ import {
   useBackendStatus,
   useReportBackendStatus,
 } from "@/components/backend-status";
-import { HeroVideo } from "@/components/hero-video";
 import { MobileAgentRow } from "@/components/mobile-agent-row";
 import { MobileDiscoverHero } from "@/components/mobile-discover-hero";
 import { OnboardingPrompt } from "@/components/onboarding-prompt";
@@ -413,15 +412,17 @@ export default function DiscoverPage() {
        * section now spans the viewport so the video can, while the text stays
        * on the same 1280px measure as every other section on the page.
        */}
-      <section aria-labelledby="discover-heading" className={styles.heroSection}>
+      <section aria-labelledby="discover-heading" className={`${styles.heroSection} test-dark`}>
         {/*
          * Deferred, poster-backed and reduced-motion-aware. It used to be a
          * bare autoplaying <video> with no poster and no preload hint, which
          * made an MP4 on a third-party CDN the Largest Contentful Paint of the
          * entire site. See components/hero-video.tsx.
          */}
-        {!isMobile ? <HeroVideo className={styles.heroBgVideo} /> : null}
-        <div className={styles.heroOverlay} />
+        {/* The gold dolphin leading the pod (campaign/assets/ART-STYLE.md), in place of the birds video. */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- one static, pre-sized artwork */}
+        {!isMobile ? <img alt="" className={styles.heroArt} fetchPriority="high" src="/home-hero-pod.jpg" /> : null}
+        <div className={styles.heroOverlayArt} />
 
         <div className="site-frame">
           <div className={styles.heroCopy}>

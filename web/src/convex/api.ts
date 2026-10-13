@@ -1905,6 +1905,25 @@ export type HubTraderPage = HubTrader & {
   minUsd: number;
 };
 
+/** "Would your strategy have survived?" (convex/strategyTest.ts): a fixed-choice backtest, no table. */
+export type StrategyTestArgs = { coin: string; entry: string; level: number; target: number | null; stop: number | null; to: string };
+export type StrategyTestResult = {
+  coin: string;
+  words: string;
+  from: number | null;
+  to: number | null;
+  resultPct: number;
+  holdPct: number;
+  trades: number;
+  winPct: number | null;
+  worstDropPct: number;
+  stillHolding: boolean;
+  curve: { t: number; you: number; hold: number }[];
+};
+export const strategyTestApi = anyApi as unknown as {
+  strategyTest: { run: Action<StrategyTestArgs, StrategyTestResult> };
+};
+
 /** Selling a trader for U, paid once to its builder (convex/traderSales.ts). */
 export type TraderAccess = { priceU: number | null; payTo: string; own: boolean; paid: boolean };
 

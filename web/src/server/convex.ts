@@ -2,7 +2,7 @@ import "server-only";
 
 import { ConvexHttpClient } from "convex/browser";
 
-import { api, builtAgentsApi, type BuiltAgentPublic } from "@/convex/api";
+import { api, builtAgentsApi, strategyTestApi, type BuiltAgentPublic, type StrategyTestArgs, type StrategyTestResult } from "@/convex/api";
 import type { Agent } from "@/types/agent";
 
 /**
@@ -142,4 +142,12 @@ export async function fetchAgentIdsForSitemap(): Promise<
   }
 
   return collected;
+}
+
+/** A strategy test (convex/strategyTest.ts), or null for any failure. Callers cache it: one set of choices, one answer. */
+export async function runStrategyTest(args: StrategyTestArgs): Promise<StrategyTestResult | null> {
+  const convex = client();
+  if (!convex) return null;
+  const result = await withTimeout(convex.action(strategyTestApi.strategyTest.run, args) as Promise<StrategyTestResult>);
+  return result ?? null;
 }

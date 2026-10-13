@@ -123,6 +123,7 @@ import type * as setups from "../setups.js";
 import type * as shelves from "../shelves.js";
 import type * as sources_scan8004 from "../sources/scan8004.js";
 import type * as strategy from "../strategy.js";
+import type * as strategyTest from "../strategyTest.js";
 import type * as tracking from "../tracking.js";
 import type * as trade from "../trade.js";
 import type * as traderSales from "../traderSales.js";
@@ -255,6 +256,7 @@ declare const fullApi: ApiFromModules<{
   shelves: typeof shelves;
   "sources/scan8004": typeof sources_scan8004;
   strategy: typeof strategy;
+  strategyTest: typeof strategyTest;
   tracking: typeof tracking;
   trade: typeof trade;
   traderSales: typeof traderSales;

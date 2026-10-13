@@ -1,0 +1,302 @@
+/*
+ * THE TRADING HUB (owner, 2026-10-13): beebots.tech's substance - traders with their live record, anyone
+ * can run one - in the proportions of Guild.ai's Agent Hub, measured from their page: 14px body,
+ * 18px/600 section titles, numbers in a mono face, hairline borders, one accent used sparingly.
+ * Site tokens only, so dark mode follows globals.css.
+ */
+
+.page {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--canvas);
+}
+
+.layout {
+  width: min(100%, 1280px);
+  margin-inline: auto;
+  padding: 24px clamp(16px, 3vw, 32px) 96px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 28px;
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.mono { font-family: var(--font-geist-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+/* ── hero ── */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 9%, transparent) 1px, transparent 0) 0 0 / 14px 14px,
+    var(--paper);
+  padding: 56px 24px 52px;
+  text-align: center;
+}
+
+.heroTitle {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: clamp(32px, 4vw, 44px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.heroSub {
+  margin: 10px auto 0;
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.search {
+  margin: 22px auto 0;
+  max-width: 30rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--paper-strong);
+}
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+}
+.search svg { color: var(--muted); flex: none; }
+
+/* ── sections ── */
+
+.section { margin-top: 36px; }
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.sectionTitle { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.sectionNote { color: var(--muted); font-size: 13px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); background: var(--paper-strong); }
+
+/* ── trader cards ── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  padding: 16px;
+  min-height: 236px;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+.card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+
+.cardTop { display: flex; align-items: center; gap: 12px; }
+.mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--paper-muted);
+  overflow: hidden;
+}
+.mark[data-tone="b"] { color: var(--info); background: var(--info-soft); }
+.mark[data-tone="c"] { color: var(--danger); background: var(--danger-soft); }
+
+.cardName { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
+.byline { margin: 1px 0 0; color: var(--muted); font-size: 12px; }
+.byline b { color: var(--ink-soft); font-weight: 500; }
+
+.tag {
+  margin-left: auto;
+  align-self: flex-start;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.tagline {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.figure { margin-top: auto; padding-top: 16px; }
+.figureBig { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.figureLabel { margin-top: 2px; color: var(--muted); font-size: 12px; }
+
+.stats {
+  display: flex;
+  gap: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.stats b { color: var(--ink); font-weight: 500; }
+
+.empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  padding: 28px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── sidebar: your traders ── */
+
+.side {
+  position: sticky;
+  top: 88px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  padding: 16px;
+}
+.sideTitle { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+.sideRow { padding: 10px 0; border-top: 1px solid var(--line); }
+.sideRow:first-of-type { border-top: 0; padding-top: 0; }
+.sideName { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.dot { width: 7px; height: 7px; border-radius: 99px; background: var(--line-strong); flex: none; }
+.dot[data-on] { background: #1f9d8a; }
+.sideMeta { margin-top: 3px; color: var(--muted); font-size: 12px; }
+.sideActions { display: flex; gap: 12px; margin-top: 6px; font-size: 12px; }
+.linkBtn { border: 0; padding: 0; background: none; color: var(--ink-soft); font-size: 12px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.sideFoot { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--canvas);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--paper-strong);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.note { margin-top: 18px; color: var(--muted); font-size: 12px; }
+
+/* ── trader page ── */
+
+.crumbs { color: var(--muted); font-size: 13px; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--ink); }
+
+.head { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+.headMark { width: 48px; height: 48px; border-radius: 12px; font-size: 16px; }
+.headName { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.headActions { margin-left: auto; display: flex; gap: 8px; }
+
+.detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 28px;
+  margin-top: 26px;
+  align-items: start;
+}
+@media (max-width: 900px) { .detail { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 18px; }
+.panel + .panel { margin-top: 14px; }
+.panelTitle { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.lede { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.65; }
+
+.rules { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.rules li { padding: 10px 12px; border-radius: 8px; background: var(--paper-muted); color: var(--ink); font-size: 13px; line-height: 1.55; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 0 8px 8px 0; border-bottom: 1px solid var(--line); }
+.table td { padding: 10px 8px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.table tr:last-child td { border-bottom: 0; }
+.reason { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+.facts { margin: 0; display: grid; gap: 14px; }
+.facts div { display: grid; gap: 2px; }
+.facts dt { color: var(--muted); font-size: 12px; }
+.facts dd { margin: 0; font-size: 14px; font-weight: 500; }
+.facts hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+
+.narrow {
+  width: min(100%, 1100px);
+  margin-inline: auto;
+  padding: 24px clamp(16px, 3vw, 32px) 96px;
+}
+
+.by { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }

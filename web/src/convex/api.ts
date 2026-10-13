@@ -1875,6 +1875,33 @@ export type MyTrader = {
   draftId: string;
 };
 
+export type HubCreator = { name: string | null; handle: string | null; address: string };
+export type HubRecord = { closed: number; won: number; resultUsd: number; resultPct: number | null; paper: boolean | null; lastAt: number | null; lastReason: string | null };
+export type HubTrade = { at: number; kind: "enter" | "exit"; side: "long" | "short"; price: number; sizeUsd: number; pnlPct: number | null; paper: boolean; reason: string; txHash: string | null };
+export type HubTrader = {
+  id: string;
+  kind: "house" | "community";
+  name: string;
+  tagline: string;
+  risk: "Lower" | "Higher" | null;
+  market: string;
+  timeframe: string;
+  creator: HubCreator;
+  backtest: TraderBacktestWindow[] | null;
+  live: HubRecord | null;
+  priceUsd: number | null;
+  active: boolean;
+};
+export type HubTraderPage = HubTrader & {
+  desk: { watches: string; buys: string; sells: string; protects: string } | null;
+  rules: string[];
+  stopLossPct: number | null;
+  takeProfitPct: number | null;
+  statsAt: number | null;
+  trades: HubTrade[];
+  minUsd: number;
+};
+
 export const tradersApi = anyApi as unknown as {
   traders: {
     list: Query<Record<string, never>, { market: string; minUsd: number; statsAt: number | null; traders: TraderCard[] }>;
@@ -1893,5 +1920,7 @@ export const tradersApi = anyApi as unknown as {
       } | null
     >;
     startFromAgent: Mutation<{ sessionToken: string; agentKey: string; amountUsd: number; real: boolean; acknowledge?: boolean }, { conversationKey: string }>;
+    hub: Query<Record<string, never>, { minUsd: number; statsAt: number | null; traders: HubTrader[] }>;
+    trader: Query<{ id: string }, HubTraderPage | null>;
   };
 };

@@ -1129,7 +1129,9 @@ export default defineSchema({
     .index("by_hash", ["hash"])
     .index("by_owner", ["ownerAddress", "createdAt"])
     .index("by_draft", ["draftId", "network"])
-    .index("by_agent_key", ["agentKey"]),
+    .index("by_agent_key", ["agentKey"])
+    // The trading hub reads only registered mainnet listings (2026-10-13), not the whole table.
+    .index("by_status_network", ["status", "network"]),
 
   /**
    * x402 PAYMENTS TO BUILT AGENTS (2026-10-02, convex/x402.ts). One row per

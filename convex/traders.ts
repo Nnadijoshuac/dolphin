@@ -389,3 +389,158 @@ export const seedHouseDrafts = internalMutation({
     return out;
   },
 });
+
+/* ── The trading hub (owner, 2026-10-13: beebots' substance in Guild Agent Hub's calm) ── */
+
+/**
+ * Who made Steady and Bold. The owner asked that they read as made by him, not as a special house
+ * product ("created by @Joshua, use my wallet as the creator").
+ */
+const HOUSE_CREATOR = { name: "Joshua Nnadi", handle: "NnadiJoshuaC", address: "0x13450a106568d011d25d8ac222b489b098df9196" };
+
+type HubTrade = { at: number; kind: "enter" | "exit"; side: "long" | "short"; price: number; sizeUsd: number; pnlPct: number | null; paper: boolean; reason: string; txHash: string | null };
+
+function record(trades: Doc<"strategyTrades">[]) {
+  const exits = trades.filter((trade) => trade.kind === "exit" && trade.pnlPct !== null);
+  const resultUsd = exits.reduce((sum, trade) => sum + ((trade.pnlPct ?? 0) * trade.sizeUsd) / 100, 0);
+  const staked = exits.reduce((sum, trade) => sum + trade.sizeUsd, 0);
+  return {
+    closed: exits.length,
+    won: exits.filter((trade) => (trade.pnlPct ?? 0) > 0).length,
+    resultUsd: Math.round(resultUsd * 100) / 100,
+    resultPct: staked > 0 ? Math.round((resultUsd / (staked / Math.max(exits.length, 1))) * 1000) / 10 : null,
+    paper: trades.length > 0 ? trades.every((trade) => trade.paper) : null,
+    lastAt: trades[0]?.at ?? null,
+    lastReason: trades[0]?.reason ?? null,
+  };
+}
+
+function hubTrades(trades: Doc<"strategyTrades">[]): HubTrade[] {
+  return trades.map((trade) => ({
+    at: trade.at,
+    kind: trade.kind,
+    side: trade.side,
+    price: trade.price,
+    sizeUsd: trade.sizeUsd,
+    pnlPct: trade.pnlPct,
+    paper: trade.paper,
+    reason: trade.reason,
+    txHash: trade.txHash ?? null,
+  }));
+}
+
+/** Registered Dolphin-built agents that trade from a Dolphin Wallet, with their builder's own record. */
+async function communityTraders(ctx: QueryCtx, tradesEach: number) {
+  const listings = (
+    await ctx.db
+      .query("builtAgents")
+      .withIndex("by_status_network", (q) => q.eq("status", "registered").eq("network", "bsc"))
+      .take(200)
+  ).filter((listing) => listing.agentKey);
+  const out = [];
+  for (const listing of listings) {
+    const draft = await ctx.db.get(listing.draftId);
+    if (!draft || draft.trader === "steady" || draft.trader === "bold") continue;
+    const rules = ((draft.rules ?? []) as Rule[]).filter((rule) => rule && rule.venue === "dolphin-wallet" && !rule.grid);
+    if (rules.length === 0) continue;
+    const trades = await ctx.db.query("strategyTrades").withIndex("by_draft", (q) => q.eq("draftId", draft._id)).order("desc").take(tradesEach);
+    const quietFor = Date.now() - (trades[0]?.at ?? draft.updatedAt);
+    // The seabed (owner, 2026-10-13): a trader whose builder stopped it, or that has not traded in 14 days.
+    const active = Boolean(draft.autopilot?.on) && quietFor < 14 * 86_400_000;
+    out.push({ listing, draft, rules, trades, active });
+  }
+  return out;
+}
+
+export const hub = query({
+  args: {},
+  handler: async (ctx) => {
+    const row = await ctx.db.query("traderStats").first();
+    const stats = (row?.stats ?? {}) as Record<string, WindowStats[]>;
+    const house = TRADERS.map((trader) => ({
+      id: trader.id as string,
+      kind: "house" as const,
+      name: trader.name,
+      tagline: trader.tagline,
+      risk: trader.risk,
+      market: TRADER_MARKET,
+      timeframe: trader.timeframe,
+      creator: HOUSE_CREATOR,
+      backtest: stats[trader.id] ?? null,
+      live: null,
+      priceUsd: null,
+      active: true,
+    }));
+    const community = (await communityTraders(ctx, 60)).map(({ listing, rules, trades, active }) => ({
+      active,
+      id: listing.agentKey as string,
+      kind: "community" as const,
+      name: listing.name,
+      tagline: listing.description.length > 140 ? `${listing.description.slice(0, 137)}…` : listing.description,
+      risk: null,
+      market: rules[0].market,
+      timeframe: rules[0].timeframe,
+      creator: { name: null, handle: listing.links.x ? listing.links.x.replace(/^.*\//, "").replace(/^@/, "") : null, address: listing.ownerAddress },
+      backtest: null,
+      live: record(trades),
+      priceUsd: listing.hirePriceUsd ?? null,
+    }));
+    return { minUsd: TRADER_MIN_USD, statsAt: row?.at ?? null, traders: [...house, ...community] };
+  },
+});
+
+/** One trader's page: its rules in words, its record and its trade history. */
+export const trader = query({
+  args: { id: v.string() },
+  handler: async (ctx, { id }) => {
+    const houseTrader = traderById(id);
+    if (houseTrader) {
+      const row = await ctx.db.query("traderStats").first();
+      const stats = (row?.stats ?? {}) as Record<string, WindowStats[]>;
+      return {
+        id,
+        kind: "house" as const,
+        name: houseTrader.name,
+        tagline: houseTrader.tagline,
+        risk: houseTrader.risk,
+        market: TRADER_MARKET,
+        timeframe: houseTrader.timeframe,
+        creator: HOUSE_CREATOR,
+        desk: houseTrader.desk,
+        rules: [] as string[],
+        stopLossPct: houseTrader.stopLossPct,
+        takeProfitPct: houseTrader.takeProfitPct,
+        backtest: stats[houseTrader.id] ?? null,
+        statsAt: row?.at ?? null,
+        live: null,
+        trades: [] as HubTrade[],
+        priceUsd: null,
+        minUsd: TRADER_MIN_USD,
+      };
+    }
+    const found = await runnable(ctx, id);
+    if (!found) return null;
+    const trades = await ctx.db.query("strategyTrades").withIndex("by_draft", (q) => q.eq("draftId", found.draft._id)).order("desc").take(100);
+    const rule = found.rules[0];
+    return {
+      id: found.listing.agentKey as string,
+      kind: "community" as const,
+      name: found.listing.name,
+      tagline: found.listing.description,
+      risk: null,
+      market: rule.market,
+      timeframe: rule.timeframe,
+      creator: { name: null, handle: found.listing.links.x ? found.listing.links.x.replace(/^.*\//, "").replace(/^@/, "") : null, address: found.listing.ownerAddress },
+      desk: null,
+      rules: found.rules.map((each) => describeLocked(each).replace(/(buy|short) \$[\d,.]+( at \d+x)?/, "$1 with your amount$2")),
+      stopLossPct: rule.stopLossPct,
+      takeProfitPct: rule.takeProfitPct,
+      backtest: null,
+      statsAt: null,
+      live: record(trades),
+      trades: hubTrades(trades),
+      priceUsd: found.listing.hirePriceUsd ?? null,
+      minUsd: TRADER_MIN_USD,
+    };
+  },
+});

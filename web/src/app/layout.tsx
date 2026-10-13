@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Doto, Geist, Geist_Mono } from "next/font/google";
+import { Doto, Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -32,6 +32,13 @@ const doto = Doto({
   variable: "--font-doto",
   subsets: ["latin"],
   weight: ["700", "900"],
+});
+
+/* One serif, for hub titles only (the trading hub, 2026-10-13, after Guild's Agent Hub). */
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-serif",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 export const metadata: Metadata = {
@@ -119,7 +126,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
-      className={`${geistSans.variable} ${geistMono.variable} ${doto.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${doto.variable} ${instrumentSerif.variable} h-full antialiased`}
       lang="en"
     >
       <body className="min-h-screen bg-canvas text-ink">

@@ -437,6 +437,27 @@ export default defineSchema({
    * a dust fingerprint under a millionth of a U), so only the transfer made for it can mark it paid and
    * nobody can claim another buyer's transaction; `txHash` is unique, so one transfer unlocks once.
    */
+  /**
+   * "Best strategies" on /test (convex/strategyTest.ts): one row per tested combination, its latest one-year
+   * result. Written only when a combination is computed (the CDN serves repeats), so at most a few thousand
+   * tiny rows; the board reads a dozen.
+   */
+  testBoard: defineTable({
+    key: v.string(),
+    coin: v.string(),
+    entry: v.string(),
+    level: v.number(),
+    target: v.union(v.number(), v.null()),
+    stop: v.union(v.number(), v.null()),
+    resultPct: v.number(),
+    holdPct: v.number(),
+    trades: v.number(),
+    winPct: v.union(v.number(), v.null()),
+    at: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_result", ["resultPct"]),
+
   traderPurchases: defineTable({
     agentKey: v.string(),
     /** The signed-in wallet, lowercase - who may run it. */

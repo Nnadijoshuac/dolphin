@@ -1920,8 +1920,16 @@ export type StrategyTestResult = {
   stillHolding: boolean;
   curve: { t: number; you: number; hold: number }[];
 };
+export type TestBoardRow = { coin: string; entry: string; level: number; target: number | null; stop: number | null; resultPct: number; holdPct: number; trades: number; winPct: number | null };
 export const strategyTestApi = anyApi as unknown as {
-  strategyTest: { run: Action<StrategyTestArgs, StrategyTestResult> };
+  strategyTest: {
+    run: Action<StrategyTestArgs, StrategyTestResult>;
+    board: Query<Record<string, never>, TestBoardRow[]>;
+    startPractice: Mutation<
+      { sessionToken: string; coin: string; entry: string; level: number; target: number | null; stop: number | null; amountUsd: number },
+      { conversationKey: string }
+    >;
+  };
 };
 
 /** Selling a trader for U, paid once to its builder (convex/traderSales.ts). */

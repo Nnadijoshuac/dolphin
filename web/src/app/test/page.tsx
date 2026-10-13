@@ -28,6 +28,7 @@ export async function generateMetadata({ searchParams }: { searchParams: SearchP
 }
 
 export default async function TestPage({ searchParams }: { searchParams: SearchParams }) {
-  const args = parseArgs(await searchParams);
-  return <StrategyTest initial={args} />;
+  const params = await searchParams;
+  // A shared link (c=1) opens as a challenge: "this made +X%, can yours beat it?" - not as your own result.
+  return <StrategyTest challenge={params.c === "1"} initial={parseArgs(params)} />;
 }

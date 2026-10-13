@@ -6,7 +6,6 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 import styles from "@/app/trade/hub.module.css";
-import DotGrid from "@/components/react-bits/DotGrid";
 import { StartDialog } from "@/app/trade/trade-client";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { traderSalesApi, tradersApi, type HubTrader, type MyTrader, type TraderAccess } from "@/convex/api";
@@ -63,7 +62,11 @@ export function TradeHub() {
     });
   }, [data, query, filter]);
 
-  const featured = traders.filter((trader) => trader.kind === "house");
+  // Featured is what beat its own year; a house trader that lost money still shows, in its own row, with
+  // its record - honesty, but not the shop window (owner's fresh-eyes review, 2026-10-14).
+  const yearOf = (trader: HubTrader) => trader.backtest?.find((window) => window.days === 365)?.resultPct ?? null;
+  const featured = traders.filter((trader) => trader.kind === "house" && (yearOf(trader) ?? 1) > 0);
+  const alsoHouse = traders.filter((trader) => trader.kind === "house" && (yearOf(trader) ?? 1) <= 0);
   const community = traders.filter((trader) => trader.kind === "community" && trader.active);
   const seabed = traders.filter((trader) => trader.kind === "community" && !trader.active);
 
@@ -71,10 +74,10 @@ export function TradeHub() {
     <div className={styles.page}>
       <div className={styles.layout}>
         <main>
-          <header className={styles.hero}>
-            <div aria-hidden className={styles.heroDots}>
-              <DotGrid activeColor="#f0b90b" baseColor="#8f8a7c" dotSize={3} gap={20} glow={0.35} intro opacity={0.45} proximity={130} shockRadius={220} shockStrength={3} dpr={undefined} style={undefined} />
-            </div>
+          <header className={`${styles.hero} test-dark`}>
+            {/* The approved gold-dolphin art (campaign/assets/ART-STYLE.md) in place of the dot grid. */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- one static, pre-sized artwork */}
+            <img alt="" className={styles.heroArt} src="/home-hero-pod.jpg" />
             <h1 className={styles.heroTitle}>Agents that trade, in the open</h1>
             <p className={styles.heroSub}>Every trader here shows its record, losses included. Run one in your own wallet, on practice money first.</p>
             <label className={styles.search}>
@@ -114,11 +117,25 @@ export function TradeHub() {
             </section>
           ) : null}
 
+          {alsoHouse.length > 0 ? (
+            <section className={styles.section}>
+              <div className={styles.sectionHead}>
+                <h2 className={styles.sectionTitle}>Also by Serenity</h2>
+                <span className={styles.sectionNote}>Lost money over the last 12 months. Here so you can compare.</span>
+              </div>
+              <div className={styles.grid}>
+                {alsoHouse.map((trader) => (
+                  <TraderCard key={trader.id} trader={trader} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {filter !== "lower" && filter !== "higher" ? (
             <section className={styles.section}>
               <div className={styles.sectionHead}>
                 <h2 className={styles.sectionTitle}>Built by the community</h2>
-                <Link className={styles.secondary} href="/dolphin">
+                <Link className={styles.secondary} href="/dolphin?mode=build&new=1">
                   Build a trader
                 </Link>
               </div>
@@ -130,7 +147,7 @@ export function TradeHub() {
                 </div>
               ) : data ? (
                 <div className={styles.empty}>
-                  No community traders yet{query ? " match that search" : ""}. Describe one in a sentence and it can be the first.
+                  No community traders yet{query ? " match that search" : ""}. <Link href="/test?ref=trade-empty">Test a strategy</Link>, run it, then publish it to be the first.
                 </div>
               ) : null}
             </section>
@@ -159,12 +176,20 @@ export function TradeHub() {
   );
 }
 
+/** Each house trader's scene from the approved art set. */
+const TRADER_ART: Record<string, string> = {
+  steady: "/test/art-survivor.jpg",
+  riptide: "/test/art-assassin.jpg",
+  bold: "/test/art-bruised.jpg",
+};
+
 function TraderCard({ trader }: { trader: HubTrader }) {
   const year = trader.backtest?.find((window) => window.days === 365) ?? null;
   const quarter = trader.backtest?.find((window) => window.days === 90) ?? null;
   const live = trader.live;
   return (
     <Link className={styles.card} href={`/trade/${encodeURIComponent(trader.id)}`}>
+      {TRADER_ART[trader.id] ? <div aria-hidden className={styles.cardArt} style={{ backgroundImage: `url(${TRADER_ART[trader.id]})` }} /> : null}
       <div className={styles.cardTop}>
         <span className={styles.mark}>
           <WalletAvatar address={trader.id} kind="bot" size={36} />

@@ -1847,7 +1847,7 @@ export type TraderCard = {
   id: "steady" | "bold";
   name: string;
   tagline: string;
-  risk: "Lower" | "Higher";
+  risk: "Lower" | "Medium" | "Higher";
   desk: { watches: string; buys: string; sells: string; protects: string };
   timeframe: string;
   stopLossPct: number;
@@ -1886,7 +1886,7 @@ export type HubTrader = {
   kind: "house" | "community";
   name: string;
   tagline: string;
-  risk: "Lower" | "Higher" | null;
+  risk: "Lower" | "Medium" | "Higher" | null;
   market: string;
   timeframe: string;
   creator: HubCreator;

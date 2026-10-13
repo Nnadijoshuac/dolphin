@@ -27,12 +27,19 @@ import type { Condition, Timeframe } from "./strategy";
  * these lose far less than holding BNB.
  */
 
+/*
+ * RIPTIDE ADDED 2026-10-14 - the best BNB strategy on /test's leaderboard: Steady's entry with wider exits
+ * and no early RSI exit. Split-year check (campaign/tools/halves.ts, 4h, $100, fees counted):
+ *   crash half (BNB -49.2%): -8.7%   recovery half (BNB +20.9%): +39.1%   year (BNB -38.6%): +30.5%
+ * Beats holding in both halves, but on only 4 trades in a year: a patient trader, said so on its card.
+ */
+
 export type TraderDef = {
-  id: "steady" | "bold";
+  id: "steady" | "bold" | "riptide";
   name: string;
   /** One line for the card. */
   tagline: string;
-  risk: "Lower" | "Higher";
+  risk: "Lower" | "Medium" | "Higher";
   /** How it decides, in four short plain steps - the "desk" a person reads. */
   desk: { watches: string; buys: string; sells: string; protects: string };
   timeframe: Timeframe;
@@ -67,6 +74,27 @@ export const TRADERS: readonly TraderDef[] = [
     until: [{ kind: "rsi", op: "above", value: 65, period: 14 }],
     stopLossPct: 4,
     takeProfitPct: 8,
+    maxTradesPerDay: 2,
+  },
+  {
+    id: "riptide",
+    name: "Riptide",
+    tagline: "Steady's patience with bigger targets. Rarely trades, aims for the big bounce.",
+    risk: "Medium",
+    desk: {
+      watches: "BNB on 4-hour candles, and whether it is above its 100-candle average.",
+      buys: "Only when BNB is in an uptrend and has just pulled back (RSI under 40).",
+      sells: "When it is up 12%. A few trades a year, so expect long quiet stretches.",
+      protects: "Sells if it falls 8% from where it bought.",
+    },
+    timeframe: "4h",
+    when: [
+      { kind: "price_vs_ma", op: "above", ma: "ema", length: 100 },
+      { kind: "rsi", op: "below", value: 40, period: 14 },
+    ],
+    until: [],
+    stopLossPct: 8,
+    takeProfitPct: 12,
     maxTradesPerDay: 2,
   },
   {

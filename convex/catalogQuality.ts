@@ -13,7 +13,9 @@ import type { Doc } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { findDuplicates } from "./lib/dedupe";
 
-const MAX_ROWS = 1000;
+// Above the live+duplicate population (about 1,250 on 2026-10-13, mostly one
+// publisher's series); the pass runs once a day, so reading them all is cheap.
+const MAX_ROWS = 3000;
 
 export const dedupe = internalMutation({
   args: {},

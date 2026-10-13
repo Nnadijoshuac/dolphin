@@ -76,6 +76,27 @@ export function findDuplicates(candidates: readonly DedupeCandidate[]): Set<stri
   for (const candidate of candidates) {
     if (selfRetired(candidate)) duplicates.add(candidate.agentKey);
   }
+  /*
+   * MASS-PRODUCED SERIES (2026-10-13). One publisher (alpharc.app) registered
+   * ~1,100 agents overnight, one per tokenised stock, each "Explore market data
+   * for <Company> xStock (<TICKER>) on BNB Chain, ...". Every name and every
+   * description differs, so two-of-three never matches, yet they are one
+   * product and they buried the catalog (161 of the first 200 listings). A
+   * publisher's registrations whose descriptions open with the same words form
+   * a series; at SERIES_MIN or more, only the highest-ranked stays listed.
+   */
+  const series = new Map<string, DedupeCandidate[]>();
+  for (const candidate of ordered) {
+    const key = seriesKey(candidate);
+    if (!key) continue;
+    const members = series.get(key) ?? [];
+    members.push(candidate);
+    series.set(key, members);
+  }
+  for (const members of series.values()) {
+    if (members.length < SERIES_MIN) continue;
+    for (const other of members.slice(1)) duplicates.add(other.agentKey);
+  }
   for (const group of groups) {
     // Everyone but the highest-ranked member.
     const others = [...group]
@@ -84,6 +105,16 @@ export function findDuplicates(candidates: readonly DedupeCandidate[]): Set<stri
     for (const other of others) duplicates.add(other.agentKey);
   }
   return duplicates;
+}
+
+/** A publisher's templated run of this size or more is one product. */
+export const SERIES_MIN = 10;
+const SERIES_WORDS = 4;
+
+function seriesKey(candidate: DedupeCandidate): string | null {
+  const words = normalize(candidate.description).split(" ").filter(Boolean);
+  if (words.length < SERIES_WORDS) return null;
+  return `${candidate.ownerAddress.toLowerCase()}|${words.slice(0, SERIES_WORDS).join(" ")}`;
 }
 
 const RETIRED = /\b(retired|deprecated|decommissioned|not in service|no longer (?:in service|maintained|supported)|do not use|duplicate registration)\b/i;

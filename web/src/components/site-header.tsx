@@ -20,6 +20,7 @@ const navigation = [
   // front door. See Agent/DOLPHIN-AGENT-SCOPE.md §6.
   { path: "/dolphin", label: "Dolphin", icon: "sparkle" as const },
   { path: "/my-agents", label: "My Agents", icon: "agents" as const },
+  { path: "/trade", label: "Trade", icon: "trading" as const },
   { path: SET_AND_QUEST_URL, label: "Set and Quest", icon: "sparkle" as const, quest: true },
   { path: "/wallet", label: "Wallet", icon: "wallet" as const },
 ] as const;

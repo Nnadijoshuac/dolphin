@@ -57,6 +57,7 @@ const DESTINATIONS: ReadonlyArray<{
   { path: "/search", label: "Search", icon: "search", hint: "Find an agent by skill" },
   { path: "/dolphin", label: "Dolphin", icon: "brand", hint: "Ask about any agent" },
   { path: "/my-agents", label: "My agents", icon: "agents", hint: "Hires and saved setups" },
+  { path: "/trade", label: "Trade", icon: "trading", hint: "Let an agent trade for you" },
   { path: "/wallet", label: "Wallet", icon: "wallet", hint: "Balances, history, assets" },
 ];
 

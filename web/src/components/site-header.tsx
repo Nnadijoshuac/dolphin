@@ -9,20 +9,17 @@ import { SetAndQuestLink } from "@/components/set-and-quest-link";
 import { NETWORK_LABEL } from "@/constants/agents";
 import { SET_AND_QUEST_URL } from "@/constants/site";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
+import { MobileMenuButton } from "@/components/mobile-nav";
 import { useWallet } from "@/wallet/wallet-provider";
 
+// Four destinations and the quest (owner, 2026-10-14: seven items, two called "Dolphin", told a newcomer
+// nothing). The builder is the Build button; My agents appears once a wallet is connected.
 const navigation = [
-  { path: "/", label: "Discover", icon: "discover" as const },
-  { path: "/search", label: "Search", icon: "search" as const },
-  // Third of five, matching the mobile tab order, where Dolphin is the raised
-  // centre action. The centre-orb treatment itself is a tab-bar idiom and does
-  // not carry over to a web header - same feature, same backend, different
-  // front door. See Agent/DOLPHIN-AGENT-SCOPE.md §6.
-  { path: "/dolphin", label: "Dolphin", icon: "sparkle" as const },
-  { path: "/my-agents", label: "My Agents", icon: "agents" as const },
-  { path: "/trade", label: "Trade", icon: "trading" as const },
-  { path: SET_AND_QUEST_URL, label: "Set and Quest", icon: "sparkle" as const, quest: true },
+  { path: "/test", label: "Test", icon: "sparkle" as const },
+  { path: "/trade", label: "Traders", icon: "trading" as const },
+  { path: "/search", label: "Agents", icon: "search" as const },
   { path: "/wallet", label: "Wallet", icon: "wallet" as const },
+  { path: SET_AND_QUEST_URL, label: "Set and Quest", icon: "sparkle" as const, quest: true },
 ] as const;
 
 const [networkName, networkEnvironment] = NETWORK_LABEL.split(" · ");
@@ -93,7 +90,18 @@ export function SiteHeader() {
             })}
           </nav>
 
-          <div className="flex items-center gap-4 justify-self-end">
+          <div className="flex items-center gap-3 justify-self-end">
+            {wallet.isConnected ? (
+              <Link className="interactive hidden text-sm font-medium text-muted no-underline hover:text-ink lg:inline" href="/my-agents">
+                My agents
+              </Link>
+            ) : null}
+            <Link
+              className="interactive inline-flex min-h-10 items-center rounded-xl border border-line bg-paper px-4 text-xs font-semibold text-ink no-underline hover:bg-paper-strong"
+              href="/dolphin"
+            >
+              Build
+            </Link>
             {/* The network, in full. Set and Earn counts "not stated on the page" against a
                 marketplace, and "BNB Chain" alone does not say mainnet or testnet. */}
             <div className="hidden items-center gap-2.5 text-muted xl:flex">
@@ -132,8 +140,9 @@ export function SiteHeader() {
         <header className="mobile-brand-header">
           <Link href="/" aria-label="Dolphin home">
             <BrandMark size={38} />
-            <div><strong>Dolphin</strong><p>ERC-8004 AI agent marketplace</p><BnbBadge /></div>
+            <div><strong>Dolphin</strong><p>Trading agents on BNB Chain</p><BnbBadge /></div>
           </Link>
+          <MobileMenuButton />
         </header>
       ) : null}
 

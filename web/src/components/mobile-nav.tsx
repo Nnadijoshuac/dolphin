@@ -53,11 +53,11 @@ const DESTINATIONS: ReadonlyArray<{
   icon: GlyphName | "brand";
   hint: string;
 }> = [
-  { path: "/", label: "Discover", icon: "discover", hint: "Browse the live catalog" },
-  { path: "/search", label: "Search", icon: "search", hint: "Find an agent by skill" },
-  { path: "/dolphin", label: "Dolphin", icon: "brand", hint: "Ask about any agent" },
-  { path: "/my-agents", label: "My agents", icon: "agents", hint: "Hires and saved setups" },
-  { path: "/trade", label: "Trade", icon: "trading", hint: "Let an agent trade for you" },
+  { path: "/test", label: "Test", icon: "sparkle", hint: "Would your strategy have survived?" },
+  { path: "/trade", label: "Traders", icon: "trading", hint: "Agents that trade, with their record" },
+  { path: "/search", label: "Agents", icon: "search", hint: "Hire an agent for a job" },
+  { path: "/dolphin", label: "Build", icon: "brand", hint: "Describe an agent and Dolphin builds it" },
+  { path: "/my-agents", label: "My agents", icon: "agents", hint: "What you built and hired" },
   { path: "/wallet", label: "Wallet", icon: "wallet", hint: "Balances, history, assets" },
 ];
 

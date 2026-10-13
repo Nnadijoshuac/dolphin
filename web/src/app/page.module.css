@@ -885,7 +885,10 @@
 }
 
 @media (max-width: 767px) {
-  .heroSection, .desktopCards { display: none; }
+  .desktopCards { display: none; }
+  .heroSection { min-height: 560px; display: flex; align-items: flex-end; padding-block: 0 2.5rem; }
+  .heroArt { object-position: 72% center; }
+  .heroOverlayArt { background: linear-gradient(180deg, rgb(8 8 7 / 0.1) 0%, rgb(8 8 7 / 0.55) 40%, rgb(8 8 7 / 0.95) 72%); }
   .catalogSection { padding: 0 16px; }
   .catalogLayout { display: block; }
   .catalogAside {
@@ -920,3 +923,23 @@
   .viewAllRow button { width: 100%; min-height: 48px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); font-size: 14px; font-weight: 600; }
   .viewAllRow button span { display: none; }
 }
+
+/* Two clear ways in (2026-10-14): test first, or watch traders that already run. */
+.heroActions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+.heroPrimary,
+.heroSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 50px;
+  padding: 0 24px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.heroPrimary { background: #f0b90b; color: #171813; }
+.heroPrimary:hover { background: #ffd54a; }
+.heroSecondary { border: 1px solid rgb(244 243 236 / 0.3); color: #f4f3ec; }
+.heroSecondary:hover { border-color: #f4f3ec; }

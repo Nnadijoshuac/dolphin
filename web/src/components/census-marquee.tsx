@@ -68,18 +68,18 @@ export function CensusMarquee() {
    * loop develops a seam nobody can find later.
    */
   const segments = [
-    { value: formatCount(census.assessed), label: "registry identities assessed" },
-    { value: formatCount(census.candidates), label: "published an endpoint" },
-    { value: formatCount(census.live), label: "answered", terminal: true },
+    { value: formatCount(census.assessed), label: "agents registered on BNB Chain" },
+    { value: formatCount(census.candidates), label: "gave an address to reach them" },
+    { value: formatCount(census.live), label: "answered when Dolphin called", terminal: true },
     {
       value: formatCount(census.publishers),
-      label: `publishers behind those ${formatCount(census.live)}`,
+      label: `teams behind those ${formatCount(census.live)}`,
     },
   ];
 
   const pass = (hidden: boolean) => (
     <div aria-hidden={hidden || undefined} className="ticker__pass">
-      <span className="ticker__tag">The liveness census</span>
+      <span className="ticker__tag">Checked daily</span>
       {segments.map((segment, index) => (
         <span className="ticker__item" key={`${segment.label}-${index}`}>
           <span
@@ -91,7 +91,7 @@ export function CensusMarquee() {
         </span>
       ))}
       <span className="ticker__note">
-        Dolphin called every ERC-8004 agent on BNB Chain. Most do not answer.
+        Dolphin calls every agent on BNB Chain. Most never answer. Only the ones that do are listed here.
       </span>
     </div>
   );

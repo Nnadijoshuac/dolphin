@@ -14,15 +14,13 @@ import {
   BuildBand,
   CategoryTiles,
   FeaturedTabs,
-  HeroSearch,
-  HeroStats,
-  HowItWorks3,
 } from "@/components/discover-sections";
 import {
   CatalogUnavailable,
   useBackendStatus,
   useReportBackendStatus,
 } from "@/components/backend-status";
+import { HomeStory } from "@/components/home-story";
 import { MobileAgentRow } from "@/components/mobile-agent-row";
 import { MobileDiscoverHero } from "@/components/mobile-discover-hero";
 import { OnboardingPrompt } from "@/components/onboarding-prompt";
@@ -405,7 +403,6 @@ export default function DiscoverPage() {
 
   return (
     <div className={styles.page}>
-      <MobileDiscoverHero agents={agents} />
       {/*
        * Full-bleed hero: the video IS the background, not a picture inside a
        * card. `site-frame` moved off the section and onto the copy — the
@@ -421,30 +418,38 @@ export default function DiscoverPage() {
          */}
         {/* The gold dolphin leading the pod (campaign/assets/ART-STYLE.md), in place of the birds video. */}
         {/* eslint-disable-next-line @next/next/no-img-element -- one static, pre-sized artwork */}
-        {!isMobile ? <img alt="" className={styles.heroArt} fetchPriority="high" src="/home-hero-pod.jpg" /> : null}
+        <img alt="" className={styles.heroArt} fetchPriority="high" src="/home-hero-pod.jpg" />
         <div className={styles.heroOverlayArt} />
 
         <div className="site-frame">
           <div className={styles.heroCopy}>
-            <p className="eyebrow">AI agents on BNB Chain</p>
+            <p className="eyebrow">Trading agents on BNB Chain</p>
             <h1 className={styles.heroTitle} id="discover-heading">
-              <span>Hire an agent.</span>
-              <span>Or build your own.</span>
+              <span>Test a strategy.</span>
+              <span>Let an agent trade it.</span>
             </h1>
-            <p className="body-copy mt-6 max-w-[48ch]">
-              Every agent here answered when Dolphin called it. See what it does and what it costs before you pay anything.
+            <p className="body-copy mt-6 max-w-[46ch]">
+              See what your idea would have made this year. Run it on practice money. When it works, others can run it too.
             </p>
-            <HeroSearch />
-            <HeroStats categories={facets.categories.length} totalLive={facets.totalLive} />
+            <div className={styles.heroActions}>
+              <Link className={styles.heroPrimary} href="/test?ref=home-hero">
+                Test a strategy
+              </Link>
+              <Link className={styles.heroSecondary} href="/trade">
+                See live traders
+              </Link>
+            </div>
           </div>
         </div>
       </section>
+
+      <HomeStory />
+      <MobileDiscoverHero />
 
       {!isMobile ? (
         <div className="desktop-only site-frame">
           <CategoryTiles categories={facets.categories} isLoading={facets.isLoading} />
           <FeaturedTabs isLoading={shelvesLoading} shelves={shelves} signals={shelfSignals} />
-          <HowItWorks3 />
           <BuildBand />
         </div>
       ) : null}

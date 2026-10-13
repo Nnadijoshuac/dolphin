@@ -125,6 +125,7 @@ import type * as sources_scan8004 from "../sources/scan8004.js";
 import type * as strategy from "../strategy.js";
 import type * as tracking from "../tracking.js";
 import type * as trade from "../trade.js";
+import type * as traderSales from "../traderSales.js";
 import type * as traders from "../traders.js";
 import type * as verification from "../verification.js";
 import type * as walletActions from "../walletActions.js";
@@ -256,6 +257,7 @@ declare const fullApi: ApiFromModules<{
   strategy: typeof strategy;
   tracking: typeof tracking;
   trade: typeof trade;
+  traderSales: typeof traderSales;
   traders: typeof traders;
   verification: typeof verification;
   walletActions: typeof walletActions;

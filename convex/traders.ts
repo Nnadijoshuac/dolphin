@@ -8,6 +8,7 @@ import { DOLPHIN_SWAP_GAS_USD } from "./lib/grid";
 import { cleanRule, describeLocked, describeRule, simulate, TIMEFRAME_MS, VENUE_FEE_BPS, type Rule, type RuleState } from "./lib/strategy";
 import { TRADER_MARKET, TRADER_MAX_USD, TRADER_MIN_USD, traderById, traderRule, TRADERS } from "./lib/traders";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
+import { mayRun } from "./traderSales";
 
 /**
  * HIRE A TRADER (owner + mentor, 2026-10-05; lib/traders.ts). Starting one makes an ordinary rules agent
@@ -307,6 +308,8 @@ export const startFromAgent = mutation({
       throw new ConvexError(`Choose $${TRADER_MIN_USD} to $${TRADER_MAX_USD.toLocaleString("en")}.`);
     }
     if (real && !acknowledge) throw new ConvexError("Accept the real-money terms first.");
+    // A priced trader runs only for its builder or someone whose payment Dolphin read on-chain (traderSales.ts).
+    if (!(await mayRun(ctx, found.listing, wallet))) throw new ConvexError(`This trader costs ${found.listing.runPriceU} U to run. Pay its builder first.`);
     const each = Math.floor((amountUsd / found.rules.length) * 100) / 100;
     if (each < 1) throw new ConvexError("That amount is too small to split across this agent's rules.");
     // Its builder, and Dolphin's own traders (their rules are public on /trade), run unlocked.
@@ -472,7 +475,7 @@ async function communityCards(ctx: QueryCtx) {
     creator: { name: null, handle: listing.links.x ? listing.links.x.replace(/^.*\//, "").replace(/^@/, "") : null, address: listing.ownerAddress },
     backtest: null,
     live: record(trades),
-    priceUsd: listing.hirePriceUsd ?? null,
+    priceUsd: listing.runPriceU ?? null,
   }));
   return cards;
 }
@@ -576,7 +579,7 @@ export const trader = query({
       statsAt: null,
       live: record(trades),
       trades: hubTrades(trades),
-      priceUsd: found.listing.hirePriceUsd ?? null,
+      priceUsd: found.listing.runPriceU ?? null,
       minUsd: TRADER_MIN_USD,
     };
   },

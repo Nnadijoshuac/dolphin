@@ -431,6 +431,28 @@ export default defineSchema({
    */
   tradeHubCache: defineTable({ community: v.any(), at: v.number() }),
 
+  /**
+   * One buyer's purchase of a paid trader (convex/traderSales.ts). Two witnesses, as for every move of
+   * real money: this row and the BNB Chain receipt. A reservation fixes an EXACT amount (the price plus
+   * a dust fingerprint under a millionth of a U), so only the transfer made for it can mark it paid and
+   * nobody can claim another buyer's transaction; `txHash` is unique, so one transfer unlocks once.
+   */
+  traderPurchases: defineTable({
+    agentKey: v.string(),
+    /** The signed-in wallet, lowercase - who may run it. */
+    buyer: v.string(),
+    /** The builder's payout wallet, checksummed: where the U must go. */
+    payTo: v.string(),
+    /** U base units, decimal string: the exact amount the transfer must carry. */
+    amountRaw: v.string(),
+    status: v.union(v.literal("reserved"), v.literal("paid")),
+    txHash: v.optional(v.string()),
+    createdAt: v.number(),
+    paidAt: v.optional(v.number()),
+  })
+    .index("by_buyer_agent", ["buyer", "agentKey"])
+    .index("by_tx", ["txHash"]),
+
   /** Which post brought people: anonymous counts per `?ref=` tag per UTC day (convex/campaignRefs.ts). */
   campaignRefs: defineTable({
     ref: v.string(),
@@ -1065,6 +1087,12 @@ export default defineSchema({
     payoutAddress: v.optional(v.string()),
     purpose: v.optional(v.union(v.literal("private"), v.literal("tools"), v.literal("hire"))),
     hirePriceUsd: v.optional(v.union(v.number(), v.null())),
+    /**
+     * PRICE TO RUN IT, IN U (owner, 2026-10-13: builders sell their traders). Paid once, from the
+     * buyer's Dolphin Wallet straight to payoutAddress (convex/traderSales.ts). Absent or null: free.
+     * Not hirePriceUsd, which is the per-call price of the agent's own API.
+     */
+    runPriceU: v.optional(v.union(v.number(), v.null())),
     /**
      * HOW IT IS CALLED (owner, 2026-10-02). "mcp": a tool server, any tool
      * call is one paid call. "a2a": an agent, one task in and one result out.

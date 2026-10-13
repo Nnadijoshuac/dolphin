@@ -183,6 +183,9 @@ const UNSUPPORTED_REASON =
 
 /* ------------------------------------------------------------------------- */
 
+/** U (United Stables) on BNB Chain - the same address as convex/lib/x402.ts U_TOKEN. */
+const U_TOKEN_ADDRESS = "0xcE24439F2D9C6a2289F741120FE202248B666666" as Address;
+
 export type AltanaWalletStatus =
   | "unsupported"
   | "loading"
@@ -373,6 +376,13 @@ export type AltanaWalletValue = Readonly<{
     amountRaw: bigint;
     to: Address;
   }) => Promise<{ transactionHash: string | null }>;
+
+  /**
+   * Pays a trader's builder in U, once, for running their strategy (convex/traderSales.ts). The
+   * recipient and exact amount come from the backend's reservation, never from typing; the backend
+   * then reads the receipt itself before anything unlocks. Recorded in Agent activity like any action.
+   */
+  payTraderBuilder: (input: { to: Address; amountRaw: bigint; agentKey: string; agentName: string }) => Promise<{ transactionHash: string }>;
 
   /**
    * A chat trade ticket, signed (see pancakeswap-trade.ts). Re-quotes at
@@ -1581,6 +1591,57 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     [adminSigner, readTokenBalance, readWithdrawReserveWei, recordAction, refreshBalance, refreshRecoverability],
   );
 
+  const payTraderBuilder = useCallback(
+    async (input: { to: Address; amountRaw: bigint; agentKey: string; agentName: string }): Promise<{ transactionHash: string }> => {
+      const wallet = getAltanaSnapshot();
+      if (!wallet) throw new Error("No Dolphin Wallet on this device.");
+      const [balances, reserveWei, held] = await Promise.all([
+        altanaClient().balances({ wallet: { address: wallet.address }, chainId: ALTANA_NETWORK.chainId }),
+        readWithdrawReserveWei(),
+        readTokenBalance(U_TOKEN_ADDRESS),
+      ]);
+      // Re-checked at signing time: the balance on screen may be minutes old.
+      if (held.raw < input.amountRaw) {
+        throw new Error(`The Dolphin Wallet holds ${formatTokenAmount(held.raw, 18)} U, less than the ${formatTokenAmount(input.amountRaw, 18)} U this costs. Add U and try again.`);
+      }
+      if (balances.native < reserveWei) {
+        throw new Error(
+          `Paying in U needs a little BNB in the Dolphin Wallet for network gas: about ${formatTokenAmount(reserveWei, 18)} BNB. ` +
+            `It holds ${formatTokenAmount(balances.native, 18)} BNB. Add a little BNB and try again.`,
+        );
+      }
+      setIsBusy(true);
+      setError(null);
+      try {
+        const result = await altanaClient().execute({
+          wallet: { address: wallet.address },
+          signer: adminSigner(),
+          calls: [buildWithdrawCall({ kind: "token", token: U_TOKEN_ADDRESS, symbol: "U", decimals: 18 }, input.to, input.amountRaw)],
+          chainId: ALTANA_NETWORK.chainId,
+        });
+        if (result.status === "FAILED" || !result.transactionHash) {
+          throw new Error("The chain did not accept that payment. Nothing was sent. Try again.");
+        }
+        recordAction({
+          wallet: wallet.address,
+          transactionHash: result.transactionHash,
+          kind: "agent",
+          purpose: "agent",
+          agentKey: input.agentKey,
+          agentName: input.agentName,
+        });
+        refreshBalance();
+        return { transactionHash: result.transactionHash };
+      } catch (cause) {
+        setError(toUserMessage(cause, "That payment could not be sent. Try again."));
+        throw cause;
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [adminSigner, readTokenBalance, readWithdrawReserveWei, recordAction, refreshBalance],
+  );
+
   const trade = useCallback(
     async (input: {
       tokenIn: TradeSide;
@@ -1728,6 +1789,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
       payForAgentWithBnb,
       readWithdrawReserveWei,
       withdraw,
+      payTraderBuilder,
       trade,
     };
   }, [
@@ -1765,6 +1827,7 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
     stored,
     supported,
     withdraw,
+    payTraderBuilder,
     trade,
   ]);
 

@@ -1,13 +1,16 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
 
 import styles from "@/app/trade/hub.module.css";
 import { ago, creatorLabel, HubStartDialog, pct } from "@/app/trade/trade-hub";
 import { WalletAvatar } from "@/components/wallet-avatar";
-import { tradersApi } from "@/convex/api";
+import { traderSalesApi, tradersApi } from "@/convex/api";
+import { toast } from "@/store/use-toast-store";
+import { toUserMessage } from "@/wallet/wallet-errors";
+import { useWalletSession } from "@/wallet/wallet-session";
 
 /** One trader, laid out like an agent page on Guild's hub: what it does on the left, its facts on the right. */
 export function TraderPage({ id }: { id: string }) {
@@ -190,13 +193,14 @@ export function TraderPage({ id }: { id: string }) {
               <div>
                 <dt>To run it</dt>
                 <dd>
-                  {trader.priceUsd ? `$${trader.priceUsd}` : "Free"} · from ${trader.minUsd}
+                  {trader.priceUsd ? `${trader.priceUsd} U, paid once to its builder` : "Free"} · trades from ${trader.minUsd}
                 </dd>
               </div>
               <div>
                 <dt>Made by</dt>
                 <dd>{trader.creator.name ?? creatorLabel(trader.creator)}</dd>
               </div>
+              {trader.kind === "community" ? <PriceControl agentKey={trader.id} /> : null}
               <hr />
               <button className={styles.primary} onClick={() => setStarting(true)} type="button">
                 Run it in your wallet
@@ -208,6 +212,42 @@ export function TraderPage({ id }: { id: string }) {
         <p className={styles.note}>Past results don&rsquo;t predict what happens next. Not financial advice.</p>
       </div>
       {starting ? <HubStartDialog minUsd={trader.minUsd} onClose={() => setStarting(false)} trader={trader} /> : null}
+    </div>
+  );
+}
+
+/** Its builder, signed in, prices it or makes it free (convex/traderSales.ts). Nobody else sees this. */
+function PriceControl({ agentKey }: { agentKey: string }) {
+  const session = useWalletSession();
+  const access = useQuery(traderSalesApi.traderSales.access, session.sessionToken ? { agentKey, sessionToken: session.sessionToken } : "skip");
+  const setPrice = useMutation(traderSalesApi.traderSales.setRunPrice);
+  const [draft, setDraft] = useState<string | null>(null);
+  if (!session.sessionToken || !access?.own) return null;
+  const value = draft ?? (access.priceU ? String(access.priceU) : "");
+  const save = async (priceU: number | null) => {
+    try {
+      await setPrice({ sessionToken: session.sessionToken!, agentKey, priceU });
+      setDraft(null);
+      toast.success(priceU ? `Others now pay ${priceU} U to run it, straight to your payout wallet.` : "It is free to run again.");
+    } catch (cause) {
+      toast.error(toUserMessage(cause, "That price did not save."));
+    }
+  };
+  return (
+    <div>
+      <dt>Your price to run it (U)</dt>
+      <dd className="flex items-center gap-2">
+        <input
+          className="h-8 w-20 rounded-md border border-line bg-paper px-2 text-[13px]"
+          inputMode="decimal"
+          onChange={(event) => setDraft(event.target.value.replace(/[^0-9.]/g, ""))}
+          placeholder="Free"
+          value={value}
+        />
+        <button className="text-[12px] font-semibold underline" onClick={() => void save(value ? Number(value) : null)} type="button">
+          Save
+        </button>
+      </dd>
     </div>
   );
 }

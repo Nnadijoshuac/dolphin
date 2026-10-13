@@ -1,16 +1,19 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import styles from "@/app/trade/hub.module.css";
 import DotGrid from "@/components/react-bits/DotGrid";
 import { StartDialog } from "@/app/trade/trade-client";
 import { WalletAvatar } from "@/components/wallet-avatar";
-import { tradersApi, type HubTrader, type MyTrader } from "@/convex/api";
+import { traderSalesApi, tradersApi, type HubTrader, type MyTrader, type TraderAccess } from "@/convex/api";
 import { toast } from "@/store/use-toast-store";
+import { useAltanaWallet } from "@/wallet/altana-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
+import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
 
 /**
@@ -223,7 +226,7 @@ function TraderCard({ trader }: { trader: HubTrader }) {
             <span>
               <b>{live && live.closed > 0 ? Math.round((live.won / live.closed) * 100) : 0}%</b> won
             </span>
-            <span>{live?.lastAt ? `last ${ago(live.lastAt)}` : trader.market}</span>
+            <span>{trader.priceUsd ? <b>{trader.priceUsd} U</b> : "Free"}</span>
           </>
         )}
       </div>
@@ -306,6 +309,15 @@ function SideRow({ trader, sessionToken }: { trader: MyTrader; sessionToken: str
 export function HubStartDialog({ trader, minUsd, onClose }: { trader: HubTrader; minUsd: number; onClose: () => void }) {
   const startHouse = useMutation(tradersApi.traders.start);
   const startAgent = useMutation(tradersApi.traders.startFromAgent);
+  const session = useWalletSession();
+  const access = useQuery(
+    traderSalesApi.traderSales.access,
+    trader.kind === "community" ? { agentKey: trader.id, ...(session.sessionToken ? { sessionToken: session.sessionToken } : {}) } : "skip",
+  );
+  // A priced trader asks for its price first, unless it is yours or already paid for.
+  if (trader.kind === "community" && access?.priceU && !access.own && !access.paid) {
+    return <PayDialog access={access} onClose={onClose} trader={trader} />;
+  }
   return (
     <StartDialog
       begin={(sessionToken, amountUsd, real) =>
@@ -318,5 +330,85 @@ export function HubStartDialog({ trader, minUsd, onClose }: { trader: HubTrader;
       onClose={onClose}
       riskLabel={trader.risk ? `${trader.risk} risk` : "Built by the community"}
     />
+  );
+}
+
+/**
+ * THE PRICE OF A TRADER, PAID ONCE (convex/traderSales.ts). U goes from the buyer's Dolphin Wallet
+ * straight to the builder; Dolphin reads the receipt before the Start step appears.
+ */
+function PayDialog({ trader, access, onClose }: { trader: HubTrader; access: TraderAccess; onClose: () => void }) {
+  const session = useWalletSession();
+  const wallet = useWallet();
+  const dolphin = useAltanaWallet();
+  const reserve = useMutation(traderSalesApi.traderSales.reserve);
+  const confirm = useAction(traderSalesApi.traderSales.confirm);
+  const [busy, setBusy] = useState<string | null>(null);
+  const signedIn = Boolean(session.sessionToken);
+  const address = dolphin.status === "connected" ? dolphin.address : null;
+
+  const pay = async () => {
+    setBusy("Preparing…");
+    try {
+      const sessionToken = session.sessionToken ?? (await session.signIn());
+      if (!sessionToken) return;
+      const reserved = await reserve({ sessionToken, agentKey: trader.id });
+      setBusy("Confirm with your passkey…");
+      const { transactionHash } = await dolphin.payTraderBuilder({
+        to: reserved.payTo as `0x${string}`,
+        amountRaw: BigInt(reserved.amountRaw),
+        agentKey: trader.id,
+        agentName: trader.name,
+      });
+      setBusy("Checking the payment on BNB Chain…");
+      await confirm({ sessionToken, purchaseId: reserved.purchaseId, txHash: transactionHash });
+      toast.success(`Paid. ${trader.name} is yours to run.`);
+      // The access query flips to paid and this dialog becomes the Start step.
+    } catch (cause) {
+      toast.error(toUserMessage(cause, "The payment did not go through."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return createPortal(
+    <div aria-labelledby="pay-title" aria-modal className="confirm-scrim" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()} role="dialog">
+      <div className="confirm-card trade-dialog">
+        <p className="trade-label">Built by {creatorLabel(trader.creator)}</p>
+        <h3 className="trade-dialog__title" id="pay-title">
+          Run {trader.name} for {access.priceU} U
+        </h3>
+        <p className="trade-fine">
+          Paid once, from your Dolphin Wallet straight to its builder. Then it trades in your own wallet with your own money, practice or real, and its rules stay locked.
+        </p>
+        <ol className="trade-steps">
+          <li data-done={signedIn || undefined}>
+            <span>Sign in with your wallet</span>
+            {signedIn ? <em>Done</em> : wallet.isConnected ? (
+              <button onClick={() => void session.signIn()} type="button">Sign in</button>
+            ) : (
+              <button onClick={() => void wallet.connect()} type="button">Connect</button>
+            )}
+          </li>
+          <li data-done={address ? true : undefined}>
+            <span>Your Dolphin Wallet, holding {access.priceU} U and a little BNB for gas</span>
+            {address ? <em>Ready</em> : (
+              <button disabled={dolphin.isBusy} onClick={() => void dolphin.createWallet().catch((cause) => toast.error(toUserMessage(cause, "Could not create it.")))} type="button">
+                Create
+              </button>
+            )}
+          </li>
+        </ol>
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="h-10 rounded-xl border border-line px-4 !text-[13px] font-semibold text-ink" disabled={Boolean(busy)} onClick={onClose} type="button">
+            Cancel
+          </button>
+          <button className="trade-start trade-start--inline" disabled={!signedIn || !address || Boolean(busy)} onClick={() => void pay()} type="button">
+            <span>{busy ?? `Pay ${access.priceU} U`}</span>
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

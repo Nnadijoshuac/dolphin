@@ -1905,6 +1905,18 @@ export type HubTraderPage = HubTrader & {
   minUsd: number;
 };
 
+/** Selling a trader for U, paid once to its builder (convex/traderSales.ts). */
+export type TraderAccess = { priceU: number | null; payTo: string; own: boolean; paid: boolean };
+
+export const traderSalesApi = anyApi as unknown as {
+  traderSales: {
+    access: Query<{ agentKey: string; sessionToken?: string }, TraderAccess | null>;
+    setRunPrice: Mutation<{ sessionToken: string; agentKey: string; priceU: number | null }, { priceU: number | null }>;
+    reserve: Mutation<{ sessionToken: string; agentKey: string }, { purchaseId: string; payTo: string; token: string; amountRaw: string; priceU: number }>;
+    confirm: Action<{ sessionToken: string; purchaseId: string; txHash: string }, { paid: true }>;
+  };
+};
+
 export const tradersApi = anyApi as unknown as {
   traders: {
     list: Query<Record<string, never>, { market: string; minUsd: number; statsAt: number | null; traders: TraderCard[] }>;

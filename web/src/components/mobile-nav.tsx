@@ -56,7 +56,7 @@ const DESTINATIONS: ReadonlyArray<{
   { path: "/test", label: "Test", icon: "sparkle", hint: "Would your strategy have survived?" },
   { path: "/trade", label: "Traders", icon: "trading", hint: "Agents that trade, with their record" },
   { path: "/search", label: "Agents", icon: "search", hint: "Hire an agent for a job" },
-  { path: "/dolphin", label: "Build", icon: "brand", hint: "Describe an agent and Dolphin builds it" },
+  { path: "/dolphin?mode=build&new=1", label: "Build", icon: "brand", hint: "Describe an agent and Dolphin builds it" },
   { path: "/my-agents", label: "My agents", icon: "agents", hint: "What you built and hired" },
   { path: "/wallet", label: "Wallet", icon: "wallet", hint: "Balances, history, assets" },
 ];
@@ -129,7 +129,7 @@ function AccountCard({ onNavigate }: { onNavigate: () => void }) {
 
 function isActiveRoute(pathname: string, path: string) {
   if (path === "/") return pathname === "/" || pathname.startsWith("/agent/");
-  return pathname.startsWith(path);
+  return pathname.startsWith(path.split("?")[0]);
 }
 
 /**

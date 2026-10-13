@@ -75,10 +75,10 @@ const MODE_HINT: Readonly<Record<ChatMode, string>> = {
  * performance: those categories return unavailableStats by construction.
  */
 export const STARTER_PROMPTS = [
-  "Which agents can execute a transaction?",
-  "What is my Venus health factor?",
+  "Which agents can make a trade for me?",
   "Compare the yield agents",
-  "How does Dolphin decide an agent is live?",
+  "Is my Venus loan safe?",
+  "How do you know an agent is real?",
 ];
 
 /**
@@ -91,9 +91,9 @@ export const BUILD_STARTERS = [
    * "Check", not "Watch": a built agent answers when asked and cannot watch
    * anything in the background, and the builder says so if asked.
    */
+  "Buy BNB when it drops 5% in a day and sell at +8%",
+  "Buy a little BNB every week",
   "Check my Venus health factor",
-  "Compare yields on BNB Chain",
-  "Explain a PancakeSwap pool before I add liquidity",
 ];
 
 /*
@@ -562,6 +562,7 @@ export function DolphinClient({
   autoAsk,
   initialConversationKey = null,
   solo = null,
+  freshBuild = false,
 }: {
   seedAgentKey: string | null;
   seedAgentName?: string | null;
@@ -570,6 +571,8 @@ export function DolphinClient({
   initialConversationKey?: string | null;
   /** `?solo=`: this tab holds one popped-out panel (hooks/use-popout.ts). */
   solo?: PopKind | null;
+  /** `?mode=build&new=1` (the header's Build button): a fresh builder, never the last chat. */
+  freshBuild?: boolean;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [draftOpen, setDraftOpen] = useState(false);
@@ -629,6 +632,10 @@ export function DolphinClient({
       return;
     }
     const place = useDolphinPlaceStore.getState();
+    if (freshBuild) {
+      place.setNewMode("build");
+      return;
+    }
     if (seedAgentKey) {
       // A question about one agent: a fresh Chat, with the question ready.
       place.setNewMode("chat");
@@ -641,7 +648,7 @@ export function DolphinClient({
       restoredKeyRef.current = place.conversationKey;
       openConversation(place.conversationKey);
     }
-  }, [autoAsk, initialConversationKey, openConversation, seedAgentKey, seedAgentName]);
+  }, [autoAsk, freshBuild, initialConversationKey, openConversation, seedAgentKey, seedAgentName]);
   const { exists, isLoading, title, turns, agentDirectory } =
     useDolphinConversation(conversationKey);
 
@@ -997,7 +1004,7 @@ export function DolphinClient({
     ? "Describe the agent you want to build…"
     : trying
       ? `Ask ${draftName} something…`
-      : "Ask about an agent, a position, or a yield…";
+      : "Ask anything about agents on BNB Chain…";
   const composer = (
     <form
       onSubmit={(event) => {

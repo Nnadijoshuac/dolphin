@@ -98,7 +98,7 @@ export function SiteHeader() {
             ) : null}
             <Link
               className="interactive inline-flex min-h-10 items-center rounded-xl border border-line bg-paper px-4 text-xs font-semibold text-ink no-underline hover:bg-paper-strong"
-              href="/dolphin"
+              href="/dolphin?mode=build&new=1"
             >
               Build
             </Link>

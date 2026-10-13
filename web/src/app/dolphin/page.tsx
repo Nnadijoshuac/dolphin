@@ -84,6 +84,7 @@ export default async function DolphinPage({
       solo={openKey && (sp.solo === "draft" || sp.solo === "canvas") ? sp.solo : null}
       seedAgentKey={seedAgentKey}
       seedAgentName={name}
+      freshBuild={sp.mode === "build" && sp.new === "1" && !openKey}
     />
   );
 }

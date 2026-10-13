@@ -82,3 +82,15 @@ export function strategySentence(args: StrategyTestArgs): string {
   const exits = [args.target !== null ? `sell at +${args.target}%` : null, args.stop !== null ? `cut losses at −${args.stop}%` : null].filter(Boolean);
   return `Buy ${args.coin} when ${entry.words(args.level)}, ${exits.join(" or ")}.`;
 }
+
+/**
+ * One artwork per title (public/test, renders reviewed by the owner), shared by the page and the share card
+ * so both are the same picture. The Survivor borrows the leap and The Ghost the seabed until they get their own.
+ */
+export const PERSONA_ART: Record<string, string> = {
+  "Market Assassin": "/test/art-assassin.jpg",
+  "The Survivor": "/test/art-assassin.jpg",
+  "Bruised, not broken": "/test/art-bruised.jpg",
+  "Should've just held": "/test/art-held.jpg",
+  "The Ghost": "/test/art-held.jpg",
+};

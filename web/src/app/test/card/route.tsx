@@ -1,98 +1,89 @@
 import { ImageResponse } from "next/og";
 
-import { parseArgs, persona, signed, strategySentence } from "@/app/test/choices";
+import { parseArgs, persona, PERSONA_ART, signed, strategySentence } from "@/app/test/choices";
 import { runStrategyTest } from "@/server/convex";
 
 /**
- * The share card for one strategy test (1200x630). Unlike the agent cards, this one carries a number,
- * because the number is FIXED: a backtest over a finished window that is printed on the card itself, with
- * "fees and gas counted" - the provenance travels with the image (AGENTS.md §5).
+ * The share card for one strategy test (1200x630) - the first thing anyone sees on X (owner, 2026-10-13:
+ * "this looks very coded... look for good graphic design"). Built like the exchange PnL cards and Spotify
+ * Wrapped (campaign/research/ui-refs-2026-10-13): an ARTWORK first, the result set on it. The artwork is a
+ * premium render per title (public/test/art-*.jpg); the number, holding and window are the real backtest,
+ * printed with "fees counted" so the provenance travels with the image (AGENTS.md §5).
  */
 
-const BG = "#0c0d0a";
-const INK = "#f4f3ed";
-const MUTED = "#9a9b90";
-const GOLD = "#f0b90b";
-const UP = "#3ccf9e";
-const DOWN = "#ff6b5e";
+const INK = "#f6f4ec";
+const MUTED = "rgba(246,244,236,0.62)";
+const GOLD = "#f3c13a";
+const UP = "#4fe0ae";
+const DOWN = "#ff7466";
+
+const ART = PERSONA_ART;
+
+const GEIST: Record<500 | 800, string> = {
+  500: "https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RruM4nQ.ttf",
+  800: "https://fonts.gstatic.com/s/geist/v5/gyBhhwUxId8gMGYQMKR3pzfaWI_RHOQ4nQ.ttf",
+};
+type Font = { name: string; data: ArrayBuffer; weight: 500 | 800; style: "normal" };
+let fonts: Promise<Font[]> | null = null;
+function loadFonts(): Promise<Font[]> {
+  fonts ??= Promise.all(
+    ([500, 800] as const).map(async (weight): Promise<Font> => ({ name: "Geist", data: await (await fetch(GEIST[weight])).arrayBuffer(), weight, style: "normal" })),
+  ).catch(() => []);
+  return fonts;
+}
 
 function day(ms: number | null): string {
   return ms === null ? "" : new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
-function path(points: number[], width: number, height: number, min: number, max: number): string {
-  const span = max - min || 1;
-  return points
-    .map((value, index) => `${index === 0 ? "M" : "L"}${((index / Math.max(1, points.length - 1)) * width).toFixed(1)},${(height - ((value - min) / span) * height).toFixed(1)}`)
-    .join(" ");
-}
-
 export async function GET(request: Request) {
   const args = parseArgs(new URL(request.url).searchParams);
   // X keeps a card for days: one retry before falling back to the plain one.
-  const result = (await runStrategyTest(args)) ?? (await runStrategyTest(args));
+  const [result, loaded] = await Promise.all([runStrategyTest(args).then((first) => first ?? runStrategyTest(args)), loadFonts()]);
+  const options = { width: 1200, height: 630, ...(loaded.length ? { fonts: loaded } : {}) };
+
   if (!result) {
     return new ImageResponse(
       (
-        <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: BG, color: INK, fontSize: 56 }}>
-          Would your strategy have survived?
+        <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", fontFamily: "Geist" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- next/og renders plain img only */}
+          <img alt="" height={630} src={new URL(ART["Market Assassin"], request.url).toString()} style={{ position: "absolute", top: 0, left: 0 }} width={1200} />
+          <div style={{ display: "flex", margin: "auto 0 auto 72px", fontSize: 64, fontWeight: 800, color: INK, maxWidth: 560, lineHeight: 1.1 }}>Would your strategy have survived?</div>
         </div>
       ),
-      { width: 1200, height: 630, headers: { "Cache-Control": "no-store" } },
+      { ...options, headers: { "Cache-Control": "no-store" } },
     );
   }
+
   const who = persona(result);
-  const you = result.curve.map((point) => point.you);
-  const hold = result.curve.map((point) => point.hold);
-  const min = Math.min(...you, ...hold);
-  const max = Math.max(...you, ...hold);
   const beat = Math.round((result.resultPct - result.holdPct) * 10) / 10;
+  const src = new URL(ART[who.title] ?? ART["Market Assassin"], request.url).toString();
 
   return new ImageResponse(
     (
-      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: BG, color: INK, padding: "56px 64px", fontFamily: "sans-serif" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", fontSize: 26, color: GOLD, letterSpacing: 2, textTransform: "uppercase" }}>{who.title}</div>
-          <div style={{ display: "flex", fontSize: 24, color: MUTED }}>dolphinamp.xyz/test</div>
-        </div>
-        <div style={{ display: "flex", marginTop: 28, gap: 48 }}>
-          <div style={{ display: "flex", flexDirection: "column", width: 520 }}>
-            <div style={{ display: "flex", fontSize: 150, fontWeight: 700, lineHeight: 1, color: result.resultPct >= 0 ? UP : DOWN }}>{signed(result.resultPct)}</div>
-            <div style={{ display: "flex", fontSize: 30, marginTop: 18, color: INK }}>
-              {`Just holding ${result.coin}: ${signed(result.holdPct)}`}
-            </div>
-            <div style={{ display: "flex", fontSize: 30, marginTop: 6, color: beat >= 0 ? UP : DOWN }}>
-              {beat >= 0 ? `${beat} points better than holding` : `${Math.abs(beat)} points worse than holding`}
-            </div>
-            <div style={{ display: "flex", fontSize: 24, marginTop: 26, color: MUTED, lineHeight: 1.35 }}>{strategySentence(args)}</div>
+      <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", fontFamily: "Geist", color: INK }}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- next/og renders plain img only */}
+        <img alt="" height={630} src={src} style={{ position: "absolute", top: 0, left: 0 }} width={1200} />
+        {/* A soft shade under the words so they read on any frame of the art. */}
+        <div style={{ position: "absolute", top: 0, left: 0, width: 1200, height: 630, display: "flex", background: "linear-gradient(90deg, rgba(5,5,4,0.88) 0%, rgba(5,5,4,0.6) 40%, rgba(5,5,4,0) 68%)" }} />
+        <div style={{ position: "relative", display: "flex", flexDirection: "column", padding: "60px 72px", width: "100%" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", width: 10, height: 10, borderRadius: 10, background: GOLD }} />
+            <div style={{ display: "flex", fontSize: 24, fontWeight: 500, color: GOLD, letterSpacing: 3, textTransform: "uppercase" }}>{who.title}</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-            <svg height="300" viewBox="0 0 520 300" width="520">
-              <path d={path(hold, 520, 300, min, max)} fill="none" stroke={MUTED} strokeDasharray="8 8" strokeWidth="4" />
-              <path d={path(you, 520, 300, min, max)} fill="none" stroke={GOLD} strokeWidth="7" />
-            </svg>
-            <div style={{ display: "flex", gap: 28, fontSize: 22, marginTop: 14, color: MUTED }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, color: GOLD }}>
-                <div style={{ display: "flex", width: 28, height: 5, borderRadius: 3, background: GOLD }} />
-                this strategy
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ display: "flex", width: 28, height: 0, borderTop: `4px dashed ${MUTED}` }} />
-                just holding
-              </div>
-            </div>
+          <div style={{ display: "flex", marginTop: 22, fontSize: 168, fontWeight: 800, lineHeight: 1, color: result.resultPct >= 0 ? UP : DOWN }}>{signed(result.resultPct)}</div>
+          <div style={{ display: "flex", marginTop: 16, fontSize: 32, fontWeight: 500 }}>{`in a year ${result.coin} did ${signed(result.holdPct)}`}</div>
+          <div style={{ display: "flex", marginTop: 8, fontSize: 26, fontWeight: 500, color: beat >= 0 ? UP : DOWN }}>
+            {beat >= 0 ? `${beat} points better than holding` : `${Math.abs(beat)} points worse than holding`}
           </div>
-        </div>
-        <div style={{ display: "flex", marginTop: "auto", justifyContent: "space-between", fontSize: 22, color: MUTED }}>
-          <div style={{ display: "flex" }}>{`Backtest · ${day(result.from)} – ${day(result.to)} · ${result.trades} trades · fees and gas counted`}</div>
-          <div style={{ display: "flex", color: INK }}>Test yours →</div>
+          <div style={{ display: "flex", marginTop: 20, maxWidth: 560, fontSize: 21, fontWeight: 500, color: MUTED, lineHeight: 1.4 }}>{strategySentence(args)}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: "auto" }}>
+            <div style={{ display: "flex", fontSize: 26, fontWeight: 800 }}>dolphinamp.xyz/test</div>
+            <div style={{ display: "flex", fontSize: 17, fontWeight: 500, color: MUTED }}>{`Backtest ${day(result.from)} – ${day(result.to)} · ${result.trades} trades · fees counted`}</div>
+          </div>
         </div>
       </div>
     ),
-    {
-      width: 1200,
-      height: 630,
-      headers: { "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800" },
-    },
+    { ...options, headers: { "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800" } },
   );
 }

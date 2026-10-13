@@ -4922,3 +4922,23 @@ select {
   background: var(--ink);
   color: var(--canvas);
 }
+
+/*
+ * The strategy test is always dark (app/test): its artwork is dark, and the result on the page is the same
+ * picture as the share card. Re-pointing the tokens re-skins every shadcn component inside it.
+ */
+.test-dark {
+  --canvas: #080807;
+  --paper: #10100e;
+  --paper-strong: #161613;
+  --paper-muted: #1c1c18;
+  --ink: #f4f3ec;
+  --ink-soft: #d4d3c9;
+  --muted: #9b9a90;
+  --line: rgba(244, 243, 236, 0.1);
+  --line-strong: rgba(244, 243, 236, 0.22);
+  --accent-soft: rgba(243, 193, 58, 0.14);
+  --accent-ink: #f3c13a;
+  background: var(--canvas);
+  color: var(--ink);
+}

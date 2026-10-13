@@ -22,7 +22,6 @@ import {
 } from "@/components/backend-status";
 import { HomeStory } from "@/components/home-story";
 import { MobileAgentRow } from "@/components/mobile-agent-row";
-import { MobileDiscoverHero } from "@/components/mobile-discover-hero";
 import { OnboardingPrompt } from "@/components/onboarding-prompt";
 import { categoryDescription, categoryLabel } from "@/constants/agents";
 import {
@@ -439,12 +438,22 @@ export default function DiscoverPage() {
                 See live traders
               </Link>
             </div>
+            {/* Phones: one product picture, as Cash App does - a real result card, not art under the words. */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- the cached share card itself */}
+            <img
+              alt="A strategy test result: ETH bought after an 8% daily drop made +35.9% while ETH fell 40.9%"
+              className={styles.heroShot}
+              src="/test/card?coin=ETH&entry=dip&level=8&target=12&stop=8&to=2026-10-12&v=art2"
+            />
           </div>
         </div>
       </section>
 
       <HomeStory />
-      <MobileDiscoverHero />
+      {/* Phones: the catalog lives on /search now; one link instead of a long list (owner: "too busy"). */}
+      <div className={styles.mobileAgentsLink}>
+        <Link href="/search">Browse agents for hire →</Link>
+      </div>
 
       {!isMobile ? (
         <div className="desktop-only site-frame">
@@ -477,7 +486,7 @@ export default function DiscoverPage() {
       <section
         aria-labelledby="catalog-heading"
         id="browse-by-role"
-        className={`site-frame py-14 sm:py-20 ${styles.catalogSection} ${isMobile ? "" : "hidden"}`}
+        className={`site-frame py-14 sm:py-20 ${styles.catalogSection} hidden`}
       >
         <div className={styles.catalogLayout}>
           <aside className={styles.catalogAside}>

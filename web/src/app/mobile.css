@@ -78,6 +78,8 @@
     box-shadow: var(--shadow-soft);
   }
 
+  /* Phones: no scrolling census ticker - one thing at a time (2026-10-14). */
+  .ticker { display: none !important; }
   .mobile-brand-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 12px 24px; }
   .mobile-brand-header > a { display: flex; align-items: center; gap: 12px; text-decoration: none; }
   .mobile-brand-header strong { font-size: 17px; font-weight: 800; letter-spacing: -.4px; }

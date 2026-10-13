@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 
-import { BnbBadge, BnbLogo, BrandMark } from "@/components/brand-mark";
+import { BnbLogo, BrandMark } from "@/components/brand-mark";
 import { SetAndQuestLink } from "@/components/set-and-quest-link";
 import { NETWORK_LABEL } from "@/constants/agents";
 import { SET_AND_QUEST_URL } from "@/constants/site";
@@ -140,7 +140,7 @@ export function SiteHeader() {
         <header className="mobile-brand-header">
           <Link href="/" aria-label="Dolphin home">
             <BrandMark size={38} />
-            <div><strong>Dolphin</strong><p>Trading agents on BNB Chain</p><BnbBadge /></div>
+            <div><strong>Dolphin</strong></div>
           </Link>
           <MobileMenuButton />
         </header>

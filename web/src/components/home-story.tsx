@@ -37,19 +37,23 @@ const STEPS = [
 
 export function HomeStory() {
   return (
-    <section aria-labelledby="home-story" className="test-dark py-16 sm:py-24">
+    <section aria-labelledby="home-story" className="test-dark py-10 sm:py-24">
       <div className="mx-auto w-[min(100%-32px,1240px)]">
-        <h2 className="text-3xl leading-tight font-bold sm:text-4xl" id="home-story">
+        <h2 className="text-2xl leading-tight font-bold sm:text-4xl" id="home-story">
           From an idea to an agent that trades it
         </h2>
         <p className="mt-2 max-w-xl text-base text-muted">Three steps. You can stop after any of them.</p>
-        <ol className="mt-8 grid gap-4 md:grid-cols-3">
+        {/* Phones: a plain numbered list (no pictures); wider screens: three art cards. */}
+        <ol className="mt-6 grid gap-0 md:mt-8 md:grid-cols-3 md:gap-4">
           {STEPS.map((step) => (
-            <li className="group relative isolate flex min-h-[380px] flex-col overflow-hidden rounded-2xl border border-line" key={step.n}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- a static, pre-sized artwork */}
-              <img alt="" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-70 transition-transform duration-500 group-hover:scale-[1.03]" src={step.art} />
-              <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#080807] via-[#080807]/80 to-[#080807]/10" />
-              <div className="mt-auto p-6">
+            <li className="group relative isolate flex flex-col overflow-hidden border-t border-line md:min-h-[380px] md:rounded-2xl md:border" key={step.n}>
+              {/* A wrapper, not `hidden` on the img: the site's global img rule is unlayered and beats Tailwind's. */}
+              <div className="absolute inset-0 -z-10 hidden md:block">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a static, pre-sized artwork */}
+                <img alt="" className="h-full w-full object-cover opacity-70 transition-transform duration-500 group-hover:scale-[1.03]" src={step.art} />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#080807] via-[#080807]/80 to-[#080807]/10" />
+              </div>
+              <div className="mt-auto py-5 md:p-6">
                 <p className="text-sm font-semibold text-[#f3c13a]">Step {step.n}</p>
                 <h3 className="mt-1 text-2xl font-bold">{step.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-ink-soft">{step.body}</p>
@@ -70,14 +74,14 @@ export function HomeStory() {
 function QuestBanner() {
   return (
     <Link
-      className="mt-6 flex flex-col gap-4 rounded-2xl border border-[#f3c13a]/40 bg-gradient-to-r from-[#f3c13a]/15 to-transparent p-6 no-underline sm:flex-row sm:items-center sm:justify-between"
+      className="mt-6 flex flex-col gap-4 border-t border-line pt-5 no-underline sm:flex-row sm:items-center sm:justify-between md:rounded-2xl md:border md:border-[#f3c13a]/40 md:bg-gradient-to-r md:from-[#f3c13a]/15 md:to-transparent md:p-6"
       href={`${SET_AND_QUEST_URL}?ref=home-banner`}
     >
       <div>
         <p className="text-sm font-semibold text-[#f3c13a]">BNB Chain Set and Earn · until 5 Nov</p>
-        <p className="mt-1 text-xl font-bold text-ink">Dolphin is one of nine marketplaces in the quest. Take part through us.</p>
+        <p className="mt-1 text-base font-semibold text-ink md:text-xl md:font-bold">Dolphin is one of nine marketplaces in the quest. Take part through us →</p>
       </div>
-      <span className="inline-flex h-11 shrink-0 items-center justify-center rounded-md bg-accent px-6 text-[15px] font-semibold text-[#171813]">Take part →</span>
+      <span className="hidden h-11 shrink-0 items-center justify-center rounded-md bg-accent px-6 text-[15px] font-semibold text-[#171813] md:inline-flex">Take part →</span>
     </Link>
   );
 }

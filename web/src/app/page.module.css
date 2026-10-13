@@ -104,7 +104,7 @@
   margin-top: 1.25rem;
   font-size: clamp(3rem, 6.1vw, 5.55rem);
   font-weight: 650;
-  letter-spacing: -0.065em;
+  letter-spacing: -0.01em;
   line-height: 0.96;
   text-wrap: balance;
 }
@@ -886,9 +886,13 @@
 
 @media (max-width: 767px) {
   .desktopCards { display: none; }
-  .heroSection { min-height: 560px; display: flex; align-items: flex-end; padding-block: 0 2.5rem; }
-  .heroArt { object-position: 72% center; }
-  .heroOverlayArt { background: linear-gradient(180deg, rgb(8 8 7 / 0.1) 0%, rgb(8 8 7 / 0.55) 40%, rgb(8 8 7 / 0.95) 72%); }
+  /* Phones (2026-10-14, after Cash App): words on plain black, one picture below them. */
+  .heroSection { min-height: 0; display: block; padding-block: 2.5rem 2rem; background: #080807; animation: none; }
+  .heroArt, .heroOverlayArt { display: none; }
+  .heroSection .heroShot { display: block; }
+  .heroActions { flex-direction: column; align-items: stretch; }
+  .heroActions .heroSecondary { border: 0; height: 40px; text-decoration: underline; text-underline-offset: 4px; }
+  .page .mobileAgentsLink { display: block; }
   .catalogSection { padding: 0 16px; }
   .catalogLayout { display: block; }
   .catalogAside {
@@ -943,3 +947,7 @@
 .heroPrimary:hover { background: #ffd54a; }
 .heroSecondary { border: 1px solid rgb(244 243 236 / 0.3); color: #f4f3ec; }
 .heroSecondary:hover { border-color: #f4f3ec; }
+
+.heroShot { display: none; width: 100%; height: auto; margin-top: 32px; border-radius: 16px; border: 1px solid rgb(244 243 236 / 0.12); }
+.mobileAgentsLink { display: none; padding: 8px 24px 48px; background: #080807; }
+.mobileAgentsLink a { color: #f4f3ec; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }

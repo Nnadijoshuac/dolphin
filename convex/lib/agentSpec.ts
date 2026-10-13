@@ -487,7 +487,15 @@ export const RULES_ONLY_SCHEMA = {
   },
 } as const;
 
-/** Whether a person's message asks for a trading rule: candles or an indicator, and an entry. */
+/** Whether a person's message asks for a trading rule: candles, an indicator or a market move, and an entry. */
 export function asksForRule(text: string): boolean {
-  return /\b(candles?|rsi|moving average|macd|[0-9]+\s*-?\s*(minute|min|hour|h|day)\b)/i.test(text) && /\b(buy|short|go long|long)\b/i.test(text);
+  const buys = /\b(buy|buys|buying|short|go long|long)\b/i.test(text);
+  const chartWords = /\b(candles?|rsi|moving average|macd|[0-9]+\s*-?\s*(minute|min|hour|h|day)\b)/i.test(text);
+  /*
+   * PLAIN WORDS COUNT TOO (user test, 2026-10-05: "an agent that buys BNB when it drops a lot and sells
+   * when it goes back up. I have 30 dollars" built an instructions agent that needed a model key). A
+   * market move in everyday words, next to a buy, is a rule.
+   */
+  const moveWords = /\b(drops?|dips?|falls?|crash(es)?|goes (back )?(up|down)|rises?|pumps?|bounces?|recovers?)\b|\b(down|up) \d+\s*%|\d+\s*%/i.test(text);
+  return buys && (chartWords || moveWords);
 }

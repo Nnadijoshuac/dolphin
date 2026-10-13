@@ -9,3 +9,9 @@ test("a described trading rule is recognised, a token checker is not", () => {
   assert.equal(asksForRule("Check any BNB Chain token for honeypot risk and give a verdict"), false);
   assert.equal(RULES_ONLY_SCHEMA.schema.properties.rules.type, "array");
 });
+
+test("plain words for a market move count as a rule (user test 2026-10-05)", () => {
+  assert.equal(asksForRule("I want an agent that buys BNB when it drops a lot and sells when it goes back up. I have 30 dollars."), true);
+  assert.equal(asksForRule("buy BNB when it is down 5%"), true);
+  assert.equal(asksForRule("an agent that tells me the BNB price every morning"), false);
+});

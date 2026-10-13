@@ -29,14 +29,6 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function sameProduct(a: DedupeCandidate, b: DedupeCandidate): boolean {
-  const name = normalize(a.name) === normalize(b.name);
-  const owner = a.ownerAddress.toLowerCase() === b.ownerAddress.toLowerCase();
-  const description =
-    normalize(a.description).length > 0 && normalize(a.description) === normalize(b.description);
-  return Number(name) + Number(owner) + Number(description) >= 2;
-}
-
 /**
  * The keys that should be `duplicate`: every candidate but the best of its group.
  *
@@ -50,21 +42,39 @@ export function findDuplicates(candidates: readonly DedupeCandidate[]): Set<stri
   const ordered = [...candidates].sort(
     (a, b) => b.rank - a.rank || (a.agentKey < b.agentKey ? -1 : 1),
   );
-  const groups: DedupeCandidate[][] = [];
-  for (const candidate of ordered) {
-    const matching = groups.filter((group) => group.some((member) => sameProduct(member, candidate)));
-    if (matching.length === 0) {
-      groups.push([candidate]);
-      continue;
+  /*
+   * Union-find over the three pair keys (name+owner, name+description,
+   * owner+description). Two candidates share a key exactly when they match on
+   * that pair, so this is the same transitive two-of-three grouping as before,
+   * in one pass. The old pairwise scan was quadratic and blew the 1 s mutation
+   * limit at 1,250 rows (2026-10-13).
+   */
+  const parent = ordered.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const firstByKey = new Map<string, number>();
+  ordered.forEach((candidate, i) => {
+    const name = normalize(candidate.name);
+    const owner = candidate.ownerAddress.toLowerCase();
+    const description = normalize(candidate.description);
+    const keys = [`no|${name}|${owner}`];
+    if (description) keys.push(`nd|${name}|${description}`, `od|${owner}|${description}`);
+    for (const key of keys) {
+      const seen = firstByKey.get(key);
+      if (seen === undefined) firstByKey.set(key, i);
+      else {
+        const a = find(seen), b = find(i);
+        if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
+      }
     }
-    // A candidate can bridge two groups; merge them, keeping rank order.
-    const [first, ...rest] = matching;
-    first.push(candidate);
-    for (const other of rest) {
-      first.push(...other);
-      groups.splice(groups.indexOf(other), 1);
-    }
-  }
+  });
+  const byRoot = new Map<number, DedupeCandidate[]>();
+  ordered.forEach((candidate, i) => {
+    const root = find(i);
+    const members = byRoot.get(root) ?? [];
+    members.push(candidate);
+    byRoot.set(root, members);
+  });
+  const groups = [...byRoot.values()];
   const duplicates = new Set<string>();
   /*
    * SELF-RETIRED (owner, 2026-09-29: "Tidemark (retired duplicate)... just

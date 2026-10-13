@@ -67,11 +67,14 @@ export function StrategyTest({ initial, challenge }: { initial: StrategyTestArgs
     <div className="test-dark min-h-screen pb-24">
       {/* The hero is the artwork itself. */}
       <section className="relative isolate overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a static, pre-sized artwork */}
-        <img alt="" className="absolute inset-0 -z-10 h-full w-full object-cover object-right opacity-90" src="/test/art-assassin.jpg" />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#080807] via-[#080807]/80 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 -z-10 h-32 bg-gradient-to-t from-[#080807] to-transparent" />
-        <div className="mx-auto w-[min(100%-32px,1200px)] py-16 sm:py-24">
+        {/* Phones: words on plain black, no art behind them (owner: "too busy"); the result card below is the picture. */}
+        <div className="absolute inset-0 -z-10 hidden md:block">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a static, pre-sized artwork */}
+          <img alt="" className="h-full w-full object-cover object-right opacity-90" src="/test/art-assassin.jpg" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#080807] via-[#080807]/80 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#080807] to-transparent" />
+        </div>
+        <div className="mx-auto w-[min(100%-32px,1200px)] py-10 sm:py-24">
           {toBeat ? (
             <p className="mb-6 inline-flex flex-wrap items-center gap-x-2 rounded-full border border-[#f3c13a]/40 bg-[#f3c13a]/10 px-4 py-2 text-sm">
               <span className="font-semibold text-[#f3c13a]">Challenge</span>
@@ -347,9 +350,11 @@ function Board({ onPick }: { onPick: (row: TestBoardRow) => void }) {
               onClick={() => onPick(row)}
               type="button"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element -- a static, pre-sized artwork */}
-              <img alt="" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-45 transition-opacity group-hover:opacity-60" src={first ? "/test/art-assassin.jpg" : "/test/art-survivor.jpg"} />
-              <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#080807] via-[#080807]/85 to-[#080807]/40" />
+              <div className="absolute inset-0 -z-10 hidden md:block">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a static, pre-sized artwork */}
+                <img alt="" className="h-full w-full object-cover opacity-45 transition-opacity group-hover:opacity-60" src={first ? "/test/art-assassin.jpg" : "/test/art-survivor.jpg"} />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#080807] via-[#080807]/85 to-[#080807]/40" />
+              </div>
               <div className={`p-5 ${first ? "sm:pt-14" : ""}`}>
                 <p className={`text-sm font-semibold ${first ? "text-[#f3c13a]" : "text-muted"}`}>#{rank}</p>
                 <p className={`mt-1 font-extrabold tabular-nums ${first ? "text-5xl" : "text-4xl"} ${row.resultPct >= 0 ? "text-[#4fe0ae]" : "text-[#ff7466]"}`}>{signed(row.resultPct)}</p>

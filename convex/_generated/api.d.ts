@@ -70,6 +70,7 @@ import type * as lib_firstParty from "../lib/firstParty.js";
 import type * as lib_grid from "../lib/grid.js";
 import type * as lib_iconPolicy from "../lib/iconPolicy.js";
 import type * as lib_indicators from "../lib/indicators.js";
+import type * as lib_jev from "../lib/jev.js";
 import type * as lib_knowledge from "../lib/knowledge.js";
 import type * as lib_knowledgeServe from "../lib/knowledgeServe.js";
 import type * as lib_knowledgeTools from "../lib/knowledgeTools.js";
@@ -200,6 +201,7 @@ declare const fullApi: ApiFromModules<{
   "lib/grid": typeof lib_grid;
   "lib/iconPolicy": typeof lib_iconPolicy;
   "lib/indicators": typeof lib_indicators;
+  "lib/jev": typeof lib_jev;
   "lib/knowledge": typeof lib_knowledge;
   "lib/knowledgeServe": typeof lib_knowledgeServe;
   "lib/knowledgeTools": typeof lib_knowledgeTools;

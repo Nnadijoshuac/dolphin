@@ -396,6 +396,9 @@ function BacktestTab({ conversationKey, rule }: { conversationKey: string; rule:
         <Stat label="Worst drop" value={result.maxDrawdownUsd > 0 ? `−$${result.maxDrawdownUsd.toFixed(2)}` : "$0.00"} />
         <Stat label="Fees" value={`$${result.feesUsd.toFixed(2)}`} />
       </div>
+      {rule.confirm ? (
+        <p className="mt-2 text-[0.66rem] text-muted">This test runs the rule without Jev&rsquo;s check, so it shows every buy Jev would be asked about.</p>
+      ) : null}
 
       <div className="mt-3">
         <RuleChart

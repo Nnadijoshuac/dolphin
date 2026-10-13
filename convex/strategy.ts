@@ -12,7 +12,8 @@ import { DOLPHIN_SWAP_GAS_USD, GRID_TIMEFRAME, gridTagOf, planGrid, simulateGrid
 import { RULE_TEMPLATES } from "./lib/ruleTemplates";
 import { requireWalletAddress } from "./lib/walletAuth";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
-import { afterCandle, cleanRule, decide, describeLocked, describeRule, EMPTY_STATE, redactReason, resultPct, resultUsd, simulate, TIMEFRAME_MS, TIMEFRAMES, VENUE_FEE_BPS, venueProblem, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
+import { askJev, jevState } from "./lib/jev";
+import { afterCandle, BRAIN_KEY_NAMES, BRAIN_LABELS, cleanRule, decide, describeLocked, describeRule, EMPTY_STATE, redactReason, resultPct, resultUsd, simulate, TIMEFRAME_MS, TIMEFRAMES, VENUE_FEE_BPS, venueProblem, type BrainConfirm, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -339,6 +340,23 @@ export const updateRule = mutation({
 });
 
 /** Pause or resume one rule: paused, it opens nothing new but still closes what it holds. */
+/** Plugs a brain into a rule's entries, or unplugs it (brain null). The brain port, lib/strategy.ts Rule.confirm. */
+export const setBrainCheck = mutation({
+  args: { conversationKey: v.string(), ruleId: v.string(), brain: v.union(v.literal("jev"), v.null()), minPct: v.optional(v.number()) },
+  handler: async (ctx, { conversationKey, ruleId, brain, minPct }) => {
+    const draft = await draftOfKey(ctx, conversationKey);
+    const rules = rulesOf(draft);
+    const rule = rules.find((candidate) => candidate.id === ruleId);
+    if (!draft || !rule) throw new ConvexError("That rule is not in this agent.");
+    const { confirm: _old, ...rest } = rule;
+    const cleaned = cleanRule(brain ? { ...rest, confirm: { brain, minPct: minPct ?? 60 } } : rest, rule.id);
+    if ("problems" in cleaned) throw new ConvexError(`That does not fit the rule: ${cleaned.problems.join("; ")}.`);
+    const next = { ...cleaned.rule, name: rule.name, ...(rule.locked ? { locked: rule.locked } : {}), ...(rule.grid ? { grid: rule.grid } : {}) };
+    await ctx.db.patch(draft._id, { rules: rules.map((candidate) => (candidate.id === ruleId ? next : candidate)), updatedAt: Date.now() });
+    return { confirm: next.confirm ?? null };
+  },
+});
+
 export const setRulePaused = mutation({
   args: { conversationKey: v.string(), ruleId: v.string(), paused: v.boolean() },
   handler: async (ctx, { conversationKey, ruleId, paused }) => {
@@ -428,6 +446,7 @@ export const forConversation = query({
         heldQty: typeof (run?.held as { qty?: unknown } | undefined)?.qty === "string" ? (run?.held as { qty: string }).qty : null,
         timeframe: rule.timeframe,
         grid: rule.grid ?? null,
+        confirm: rule.confirm ?? null,
       });
     }
     const lockedIds = new Set(rules.filter((rule) => rule.locked).map((rule) => rule.id));
@@ -939,6 +958,23 @@ export const tick = internalAction({
           });
           continue;
         }
+        // The brain port: a plugged-in model must agree before an entry. Any failure means no trade.
+        if (decision.type === "enter" && rule.confirm) {
+          const gate = await brainGate(ctx, armedDraft.owner, rule, candles, decision.reason);
+          if (!gate.take) {
+            await ctx.runMutation(internal.strategy.record, {
+              draftId,
+              ruleId: rule.id,
+              state: afterCandle(state, judged.openTime, { type: "none", reason: gate.reason }, true, now),
+              lastError: gate.error,
+              lastReason: gate.reason,
+              lagMs,
+              trade: null,
+            });
+            continue;
+          }
+          decision = { ...decision, reason: `${decision.reason} ${gate.reason}` };
+        }
         // On paper every decision "executes" at the closed candle's price; Live sends a real order first.
         const held = armedDraft.helds[rule.id] ?? null;
         let execution: Execution = { real: false };
@@ -1010,6 +1046,32 @@ export const tick = internalAction({
     return { rules: rulesChecked, trades };
   },
 });
+
+/**
+ * Puts an entry to the rule's brain with the RUNNER's key (ArmedDraft.owner's Keys tab). Fails closed:
+ * no key, a refused key, a timeout or a malformed answer all mean "skip", with the cause shown.
+ */
+async function brainGate(
+  ctx: ActionCtx,
+  owner: string | null,
+  rule: Rule,
+  candles: Candle[],
+  reason: string,
+): Promise<{ take: boolean; reason: string; error: string | null }> {
+  const confirm = rule.confirm as BrainConfirm;
+  const label = BRAIN_LABELS[confirm.brain];
+  const keyName = BRAIN_KEY_NAMES[confirm.brain];
+  const apiKey: string | null = owner ? await ctx.runAction(internal.envVars.reveal, { walletAddress: owner, name: keyName }) : null;
+  if (!apiKey) return { take: false, reason: `Not traded: ${label} checks this rule's entries, and there is no ${keyName} in Keys.`, error: `Add ${keyName} in Keys so ${label} can check entries.` };
+  try {
+    const verdict = await askJev(apiKey, jevState(rule.market, rule.timeframe, candles, reason, rule.action));
+    if (verdict.take && verdict.pct >= confirm.minPct) return { take: true, reason: `${label} agreed, ${verdict.pct}% sure.`, error: null };
+    return { take: false, reason: `Not traded: ${label} was ${verdict.pct}% sure, below this rule's ${confirm.minPct}%.`, error: null };
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : `${label} did not answer.`;
+    return { take: false, reason: `Not traded: ${message}`, error: message };
+  }
+}
 
 /* ── The rule view: its market's candles, and its backtest (owner, 2026-10-03) ── */
 
@@ -1207,6 +1269,8 @@ export const exportForRunner = mutation({
     if (!draft || rules.length === 0) throw new ConvexError("This agent has no trading rules to run yet.");
     // The runner file carries every condition: a copied setup's locked strategy runs on Dolphin only.
     if (rules.some((rule) => rule.locked)) throw new ConvexError("This agent includes a copied setup whose strategy is locked, so it runs on Dolphin only.");
+    // The runner has no brain port: it would buy without the check the builder asked for.
+    if (rules.some((rule) => rule.confirm)) throw new ConvexError("A rule here asks a brain (Jev) before it buys, and that check runs on Dolphin only. Switch the check off to run it on your own server.");
     const token = randomToken();
     await ctx.db.patch(draft._id, { runnerTokenHash: await sha256Hex(token), updatedAt: Date.now() });
     return {

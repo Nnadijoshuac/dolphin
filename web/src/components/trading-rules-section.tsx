@@ -153,6 +153,7 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
   const update = useMutation(strategyApi.strategy.updateRule);
   const remove = useMutation(strategyApi.strategy.removeRule);
   const setPaused = useMutation(strategyApi.strategy.setRulePaused);
+  const setBrain = useMutation(strategyApi.strategy.setBrainCheck);
   const [error, setError] = useState<string | null>(null);
   const [viewing, setViewing] = useState(false);
   // In its own tab, like the canvas and the agent panel: closing that tab brings the view back here.
@@ -198,6 +199,7 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
               ? " · watching"
               : " · not started"}
         {rule.paused ? <span className="font-semibold text-ink-soft"> · paused</span> : null}
+        {rule.confirm ? ` · Jev checks each buy (TYPESAFE_API_KEY in Keys)` : null}
       </p>
       {/* Holding: the price now, the move since the buy, and what selling now would return - live. */}
       <LivePnl rule={rule} />
@@ -206,6 +208,18 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
         {futures ? <NumberBox label="Leverage" onSave={(value) => value !== null && void save({ leverage: value })} suffix="x" value={rule.leverage} /> : null}
         <NumberBox allowEmpty label="Stop" onSave={(value) => void save({ stopLossPct: value })} suffix="%" value={rule.stopLossPct} />
         <span className="ml-auto flex items-center gap-1">
+          {!rule.grid ? (
+            <button
+              className="rounded-md px-1.5 py-0.5 !text-[0.68rem] font-semibold text-muted transition-colors hover:bg-paper hover:text-ink"
+              onClick={() =>
+                void setBrain({ conversationKey, ruleId: rule.id, brain: rule.confirm ? null : "jev" }).catch((cause) => setError(reason(cause, "That did not save.")))
+              }
+              title="Before each buy, ask Jev (TypeSafe's decision model) whether to take it. Uses your own key."
+              type="button"
+            >
+              {rule.confirm ? "Unplug Jev" : "Ask Jev first"}
+            </button>
+          ) : null}
           <button
             className="rounded-md px-1.5 py-0.5 !text-[0.68rem] font-semibold text-muted transition-colors hover:bg-paper hover:text-ink"
             onClick={() => void setPaused({ conversationKey, ruleId: rule.id, paused: !rule.paused }).catch((cause) => setError(reason(cause, "That did not save.")))}

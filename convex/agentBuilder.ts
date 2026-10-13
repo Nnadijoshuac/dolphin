@@ -149,6 +149,7 @@ TRADING RULES - for an agent that trades on market conditions, write them in \`r
 - Example - "short BNB on 4-hour candles when the trend turns down, hold until it turns up, 2x, stop at 5%": venue binance-futures, market BNBUSDT, timeframe 4h, when [trend down 3], action short, until [trend up 2], stopLossPct 5, leverage 2.
 - When you write rules, add NO Schedule, Price trigger, Indicators, Signal, Risk limits, Swap or Safety block: the rule reads Binance's candles itself and carries its own size, stop and daily cap. A Price feed for the rule's token is welcome - it draws the live chart on the canvas.
 - Put the rule in \`rules\`, never only in the instructions: a rule written as prose does not trade.
+- THE BRAIN PORT: a rule can ask Jev (TypeSafe's fast decision model) to approve each buy before it trades - set confirm { brain "jev", minPct 60 } only when the person asks for Jev or for an AI to double-check entries. It runs on their own TYPESAFE_API_KEY from Keys; say so in one sentence. Otherwise confirm is null: a plain rule needs no AI and no key.
 - Rules start on PAPER (pretend money at live prices) while Autopilot is on. The person can switch Trading mode to Live in the agent panel - after accepting a real-money notice - to trade real funds from the Dolphin Wallet or their Binance account. Never ask for keys in the chat. Say this when you add rules.
 
 RECIPES - the shapes that work; add every block the job needs in one go:
@@ -982,7 +983,7 @@ const RULES_ONLY_PROMPT = `You turn a person's description of a trading rule int
 - market: a Binance pair such as BNBUSDT. timeframe: 1m, 5m, 15m, 1h, 4h or 1d.
 - when: entry conditions, ALL must hold. until: exit conditions, ALL must hold (empty if only a stop or target).
 - Conditions (every field present, unused ones null): rsi (op above/below, value, period - 14 unless said), price_vs_ma (op, ma sma/ema, length), ma_cross (direction up/down, fast, slow, ma), macd_cross (direction), trend (direction, candles), price (op, value), change_pct (op, value, candles), fib (op near/above/below, value = level as a ratio like 0.618, candles = swing length, e.g. 50: a buy at the 61.8% pullback is fib near 0.618).
-- action: buy, or short (binance-futures only). sizeUsd: dollars per entry. stopLossPct / takeProfitPct: % price move, or null. leverage: 1 unless they asked. maxTradesPerDay: what they said, else 2. cooldownMinutes: what they said, else 0. name: null.
+- action: buy, or short (binance-futures only). sizeUsd: dollars per entry. stopLossPct / takeProfitPct: % price move, or null. leverage: 1 unless they asked. maxTradesPerDay: what they said, else 2. cooldownMinutes: what they said, else 0. name: null. confirm: null, unless they ask Jev (TypeSafe's decision model) to approve each buy: { "brain": "jev", "minPct": 60 or what they said }.
 - "Get out when X, or at a 0.3% gain, or at a 0.5% loss" means until [X], takeProfitPct 0.3, stopLossPct 0.5.
 - Plain words: "drops a lot" or "dips" = change_pct below -5 over 24 candles on 1h; "goes back up" = takeProfitPct 5 and until rsi above 60; "I have $30" = sizeUsd 30; no stop given = stopLossPct 6.
 Write only what they described; never invent a rule.`;

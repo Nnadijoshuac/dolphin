@@ -108,7 +108,22 @@ export type Rule = {
   locked?: string;
   /** One level of a grid (lib/grid.ts): the agent counts the grid as one rule and the panel shows it as one card. */
   grid?: GridTag;
+  /**
+   * THE BRAIN PORT (owner, 2026-10-13: "Dolphin is like a laptop... places to plug in extra stuff").
+   * When set, an entry the rule decides on is first put to a plugged-in decision model, and the rule
+   * buys only if the model says take, at least `minPct` sure. The key is the RUNNER's own (Keys tab,
+   * BRAIN_KEY_NAMES), so a copied or bought strategy spends the buyer's key, never the seller's.
+   * Exits never ask: a stop-loss must not wait on a third party. Backtests skip the check and say so.
+   */
+  confirm?: BrainConfirm;
 };
+
+export const BRAINS = ["jev"] as const;
+export type Brain = (typeof BRAINS)[number];
+export type BrainConfirm = { brain: Brain; minPct: number };
+/** The Keys-tab variable each brain reads, in the runner's wallet. */
+export const BRAIN_KEY_NAMES: Record<Brain, string> = { jev: "TYPESAFE_API_KEY" };
+export const BRAIN_LABELS: Record<Brain, string> = { jev: "Jev" };
 
 /** `quoteVolume`: the candle's traded value in the quote currency (USDT), when the source gives it. Rules never read it. */
 export type Candle = { openTime: number; open: number; high: number; low: number; close: number; quoteVolume?: number };
@@ -415,11 +430,16 @@ export function describeRule(rule: Rule): string {
     ...(rule.takeProfitPct !== null ? [`at ${aOrAn(rule.takeProfitPct)} ${rule.takeProfitPct}% gain`] : []),
   ];
   return (
-    `On ${rule.market} ${rule.timeframe} candles: when ${rule.when.map(describe).join(" and ")}, ${verb} $${rule.sizeUsd}` +
+    `On ${rule.market} ${rule.timeframe} candles: when ${rule.when.map(describe).join(" and ")}${brainWords(rule)}, ${verb} $${rule.sizeUsd}` +
     (rule.leverage > 1 ? ` at ${rule.leverage}x` : "") +
     (exits.length ? `; get out ${exits.join(", or ")}` : "") +
     `. At most ${rule.maxTradesPerDay} a day.`
   );
+}
+
+/** " and Jev agrees, at least 60% sure" - empty without a brain check. */
+function brainWords(rule: Rule): string {
+  return rule.confirm ? ` and ${BRAIN_LABELS[rule.confirm.brain]} agrees, at least ${rule.confirm.minPct}% sure` : "";
 }
 
 /**
@@ -435,7 +455,7 @@ export function describeLocked(rule: Rule): string {
     ...(rule.takeProfitPct !== null ? [`at ${aOrAn(rule.takeProfitPct)} ${rule.takeProfitPct}% gain`] : []),
   ];
   return (
-    `On ${rule.market} ${rule.timeframe} candles: when its locked conditions hold, ${verb} $${rule.sizeUsd}` +
+    `On ${rule.market} ${rule.timeframe} candles: when its locked conditions hold${brainWords(rule)}, ${verb} $${rule.sizeUsd}` +
     (rule.leverage > 1 ? ` at ${rule.leverage}x` : "") +
     (exits.length ? `; get out ${exits.join(", or ")}` : "") +
     `. At most ${rule.maxTradesPerDay} a day.`
@@ -635,6 +655,15 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
   if (maxTradesPerDay === null) problems.push(`at most ${LIMITS.maxTradesPerDay} trades a day`);
   const cooldownMinutes = num(r.cooldownMinutes ?? 0, 0, LIMITS.maxCooldownMinutes);
   if (cooldownMinutes === null) problems.push("the cooldown must be 0 minutes to 7 days");
+  let confirm: BrainConfirm | undefined;
+  if (r.confirm !== null && r.confirm !== undefined) {
+    const c = r.confirm as Record<string, unknown>;
+    const brain = (BRAINS as readonly string[]).includes(String(c.brain)) ? (c.brain as Brain) : null;
+    const minPct = num(c.minPct ?? 60, 50, 95);
+    if (!brain) problems.push(`the brain check must use one of: ${BRAINS.join(", ")}`);
+    if (minPct === null) problems.push("the brain check's confidence must be 50% to 95%");
+    if (brain && minPct !== null) confirm = { brain, minPct: Math.round(minPct) };
+  }
 
   if (problems.length > 0) return { problems };
   const warnings: string[] = [];
@@ -674,6 +703,7 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
     leverage: leverage as number,
     maxTradesPerDay: Math.round(maxTradesPerDay as number),
     cooldownMinutes: Math.round(cooldownMinutes as number),
+    ...(confirm ? { confirm } : {}),
   };
   rule.name = typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 80) : describeRule(rule).slice(0, 80);
   return { rule, warnings };

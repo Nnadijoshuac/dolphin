@@ -122,7 +122,7 @@ export const BUILDER_REPLY_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["name", "venue", "market", "timeframe", "when", "action", "sizeUsd", "until", "stopLossPct", "takeProfitPct", "leverage", "maxTradesPerDay", "cooldownMinutes"],
+          required: ["name", "venue", "market", "timeframe", "when", "action", "sizeUsd", "until", "stopLossPct", "takeProfitPct", "leverage", "maxTradesPerDay", "cooldownMinutes", "confirm"],
           properties: {
             name: { type: ["string", "null"], description: "A short name, or null to describe it automatically." },
             venue: { type: "string", enum: ["dolphin-wallet", "binance-wallet", "binance-spot", "binance-futures"] },
@@ -169,6 +169,13 @@ export const BUILDER_REPLY_SCHEMA = {
             leverage: { type: ["number", "null"], description: "binance-futures only; 1 unless the person asked for leverage (max 5)." },
             maxTradesPerDay: { type: ["number", "null"] },
             cooldownMinutes: { type: ["number", "null"] },
+            confirm: {
+              type: ["object", "null"],
+              description: "null, unless the person asks for Jev (or an AI decision model) to approve each buy: then { brain: \"jev\", minPct: how sure it must be, 60 unless they said }.",
+              additionalProperties: false,
+              required: ["brain", "minPct"],
+              properties: { brain: { type: "string", enum: ["jev"] }, minPct: { type: ["number", "null"] } },
+            },
           },
         },
       },

@@ -18,6 +18,13 @@ import type { Condition, Timeframe } from "./strategy";
  * at this size - small, frequent trades are eaten by costs. So Bold means wider swings and more trades
  * than Steady, not leverage and not "more profit". These numbers are recorded here, never shown as
  * a promise: the page runs its own backtest when it is opened.
+ *
+ * RE-TESTED 2026-10-13 (Agent/research-tradingagents/walkforward-2026-10-13.ts), the last year split in two:
+ *   crash half (BNB -54%)    : Steady as it was (SMA 200) -11.8%, with EMA 100 -5.2%, Bold -14.0%
+ *   recovery half (BNB +21%) : Steady as it was +8.1%,          with EMA 100 +12.4%, Bold +3.7%
+ * Steady moved to the 100-candle EMA because it did better in BOTH halves, not just over the whole year
+ * (a variant that wins only overall is fitted to one stretch). Every buy-only BNB rule loses in a crash;
+ * these lose far less than holding BNB.
  */
 
 export type TraderDef = {
@@ -47,14 +54,14 @@ export const TRADERS: readonly TraderDef[] = [
     tagline: "Waits for a dip inside an uptrend. Few trades, small losses.",
     risk: "Lower",
     desk: {
-      watches: "BNB on 4-hour candles, and whether it is above its 200-candle average.",
+      watches: "BNB on 4-hour candles, and whether it is above its 100-candle average.",
       buys: "Only when BNB is in an uptrend and has just pulled back (RSI under 40).",
       sells: "When it bounces back (RSI over 65) or is up 8%.",
       protects: "Sells if it falls 4% from where it bought.",
     },
     timeframe: "4h",
     when: [
-      { kind: "price_vs_ma", op: "above", ma: "sma", length: 200 },
+      { kind: "price_vs_ma", op: "above", ma: "ema", length: 100 },
       { kind: "rsi", op: "below", value: 40, period: 14 },
     ],
     until: [{ kind: "rsi", op: "above", value: 65, period: 14 }],

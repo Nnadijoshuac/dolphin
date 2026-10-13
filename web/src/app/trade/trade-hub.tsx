@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import styles from "@/app/trade/hub.module.css";
+import DotGrid from "@/components/react-bits/DotGrid";
 import { StartDialog } from "@/app/trade/trade-client";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { tradersApi, type HubTrader, type MyTrader } from "@/convex/api";
@@ -38,6 +39,7 @@ export function ago(at: number): string {
 }
 
 export function creatorLabel(creator: HubTrader["creator"]): string {
+  if (creator.name) return creator.name;
   if (creator.handle) return `@${creator.handle}`;
   return `${creator.address.slice(0, 6)}…${creator.address.slice(-4)}`;
 }
@@ -72,6 +74,9 @@ export function TradeHub() {
       <div className={styles.layout}>
         <main>
           <header className={styles.hero}>
+            <div aria-hidden className={styles.heroDots}>
+              <DotGrid activeColor="#f0b90b" baseColor="#8f8a7c" dotSize={3} gap={20} glow={0.35} intro opacity={0.45} proximity={130} shockRadius={220} shockStrength={3} dpr={undefined} style={undefined} />
+            </div>
             <h1 className={styles.heroTitle}>Agents that trade, in the open</h1>
             <p className={styles.heroSub}>Every trader here shows its record, losses included. Run one in your own wallet, on practice money first.</p>
             <label className={styles.search}>
@@ -159,6 +164,7 @@ export function TradeHub() {
 
 function TraderCard({ trader }: { trader: HubTrader }) {
   const year = trader.backtest?.find((window) => window.days === 365) ?? null;
+  const quarter = trader.backtest?.find((window) => window.days === 90) ?? null;
   const live = trader.live;
   return (
     <Link className={styles.card} href={`/trade/${encodeURIComponent(trader.id)}`}>
@@ -182,7 +188,16 @@ function TraderCard({ trader }: { trader: HubTrader }) {
         {year ? (
           <>
             <p className={`${styles.figureBig} ${styles.mono} ${year.resultPct >= 0 ? "pnl-up" : "pnl-down"}`}>{pct(year.resultPct)}</p>
-            <p className={styles.figureLabel}>Last 12 months, backtested · BNB itself {pct(year.holdPct)}</p>
+            <p className={styles.figureLabel}>Last 12 months, backtested</p>
+            <p className={styles.versus}>
+              {year.resultPct > year.holdPct ? (
+                <>
+                  <b className="pnl-up">{(year.resultPct - year.holdPct).toFixed(1)} points better</b> than holding BNB ({pct(year.holdPct)})
+                </>
+              ) : (
+                <>Holding BNB did {pct(year.holdPct)}</>
+              )}
+            </p>
           </>
         ) : live && live.closed > 0 && live.resultPct !== null ? (
           <>
@@ -200,13 +215,10 @@ function TraderCard({ trader }: { trader: HubTrader }) {
         {year ? (
           <>
             <span>
-              <b>{year.trades}</b> trades
+              3 mo <b className={quarter && quarter.resultPct >= 0 ? "pnl-up" : "pnl-down"}>{quarter ? pct(quarter.resultPct) : "–"}</b>
             </span>
             <span>
-              <b>{year.winPct ?? 0}%</b> won
-            </span>
-            <span>
-              <b>−{year.worstDropPct.toFixed(1)}%</b> worst dip
+              <b>{year.trades}</b> trades · <b>{year.winPct ?? 0}%</b> won
             </span>
           </>
         ) : (

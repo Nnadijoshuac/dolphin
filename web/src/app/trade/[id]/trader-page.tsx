@@ -142,7 +142,10 @@ export function TraderPage({ id }: { id: string }) {
                   </div>
                   <div>
                     <dt>Holding BNB instead</dt>
-                    <dd className={styles.mono}>{pct(year.holdPct)}</dd>
+                    <dd className={styles.mono}>
+                      {pct(year.holdPct)}
+                      {year.resultPct > year.holdPct ? <span className="pnl-up"> · {(year.resultPct - year.holdPct).toFixed(1)} pts better</span> : null}
+                    </dd>
                   </div>
                   <div>
                     <dt>Trades a year · won</dt>

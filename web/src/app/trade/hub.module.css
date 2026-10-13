@@ -35,12 +35,15 @@
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background:
-    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 9%, transparent) 1px, transparent 0) 0 0 / 14px 14px,
-    var(--paper);
+  background: var(--paper);
   padding: 56px 24px 52px;
   text-align: center;
+  isolation: isolate;
 }
+
+/* React Bits DotGrid sits behind the hero copy and reacts to the cursor. */
+.heroDots { position: absolute; inset: 0; z-index: -1; }
+.heroDots :global(.dot-grid) { width: 100%; height: 100%; }
 
 .heroTitle {
   margin: 0;
@@ -300,3 +303,5 @@
 }
 
 .by { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.versus { margin-top: 6px; color: var(--muted); font-size: 12px; }
+.versus b { font-weight: 600; }

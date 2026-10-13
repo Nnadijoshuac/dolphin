@@ -71,8 +71,11 @@ export const refreshStats = action({
   args: {},
   handler: async (ctx): Promise<{ refreshed: boolean }> => {
     const row: Doc<"traderStats"> | null = await ctx.runQuery(internal.traders.statsRow, {});
-    if (row && Date.now() - row.at < STATS_FRESH_MS) return { refreshed: false };
-    const out: Record<string, WindowStats[]> = {};
+    // A changed rule (lib/traders.ts) re-runs at once instead of showing the old rule's record for 6 h.
+    const signature = JSON.stringify(TRADERS.map((trader) => [trader.id, trader.when, trader.until, trader.stopLossPct, trader.takeProfitPct]));
+    const storedSignature = (row?.stats as { __signature?: string } | undefined)?.__signature;
+    if (row && storedSignature === signature && Date.now() - row.at < STATS_FRESH_MS) return { refreshed: false };
+    const out: Record<string, WindowStats[] | string> = { __signature: signature };
     for (const trader of TRADERS) {
       const made = cleanRule(traderRule(trader, SAMPLE_USD), "backtest");
       if ("problems" in made) continue;
@@ -396,7 +399,8 @@ export const seedHouseDrafts = internalMutation({
  * Who made Steady and Bold. The owner asked that they read as made by him, not as a special house
  * product ("created by @Joshua, use my wallet as the creator").
  */
-const HOUSE_CREATOR = { name: "Joshua Nnadi", handle: "NnadiJoshuaC", address: "0x13450a106568d011d25d8ac222b489b098df9196" };
+// Owner, 2026-10-13: a builder name, not his full name ("I just use Serenity instead").
+const HOUSE_CREATOR = { name: "Serenity", handle: null as string | null, address: "0x13450a106568d011d25d8ac222b489b098df9196" };
 
 type HubTrade = { at: number; kind: "enter" | "exit"; side: "long" | "short"; price: number; sizeUsd: number; pnlPct: number | null; paper: boolean; reason: string; txHash: string | null };
 

@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { historyCandles } from "./lib/binanceMarket";
 import { DOLPHIN_SWAP_GAS_USD } from "./lib/grid";
 import { cleanRule, describeLocked, describeRule, simulate, TIMEFRAME_MS, VENUE_FEE_BPS, type Rule, type RuleState } from "./lib/strategy";
@@ -67,7 +67,8 @@ export const list = query({
  * fee each way and Dolphin Wallet gas on every swap included, on a sample $100 trade. Re-run when the
  * stored one is older than STATS_FRESH_MS; anyone may ask (it is cheap and changes nothing).
  */
-export const refreshStats = action({
+/** Runs on a 6-hourly cron (convex/crons.ts), never from a page load: visitors cost no backend calls. */
+export const refreshStats = internalAction({
   args: {},
   handler: async (ctx): Promise<{ refreshed: boolean }> => {
     const row: Doc<"traderStats"> | null = await ctx.runQuery(internal.traders.statsRow, {});
@@ -456,6 +457,49 @@ async function communityTraders(ctx: QueryCtx, tradesEach: number) {
   return out;
 }
 
+type HubCommunityCard = Awaited<ReturnType<typeof communityCards>>[number];
+
+async function communityCards(ctx: QueryCtx) {
+  const cards = (await communityTraders(ctx, 60)).map(({ listing, rules, trades, active }) => ({
+    active,
+    id: listing.agentKey as string,
+    kind: "community" as const,
+    name: listing.name,
+    tagline: listing.description.length > 140 ? `${listing.description.slice(0, 137)}…` : listing.description,
+    risk: null,
+    market: rules[0].market,
+    timeframe: rules[0].timeframe,
+    creator: { name: null, handle: listing.links.x ? listing.links.x.replace(/^.*\//, "").replace(/^@/, "") : null, address: listing.ownerAddress },
+    backtest: null,
+    live: record(trades),
+    priceUsd: listing.hirePriceUsd ?? null,
+  }));
+  return cards;
+}
+
+/**
+ * Rebuilds the hub's community cards (owner, 2026-10-13: "be careful" with read/writes). The 15-minute cron
+ * passes force=false and stops after two one-document reads when no trade or listing is newer than the cache;
+ * publishing and unpublishing pass force=true so a new trader shows at once. A full rebuild at least every 6 h
+ * catches edits that change neither (a rule edited, a trader stopped).
+ */
+export const rebuildHub = internalMutation({
+  args: { force: v.boolean() },
+  handler: async (ctx, { force }) => {
+    const cache = await ctx.db.query("tradeHubCache").first();
+    if (cache && !force && Date.now() - cache.at < STATS_FRESH_MS) {
+      const lastTrade = await ctx.db.query("strategyTrades").order("desc").first();
+      const lastListing = await ctx.db.query("builtAgents").order("desc").first();
+      const newest = Math.max(lastTrade?._creationTime ?? 0, lastListing?._creationTime ?? 0);
+      if (newest < cache.at) return { rebuilt: false };
+    }
+    const community = await communityCards(ctx);
+    if (cache) await ctx.db.patch(cache._id, { community, at: Date.now() });
+    else await ctx.db.insert("tradeHubCache", { community, at: Date.now() });
+    return { rebuilt: true };
+  },
+});
+
 export const hub = query({
   args: {},
   handler: async (ctx) => {
@@ -475,20 +519,9 @@ export const hub = query({
       priceUsd: null,
       active: true,
     }));
-    const community = (await communityTraders(ctx, 60)).map(({ listing, rules, trades, active }) => ({
-      active,
-      id: listing.agentKey as string,
-      kind: "community" as const,
-      name: listing.name,
-      tagline: listing.description.length > 140 ? `${listing.description.slice(0, 137)}…` : listing.description,
-      risk: null,
-      market: rules[0].market,
-      timeframe: rules[0].timeframe,
-      creator: { name: null, handle: listing.links.x ? listing.links.x.replace(/^.*\//, "").replace(/^@/, "") : null, address: listing.ownerAddress },
-      backtest: null,
-      live: record(trades),
-      priceUsd: listing.hirePriceUsd ?? null,
-    }));
+    // One small row, rebuilt by rebuildHub: visitors never trigger the scan over every listing.
+    const cache = await ctx.db.query("tradeHubCache").first();
+    const community = (cache?.community ?? []) as HubCommunityCard[];
     return { minUsd: TRADER_MIN_USD, statsAt: row?.at ?? null, traders: [...house, ...community] };
   },
 });

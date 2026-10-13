@@ -158,6 +158,11 @@ crons.daily(
   {},
 );
 
+/** House traders' backtests (convex/traders.ts). Was fired by every /trade page load until 2026-10-13. */
+crons.interval("house trader backtests", { hours: 6 }, internal.traders.refreshStats, {});
+/** The /trade hub's community cards; two tiny reads when nothing changed (convex/traders.ts rebuildHub). */
+crons.interval("trade hub cards", { minutes: 15 }, internal.traders.rebuildHub, { force: false });
+
 /** Anonymous engagement past its retention window. See convex/engagement.ts. */
 crons.interval(
   "prune old engagement counters",

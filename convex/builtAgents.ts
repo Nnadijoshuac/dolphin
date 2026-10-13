@@ -476,6 +476,7 @@ export const markRegistered = internalMutation({
       .unique();
     if (!row) return;
     await ctx.db.patch(row._id, { ...fields, status: "registered", updatedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.traders.rebuildHub, { force: true });
   },
 });
 
@@ -490,6 +491,7 @@ export const unpublish = mutation({
       .unique();
     if (!row || row.ownerAddress !== owner) throw new ConvexError("That agent is not yours.");
     await ctx.db.patch(row._id, { status: "unpublished", updatedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.traders.rebuildHub, { force: true });
   },
 });
 

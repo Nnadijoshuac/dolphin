@@ -1905,7 +1905,6 @@ export type HubTraderPage = HubTrader & {
 export const tradersApi = anyApi as unknown as {
   traders: {
     list: Query<Record<string, never>, { market: string; minUsd: number; statsAt: number | null; traders: TraderCard[] }>;
-    refreshStats: Action<Record<string, never>, { refreshed: boolean }>;
     start: Mutation<{ sessionToken: string; traderId: string; amountUsd: number; real: boolean; acknowledge?: boolean }, { conversationKey: string }>;
     arm: Mutation<{ sessionToken: string; conversationKey: string }, null>;
     stop: Mutation<{ sessionToken: string; conversationKey: string }, null>;

@@ -196,6 +196,7 @@ export const storeAdopted = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+    await ctx.scheduler.runAfter(0, internal.traders.rebuildHub, { force: true });
     return { conversationKey, hash: args.hash };
   },
 });

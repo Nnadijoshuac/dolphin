@@ -4,7 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { LivePnl } from "@/components/live-pnl";
@@ -43,13 +43,7 @@ function ago(at: number): string {
 
 export function TradeClient() {
   const data = useQuery(tradersApi.traders.list, {});
-  const refresh = useAction(tradersApi.traders.refreshStats);
   const [starting, setStarting] = useState<TraderCard | null>(null);
-
-  // Re-run the backtest when the stored one is old; the page shows the stored one meanwhile.
-  useEffect(() => {
-    void refresh({}).catch(() => undefined);
-  }, [refresh]);
 
   return (
     <div className="site-frame page-shell trade-page">
@@ -68,7 +62,7 @@ export function TradeClient() {
       </div>
       {data?.statsAt ? (
         <p className="trade-note">
-          Past results on BNB, re-checked {ago(data.statsAt)} on Binance price history, with PancakeSwap fees and gas. They don&rsquo;t predict what happens next.
+          Past results on BNB, with PancakeSwap fees and gas. They don&rsquo;t predict what happens next.
           Not financial advice.
         </p>
       ) : null}

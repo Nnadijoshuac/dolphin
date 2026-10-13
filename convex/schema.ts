@@ -425,6 +425,12 @@ export default defineSchema({
   /** Dolphin's own backtest of its hireable traders, one row, re-run at most every 6 hours (convex/traders.ts). */
   traderStats: defineTable({ stats: v.any(), at: v.number() }),
 
+  /**
+   * The /trade hub's community cards, built by convex/traders.ts rebuildHub and read as ONE row per visit.
+   * Computing them inside the public query read every listing, its draft and 60 trades each, per visitor.
+   */
+  tradeHubCache: defineTable({ community: v.any(), at: v.number() }),
+
   /** Which post brought people: anonymous counts per `?ref=` tag per UTC day (convex/campaignRefs.ts). */
   campaignRefs: defineTable({
     ref: v.string(),

@@ -1,8 +1,8 @@
 "use client";
 
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import styles from "@/app/trade/hub.module.css";
 import DotGrid from "@/components/react-bits/DotGrid";
@@ -46,13 +46,8 @@ export function creatorLabel(creator: HubTrader["creator"]): string {
 
 export function TradeHub() {
   const data = useQuery(tradersApi.traders.hub, {});
-  const refresh = useAction(tradersApi.traders.refreshStats);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-
-  useEffect(() => {
-    void refresh({}).catch(() => undefined);
-  }, [refresh]);
 
   const traders = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -109,7 +104,6 @@ export function TradeHub() {
             <section className={styles.section}>
               <div className={styles.sectionHead}>
                 <h2 className={styles.sectionTitle}>Featured</h2>
-                {data?.statsAt ? <span className={styles.sectionNote}>Records re-checked {ago(data.statsAt)}</span> : null}
               </div>
               <div className={styles.grid}>
                 {data ? featured.map((trader) => <TraderCard key={trader.id} trader={trader} />) : [0, 1].map((key) => <div className={`${styles.card} skeleton`} key={key} />)}

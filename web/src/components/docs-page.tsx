@@ -31,7 +31,13 @@ export const LIBRARY: LibraryGroup[] = [
       { href: "/docs/payments", label: "Payments" },
     ],
   },
-  { group: "Build", items: [{ href: "/docs/build", label: "Building agents" }] },
+  {
+    group: "Build",
+    items: [
+      { href: "/docs/build", label: "Building agents" },
+      { href: "/docs/traders", label: "Trading agents" },
+    ],
+  },
   {
     group: "Developers",
     items: [

@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import sharp from "sharp";
 
 import { parseArgs, persona, PERSONA_ART, signed, strategySentence } from "@/app/test/choices";
 import { runStrategyTest } from "@/server/convex";
@@ -36,6 +37,15 @@ function day(ms: number | null): string {
   return ms === null ? "" : new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
+/**
+ * WhatsApp shows no preview for an image over ~300 KB or slow to load, and the art makes the PNG that
+ * next/og renders ~840 KB. Re-encoded as a progressive JPEG it is ~100 KB, so every app unfurls it.
+ */
+async function asJpeg(png: ImageResponse, headers: Record<string, string>): Promise<Response> {
+  const jpeg = await sharp(Buffer.from(await png.arrayBuffer())).jpeg({ quality: 82, progressive: true, mozjpeg: true }).toBuffer();
+  return new Response(new Uint8Array(jpeg), { headers: { ...headers, "Content-Type": "image/jpeg", "Content-Length": String(jpeg.length) } });
+}
+
 export async function GET(request: Request) {
   const args = parseArgs(new URL(request.url).searchParams);
   // X keeps a card for days: one retry before falling back to the plain one.
@@ -43,7 +53,7 @@ export async function GET(request: Request) {
   const options = { width: 1200, height: 630, ...(loaded.length ? { fonts: loaded } : {}) };
 
   if (!result) {
-    return new ImageResponse(
+    return asJpeg(new ImageResponse(
       (
         <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", fontFamily: "Geist" }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- next/og renders plain img only */}
@@ -51,15 +61,15 @@ export async function GET(request: Request) {
           <div style={{ display: "flex", margin: "auto 0 auto 72px", fontSize: 64, fontWeight: 800, color: INK, maxWidth: 560, lineHeight: 1.1 }}>Would your strategy have survived?</div>
         </div>
       ),
-      { ...options, headers: { "Cache-Control": "no-store" } },
-    );
+      options,
+    ), { "Cache-Control": "no-store" });
   }
 
   const who = persona(result);
   const beat = Math.round((result.resultPct - result.holdPct) * 10) / 10;
   const src = new URL(ART[who.title] ?? ART["Market Assassin"], request.url).toString();
 
-  return new ImageResponse(
+  return asJpeg(new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", position: "relative", fontFamily: "Geist", color: INK }}>
         {/* eslint-disable-next-line @next/next/no-img-element -- next/og renders plain img only */}
@@ -84,6 +94,6 @@ export async function GET(request: Request) {
         </div>
       </div>
     ),
-    { ...options, headers: { "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800" } },
-  );
+    options,
+  ), { "Cache-Control": "public, max-age=300, s-maxage=31536000, stale-while-revalidate=604800" });
 }

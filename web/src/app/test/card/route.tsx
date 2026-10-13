@@ -52,12 +52,12 @@ export async function GET(request: Request) {
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: BG, color: INK, padding: "56px 64px", fontFamily: "sans-serif" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", fontSize: 26, color: GOLD, letterSpacing: 4, textTransform: "uppercase" }}>{who.title}</div>
+          <div style={{ display: "flex", fontSize: 26, color: GOLD, letterSpacing: 2, textTransform: "uppercase" }}>{who.title}</div>
           <div style={{ display: "flex", fontSize: 24, color: MUTED }}>dolphinamp.xyz/test</div>
         </div>
         <div style={{ display: "flex", marginTop: 28, gap: 48 }}>
           <div style={{ display: "flex", flexDirection: "column", width: 520 }}>
-            <div style={{ display: "flex", fontSize: 150, fontWeight: 800, lineHeight: 1, color: result.resultPct >= 0 ? UP : DOWN, letterSpacing: -6 }}>{signed(result.resultPct)}</div>
+            <div style={{ display: "flex", fontSize: 150, fontWeight: 700, lineHeight: 1, color: result.resultPct >= 0 ? UP : DOWN }}>{signed(result.resultPct)}</div>
             <div style={{ display: "flex", fontSize: 30, marginTop: 18, color: INK }}>
               {`Just holding ${result.coin}: ${signed(result.holdPct)}`}
             </div>
@@ -89,6 +89,10 @@ export async function GET(request: Request) {
         </div>
       </div>
     ),
-    { width: 1200, height: 630, headers: { "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800" } },
+    {
+      width: 1200,
+      height: 630,
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800" },
+    },
   );
 }

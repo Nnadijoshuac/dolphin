@@ -4914,3 +4914,11 @@ select {
 .trade-pill[data-real] { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 .trade-link { font-weight: 700; color: var(--ink); }
 .trade-link:hover { text-decoration: underline; }
+
+/* shadcn ToggleGroup's selected item (components/ui/toggle-group.tsx). */
+[data-slot="toggle-group-item"][data-state="on"],
+[data-slot="toggle-group-item"][data-state="on"]:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--canvas);
+}

@@ -1,9 +1,9 @@
 /**
  * Collapses duplicate registrations to one listing. Rule: convex/lib/dedupe.ts.
  *
- * Runs hourly from ranking.recomputeUsage (the winner of a group is its
- * highest-ranked member, and rank moves with usage) and after a new agent is
- * listed. Considers `live` and `duplicate` rows together, so when a group's
+ * Runs once a day from convex/crons.ts. It used to run hourly from
+ * ranking.recomputeUsage and after every new listing, and reading the whole
+ * catalog that often used 8 GB of database I/O in twelve days (2026-10-13). Considers `live` and `duplicate` rows together, so when a group's
  * winner stops answering and drops out, the next registration is promoted
  * back to `live` on the following run.
  */

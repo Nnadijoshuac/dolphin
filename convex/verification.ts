@@ -567,8 +567,9 @@ export const applyVerification = internalMutation({
     if (!existing) {
       await ctx.db.insert("agents", next);
       await ctx.scheduler.runAfter(0, internal.facets.recompute, {});
-      // A new listing may be a re-registration of one already listed.
-      await ctx.scheduler.runAfter(0, internal.catalogQuality.dedupe, {});
+      // A new listing may be a re-registration of one already listed; the daily
+      // dedupe cron catches it. Scheduling a full-catalog dedupe per insert was
+      // most of the 10 GB of database I/O that disabled the team on 2026-10-13.
       return;
     }
 

@@ -128,10 +128,10 @@ export const recomputeUsage = internalMutation({
       changed++;
     }
 
-    // Which registration of a duplicated product is listed follows rank, so the
-    // dedupe pass runs after every ranking run. Shelves order by rank too. Both
-    // compare before writing, so an unchanged hour writes nothing.
-    await ctx.scheduler.runAfter(0, internal.catalogQuality.dedupe, {});
+    // Shelves order by rank, so they follow every ranking run. The dedupe pass
+    // used to run here too and is now its own daily cron: it reads every listed
+    // agent in full, and hourly it was 4 GB of database I/O per deployment in
+    // twelve days (2026-10-13). Which duplicate is listed can wait a day.
     await ctx.scheduler.runAfter(0, internal.shelves.rebuild, {});
 
     return { agents: agents.length, changed };

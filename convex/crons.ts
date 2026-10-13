@@ -144,6 +144,20 @@ crons.interval(
   {},
 );
 
+/**
+ * One listing per product (convex/catalogQuality.ts). Daily, not hourly: each
+ * pass reads every listed agent in full. Run hourly from ranking and once per
+ * new listing it reached 8 GB of the team's 10 GB database I/O by 2026-10-13
+ * and the free plan disabled both deployments. A re-registration may show twice
+ * for up to a day; that is the trade.
+ */
+crons.daily(
+  "collapse duplicate registrations",
+  { hourUTC: 3, minuteUTC: 17 },
+  internal.catalogQuality.dedupe,
+  {},
+);
+
 /** Anonymous engagement past its retention window. See convex/engagement.ts. */
 crons.interval(
   "prune old engagement counters",

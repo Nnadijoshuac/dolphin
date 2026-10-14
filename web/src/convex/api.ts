@@ -1941,6 +1941,7 @@ export const traderSalesApi = anyApi as unknown as {
     setRunPrice: Mutation<{ sessionToken: string; agentKey: string; priceU: number | null }, { priceU: number | null }>;
     reserve: Mutation<{ sessionToken: string; agentKey: string }, { purchaseId: string; payTo: string; token: string; amountRaw: string; priceU: number }>;
     confirm: Action<{ sessionToken: string; purchaseId: string; txHash: string }, { paid: true }>;
+    setCreatorName: Mutation<{ sessionToken: string; agentKey: string; name: string | null }, { name: string | null }>;
   };
 };
 

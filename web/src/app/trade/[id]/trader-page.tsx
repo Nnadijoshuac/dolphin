@@ -200,6 +200,7 @@ export function TraderPage({ id }: { id: string }) {
                 <dt>Made by</dt>
                 <dd>{trader.creator.name ?? creatorLabel(trader.creator)}</dd>
               </div>
+              {trader.kind === "community" ? <NameControl agentKey={trader.id} current={trader.creator.name} /> : null}
               {trader.kind === "community" ? <PriceControl agentKey={trader.id} /> : null}
               <hr />
               <button className={styles.primary} onClick={() => setStarting(true)} type="button">
@@ -245,6 +246,42 @@ function PriceControl({ agentKey }: { agentKey: string }) {
           value={value}
         />
         <button className="text-[12px] font-semibold underline" onClick={() => void save(value ? Number(value) : null)} type="button">
+          Save
+        </button>
+      </dd>
+    </div>
+  );
+}
+
+/** Its builder sets the name shown as "by …" on /trade (convex/traderSales.ts setCreatorName). */
+function NameControl({ agentKey, current }: { agentKey: string; current: string | null }) {
+  const session = useWalletSession();
+  const access = useQuery(traderSalesApi.traderSales.access, session.sessionToken ? { agentKey, sessionToken: session.sessionToken } : "skip");
+  const setName = useMutation(traderSalesApi.traderSales.setCreatorName);
+  const [draft, setDraft] = useState<string | null>(null);
+  if (!session.sessionToken || !access?.own) return null;
+  const value = draft ?? current ?? "";
+  const save = async () => {
+    try {
+      await setName({ sessionToken: session.sessionToken!, agentKey, name: value.trim() ? value : null });
+      setDraft(null);
+      toast.success(value.trim() ? `Shown as "by ${value.trim()}".` : "Name cleared.");
+    } catch (cause) {
+      toast.error(toUserMessage(cause, "That name did not save."));
+    }
+  };
+  return (
+    <div>
+      <dt>Your name on Dolphin</dt>
+      <dd className="flex items-center gap-2">
+        <input
+          className="h-8 w-32 rounded-md border border-line bg-paper px-2 text-[13px]"
+          maxLength={32}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="e.g. Serenity"
+          value={value}
+        />
+        <button className="text-[12px] font-semibold underline" onClick={() => void save()} type="button">
           Save
         </button>
       </dd>

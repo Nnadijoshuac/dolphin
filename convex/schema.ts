@@ -1122,6 +1122,8 @@ export default defineSchema({
      * Not hirePriceUsd, which is the per-call price of the agent's own API.
      */
     runPriceU: v.optional(v.union(v.number(), v.null())),
+    /** The name its builder shows on /trade (traderSales.setCreatorName). Absent: their X handle or address. */
+    creatorName: v.optional(v.union(v.string(), v.null())),
     /**
      * HOW IT IS CALLED (owner, 2026-10-02). "mcp": a tool server, any tool
      * call is one paid call. "a2a": an agent, one task in and one result out.

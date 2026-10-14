@@ -157,3 +157,30 @@ export const confirm = action({
     return { paid: true };
   },
 });
+
+/** The builder names themselves on /trade - 2 to 32 letters, digits, spaces, dots, dashes or underscores. */
+export const setCreatorName = mutation({
+  args: { sessionToken: v.string(), agentKey: v.string(), name: v.union(v.string(), v.null()) },
+  handler: async (ctx, { sessionToken, agentKey, name }) => {
+    const wallet = await requireWalletAddress(ctx, sessionToken, "Naming yourself");
+    const listing = await listingOf(ctx, agentKey);
+    if (!listing) throw new ConvexError("That trader is not published.");
+    if (listing.ownerAddress.toLowerCase() !== wallet.toLowerCase()) throw new ConvexError("Only its builder can do that.");
+    const clean = name === null ? null : name.trim().replace(/\s+/g, " ");
+    if (clean !== null && !/^[\p{L}\p{N} ._-]{2,32}$/u.test(clean)) throw new ConvexError("Use 2 to 32 letters, numbers, spaces, dots, dashes or underscores.");
+    await ctx.db.patch(listing._id, { creatorName: clean, updatedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.traders.rebuildHub, { force: true });
+    return { name: clean };
+  },
+});
+
+/** Operators: name a listing's builder (the owner asked his own traders to read "Serenity"). */
+export const setCreatorNameInternal = internalMutation({
+  args: { agentKey: v.string(), name: v.union(v.string(), v.null()) },
+  handler: async (ctx, { agentKey, name }) => {
+    const listing = await listingOf(ctx, agentKey);
+    if (!listing) throw new ConvexError("Not published.");
+    await ctx.db.patch(listing._id, { creatorName: name, updatedAt: Date.now() });
+    await ctx.scheduler.runAfter(0, internal.traders.rebuildHub, { force: true });
+  },
+});

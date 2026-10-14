@@ -450,9 +450,23 @@ export default function DiscoverPage() {
       </section>
 
       <HomeStory />
-      {/* Phones: the catalog lives on /search now; one link instead of a long list (owner: "too busy"). */}
+      {/*
+        Phones: four agents for hire from the "Ready to hire" shelf the page already loads (owner, 2026-10-14:
+        without them it stopped feeling like a marketplace), then one link to the full catalog.
+      */}
+      {isMobile && shelves[0]?.agents.length ? (
+        <section aria-labelledby="mobile-hire" className={styles.mobileHire}>
+          <h2 id="mobile-hire">Agents for hire</h2>
+          <p>Paid per job, held in escrow until they deliver.</p>
+          <div className={styles.mobileRows}>
+            {shelves[0].agents.slice(0, 4).map((agent) => (
+              <MobileAgentRow agent={agent} key={agent.agentKey} signals={shelfSignals.get(agent.agentKey)} surface="discover" />
+            ))}
+          </div>
+        </section>
+      ) : null}
       <div className={styles.mobileAgentsLink}>
-        <Link href="/search">Browse agents for hire →</Link>
+        <Link href="/search">See all {facets.totalLive > 0 ? facets.totalLive : ""} agents →</Link>
       </div>
 
       {!isMobile ? (

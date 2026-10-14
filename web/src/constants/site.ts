@@ -43,6 +43,9 @@ export const SITE_NAME = "Dolphin";
 /** The in-product campaign hub. Both responsive navigation surfaces use it. */
 export const SET_AND_QUEST_URL = "/set-and-quest";
 
+/** The community: a public Telegram group, created 2026-10-14 by the owner's account. */
+export const TELEGRAM_URL = "https://t.me/dolphinamp_traders";
+
 /** The organizer's page remains the source of truth for registration and rules. */
 export const SET_AND_EARN_OFFICIAL_URL =
   "https://www.bnbchain.org/en/hackathons/smart-money-era";

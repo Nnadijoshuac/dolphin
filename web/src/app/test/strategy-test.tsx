@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { strategyTestApi, type StrategyTestArgs, type StrategyTestResult, type TestBoardRow } from "@/convex/api";
+import { TELEGRAM_URL } from "@/constants/site";
 import { toast } from "@/store/use-toast-store";
 import { toUserMessage } from "@/wallet/wallet-errors";
 import { useWalletSession } from "@/wallet/wallet-session";
@@ -312,6 +313,9 @@ function Result({ args, result, loading, error, toBeat }: { args: StrategyTestAr
           Take part
         </Link>
       </p>
+      <a className="text-sm font-semibold text-[#f3c13a] underline underline-offset-4" href={TELEGRAM_URL} rel="noreferrer" target="_blank">
+        Post your card in Dolphin Traders on Telegram →
+      </a>
     </div>
   );
 }

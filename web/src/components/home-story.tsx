@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { SET_AND_QUEST_URL } from "@/constants/site";
+import { SET_AND_QUEST_URL, TELEGRAM_URL } from "@/constants/site";
 
 /*
  * THE ONE STORY (owner, 2026-10-14: "think of it as though you didn't build it... then criticise it").
@@ -65,6 +65,9 @@ export function HomeStory() {
           ))}
         </ol>
         <QuestBanner />
+        <a className="mt-4 inline-block text-sm font-semibold text-[#f3c13a] underline underline-offset-4" href={TELEGRAM_URL} rel="noreferrer" target="_blank">
+          Join Dolphin Traders on Telegram, where people post their strategy results →
+        </a>
       </div>
     </section>
   );

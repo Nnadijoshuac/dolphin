@@ -28,6 +28,9 @@ const navigation = [
 ] as const;
 
 
+const BRAND_HEADER_PATHS = ["/test", "/docs", "/setups", "/policies", "/whitepaper"];
+const BRAND_HEADER_EXACT = ["/trade"];
+
 function isActiveRoute(pathname: string, path: string) {
   if (path === "/") {
     return pathname === "/" || pathname.startsWith("/agent/");
@@ -114,7 +117,9 @@ export function SiteHeader() {
         </div>
       </header>
 
-      {pathname === "/" ? (
+      {/* Phones: every top-level page without its own header gets logo + menu (owner, 2026-10-14: /test and
+          /trade had no way to navigate). Trader pages get a back arrow instead. */}
+      {pathname === "/" || BRAND_HEADER_EXACT.includes(pathname) || BRAND_HEADER_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`)) ? (
         <header className="mobile-brand-header">
           <Link href="/" aria-label="Dolphin home">
             <BrandMark size={38} />
@@ -137,6 +142,7 @@ export function SiteHeader() {
        * explanation, which five one-word icons never did.
        */}
       {pathname.startsWith("/manage/") && <MobileStackHeader title="Manage agent" fallback="/my-agents" />}
+      {pathname.startsWith("/trade/") && <MobileStackHeader title="Trader" fallback="/trade" />}
     </>
   );
 }

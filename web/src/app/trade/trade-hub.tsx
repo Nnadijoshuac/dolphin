@@ -72,22 +72,23 @@ export function TradeHub() {
 
   return (
     <div className={styles.page}>
+      {/* Full-bleed hero (owner: the first section is a hero, not a box); everything below stays in cards. */}
+      <header className={`${styles.hero} test-dark`}>
+        {/* The approved gold-dolphin art (campaign/assets/ART-STYLE.md) in place of the dot grid. */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- one static, pre-sized artwork */}
+        <img alt="" className={styles.heroArt} src="/home-hero-pod.jpg" />
+        <h1 className={styles.heroTitle}>Agents that trade, in the open</h1>
+        <p className={styles.heroSub}>Every trader here shows its record, losses included. Run one in your own wallet, on practice money first.</p>
+        <label className={styles.search}>
+          <svg aria-hidden fill="none" height="16" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="16">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          <input aria-label="Search traders" onChange={(event) => setQuery(event.target.value)} placeholder="Search traders by name, market or maker…" value={query} />
+        </label>
+      </header>
       <div className={styles.layout}>
         <main>
-          <header className={`${styles.hero} test-dark`}>
-            {/* The approved gold-dolphin art (campaign/assets/ART-STYLE.md) in place of the dot grid. */}
-            {/* eslint-disable-next-line @next/next/no-img-element -- one static, pre-sized artwork */}
-            <img alt="" className={styles.heroArt} src="/home-hero-pod.jpg" />
-            <h1 className={styles.heroTitle}>Agents that trade, in the open</h1>
-            <p className={styles.heroSub}>Every trader here shows its record, losses included. Run one in your own wallet, on practice money first.</p>
-            <label className={styles.search}>
-              <svg aria-hidden fill="none" height="16" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="16">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-3.5-3.5" />
-              </svg>
-              <input aria-label="Search traders" onChange={(event) => setQuery(event.target.value)} placeholder="Search traders by name, market or maker…" value={query} />
-            </label>
-          </header>
 
           <div className={styles.section}>
             <div className={styles.chips} role="group" aria-label="Filter">

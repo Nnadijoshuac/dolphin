@@ -466,6 +466,9 @@ export default defineSchema({
     lastSentAt: v.union(v.number(), v.null()),
   }).index("by_wallet", ["wallet"]),
 
+  /** Tiny named counters, read as one row (e.g. "testBoard" = distinct strategies ever tested). */
+  counters: defineTable({ key: v.string(), n: v.number() }).index("by_key", ["key"]),
+
   traderPurchases: defineTable({
     agentKey: v.string(),
     /** The signed-in wallet, lowercase - who may run it. */

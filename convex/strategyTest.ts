@@ -187,9 +187,21 @@ export const record = internalMutation({
   },
   handler: async (ctx, row) => {
     const existing = await ctx.db.query("testBoard").withIndex("by_key", (q) => q.eq("key", row.key)).unique();
-    if (!existing) await ctx.db.insert("testBoard", { ...row, at: Date.now() });
+    if (!existing) {
+      await ctx.db.insert("testBoard", { ...row, at: Date.now() });
+      // "Best of N tested" (a builder's point on Reddit, 2026-10-14: show how many configurations were tried).
+      const counter = await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "testBoard")).unique();
+      if (counter) await ctx.db.patch(counter._id, { n: counter.n + 1 });
+      else await ctx.db.insert("counters", { key: "testBoard", n: (await ctx.db.query("testBoard").take(5000)).length });
+    }
     else if (existing.resultPct !== row.resultPct || existing.trades !== row.trades) await ctx.db.patch(existing._id, { ...row, at: Date.now() });
   },
+});
+
+/** How many distinct strategies have been tested, so the board can say "best of N". */
+export const boardCount = query({
+  args: {},
+  handler: async (ctx) => (await ctx.db.query("counters").withIndex("by_key", (q) => q.eq("key", "testBoard")).unique())?.n ?? 0,
 });
 
 /** The best strategies anyone has tested. One that barely traded is luck, not a strategy, so it needs 3 trades. */

@@ -336,6 +336,7 @@ function Stat({ label, value }: { label: string; value: string }) {
  */
 function Board({ onPick }: { onPick: (row: TestBoardRow) => void }) {
   const rows = useQuery(strategyTestApi.strategyTest.board, {});
+  const tested = useQuery(strategyTestApi.strategyTest.boardCount, {});
   if (!rows || rows.length === 0) return null;
   const podium = [rows[1], rows[0], rows[2]].filter(Boolean) as TestBoardRow[];
   const rest = rows.slice(3);
@@ -343,7 +344,7 @@ function Board({ onPick }: { onPick: (row: TestBoardRow) => void }) {
   return (
     <section className="mx-auto mt-16 w-[min(100%-32px,1200px)]">
       <h2 className="text-2xl font-bold sm:text-3xl">Best strategies so far</h2>
-      <p className="mt-1 text-sm text-muted">The strongest results anyone has tested here, over the same 12 months. Tap one to try it.</p>
+      <p className="mt-1 text-sm text-muted">{tested ? `The best of ${tested.toLocaleString()} strategies people have tested here` : "The strongest results anyone has tested here"}, over the same 12 months. More tries means more luck in the top spots: treat these as ideas, not proof. Tap one to try it.</p>
       <div className="mt-6 grid items-end gap-3 sm:grid-cols-3">
         {podium.map((row) => {
           const rank = rows.indexOf(row) + 1;

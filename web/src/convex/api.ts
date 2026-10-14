@@ -1925,6 +1925,7 @@ export const strategyTestApi = anyApi as unknown as {
   strategyTest: {
     run: Action<StrategyTestArgs, StrategyTestResult>;
     board: Query<Record<string, never>, TestBoardRow[]>;
+    boardCount: Query<Record<string, never>, number>;
     startPractice: Mutation<
       { sessionToken: string; coin: string; entry: string; level: number; target: number | null; stop: number | null; amountUsd: number },
       { conversationKey: string }

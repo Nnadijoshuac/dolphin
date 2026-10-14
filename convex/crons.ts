@@ -163,6 +163,9 @@ crons.interval("house trader backtests", { hours: 6 }, internal.traders.refreshS
 /** The /trade hub's community cards; two tiny reads when nothing changed (convex/traders.ts rebuildHub). */
 crons.interval("trade hub cards", { minutes: 15 }, internal.traders.rebuildHub, { force: false });
 
+/** "Your traders' week" email, Mondays 08:07 UTC (09:07 in Lagos). See convex/weeklyDigest.ts. */
+crons.weekly("weekly trader email", { dayOfWeek: "monday", hourUTC: 8, minuteUTC: 7 }, internal.weeklyDigest.send, {});
+
 /** Anonymous engagement past its retention window. See convex/engagement.ts. */
 crons.interval(
   "prune old engagement counters",

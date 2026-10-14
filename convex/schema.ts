@@ -458,6 +458,14 @@ export default defineSchema({
     .index("by_key", ["key"])
     .index("by_result", ["resultPct"]),
 
+  /** "Your traders' week" email subscribers (convex/weeklyDigest.ts): one row per wallet that asked. */
+  weeklyDigest: defineTable({
+    wallet: v.string(),
+    email: v.string(),
+    createdAt: v.number(),
+    lastSentAt: v.union(v.number(), v.null()),
+  }).index("by_wallet", ["wallet"]),
+
   traderPurchases: defineTable({
     agentKey: v.string(),
     /** The signed-in wallet, lowercase - who may run it. */

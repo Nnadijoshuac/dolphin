@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import styles from "@/app/trade/hub.module.css";
 import { StartDialog } from "@/app/trade/trade-client";
 import { WalletAvatar } from "@/components/wallet-avatar";
-import { traderSalesApi, tradersApi, type HubTrader, type MyTrader, type TraderAccess } from "@/convex/api";
+import { traderSalesApi, tradersApi, weeklyDigestApi, type HubTrader, type MyTrader, type TraderAccess } from "@/convex/api";
 import { toast } from "@/store/use-toast-store";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -286,8 +286,63 @@ function YourTraders() {
           ))}
         </div>
       )}
+      {session.sessionToken && mine && mine.length > 0 ? <WeeklyEmail sessionToken={session.sessionToken} /> : null}
       <p className={styles.sideFoot}>Each one trades from your own Dolphin Wallet, by fixed rules. Stop any of them whenever you like.</p>
     </aside>
+  );
+}
+
+/** Monday email of what each trader did that week. Offered only to someone who runs a trader. */
+function WeeklyEmail({ sessionToken }: { sessionToken: string }) {
+  const status = useQuery(weeklyDigestApi.weeklyDigest.mine, { sessionToken });
+  const subscribe = useMutation(weeklyDigestApi.weeklyDigest.subscribe);
+  const unsubscribe = useMutation(weeklyDigestApi.weeklyDigest.unsubscribe);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!status) return null;
+  if (status.subscribed) {
+    return (
+      <p className={styles.sideFoot}>
+        Weekly email on, to {status.email}.{" "}
+        <button className={styles.linkBtn} onClick={() => void unsubscribe({ sessionToken }).catch(() => undefined)} type="button">
+          Turn off
+        </button>
+      </p>
+    );
+  }
+  const save = async () => {
+    setBusy(true);
+    try {
+      await subscribe({ sessionToken, email });
+      toast.success("Done. You'll get your traders' week every Monday.");
+    } catch (cause) {
+      toast.error(toUserMessage(cause, "That did not save."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className={styles.sideFoot}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <p className="mb-2 font-medium text-ink">Get their week by email, every Monday</p>
+      <div className="flex gap-2">
+        <input
+          className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-paper-strong px-3 text-[13px]"
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="you@email.com"
+          type="email"
+          value={email}
+        />
+        <button className={styles.primary} disabled={busy || !email} type="submit">
+          {busy ? "…" : "Send"}
+        </button>
+      </div>
+    </form>
   );
 }
 

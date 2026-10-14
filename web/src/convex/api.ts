@@ -1944,6 +1944,15 @@ export const traderSalesApi = anyApi as unknown as {
   };
 };
 
+/** "Your traders' week" email (convex/weeklyDigest.ts). */
+export const weeklyDigestApi = anyApi as unknown as {
+  weeklyDigest: {
+    mine: Query<{ sessionToken: string }, { subscribed: boolean; email: string | null } | null>;
+    subscribe: Mutation<{ sessionToken: string; email: string }, { email: string }>;
+    unsubscribe: Mutation<{ sessionToken: string }, null>;
+  };
+};
+
 export const tradersApi = anyApi as unknown as {
   traders: {
     list: Query<Record<string, never>, { market: string; minUsd: number; statsAt: number | null; traders: TraderCard[] }>;

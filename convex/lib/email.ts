@@ -38,7 +38,8 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails";
  * first send fails. Overridable so a staging deployment can send from its own
  * verified sender rather than production's.
  */
-const DEFAULT_FROM = "Dolphin <alerts@dolphinamp.com>";
+// dolphinamp.xyz is the domain verified in Resend (checked 2026-10-14); .com was never verified, so every send was refused.
+const DEFAULT_FROM = "Dolphin <alerts@dolphinamp.xyz>";
 
 export type EmailResult =
   | { ok: true; id: string | null }

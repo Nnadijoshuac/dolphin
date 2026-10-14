@@ -132,6 +132,7 @@ import type * as verification from "../verification.js";
 import type * as walletActions from "../walletActions.js";
 import type * as walletAuth from "../walletAuth.js";
 import type * as walletHistory from "../walletHistory.js";
+import type * as weeklyDigest from "../weeklyDigest.js";
 import type * as x402 from "../x402.js";
 
 import type {
@@ -265,6 +266,7 @@ declare const fullApi: ApiFromModules<{
   walletActions: typeof walletActions;
   walletAuth: typeof walletAuth;
   walletHistory: typeof walletHistory;
+  weeklyDigest: typeof weeklyDigest;
   x402: typeof x402;
 }>;
 

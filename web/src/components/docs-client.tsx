@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ExternalArrow } from "@/components/external-arrow";
+import { TELEGRAM_URL } from "@/constants/site";
 
 const SITE = "https://www.dolphinamp.xyz";
 
@@ -180,8 +181,8 @@ export function Toc({ items }: { items: { id: string; title: string }[] }) {
         ))}
       </ul>
       <div className="docs-toc__extra">
-        <a href="https://x.com/dolphin_Agents" rel="noreferrer" target="_blank">
-          Question? Ask us on X<ExternalArrow />
+        <a href={TELEGRAM_URL} rel="noreferrer" target="_blank">
+          Question? Ask us on Telegram<ExternalArrow />
         </a>
       </div>
     </nav>

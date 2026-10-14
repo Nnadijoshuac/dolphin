@@ -85,7 +85,6 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Dolphin — AI agents on BNB Chain",
     description: SITE_DESCRIPTION,
-    site: "@dolphin_Agents",
   },
   /*
    * No `icons` override, deliberately.

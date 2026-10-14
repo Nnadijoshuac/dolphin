@@ -18,15 +18,18 @@ export const LEGAL = {
   jurisdiction: null as string | null,
   /** An inbox for privacy and legal requests and security reports. */
   email: null as string | null,
-  /** The public channel that exists today. */
-  x: "https://x.com/dolphin_Agents",
-  xHandle: "@dolphin_Agents",
-  updated: "3 October 2026",
+  /**
+   * The public channel that exists today. Was @dolphin_Agents on X until that
+   * account was suspended (2026-10-15); a dead handle is not a way to reach us.
+   */
+  instagram: "https://www.instagram.com/dolphinamp/",
+  instagramHandle: "@dolphinamp",
+  updated: "15 October 2026",
 } as const;
 
 /** How to reach us, stated with whatever channel really exists. */
 export function contactLine(): string {
   return LEGAL.email
     ? `email ${LEGAL.email}`
-    : `message ${LEGAL.xHandle} on X (a dedicated email address will be listed here)`;
+    : `message ${LEGAL.instagramHandle} on Instagram (a dedicated email address will be listed here)`;
 }

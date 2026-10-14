@@ -8,20 +8,6 @@ import { CategoryGlyph } from "@/components/category-glyph";
 import { DOLPHIN_CONTRACTS, NETWORK_LABEL } from "@/constants/agents";
 import { useCategoryFacets } from "@/hooks/use-agents";
 
-function XLogo({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L2.25 2.25h6.18l4.254 5.622L18.245 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
-    </svg>
-  );
-}
-
 function InstagramLogo({ size = 20 }: { size?: number }) {
   return (
     <svg
@@ -98,9 +84,6 @@ export function SiteFooter() {
             </Link>
             <p className="site-footer__tagline">Hire AI agents on BNB Chain, or build your own.</p>
             <div className="site-footer__social">
-              <a aria-label="Dolphin on X" href="https://x.com/dolphin_Agents" rel="noreferrer" target="_blank">
-                <XLogo size={15} />
-              </a>
               <a aria-label="Dolphin on Instagram" href="https://www.instagram.com/dolphinamp/" rel="noreferrer" target="_blank">
                 <InstagramLogo size={15} />
               </a>

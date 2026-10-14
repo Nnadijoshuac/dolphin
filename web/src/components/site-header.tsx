@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 
 import { BnbLogo, BrandMark } from "@/components/brand-mark";
@@ -14,22 +15,25 @@ import { useWallet } from "@/wallet/wallet-provider";
 
 // Four destinations and the quest (owner, 2026-10-14: seven items, two called "Dolphin", told a newcomer
 // nothing). The builder is the Build button; My agents appears once a wallet is connected.
+// PancakeSwap's header pattern (campaign/research/ui-refs-2026-10-13/refs-navs.png; owner, 2026-10-14: "the nav
+// bar is a mess... a list in two lines, who does that"): logo and a few short links on the LEFT, one wallet
+// button on the RIGHT. Wallet and My agents live in the wallet button's menu; the network is in its tooltip
+// and the footer. Every label stays on one line.
 const navigation = [
-  { path: "/test", label: "Test", icon: "sparkle" as const },
   { path: "/trade", label: "Traders", icon: "trading" as const },
+  { path: "/test", label: "Test", icon: "sparkle" as const },
   { path: "/search", label: "Agents", icon: "search" as const },
-  { path: "/wallet", label: "Wallet", icon: "wallet" as const },
+  { path: "/dolphin?mode=build&new=1", label: "Build", icon: "sparkle" as const },
   { path: SET_AND_QUEST_URL, label: "Set and Quest", icon: "sparkle" as const, quest: true },
 ] as const;
 
-const [networkName, networkEnvironment] = NETWORK_LABEL.split(" · ");
 
 function isActiveRoute(pathname: string, path: string) {
   if (path === "/") {
     return pathname === "/" || pathname.startsWith("/agent/");
   }
 
-  return pathname.startsWith(path);
+  return pathname.startsWith(path.split("?")[0]);
 }
 
 function shortAddress(address: string) {
@@ -54,7 +58,7 @@ export function SiteHeader() {
   return (
     <>
       <header className="desktop-site-header sticky top-0 z-50 border-b border-line bg-canvas/92 backdrop-blur-xl">
-        <div className="site-frame grid h-[72px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-5">
+        <div className="site-frame flex h-[68px] items-center gap-8">
           <Link
             aria-label="Dolphin home"
             className="interactive flex shrink-0 items-center gap-2.5 justify-self-start no-underline"
@@ -64,7 +68,7 @@ export function SiteHeader() {
             <span className="text-lg font-semibold tracking-[-0.035em]">Dolphin</span>
           </Link>
 
-          <nav aria-label="Primary navigation" className="hidden h-full items-center justify-self-center md:flex">
+          <nav aria-label="Primary navigation" className="hidden h-full items-center md:flex">
             {navigation.map((item) => {
               const isActive = isActiveRoute(pathname, item.path);
 
@@ -75,58 +79,32 @@ export function SiteHeader() {
               return (
                 <Link
                   aria-current={isActive ? "page" : undefined}
-                  className={`interactive relative flex h-full items-center whitespace-nowrap px-2 text-sm font-medium no-underline xl:px-4 ${
-                    isActive ? "text-ink" : "text-muted hover:text-ink"
+                  className={`interactive relative flex h-full items-center whitespace-nowrap px-3 text-[15px] font-medium no-underline ${
+                    isActive ? "text-ink" : "text-ink-soft hover:text-ink"
                   }`}
                   href={item.path}
                   key={item.path}
+                  prefetch={false}
                 >
                   {item.label}
                   {isActive ? (
-                    <span className="absolute inset-x-2 bottom-0 h-0.5 bg-accent xl:inset-x-4" />
+                    <span className="absolute inset-x-3 bottom-0 h-0.5 bg-accent" />
                   ) : null}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="flex items-center gap-3 justify-self-end">
-            {wallet.isConnected ? (
-              <Link className="interactive hidden text-sm font-medium text-muted no-underline hover:text-ink lg:inline" href="/my-agents">
-                My agents
-              </Link>
-            ) : null}
-            <Link
-              className="interactive inline-flex min-h-10 items-center rounded-xl border border-line bg-paper px-4 text-xs font-semibold text-ink no-underline hover:bg-paper-strong"
-              href="/dolphin?mode=build&new=1"
-            >
-              Build
-            </Link>
-            {/* The network, in full. Set and Earn counts "not stated on the page" against a
-                marketplace, and "BNB Chain" alone does not say mainnet or testnet. */}
-            <div className="hidden items-center gap-2.5 text-muted xl:flex">
-              <BnbLogo size={15} />
-              <span className="grid gap-0.5 whitespace-nowrap leading-none">
-                <strong className="text-[0.68rem] font-semibold text-ink-soft">{networkName}</strong>
-                <small className="text-[0.6rem] font-medium text-faint">{networkEnvironment}</small>
-              </span>
-            </div>
-
+          <div className="ml-auto flex shrink-0 items-center">
             {wallet.isConnected && wallet.address ? (
-              <Link
-                className="interactive inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-paper px-3 text-xs font-semibold no-underline hover:bg-paper-strong"
-                href="/wallet"
-                title={wallet.address}
-              >
-                <span aria-hidden="true" className="h-2 w-2 rounded-full bg-success" />
-                <span className="font-mono">{shortAddress(wallet.address)}</span>
-              </Link>
+              <WalletMenu address={wallet.address} />
             ) : (
               <button
                 aria-busy={wallet.isConnecting}
-                className="interactive min-h-10 rounded-xl bg-accent px-4 text-xs font-semibold text-ink hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60"
+                className="interactive inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full bg-accent px-5 text-sm font-semibold text-[#171813] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60"
                 disabled={wallet.isConnecting}
                 onClick={() => void wallet.connect()}
+                title={`Dolphin runs on ${NETWORK_LABEL}`}
                 type="button"
               >
                 {wallet.isConnecting ? "Connecting…" : "Connect wallet"}
@@ -160,5 +138,64 @@ export function SiteHeader() {
        */}
       {pathname.startsWith("/manage/") && <MobileStackHeader title="Manage agent" fallback="/my-agents" />}
     </>
+  );
+}
+
+/**
+ * The connected wallet as ONE pill on one line - BNB mark, short address - opening a small menu: the places
+ * that belong to you (Uniswap and PancakeSwap keep account pages here, not in the main bar).
+ */
+function WalletMenu({ address }: { address: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="interactive inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full border border-line bg-paper px-3.5 text-sm font-semibold hover:bg-paper-strong"
+        onClick={() => setOpen((was) => !was)}
+        title={`${address} on ${NETWORK_LABEL}`}
+        type="button"
+      >
+        <BnbLogo size={16} />
+        <span className="font-mono text-[13px]">{shortAddress(address)}</span>
+        <svg aria-hidden fill="none" height="14" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="14">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-[calc(100%+8px)] w-56 overflow-hidden rounded-2xl border border-line bg-paper py-1.5 shadow-xl" role="menu">
+          <p className="px-4 pt-2 pb-1 text-xs text-muted">{NETWORK_LABEL}</p>
+          {[
+            { href: "/wallet", label: "Wallet" },
+            { href: "/my-agents", label: "My agents" },
+            { href: "/trade#my-traders", label: "My traders" },
+          ].map((item) => (
+            <Link
+              className="block px-4 py-2.5 text-sm font-medium text-ink no-underline hover:bg-paper-muted"
+              href={item.href}
+              key={item.href}
+              onClick={() => setOpen(false)}
+              role="menuitem"
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

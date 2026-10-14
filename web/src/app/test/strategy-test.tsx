@@ -70,7 +70,8 @@ export function StrategyTest({ initial, challenge }: { initial: StrategyTestArgs
         {/* Phones: words on plain black, no art behind them (owner: "too busy"); the result card below is the picture. */}
         <div className="absolute inset-0 -z-10 hidden md:block">
           {/* eslint-disable-next-line @next/next/no-img-element -- a static, pre-sized artwork */}
-          <img alt="" className="h-full w-full object-cover object-right opacity-90" src="/test/art-assassin.jpg" />
+          {/* Full height, anchored right, never cropped: "cover" cut the dolphin's head off on wide screens. */}
+          <img alt="" className="absolute top-0 right-0 h-full w-auto max-w-none opacity-90" src="/test/art-assassin.jpg" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#080807] via-[#080807]/80 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[#080807] to-transparent" />
         </div>

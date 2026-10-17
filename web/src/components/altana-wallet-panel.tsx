@@ -5,10 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useBalance } from "wagmi";
 
 import { WalletHistory } from "@/components/wallet-history";
-import {
-  WithdrawDialog,
-  type WalletAsset,
-} from "@/components/wallet-withdraw";
+import { WithdrawDialog } from "@/components/wallet-withdraw";
 import { AllAssetsIcon, BnbLogo, BrandMark, TokenLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { RollingFigure } from "@/components/rolling-figure";
@@ -728,11 +725,6 @@ function IdentityWalletCard({ onReceive }: { onReceive: (address: string) => voi
           <p className="wcard__eyebrow flex items-center gap-1.5"><KeyIcon />Connected wallet</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
-        {/* All of it, always (owner, 2026-10-17); single tokens are under Assets. */}
-        <span className="asset-menu__trigger" title="Every asset in this wallet">
-          <AllAssetsIcon size={16} />
-          <span>All</span>
-        </span>
       </div>
 
       <CardAmount
@@ -953,8 +945,7 @@ function AgentWalletCard({
     ...listed.map((h) => ({ asset: h.token.symbol, label: h.token.symbol, amount: tokenFigure(h), loading: false })),
   ];
   const chosen = options.find((option) => option.asset === asset) ?? options[0];
-  // Withdraw still sends BNB or U only.
-  const withdrawAsset: WalletAsset = chosen.asset === "U" ? "U" : "BNB";
+
 
   return (
     <div aria-label="Agent payments wallet" className="wcard wcard--agent">
@@ -1004,7 +995,7 @@ function AgentWalletCard({
         </div>
       </div>
       {withdrawing ? (
-        <WithdrawDialog initialAsset={withdrawAsset} onClose={() => setWithdrawing(false)} />
+        <WithdrawDialog initialAsset={chosen.asset} onClose={() => setWithdrawing(false)} />
       ) : null}
 
       {/*

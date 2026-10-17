@@ -3,9 +3,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { BnbLogo, ULogo } from "@/components/brand-mark";
+import { BnbLogo, TokenLogo, ULogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DOLPHIN_CONTRACTS } from "@/constants/agents";
+import { WALLET_TOKENS, useWalletTokens } from "@/hooks/use-wallet-tokens";
 import { useAltanaWallet } from "@/wallet/altana-provider";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
 import { toast } from "@/store/use-toast-store";
@@ -64,7 +65,8 @@ export function WithdrawDialog({
   initialAsset,
   onClose,
 }: {
-  initialAsset: WalletAsset;
+  /** A token symbol from WALLET_TOKENS; anything not held falls back to BNB. */
+  initialAsset: string;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -74,7 +76,7 @@ export function WithdrawDialog({
   const queryClient = useQueryClient();
   const uBalance = useDolphinUBalance();
 
-  const [assetChoice, setAssetChoice] = useState<WalletAsset>(initialAsset);
+  const [assetChoice, setAssetChoice] = useState<string>(initialAsset);
   const [amountText, setAmountText] = useState("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
@@ -90,12 +92,32 @@ export function WithdrawDialog({
   const ownAddress = identity.isConnected ? identity.address : null;
   const u = uBalance.data ?? null;
 
-  const asset: WithdrawAsset =
-    assetChoice === "BNB"
-      ? { kind: "native", symbol: "BNB", decimals: 18 }
-      : { kind: "token", token: U_TOKEN, symbol: u?.symbol ?? "U", decimals: u?.decimals ?? 18 };
+  /*
+   * EVERY TOKEN THE WALLET HOLDS can leave, not only BNB and U (owner, 2026-10-17). BNB and U are always
+   * offered; any other tracked token once it is held. The send path was already token-generic:
+   * altana-provider's withdraw re-reads the token's balance at signing, refuses without BNB for gas,
+   * and records the withdrawal to wallet history.
+   */
+  const tokenRead = useWalletTokens(dolphinAddress ? [dolphinAddress] : []);
+  const ownBalances = dolphinAddress ? tokenRead.data?.get(dolphinAddress.toLowerCase()) : undefined;
+  const choices = WALLET_TOKENS.filter(
+    (token) => token.symbol === "BNB" || token.symbol === "U" || (ownBalances?.get(token.symbol) ?? BigInt(0)) > BigInt(0),
+  );
+  const choice = choices.find((token) => token.symbol === assetChoice) ?? choices[0];
 
-  const held = assetChoice === "U" ? u?.raw ?? null : dolphin.balanceWei;
+  const asset: WithdrawAsset =
+    choice.address === null
+      ? { kind: "native", symbol: "BNB", decimals: 18 }
+      : choice.symbol === "U"
+        ? { kind: "token", token: U_TOKEN, symbol: u?.symbol ?? "U", decimals: u?.decimals ?? 18 }
+        : { kind: "token", token: choice.address, symbol: choice.symbol, decimals: choice.decimals };
+
+  const held =
+    choice.address === null
+      ? dolphin.balanceWei
+      : choice.symbol === "U"
+        ? u?.raw ?? null
+        : ownBalances?.get(choice.symbol) ?? null;
   const heldText =
     held === null
       ? "…"
@@ -112,8 +134,8 @@ export function WithdrawDialog({
 
   const fillMax = async () => {
     try {
-      if (assetChoice === "U") {
-        if (u) setAmountText(formatTokenAmount(u.raw, u.decimals, u.decimals));
+      if (asset.kind === "token") {
+        if (held !== null) setAmountText(formatTokenAmount(held, asset.decimals, asset.decimals));
         return;
       }
       if (dolphin.balanceWei === null) return;
@@ -136,6 +158,7 @@ export function WithdrawDialog({
       setStatus({ kind: "sent", transactionHash: result.transactionHash });
       setAmountText("");
       void queryClient.invalidateQueries({ queryKey: ["dolphin-token-balance", dolphinAddress] });
+      void queryClient.invalidateQueries({ queryKey: ["wallet-tokens"] });
     } catch {
       // The provider records the failure and the page shows it as a toast
       // (useWalletErrorToasts), which appears above this dialog.
@@ -188,12 +211,12 @@ export function WithdrawDialog({
           </div>
         ) : (
           <>
-            <div aria-label="Asset" className="mt-5 flex gap-2" role="radiogroup">
-              {(["U", "BNB"] as const).map((option) => (
+            <div aria-label="Asset" className="mt-5 flex flex-wrap gap-2" role="radiogroup">
+              {choices.map(({ symbol: option }) => (
                 <button
-                  aria-checked={assetChoice === option}
+                  aria-checked={choice.symbol === option}
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    assetChoice === option ? "border-ink text-ink" : "border-line text-muted hover:text-ink"
+                    choice.symbol === option ? "border-ink text-ink" : "border-line text-muted hover:text-ink"
                   }`}
                   key={option}
                   onClick={() => {
@@ -204,7 +227,7 @@ export function WithdrawDialog({
                   role="radio"
                   type="button"
                 >
-                  <AssetLogo asset={option} size={16} />
+                  <TokenLogo size={16} symbol={option} />
                   {option}
                 </button>
               ))}

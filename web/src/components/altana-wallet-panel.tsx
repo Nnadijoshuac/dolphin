@@ -12,7 +12,7 @@ import {
   useDolphinUBalance,
   type WalletAsset,
 } from "@/components/wallet-withdraw";
-import { AllAssetsIcon, BnbLogo } from "@/components/brand-mark";
+import { AllAssetsIcon, BnbLogo, BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ReceiveSheet } from "@/components/receive-sheet";
 import { StatePanel } from "@/components/state-panel";
@@ -667,22 +667,27 @@ function CardAmount({
   );
 }
 
-function IdentityWalletCard({
-  onReceive,
-  price,
-}: {
-  onReceive: (address: string) => void;
-  price: BnbPriceState;
-}) {
+/** The connected wallet's mark: a key, because all it does here is sign you in. */
+function KeyIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="12" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="12">
+      <circle cx="8" cy="15" r="4" />
+      <path d="m10.8 12.2 8.7-8.7M17 6l2.5 2.5M14.5 8.5 16 10" />
+    </svg>
+  );
+}
+
+function IdentityWalletCard({ onReceive }: { onReceive: (address: string) => void }) {
   const identity = useWallet();
   const currency = useAppStore((s) => s.displayCurrency);
   const hidden = useAppStore((s) => s.hideBalances);
-  const { data, isLoading } = useBalance({
-    address: identity.address as `0x${string}` | undefined,
-    // Same pin, same reason, and the same query key as the hero's read.
-    chainId: ALTANA_CHAIN_ID,
-    query: { enabled: Boolean(identity.isConnected && identity.address) },
-  });
+  /*
+   * EVERY TOKEN, not BNB alone (owner, 2026-10-17: the card said $0.71 while the wallet held about
+   * $2.73). Same sum as the Total balance and the phone wallet - one computation, so they agree.
+   */
+  const ownAddress = identity.isConnected && identity.address ? identity.address : null;
+  const addresses = useMemo(() => (ownAddress ? [ownAddress] : []), [ownAddress]);
+  const { headline } = useWalletHoldings(addresses, currency, hidden);
 
   /*
    * The empty state is a CARD, not an absence. It occupies the same slot at
@@ -693,7 +698,7 @@ function IdentityWalletCard({
   if (!identity.isConnected || !identity.address) {
     return (
       <div aria-label="Identity wallet" className="wcard wcard--empty">
-        <p className="wcard__eyebrow">Connected wallet</p>
+        <p className="wcard__eyebrow inline-flex items-center gap-1.5"><KeyIcon />Connected wallet</p>
         <p className="wcard__title">Not connected</p>
         <p className="wcard__sub">Signs you in. Dolphin never spends from it.</p>
         <div className="wcard__foot">
@@ -710,16 +715,16 @@ function IdentityWalletCard({
       <div className="wcard__head">
         <WalletAvatar address={address} className="wcard__avatar" kind="human" size={34} />
         <div className="wcard__head-text">
-          <p className="wcard__eyebrow">Connected wallet</p>
+          <p className="wcard__eyebrow inline-flex items-center gap-1.5"><KeyIcon />Connected wallet</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
       </div>
 
       <CardAmount
-        amount={data ? renderAmount(data.value, currency, price, hidden) : null}
-        loading={isLoading}
+        amount={typeof headline === "object" ? headline : null}
+        loading={headline === "reading"}
       />
-      <p className="wcard__sub">Signs you in · never spends</p>
+      <p className="wcard__sub">Signs you in. Dolphin never spends from it.</p>
 
       {/*
        * Disconnect lives HERE, on the card for the account it disconnects. It
@@ -857,7 +862,7 @@ function AgentWalletCard({
     const blocked = wallet.status === "unsupported";
     return (
       <div aria-label="Agent payments wallet" className="wcard wcard--agent wcard--empty">
-        <p className="wcard__eyebrow">Dolphin Wallet</p>
+        <p className="wcard__eyebrow inline-flex items-center gap-1.5"><BrandMark size={12} />Dolphin Wallet</p>
         <p className="wcard__title">{blocked ? "Unavailable here" : "Not set up"}</p>
         <p className="wcard__sub">
           {blocked
@@ -929,7 +934,7 @@ function AgentWalletCard({
            * convex/agentPayments.ts verifies the payee against. This balance is
            * outbound only.
            */}
-          <p className="wcard__eyebrow">Dolphin Wallet</p>
+          <p className="wcard__eyebrow inline-flex items-center gap-1.5"><BrandMark size={12} />Dolphin Wallet</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
         <AssetMenu
@@ -947,7 +952,7 @@ function AgentWalletCard({
       ) : (
         <CardAmount amount={uAmount} loading={uBalance.isLoading} />
       )}
-      <p className="wcard__sub">Pays your hires and trades</p>
+      <p className="wcard__sub">Pays agents and runs your traders.</p>
 
       {/*
        * ADD FUNDS AND WITHDRAW, ON THE WALLET THEY MOVE MONEY IN AND OUT OF
@@ -1269,7 +1274,7 @@ export function AltanaWalletPanel() {
 
       <aside aria-label="Your wallets" className="wallet-v2__side">
         <AgentWalletCard onReceive={setReceiving} price={price} />
-        <IdentityWalletCard onReceive={setReceiving} price={price} />
+        <IdentityWalletCard onReceive={setReceiving} />
 
         {/* Only when there is something to act on (2026-09-26): a green
             "recoverable" note on every visit is reassurance nobody asked for. */}

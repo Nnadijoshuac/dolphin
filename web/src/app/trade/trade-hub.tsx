@@ -84,7 +84,7 @@ export function TradeHub() {
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" />
           </svg>
-          <input aria-label="Search traders" onChange={(event) => setQuery(event.target.value)} placeholder="Search traders by name, market or maker…" value={query} />
+          <input aria-label="Search traders" className={styles.searchInput} onChange={(event) => setQuery(event.target.value)} placeholder="Search traders by name, market or maker…" value={query} />
         </label>
       </header>
       <div className={styles.layout}>

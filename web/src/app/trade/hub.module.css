@@ -87,6 +87,8 @@
   color: var(--ink);
   font-size: 14px;
 }
+/* The pill is the field; the global sunk-input shadow drew a second box inside it (owner, 2026-10-17). */
+.search .searchInput { box-shadow: none; }
 .search svg { color: var(--muted); flex: none; }
 
 /* ── sections ── */

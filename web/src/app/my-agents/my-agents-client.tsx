@@ -76,7 +76,16 @@ function BuiltCard({ agent, now }: { agent: MyBuiltAgent; now: number }) {
   return (
     <article className="mine-card">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="min-w-0 truncate text-[1rem] font-semibold tracking-[-0.02em] text-ink">{agent.name}</h3>
+        <div className="flex min-w-0 items-center gap-3">
+          {/* Its own icon once published; a DiceBear one otherwise, and if the icon ever fails (owner, 2026-10-17). */}
+          <AgentIcon
+            category="general"
+            seed={agent.published?.hash ?? agent.conversationKey ?? agent.name}
+            size={40}
+            uri={agent.published ? `/api/v1/built/${agent.published.hash}/icon` : undefined}
+          />
+          <h3 className="min-w-0 truncate text-[1rem] font-semibold tracking-[-0.02em] text-ink">{agent.name}</h3>
+        </div>
         <span className="mine-badge" data-kind={badge === "Draft" ? "draft" : "live"}>
           {badge}
         </span>

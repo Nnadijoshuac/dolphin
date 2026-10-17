@@ -76,6 +76,12 @@ const RULE_SCHEMA = {
     leverage: { type: "number", description: `Futures only, 1-${LIMITS.maxLeverage}. Above ${LIMITS.comfortableLeverage}x comes with a liquidation warning.` },
     maxTradesPerDay: { type: "number", description: "Default 2." },
     cooldownMinutes: { type: "number", description: "Wait after any trade before the next entry. Default 0." },
+    confirm: {
+      type: ["object", "null"],
+      description: "Optional. Ask Jev (TypeSafe's decision model) to approve each buy on Dolphin, with the runner's own Jev key. Backtests skip it.",
+      properties: { brain: { type: "string", enum: ["jev"] }, minPct: { type: "number", description: "How sure Jev must be, 50-95. Default 60." } },
+      required: ["brain"],
+    },
   },
   required: ["venue", "market", "timeframe", "action", "when", "sizeUsd"],
 } as const;
@@ -115,7 +121,7 @@ export const RULE_TOOLS = [
     name: "check_rule",
     title: "Check a trading rule",
     description:
-      "Validates a rule in Dolphin's rule language and returns it cleaned, in plain words, with any warnings (e.g. leverage) - or exactly what is wrong. Use before backtest_rule, or to help someone write a rule for their Dolphin agent.",
+      "Validates a rule in Dolphin's rule language and returns it cleaned, in plain words, with any warnings (e.g. leverage) - or exactly what is wrong. Use before backtest_rule, or to help someone write a rule for their Dolphin agent. A rule can also ask Jev (TypeSafe's decision model) to approve each buy - confirm: { brain: \"jev\", minPct: 60 } - which runs on Dolphin with the person's own Jev key.",
     inputSchema: { type: "object", properties: { rule: RULE_SCHEMA }, required: ["rule"], additionalProperties: false },
     annotations: { ...READ_ONLY, openWorldHint: false },
   },
@@ -123,7 +129,7 @@ export const RULE_TOOLS = [
     name: "backtest_rule",
     title: "Backtest a trading rule on Binance history",
     description:
-      "Replays a rule over Binance's real closed-candle history with the live engine's own decisions: fees each way, stop-loss, take-profit, leverage, daily limits. Returns the result against the stake, just holding, win rate, worst drop, fees and the latest trades with the engine's reason for each. Fills at candle close; slippage and funding are not modelled. Past results do not predict future ones.",
+      "Replays a rule over Binance's real closed-candle history with the live engine's own decisions: fees each way, stop-loss, take-profit, leverage, daily limits. Returns the result against the stake, just holding, win rate, worst drop, fees and the latest trades with the engine's reason for each. Fills at candle close; slippage and funding are not modelled. A Jev check (confirm) is skipped here, so this shows every buy Jev would be asked about. Past results do not predict future ones.",
     inputSchema: {
       type: "object",
       properties: { rule: RULE_SCHEMA, candles: { type: "number", description: "How much history, 100-1500 candles. Default 1000." } },

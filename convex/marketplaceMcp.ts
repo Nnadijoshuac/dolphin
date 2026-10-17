@@ -6,6 +6,7 @@ import { MarketDataError } from "./lib/binanceMarket";
 import { callMcpTool, listMcpTools, MCP_PROTOCOL_VERSION, McpError, openMcpSession } from "./lib/mcpClient";
 import { backtestRule, checkRule, getCandles, getEscrowJob, getIndicators, getPrice, MARKET_TOOLS, PROOF_TOOLS, RULE_TOOLS, text } from "./lib/mcpMarket";
 import { readExecutionCapability } from "./lib/toolCapability";
+import { TEST_COINS, TEST_ENTRIES, TEST_STOPS, TEST_TARGETS } from "./strategyTest";
 
 /**
  * DOLPHIN FOR AI ASSISTANTS (owner, 2026-10-02 / 2026-10-03): one MCP server a person plugs into
@@ -23,6 +24,8 @@ import { readExecutionCapability } from "./lib/toolCapability";
  *   market       get_price, get_candles, get_indicators          (lib/mcpMarket.ts)
  *   rules        check_rule, backtest_rule                         (lib/mcpMarket.ts)
  *   proof        get_escrow_job                                    (lib/mcpMarket.ts)
+ *   traders      test_strategy, best_strategies, list_traders, get_trader  (2026-10-17: what /test
+ *                and /trade show. The owner's standing rule: every feature that ships lands here too.)
  *
  * WHAT DOLPHIN WILL NOT DO HERE, AND WHY
  * - It never pays. An assistant holds no wallet Dolphin can charge, and Dolphin will not spend
@@ -137,13 +140,62 @@ const MARKETPLACE_TOOLS = [
   },
 ] as const;
 
-export type Group = "marketplace" | "market" | "rules" | "proof";
+
+/*
+ * TRADERS (owner, 2026-10-17): what /test and /trade show, for an assistant. All read-only: an assistant
+ * can test a strategy and read every trader's record, but starting a trader - practice or real money -
+ * stays on Dolphin behind the person's own wallet.
+ */
+const TRADER_TOOLS = [
+  {
+    name: "test_strategy",
+    title: "Test a trading strategy on a year of real prices",
+    description:
+      "Would this simple strategy have made money over the last year? Replays it on Binance 4h candles with Dolphin's live rule engine, PancakeSwap fees and BNB Chain gas included, on a sample $100, and compares it with just holding the coin. The same test as dolphinamp.xyz/test. entry: dip = buy after the price falls `level`% in a day; rsi = buy when RSI(14) drops below `level`; trend = buy RSI below `level` while price is above its 100 EMA; momentum = buy after a `level`% rise in a day. Give a target and/or a stop (% from the entry).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        coin: { type: "string", enum: [...TEST_COINS] },
+        entry: { type: "string", enum: Object.keys(TEST_ENTRIES) },
+        level: { type: "number", description: `Allowed: dip ${TEST_ENTRIES.dip.join("/")}, rsi ${TEST_ENTRIES.rsi.join("/")}, trend ${TEST_ENTRIES.trend.join("/")}, momentum ${TEST_ENTRIES.momentum.join("/")}.` },
+        target: { type: ["number", "null"], description: `Take profit %: ${TEST_TARGETS.join(", ")}, or null.` },
+        stop: { type: ["number", "null"], description: `Stop loss %: ${TEST_STOPS.join(", ")}, or null.` },
+      },
+      required: ["coin", "entry", "level"],
+    },
+    annotations: { ...READ_ONLY, idempotentHint: false },
+  },
+  {
+    name: "best_strategies",
+    title: "The best strategies anyone has tested",
+    description: "The top results on Dolphin's strategy test board (only strategies with at least 3 trades), and how many distinct strategies have been tested in all.",
+    inputSchema: { type: "object", properties: {} },
+    annotations: READ_ONLY,
+  },
+  {
+    name: "list_traders",
+    title: "Trading agents on Dolphin, with their records",
+    description: "Every trader on dolphinamp.xyz/trade - Dolphin's own and the community's - with its market, risk, maker and record: a backtest over 90 and 365 days, and live results for community traders that have run. Losses are included.",
+    inputSchema: { type: "object", properties: {} },
+    annotations: READ_ONLY,
+  },
+  {
+    name: "get_trader",
+    title: "One trader in full",
+    description: "One trader's rules, record and recent trades. id comes from list_traders.",
+    inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    annotations: READ_ONLY,
+  },
+] as const;
+
+export type Group = "marketplace" | "market" | "rules" | "proof" | "traders";
 type ToolDefinition = { name: string; title: string; description: string; inputSchema: unknown; annotations?: unknown };
 export const GROUPS: Record<Group, readonly ToolDefinition[]> = {
   marketplace: MARKETPLACE_TOOLS,
   market: MARKET_TOOLS,
   rules: RULE_TOOLS,
   proof: PROOF_TOOLS,
+  traders: TRADER_TOOLS,
 };
 export const GROUP_NAMES = Object.keys(GROUPS) as Group[];
 
@@ -157,7 +209,7 @@ export function groupsFrom(param: string | null): Group[] {
 }
 
 /** Each group's daily cap across everyone, in calls. The marketplace's own caps are per agent (countCall). */
-const GROUP_CAPS: Record<Exclude<Group, "marketplace">, number> = { market: 5_000, rules: 600, proof: 2_000 };
+const GROUP_CAPS: Record<Exclude<Group, "marketplace">, number> = { market: 5_000, rules: 600, proof: 2_000, traders: 600 };
 
 /** A raw token amount in whole units, exactly ("150000000000000000", 18 -> "0.15"). */
 function units(raw: string, decimals: number): string {
@@ -249,6 +301,9 @@ export async function handleMarketplaceMcp(ctx: ActionCtx, message: RpcMessage, 
             ? "Rules: write a rule in Dolphin's rule language, check_rule it, then backtest_rule it on Binance history with the live engine. A rule that tests well can be added to a Dolphin agent in its build chat."
             : "",
           groups.includes("proof") ? "Proof: get_escrow_job reads a hire's escrow job straight from BNB Chain." : "",
+          groups.includes("traders")
+            ? "Traders: test_strategy replays a simple strategy on a year of real prices; best_strategies shows what tested best; list_traders and get_trader read every trader's record, losses included. Starting a trader happens on dolphinamp.xyz/trade with the person's own wallet."
+            : "",
           "Nothing here is financial advice; past results do not predict future ones.",
         ]
           .filter(Boolean)
@@ -292,6 +347,14 @@ export async function handleMarketplaceMcp(ctx: ActionCtx, message: RpcMessage, 
             return reply(await backtestRule(args));
           case "get_escrow_job":
             return reply(await getEscrowJob(args));
+          case "test_strategy":
+            return reply(await testStrategy(ctx, args));
+          case "best_strategies":
+            return reply(await bestStrategies(ctx));
+          case "list_traders":
+            return reply(await listTraders(ctx));
+          case "get_trader":
+            return reply(await getTrader(ctx, args));
           default:
             return reply(text(`No tool named ${name}.`, true));
         }
@@ -463,3 +526,69 @@ export const countCall = internalMutation({
     return bump(`mcpx:all:${day}`, CALLS_PER_DAY);
   },
 });
+
+/* ── traders group ─────────────────────────────────────────────────────── */
+
+const numOrNull = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+async function testStrategy(ctx: ActionCtx, args: Record<string, unknown>) {
+  const to = new Date().toISOString().slice(0, 10);
+  const result = (await ctx.runAction(api.strategyTest.run, {
+    coin: typeof args.coin === "string" ? args.coin.toUpperCase() : "",
+    entry: typeof args.entry === "string" ? args.entry : "",
+    level: typeof args.level === "number" ? args.level : NaN,
+    target: numOrNull(args.target),
+    stop: numOrNull(args.stop),
+    to,
+  })) as { words: string; resultPct: number; holdPct: number; trades: number; winPct: number | null; worstDropPct: number; stillHolding: boolean; from: number | null; to: number | null };
+  return text({
+    strategy: result.words,
+    window: { from: result.from ? new Date(result.from).toISOString().slice(0, 10) : null, to: result.to ? new Date(result.to).toISOString().slice(0, 10) : null },
+    resultPct: result.resultPct,
+    holdPct: result.holdPct,
+    trades: result.trades,
+    winPct: result.winPct,
+    worstDropPct: result.worstDropPct,
+    stillHolding: result.stillHolding,
+    tryIt: `${SITE}/test`,
+    note: "A backtest on past prices, fees and gas included. Past results do not predict future ones; not financial advice.",
+  });
+}
+
+async function bestStrategies(ctx: ActionCtx) {
+  const [rows, tested] = (await Promise.all([ctx.runQuery(api.strategyTest.board, {}), ctx.runQuery(api.strategyTest.boardCount, {})])) as [unknown[], number];
+  return text({ tested, best: rows, page: `${SITE}/test`, note: "Ranked by result over the last year; only strategies with at least 3 trades. Not financial advice." });
+}
+
+type HubCard = { id: string; kind: string; name: string; tagline?: string | null; risk?: string | null; market?: string; timeframe?: string; creator?: unknown; backtest?: unknown; live?: unknown; priceUsd?: number | null; active?: boolean };
+
+async function listTraders(ctx: ActionCtx) {
+  const hub = (await ctx.runQuery(api.traders.hub, {})) as { traders: HubCard[]; minUsd: number };
+  return text({
+    count: hub.traders.length,
+    traders: hub.traders.map((trader) => ({
+      id: trader.id,
+      kind: trader.kind,
+      name: trader.name,
+      tagline: trader.tagline ?? null,
+      risk: trader.risk ?? null,
+      market: trader.market ?? null,
+      timeframe: trader.timeframe ?? null,
+      maker: trader.creator ?? null,
+      backtest: trader.backtest ?? null,
+      live: trader.live ?? null,
+      priceUsd: trader.priceUsd ?? null,
+      page: `${SITE}/trade/${encodeURIComponent(trader.id)}`,
+    })),
+    minUsd: hub.minUsd,
+    note: "Records include losses. Starting one happens on its page with the person's own wallet, practice money first. Not financial advice.",
+  });
+}
+
+async function getTrader(ctx: ActionCtx, args: Record<string, unknown>) {
+  const id = typeof args.id === "string" ? args.id.trim().slice(0, 120) : "";
+  if (!id) return text("Give a trader id from list_traders.", true);
+  const trader = (await ctx.runQuery(api.traders.trader, { id })) as Record<string, unknown> | null;
+  if (!trader) return text("No trader with that id. Use list_traders.", true);
+  return text({ ...trader, page: `${SITE}/trade/${encodeURIComponent(id)}` });
+}

@@ -5,7 +5,7 @@ import { Code, DocsPage, type DocsSection } from "@/components/docs-page";
 
 export const metadata: Metadata = {
   title: "Dolphin for AI assistants (MCP)",
-  description: "One MCP URL for Claude, ChatGPT, Cursor or your own agent: Dolphin's marketplace, Binance market data, trading-rule backtests and on-chain proof.",
+  description: "One MCP URL for Claude, ChatGPT, Cursor or your own agent: Dolphin's marketplace, Binance market data, trading-rule backtests, traders' records and on-chain proof.",
   alternates: { canonical: "/docs/mcp" },
 };
 
@@ -74,7 +74,8 @@ const SECTIONS: DocsSection[] = [
                 </td>
                 <td>
                   Check a trading rule in Dolphin&rsquo;s rule language, then replay it over up to 1,500 past candles with
-                  the engine Dolphin&rsquo;s agents trade with - fees, stops and leverage included.
+                  the engine Dolphin&rsquo;s agents trade with - fees, stops and leverage included. A rule can ask Jev to
+                  approve each buy; backtests show every buy Jev would be asked about.
                 </td>
               </tr>
               <tr>
@@ -83,6 +84,16 @@ const SECTIONS: DocsSection[] = [
                   <code>get_escrow_job</code>
                 </td>
                 <td>Read a hire&rsquo;s escrow job from BNB Chain: who paid, who delivered, how much, and its status.</td>
+              </tr>
+              <tr>
+                <td>Traders</td>
+                <td>
+                  <code>test_strategy</code> <code>best_strategies</code> <code>list_traders</code> <code>get_trader</code>
+                </td>
+                <td>
+                  Test a simple strategy on a year of real prices, see the best ones anyone tested, and read every
+                  trader&rsquo;s record, losses included. Starting a trader stays on Dolphin, with your own wallet.
+                </td>
               </tr>
             </tbody>
           </table>
@@ -185,7 +196,7 @@ const SECTIONS: DocsSection[] = [
     body: (
       <ul>
         <li>Dolphin relays up to 200 calls per agent and 3,000 in total per UTC day, so no publisher&rsquo;s server is hammered through it.</li>
-        <li>The market, rules and proof groups have their own daily limits across everyone; when one is reached, its tools say so until 00:00 UTC.</li>
+        <li>The market, rules, proof and traders groups have their own daily limits across everyone; when one is reached, its tools say so until 00:00 UTC.</li>
         <li>Tools that act on-chain with an agent&rsquo;s own authority are never called. Read tools and transaction builders are.</li>
         <li>
           An agent&rsquo;s answer is its publisher&rsquo;s text, passed through unchanged and labelled as theirs. A good

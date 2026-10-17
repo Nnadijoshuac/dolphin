@@ -11,6 +11,7 @@ import { NETWORK_LABEL } from "@/constants/agents";
 import { SET_AND_QUEST_URL } from "@/constants/site";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 import { MobileMenuButton } from "@/components/mobile-nav";
+import { useMyPlaces } from "@/hooks/use-my-places";
 import { useWallet } from "@/wallet/wallet-provider";
 
 // Four destinations and the quest (owner, 2026-10-14: seven items, two called "Dolphin", told a newcomer
@@ -27,6 +28,28 @@ const navigation = [
   { path: SET_AND_QUEST_URL, label: "Set and Quest", icon: "sparkle" as const, quest: true },
 ] as const;
 
+type Places = ReturnType<typeof useMyPlaces>;
+type SubLink = { href: string; label: string; count?: number };
+
+/*
+ * What drops down under each item (owner, 2026-10-17: "this is my agent, so for somebody to get to his agent,
+ * you have to type it into the URL"). Only the places you HAVE: with nothing hired, built or started, the item
+ * stays a plain link with no menu.
+ */
+function subLinks(path: string, places: Places): SubLink[] {
+  const mine: SubLink[] =
+    path === "/trade"
+      ? [{ href: "/trade#my-traders", label: "Your traders", count: places.traders }]
+      : path === "/search"
+        ? [{ href: "/my-agents#mine-hired", label: "Agents you hired", count: places.hired }]
+        : path.startsWith("/dolphin")
+          ? [{ href: "/my-agents#mine-built", label: "Agents you built", count: places.built }]
+          : [];
+  const present = mine.filter((link) => (link.count ?? 0) > 0);
+  if (present.length === 0) return [];
+  const first: Record<string, string> = { "/trade": "All traders", "/search": "Browse agents" };
+  return [{ href: path, label: first[path] ?? "New agent" }, ...present];
+}
 
 const BRAND_HEADER_PATHS = ["/test", "/docs", "/setups", "/policies", "/whitepaper"];
 const BRAND_HEADER_EXACT = ["/trade"];
@@ -46,6 +69,7 @@ function shortAddress(address: string) {
 export function SiteHeader() {
   const pathname = usePathname();
   const wallet = useWallet();
+  const places = useMyPlaces();
   const isDolphinPath = pathname === "/dolphin" || pathname.startsWith("/dolphin/");
 
   /*
@@ -77,6 +101,11 @@ export function SiteHeader() {
 
               if ("quest" in item) {
                 return <SetAndQuestLink key={item.path} variant="nav" />;
+              }
+
+              const links = subLinks(item.path, places);
+              if (links.length > 0) {
+                return <NavDropdown active={isActive} key={item.path} label={item.label} links={links} path={item.path} />;
               }
 
               return (
@@ -144,6 +173,67 @@ export function SiteHeader() {
       {pathname.startsWith("/manage/") && <MobileStackHeader title="Manage agent" fallback="/my-agents" />}
       {pathname.startsWith("/trade/") && <MobileStackHeader title="Trader" fallback="/trade" />}
     </>
+  );
+}
+
+/** A nav item with a menu: hover or focus opens it, the label still goes to the main page, the chevron toggles it. */
+function NavDropdown({ active, label, links, path }: { active: boolean; label: string; links: SubLink[]; path: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+  return (
+    <div className="relative flex h-full items-center" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} ref={ref}>
+      <Link
+        aria-current={active ? "page" : undefined}
+        className={`interactive relative flex h-full items-center whitespace-nowrap pl-3 text-[15px] font-medium no-underline ${
+          active ? "text-ink" : "text-ink-soft hover:text-ink"
+        }`}
+        href={path}
+        prefetch={false}
+      >
+        {label}
+        {active ? <span className="absolute inset-x-3 bottom-0 h-0.5 bg-accent" /> : null}
+      </Link>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`${label} menu`}
+        className="interactive flex h-full items-center pl-1 pr-3 text-ink-soft hover:text-ink"
+        onClick={() => setOpen((was) => !was)}
+        type="button"
+      >
+        <svg aria-hidden className={open ? "rotate-180" : ""} fill="none" height="14" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="14">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full w-60 overflow-hidden rounded-2xl border border-line bg-paper py-1.5 shadow-xl" role="menu">
+          {links.map((link) => (
+            <Link
+              className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-ink no-underline hover:bg-paper-muted"
+              href={link.href}
+              key={link.href}
+              onClick={() => setOpen(false)}
+              role="menuitem"
+            >
+              {link.label}
+              {link.count ? <span className="text-xs text-muted">{link.count}</span> : null}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

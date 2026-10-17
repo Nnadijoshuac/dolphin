@@ -1,6 +1,6 @@
 "use client";
 
-import { AssetLogo } from "@/components/wallet-withdraw";
+import { TokenLogo } from "@/components/brand-mark";
 import { HIDDEN, rateKey, type Holding, type Rates } from "@/hooks/use-wallet-holdings";
 import { formatUsdCents } from "@/wallet/bnb-price";
 import { formatTokenAmount } from "@/wallet/erc8183-policy";
@@ -19,11 +19,7 @@ export function TokenList({ holdings, rates, hidden }: { holdings: Holding[]; ra
         const rate = rates.get(rateKey(token.address));
         return (
           <li className="pw-token" key={token.symbol}>
-            {token.symbol === "BNB" || token.symbol === "U" ? (
-              <AssetLogo asset={token.symbol} size={36} />
-            ) : (
-              <span aria-hidden="true" className="pw-token__badge">{token.symbol.slice(0, 1)}</span>
-            )}
+            <TokenLogo size={36} symbol={token.symbol} />
             <span className="pw-token__name">
               <strong>{token.symbol}</strong>
               <span>{!read ? "Unavailable" : hidden ? HIDDEN : formatTokenAmount(raw, token.decimals)}</span>

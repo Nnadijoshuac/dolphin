@@ -12,7 +12,7 @@ import {
   useDolphinUBalance,
   type WalletAsset,
 } from "@/components/wallet-withdraw";
-import { BnbLogo } from "@/components/brand-mark";
+import { AllAssetsIcon, BnbLogo } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { ReceiveSheet } from "@/components/receive-sheet";
 import { StatePanel } from "@/components/state-panel";
@@ -553,7 +553,10 @@ function WalletHero({
   return (
     <section aria-labelledby="wallet-total-heading" className="wallet-hero">
       <div className="wallet-hero__head">
-        <p className="eyebrow" id="wallet-total-heading">Total balance</p>
+        <p className="eyebrow inline-flex items-center gap-1.5" id="wallet-total-heading">
+          <AllAssetsIcon size={13} />
+          Total balance
+        </p>
         {/*
          * The network as a chip. It was 0.7rem grey text floating between
          * sections. Which chain an address is good for decides whether sending

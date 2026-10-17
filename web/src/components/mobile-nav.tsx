@@ -8,6 +8,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph, type GlyphName } from "@/components/category-glyph";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { SET_AND_QUEST_URL } from "@/constants/site";
+import { useMyPlaces } from "@/hooks/use-my-places";
 import { useAppStore } from "@/store/use-app-store";
 import { ALTANA_NETWORK_LABEL, formatBnb } from "@/wallet/altana-policy";
 import { useAltanaWallet } from "@/wallet/altana-provider";
@@ -163,6 +164,19 @@ export function MobileMenuButton({ className = "mobile-circle" }: { className?: 
  */
 export function MobileNavDrawer() {
   const pathname = usePathname();
+  /*
+   * The phone's side of the desktop nav dropdowns (owner, 2026-10-17: what the desktop has, the phone
+   * has): Your traders appears once you have started one, and My agents says what is in it.
+   */
+  const places = useMyPlaces();
+  const destinations = DESTINATIONS.flatMap((item) => {
+    if (item.path !== "/my-agents") return [item];
+    const counts = [places.hired ? `${places.hired} hired` : null, places.built ? `${places.built} built` : null].filter(Boolean);
+    const mine = counts.length ? { ...item, hint: counts.join(" · ") } : item;
+    return places.traders
+      ? [mine, { path: "/trade#my-traders", label: "Your traders", icon: "trading" as const, hint: `${places.traders} started` }]
+      : [mine];
+  });
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const closeTimer = useRef<number | null>(null);
@@ -251,7 +265,7 @@ export function MobileNavDrawer() {
         <nav aria-label="Primary">
           <p className="mm-label">Menu</p>
           <ul className="mm-list">
-            {DESTINATIONS.map((item) => {
+            {destinations.map((item) => {
               const active = isActiveRoute(pathname, item.path);
               return (
                 <li key={item.path}>

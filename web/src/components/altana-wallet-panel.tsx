@@ -552,7 +552,12 @@ function WalletHero({
   const held = useWalletHoldings(heldAddresses, currency, hidden);
   const amount = useStickyFigure(
     `total|${heldAddresses.join(",")}|${currency}|${hidden}`,
-    total.kind === "ready" && typeof held.headline === "object" ? held.headline : null,
+    /*
+     * The holdings read already covers native BNB in both wallets, so the figure no longer waits on the
+     * separate BNB reads behind `total` (owner, 2026-10-17: too slow). It still waits until the Dolphin
+     * Wallet's address is known, so a one-wallet sum never shows as the total.
+     */
+    total.kind !== "none" && dolphin.status !== "loading" && typeof held.headline === "object" ? held.headline : null,
   );
 
   return (

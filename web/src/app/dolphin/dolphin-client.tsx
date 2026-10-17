@@ -789,7 +789,13 @@ export function DolphinClient({
     );
   }, [clearHistory, deleteConversations, history, reset, upsertHistory]);
 
-  const isEmpty = turns.length === 0;
+  /*
+   * A conversation that already holds an agent is not empty, chat or no chat (owner, 2026-10-17: "when
+   * you open an agent, you should go to the builder... see the blocks that came together"). Agents made
+   * without a build chat - a practice trader started from /test, a house trader - used to open on the
+   * blank first screen, which reads as the chat, because the canvas waited for a first turn.
+   */
+  const isEmpty = turns.length === 0 && !builder?.draft;
   const building = activeMode === "build";
   /* A private try-run of a draft. Opened from the draft panel, never from the switch. */
   const trying = activeMode === "try";

@@ -14,6 +14,7 @@ import {
 } from "@/components/wallet-withdraw";
 import { AllAssetsIcon, BnbLogo, BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
+import { RollingFigure } from "@/components/rolling-figure";
 import { ReceiveSheet } from "@/components/receive-sheet";
 import { StatePanel } from "@/components/state-panel";
 import { WalletAvatar } from "@/components/wallet-avatar";
@@ -24,6 +25,7 @@ import { OptionalFeature } from "@/components/optional-feature";
 import { toast } from "@/store/use-toast-store";
 import { useWalletSession } from "@/wallet/wallet-session";
 import { useBnbPrice, type BnbPriceState } from "@/hooks/use-bnb-price";
+import { useStickyFigure } from "@/hooks/use-sticky-figure";
 import { useWalletHoldings } from "@/hooks/use-wallet-holdings";
 import { TokenList } from "@/components/wallet-token-list";
 import { WalletTrades } from "@/components/wallet-trades";
@@ -548,7 +550,10 @@ function WalletHero({
   const dolphinHeld = dolphin.status === "connected" ? dolphin.address : null;
   const heldAddresses = useMemo(() => [dolphinHeld, identityAddress ?? null].filter((address): address is string => Boolean(address)), [dolphinHeld, identityAddress]);
   const held = useWalletHoldings(heldAddresses, currency, hidden);
-  const amount = total.kind === "ready" && typeof held.headline === "object" ? held.headline : null;
+  const amount = useStickyFigure(
+    `total|${heldAddresses.join(",")}|${currency}|${hidden}`,
+    total.kind === "ready" && typeof held.headline === "object" ? held.headline : null,
+  );
 
   return (
     <section aria-labelledby="wallet-total-heading" className="wallet-hero">
@@ -573,7 +578,7 @@ function WalletHero({
       <div className="wallet-readout">
         {amount ? (
           <p className="wallet-readout__figure">
-            {amount.figure}
+            <RollingFigure value={amount.figure} />
             {amount.unit && <span className="wallet-readout__unit">{amount.unit}</span>}
           </p>
         ) : (
@@ -584,7 +589,7 @@ function WalletHero({
 
         <div className="wallet-readout__controls">
           <CurrencySwitch currency={currency} onChange={setCurrency} price={price} />
-          {total.kind === "ready" && (
+          {(total.kind === "ready" || amount) && (
             <button
               aria-label={hidden ? "Show balances" : "Hide balances"}
               aria-pressed={hidden}
@@ -648,12 +653,16 @@ function AddressChip({ address, onOpen }: { address: string; onOpen: () => void 
 
 /** One balance line on a card, in the chosen currency or as a stated absence. */
 function CardAmount({
-  amount,
+  amount: fresh,
   loading,
+  stickyKey,
 }: {
   amount: { figure: string; unit: string | null } | null;
   loading: boolean;
+  /** What this figure is a reading of; the last one stays up while the next is read. */
+  stickyKey: string;
 }) {
+  const amount = useStickyFigure(stickyKey, fresh);
   if (!amount) {
     return (
       <p className="wcard__amount wcard__amount--muted">{loading ? "…" : "Unavailable"}</p>
@@ -661,7 +670,7 @@ function CardAmount({
   }
   return (
     <p className="wcard__amount">
-      {amount.figure}
+      <RollingFigure value={amount.figure} />
       {amount.unit && <span className="wcard__amount-unit">{amount.unit}</span>}
     </p>
   );
@@ -723,6 +732,7 @@ function IdentityWalletCard({ onReceive }: { onReceive: (address: string) => voi
       <CardAmount
         amount={typeof headline === "object" ? headline : null}
         loading={headline === "reading"}
+        stickyKey={`connected|${address}|${currency}|${hidden}`}
       />
       <p className="wcard__sub">Signs you in. Dolphin never spends from it.</p>
 
@@ -948,9 +958,9 @@ function AgentWalletCard({
       </div>
 
       {asset === "BNB" ? (
-        <CardAmount amount={bnbAmount} loading={wallet.isReadingBalance} />
+        <CardAmount amount={bnbAmount} loading={wallet.isReadingBalance} stickyKey={`dolphin|${address}|BNB|${currency}|${hidden}`} />
       ) : (
-        <CardAmount amount={uAmount} loading={uBalance.isLoading} />
+        <CardAmount amount={uAmount} loading={uBalance.isLoading} stickyKey={`dolphin|${address}|U|${currency}|${hidden}`} />
       )}
       <p className="wcard__sub">Pays agents and runs your traders.</p>
 

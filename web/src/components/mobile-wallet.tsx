@@ -16,12 +16,14 @@ import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
 import { MobileMenuButton } from "@/components/mobile-nav";
 import { OptionalFeature } from "@/components/optional-feature";
 import { ReceiveSheet } from "@/components/receive-sheet";
+import { RollingFigure } from "@/components/rolling-figure";
 import { WalletAvatar } from "@/components/wallet-avatar";
 import { WalletHistory } from "@/components/wallet-history";
 import { TokenList } from "@/components/wallet-token-list";
 import { WalletTrades } from "@/components/wallet-trades";
 import { WithdrawDialog } from "@/components/wallet-withdraw";
 import { useBnbPrice } from "@/hooks/use-bnb-price";
+import { useStickyFigure } from "@/hooks/use-sticky-figure";
 import { useWalletHoldings } from "@/hooks/use-wallet-holdings";
 import { useWalletErrorToasts } from "@/hooks/use-wallet-error-toasts";
 import { useAppStore } from "@/store/use-app-store";
@@ -109,7 +111,10 @@ export function MobileWallet() {
   }, [view, dolphinAddress, identityAddress]);
 
   // Every asset and the total, computed once for both wallet screens (hooks/use-wallet-holdings.ts).
-  const { holdings, rates, headline, isError: holdingsError } = useWalletHoldings(viewAddresses, currency, hidden);
+  const { holdings, rates, headline: freshHeadline, isError: holdingsError } = useWalletHoldings(viewAddresses, currency, hidden);
+  // The last reading stays up while the next one is read (owner, 2026-10-17: no blinking balance).
+  const kept = useStickyFigure(`${view}|${viewAddresses.join(",")}|${currency}|${hidden}`, typeof freshHeadline === "object" ? freshHeadline : null);
+  const headline = kept ?? freshHeadline;
 
   const hasAccount = viewAddresses.length > 0;
   const canWithdraw = Boolean(dolphinAddress) && view !== "connected";
@@ -171,7 +176,7 @@ export function MobileWallet() {
           typeof headline === "object" ? (
             <>
               <p aria-live="polite" className="pw-amount">
-                {headline.figure}
+                <RollingFigure value={headline.figure} />
                 {headline.unit ? <span>{headline.unit}</span> : null}
               </p>
               <p className="pw-caption">

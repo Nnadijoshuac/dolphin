@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPublicClient, erc20Abi, http, type Address } from "viem";
 import { bsc } from "viem/chains";
 
@@ -68,13 +68,29 @@ async function readWallet(owner: Address): Promise<TokenBalances> {
  */
 export function useWalletTokens(addresses: readonly string[]) {
   const key = addresses.map((a) => a.toLowerCase()).sort();
+  const queryClient = useQueryClient();
+  const queryKey = ["wallet-tokens", ...key];
   return useQuery({
-    queryKey: ["wallet-tokens", ...key],
+    queryKey,
     enabled: key.length > 0,
     staleTime: 15_000,
     refetchInterval: 60_000,
+    // While a new set of wallets is read, keep showing the last answer (owner, 2026-10-17: no blinking).
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      const entries = await Promise.all(key.map(async (a) => [a, await readWallet(a as Address)] as const));
+      const previous = queryClient.getQueryData<Map<string, TokenBalances>>(queryKey);
+      const entries = await Promise.all(
+        key.map(async (a) => {
+          const fresh = await readWallet(a as Address);
+          // One token's balanceOf failing on one poll keeps that token's last reading rather than
+          // turning the whole total to "Unavailable" for a minute. A token never read stays absent.
+          const before = previous?.get(a);
+          if (!before) return [a, fresh] as const;
+          const merged = new Map(fresh);
+          for (const [symbol, raw] of before) if (!merged.has(symbol)) merged.set(symbol, raw);
+          return [a, merged] as const;
+        }),
+      );
       return new Map<string, TokenBalances>(entries);
     },
   });

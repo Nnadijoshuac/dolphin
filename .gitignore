@@ -98,5 +98,3 @@ skills-lock.json
 # Git-ignored working context like /Agent/ and /campaign/. Anchored for the same reason.
 /employees/
 
-# A separate project (PayBox plugin), its own git repo
-Dusk/

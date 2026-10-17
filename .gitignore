@@ -97,3 +97,6 @@ skills-lock.json
 # Employee briefs: one folder per role an agent can step into (social media, community, design...).
 # Git-ignored working context like /Agent/ and /campaign/. Anchored for the same reason.
 /employees/
+
+# A separate project (PayBox plugin), its own git repo
+Dusk/

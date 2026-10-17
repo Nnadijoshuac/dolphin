@@ -24,7 +24,7 @@ import { useQuery } from "convex/react";
 import { AgentActivity } from "@/components/agent-activity";
 import { AgentIcon } from "@/components/agent-icon";
 import { CategoryGlyph } from "@/components/category-glyph";
-import { DolphinAgentMark } from "@/components/dolphin-agent-mark";
+import { BuiltAgentIcon } from "@/components/built-agent-icon";
 import { MobileMenuButton } from "@/components/mobile-nav";
 import { StatePanel } from "@/components/state-panel";
 import { agentRouteId, categoryLabel } from "@/constants/agents";
@@ -78,8 +78,8 @@ function BuiltCard({ agent, now }: { agent: MyBuiltAgent; now: number }) {
     <article className="mine-card">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          {/* Its own icon once published; otherwise the gold Dolphin mark, never the marketplace's robot
-              faces, so what you built reads as yours (owner, 2026-10-17). */}
+          {/* Its own icon once published; otherwise an identicon, never the marketplace's robot faces, so
+              what you built reads as yours (owner, 2026-10-17). */}
           {agent.published ? (
             <AgentIcon
               category="general"
@@ -88,7 +88,7 @@ function BuiltCard({ agent, now }: { agent: MyBuiltAgent; now: number }) {
               uri={`/api/v1/built/${agent.published.hash}/icon`}
             />
           ) : (
-            <DolphinAgentMark seed={agent.conversationKey ?? agent.name} size={40} />
+            <BuiltAgentIcon seed={agent.conversationKey ?? agent.name} size={40} />
           )}
           <h3 className="min-w-0 truncate text-[1rem] font-semibold tracking-[-0.02em] text-ink">{agent.name}</h3>
         </div>

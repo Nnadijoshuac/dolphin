@@ -227,6 +227,7 @@ export function AgentWalletPanel({ agent }: { agent: BuiltAgentPublic }) {
   return (
     <div className="surface-raised mt-4 p-5">
       <p className="eyebrow">Your agent&apos;s wallet</p>
+      <p className="mt-1 text-[0.8rem] text-muted">Belongs to your agent. It collects what buyers pay and forwards it to you.</p>
       {!address ? (
         <>
           <p className="mt-2 text-[0.86rem] leading-relaxed text-ink-soft">

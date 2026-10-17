@@ -436,19 +436,24 @@ function JobHistory({ jobs }: { jobs: AgentJobRow[] }) {
         {jobs.map((job, index) => {
           const request = requestText(job.taskDescription);
           return (
-            <li className="flex items-start justify-between gap-4 py-3" key={`${job.escrowContract}:${job.jobId}`}>
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-[0.86rem] font-medium text-ink">
-                  Job #{job.jobId}
-                  {index === 0 ? <span className="rounded-full bg-paper-muted px-2 py-0.5 text-[0.66rem] font-semibold text-ink-soft">Latest</span> : null}
-                  {job.refundedAt ? <span className="rounded-full bg-paper-muted px-2 py-0.5 text-[0.66rem] font-semibold text-ink-soft">Refunded</span> : null}
-                </p>
-                {request ? <p className="mt-0.5 truncate text-[0.78rem] text-muted">{request}</p> : null}
+            <li className="py-3" key={`${job.escrowContract}:${job.jobId}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-[0.86rem] font-medium text-ink">
+                    Job #{job.jobId}
+                    {index === 0 ? <span className="rounded-full bg-paper-muted px-2 py-0.5 text-[0.66rem] font-semibold text-ink-soft">Latest</span> : null}
+                    {job.refundedAt ? <span className="rounded-full bg-paper-muted px-2 py-0.5 text-[0.66rem] font-semibold text-ink-soft">Refunded</span> : null}
+                  </p>
+                  {request ? <p className="mt-0.5 truncate text-[0.78rem] text-muted">{request}</p> : null}
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-[0.84rem] font-medium text-ink">{paidText(job)}</p>
+                  <p className="text-[0.72rem] text-faint">{day(job._creationTime)}</p>
+                </div>
               </div>
-              <div className="shrink-0 text-right">
-                <p className="text-[0.84rem] font-medium text-ink">{paidText(job)}</p>
-                <p className="text-[0.72rem] text-faint">{day(job._creationTime)}</p>
-              </div>
+              {/* An older job that never delivered is refundable too; the side panel only ever shows the latest
+                  (owner, 2026-10-17: job 56880 had no way to be refunded because a later job delivered). */}
+              {index > 0 && !job.refundedAt ? <RefundAction job={job} /> : null}
             </li>
           );
         })}

@@ -698,7 +698,7 @@ function IdentityWalletCard({ onReceive }: { onReceive: (address: string) => voi
   if (!identity.isConnected || !identity.address) {
     return (
       <div aria-label="Identity wallet" className="wcard wcard--empty">
-        <p className="wcard__eyebrow inline-flex items-center gap-1.5"><KeyIcon />Connected wallet</p>
+        <p className="wcard__eyebrow flex items-center gap-1.5"><KeyIcon />Connected wallet</p>
         <p className="wcard__title">Not connected</p>
         <p className="wcard__sub">Signs you in. Dolphin never spends from it.</p>
         <div className="wcard__foot">
@@ -715,7 +715,7 @@ function IdentityWalletCard({ onReceive }: { onReceive: (address: string) => voi
       <div className="wcard__head">
         <WalletAvatar address={address} className="wcard__avatar" kind="human" size={34} />
         <div className="wcard__head-text">
-          <p className="wcard__eyebrow inline-flex items-center gap-1.5"><KeyIcon />Connected wallet</p>
+          <p className="wcard__eyebrow flex items-center gap-1.5"><KeyIcon />Connected wallet</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
       </div>
@@ -862,7 +862,7 @@ function AgentWalletCard({
     const blocked = wallet.status === "unsupported";
     return (
       <div aria-label="Agent payments wallet" className="wcard wcard--agent wcard--empty">
-        <p className="wcard__eyebrow inline-flex items-center gap-1.5"><BrandMark size={12} />Dolphin Wallet</p>
+        <p className="wcard__eyebrow flex items-center gap-1.5"><BrandMark size={12} />Dolphin Wallet</p>
         <p className="wcard__title">{blocked ? "Unavailable here" : "Not set up"}</p>
         <p className="wcard__sub">
           {blocked
@@ -934,7 +934,7 @@ function AgentWalletCard({
            * convex/agentPayments.ts verifies the payee against. This balance is
            * outbound only.
            */}
-          <p className="wcard__eyebrow inline-flex items-center gap-1.5"><BrandMark size={12} />Dolphin Wallet</p>
+          <p className="wcard__eyebrow flex items-center gap-1.5"><BrandMark size={12} />Dolphin Wallet</p>
           <AddressChip address={address} onOpen={() => onReceive(address)} />
         </div>
         <AssetMenu

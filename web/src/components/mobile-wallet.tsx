@@ -10,6 +10,7 @@ import {
   PermissionsSection,
   RecoverabilityPanel,
 } from "@/components/altana-wallet-panel";
+import { AllAssetsIcon } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { LiquidationAlertPanel } from "@/components/liquidation-alert-panel";
 import { MobileMenuButton } from "@/components/mobile-nav";
@@ -376,10 +377,11 @@ function AccountPicker({
   }, [open, onClose]);
 
   const address = view === "dolphin" ? dolphinAddress : view === "connected" ? identityAddress : null;
+  // What each wallet DOES, the same lines as the desktop cards (owner, 2026-10-17: three wallets, make them known).
   const options: { view: View; sub: string }[] = [
-    { view: "total", sub: "Both wallets together" },
-    { view: "dolphin", sub: dolphinAddress ? short(dolphinAddress) : "Not set up" },
-    { view: "connected", sub: identityAddress ? short(identityAddress) : "Not connected" },
+    { view: "total", sub: "Every asset in both wallets" },
+    { view: "dolphin", sub: dolphinAddress ? `Pays agents, runs traders · ${short(dolphinAddress)}` : "Not set up" },
+    { view: "connected", sub: identityAddress ? `Signs you in, never spends · ${short(identityAddress)}` : "Not connected" },
   ];
 
   return (
@@ -393,7 +395,7 @@ function AccountPicker({
         type="button"
       >
         {view === "total" ? (
-          <span className="pw-picker__icon"><CategoryGlyph name="layers" size={16} /></span>
+          <span className="pw-picker__icon"><AllAssetsIcon size={16} /></span>
         ) : address ? (
           <WalletAvatar address={address} kind={view === "dolphin" ? "bot" : "human"} radius={8} size={28} />
         ) : (
@@ -419,7 +421,7 @@ function AccountPicker({
                 type="button"
               >
                 <span className="pw-picker__item-name">{NAMES[option.view]}</span>
-                <span className={`pw-picker__item-sub${option.sub.startsWith("0x") ? " pw-mono" : ""}`}>{option.sub}</span>
+                <span className="pw-picker__item-sub">{option.sub}</span>
               </button>
             </li>
           ))}

@@ -1,3 +1,4 @@
+import { cleanKeyName } from "./keyNames";
 import type { BinanceConfig } from "./agentBlocks";
 import type { GridTag } from "./grid";
 import { emaSeries, macdSeries, rsiSeries, smaSeries } from "./indicators";
@@ -120,9 +121,15 @@ export type Rule = {
 
 export const BRAINS = ["jev"] as const;
 export type Brain = (typeof BRAINS)[number];
-export type BrainConfirm = { brain: Brain; minPct: number };
-/** The Keys-tab variable each brain reads, in the runner's wallet. */
+/**
+ * `keyName`: which of the RUNNER's keys to use, by the name they gave it ("Jev", "Bush"; lib/keyNames.ts).
+ * Absent on rules made before 2026-10-17: the runner's key named like the brain, else BRAIN_KEY_NAMES.
+ */
+export type BrainConfirm = { brain: Brain; minPct: number; keyName?: string };
+/** The key each brain fell back to before keys had friendly names; still read if nothing else matches. */
 export const BRAIN_KEY_NAMES: Record<Brain, string> = { jev: "TYPESAFE_API_KEY" };
+/** A key whose name says it is for this brain ("Jev", "my typesafe key"), when the rule names none. */
+export const BRAIN_KEY_HINTS: Record<Brain, RegExp> = { jev: /jev|typesafe/i };
 export const BRAIN_LABELS: Record<Brain, string> = { jev: "Jev" };
 
 /** `quoteVolume`: the candle's traded value in the quote currency (USDT), when the source gives it. Rules never read it. */
@@ -662,7 +669,8 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
     const minPct = num(c.minPct ?? 60, 50, 95);
     if (!brain) problems.push(`the brain check must use one of: ${BRAINS.join(", ")}`);
     if (minPct === null) problems.push("the brain check's confidence must be 50% to 95%");
-    if (brain && minPct !== null) confirm = { brain, minPct: Math.round(minPct) };
+    const keyName = cleanKeyName(c.keyName);
+    if (brain && minPct !== null) confirm = { brain, minPct: Math.round(minPct), ...(keyName ? { keyName } : {}) };
   }
 
   if (problems.length > 0) return { problems };

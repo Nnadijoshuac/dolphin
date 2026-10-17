@@ -8,7 +8,8 @@ import { ListSetupDialog } from "@/components/list-setup-dialog";
 import { LivePnl } from "@/components/live-pnl";
 import { RuleView } from "@/components/rule-view";
 import { useRuleTab } from "@/hooks/use-popout";
-import { strategyApi, type TradingRuleTrade, type TradingRuleView } from "@/convex/api";
+import { envVarsApi, strategyApi, type TradingRuleTrade, type TradingRuleView } from "@/convex/api";
+import { useWalletSession } from "@/wallet/wallet-session";
 
 /**
  * TRADING RULES, IN THE DRAFT PANEL (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -155,6 +156,22 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
   const setPaused = useMutation(strategyApi.strategy.setRulePaused);
   const setBrain = useMutation(strategyApi.strategy.setBrainCheck);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * WHICH KEY JEV USES, by the name the person gave it (owner, 2026-10-17). A key whose name says Jev
+   * (or TypeSafe) is picked by itself; otherwise the person chooses from their keys, by name.
+   */
+  const session = useWalletSession();
+  const keys = useQuery(envVarsApi.envVars.list, { sessionToken: session.sessionToken ?? null });
+  const keyNames = (keys ?? []).map((key) => key.name);
+  const jevGuess = keyNames.find((name) => /jev|typesafe/i.test(name)) ?? (keyNames.length === 1 ? keyNames[0] : null);
+  const [pickingKey, setPickingKey] = useState(false);
+  const connectJev = (keyName: string | null) => {
+    setPickingKey(false);
+    void setBrain({ conversationKey, ruleId: rule.id, brain: "jev", ...(keyName ? { keyName } : {}) }).catch((cause) =>
+      setError(reason(cause, "That did not save.")),
+    );
+  };
+  const jevKey = rule.confirm?.keyName ?? jevGuess;
   const [viewing, setViewing] = useState(false);
   // In its own tab, like the canvas and the agent panel: closing that tab brings the view back here.
   const tab = useRuleTab(rule.id, conversationKey, () => setViewing(true));
@@ -199,7 +216,7 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
               ? " · watching"
               : " · not started"}
         {rule.paused ? <span className="font-semibold text-ink-soft"> · paused</span> : null}
-        {rule.confirm ? ` · Jev checks each buy (TYPESAFE_API_KEY in Keys)` : null}
+        {rule.confirm ? (jevKey ? ` · Jev checks each buy, with your key "${jevKey}"` : " · Jev checks each buy - add your Jev key in Keys") : null}
       </p>
       {/* Holding: the price now, the move since the buy, and what selling now would return - live. */}
       <LivePnl rule={rule} />
@@ -211,14 +228,37 @@ function RuleRow({ conversationKey, rule, trades }: { conversationKey: string; r
           {!rule.grid ? (
             <button
               className="rounded-md px-1.5 py-0.5 !text-[0.68rem] font-semibold text-muted transition-colors hover:bg-paper hover:text-ink"
-              onClick={() =>
-                void setBrain({ conversationKey, ruleId: rule.id, brain: rule.confirm ? null : "jev" }).catch((cause) => setError(reason(cause, "That did not save.")))
-              }
+              onClick={() => {
+                if (rule.confirm) {
+                  void setBrain({ conversationKey, ruleId: rule.id, brain: null }).catch((cause) => setError(reason(cause, "That did not save.")));
+                } else if (jevGuess || keyNames.length === 0) {
+                  connectJev(jevGuess);
+                } else {
+                  setPickingKey((was) => !was);
+                }
+              }}
               title="Before each buy, ask Jev (TypeSafe's decision model) whether to take it. Uses your own key."
               type="button"
             >
               {rule.confirm ? "Unplug Jev" : "Ask Jev first"}
             </button>
+          ) : null}
+          {pickingKey ? (
+            <select
+              aria-label="Which key Jev uses"
+              className="rounded-md border border-line bg-paper px-1.5 py-0.5 !text-[0.68rem] text-ink"
+              defaultValue=""
+              onChange={(event) => event.target.value && connectJev(event.target.value)}
+            >
+              <option disabled value="">
+                Which key is Jev&apos;s?
+              </option>
+              {keyNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
           ) : null}
           <button
             className="rounded-md px-1.5 py-0.5 !text-[0.68rem] font-semibold text-muted transition-colors hover:bg-paper hover:text-ink"

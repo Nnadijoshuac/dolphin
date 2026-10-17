@@ -21,7 +21,8 @@ import { useWalletSession } from "@/wallet/wallet-session";
  */
 
 /* The usual names for the providers a Brain can run on (BRAIN_PROVIDER_OPTIONS); any name works. */
-const SUGGESTED = BRAIN_PROVIDER_OPTIONS.filter((option) => option.id !== "custom").map((option) => option.keyName);
+// Names a person would give their keys (owner, 2026-10-17): no API_KEY_UNDERSCORES anywhere they can see.
+const SUGGESTED = ["Jev", ...BRAIN_PROVIDER_OPTIONS.filter((option) => option.id !== "custom").map((option) => option.label), "Binance"];
 
 function errorText(cause: unknown, fallback: string): string {
   const data = (cause as { data?: unknown } | null)?.data;
@@ -76,7 +77,7 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
           {variables.map((variable) => (
             <li className="group flex items-center gap-2 rounded-lg bg-paper-muted/70 px-3 py-2" key={variable.name}>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-mono text-[0.76rem] text-ink">{variable.name}</p>
+                <p className="truncate text-[0.8rem] font-medium text-ink">{variable.name}</p>
                 <p className="font-mono text-[0.68rem] text-muted">
                   {variable.last4 ? `••••${variable.last4}` : "••••"} ·{" "}
                   {new Date(variable.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
@@ -108,23 +109,24 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
           void save();
         }}
       >
-        <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Add or replace a key</p>
+        <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Add a key</p>
         <input
-          aria-label="Name"
+          aria-label="Name it"
           autoComplete="off"
           data-1p-ignore
           data-lpignore="true"
           name="dolphin-variable-name"
-          className={`${fieldClass} font-mono uppercase`}
-          onChange={(event) => setName(event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))}
-          placeholder="OPENAI_API_KEY"
+          className={fieldClass}
+          maxLength={40}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Name it - Jev, OpenRouter, Grok…"
           spellCheck={false}
           value={name}
         />
         <div className="flex flex-wrap gap-1">
-          {SUGGESTED.filter((suggestion) => !variables?.some((variable) => variable.name === suggestion)).map((suggestion) => (
+          {SUGGESTED.filter((suggestion) => !variables?.some((variable) => variable.name.toLowerCase() === suggestion.toLowerCase())).map((suggestion) => (
             <button
-              className="rounded-full border border-line px-2 py-0.5 font-mono !text-[0.64rem] text-muted transition-colors hover:border-line-strong hover:text-ink"
+              className="rounded-full border border-line px-2 py-0.5 !text-[0.64rem] text-muted transition-colors hover:border-line-strong hover:text-ink"
               key={suggestion}
               onClick={() => setName(suggestion)}
               type="button"
@@ -148,7 +150,7 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
         />
         <button
           className="flex h-8 w-full items-center justify-center rounded-lg bg-ink !text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-30"
-          disabled={saving || name.length < 2 || value.trim().length === 0}
+          disabled={saving || name.trim().length < 1 || value.trim().length === 0}
           type="submit"
         >
           <span className="text-canvas">{saving ? "Encrypting…" : "Save key"}</span>

@@ -202,10 +202,11 @@ function BrainEditor({ conversationKey, draft, onClose }: { conversationKey: str
   const saveKey = async () => {
     if (!session.sessionToken || !pastedKey.trim()) return;
     const guessed = providerFromPrefix(pastedKey);
-    const base = guessed ? BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === guessed)!.keyName : "BRAIN_API_KEY";
-    const taken = new Set((keys ?? []).map((key) => key.name));
+    // Named the way a person would ("OpenAI", "OpenAI 2"), never OPENAI_API_KEY (owner, 2026-10-17).
+    const base = guessed ? BRAIN_PROVIDER_OPTIONS.find((candidate) => candidate.id === guessed)!.label : "My model";
+    const taken = new Set((keys ?? []).map((key) => key.name.toLowerCase()));
     let keyNameToUse = base;
-    for (let n = 2; taken.has(keyNameToUse) && n < 20; n++) keyNameToUse = `${base}_${n}`;
+    for (let n = 2; taken.has(keyNameToUse.toLowerCase()) && n < 20; n++) keyNameToUse = `${base} ${n}`;
     setSavingKey(true);
     try {
       const saved = await setVariable({ sessionToken: session.sessionToken, name: keyNameToUse, value: pastedKey });

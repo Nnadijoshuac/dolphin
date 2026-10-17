@@ -1628,7 +1628,7 @@ export type TradingRuleView = {
   /** One level of a grid (convex/lib/grid.ts); the panel shows a grid's levels as one card. */
   grid: GridTag | null;
   /** The brain port: a model that must agree before an entry (convex/lib/strategy.ts Rule.confirm). */
-  confirm: { brain: "jev"; minPct: number } | null;
+  confirm: { brain: "jev"; minPct: number; keyName?: string } | null;
 };
 
 export type GridTag = { id: string; level: number; of: number; lower: number; upper: number };
@@ -1773,7 +1773,7 @@ export const strategyApi = anyApi as unknown as {
     updateRule: Mutation<{ conversationKey: string; ruleId: string; sizeUsd?: number; leverage?: number; stopLossPct?: number | null }, { warnings: string[] }>;
     removeRule: Mutation<{ conversationKey: string; ruleId: string }, null>;
     setRulePaused: Mutation<{ conversationKey: string; ruleId: string; paused: boolean }, null>;
-    setBrainCheck: Mutation<{ conversationKey: string; ruleId: string; brain: "jev" | null; minPct?: number }, { confirm: { brain: "jev"; minPct: number } | null }>;
+    setBrainCheck: Mutation<{ conversationKey: string; ruleId: string; brain: "jev" | null; minPct?: number; keyName?: string }, { confirm: { brain: "jev"; minPct: number; keyName?: string } | null }>;
     templates: Query<Record<string, never>, RuleTemplateView[]>;
     previewGrid: Action<GridSpecArgs, GridPreview>;
     addGrid: Mutation<{ conversationKey: string } & GridSpecArgs, { levels: number; warnings: string[] }>;

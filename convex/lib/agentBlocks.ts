@@ -38,6 +38,7 @@ import { getAddress, isAddress } from "viem";
 import type { ToolDefinition } from "./openrouter";
 import { activeQuietEvent, type AuthMode, type QuietEvent } from "./analyticalBlocks";
 import { indicatorReport, SIGNAL_CONDITIONS, type SignalCondition } from "./indicators";
+import { cleanKeyName, KEY_NAME_HINT } from "./keyNames";
 import { assertSafeUrl } from "./safeFetch";
 import { verifiedTokenBySymbol, verifiedTokens, type TradeToken } from "./tradeTokens";
 
@@ -218,7 +219,7 @@ export function validateBlocks(input: unknown): AgentBlock[] {
             ? config.authParam
             : null;
         if ((authMode === "header" || authMode === "query") && !authParam) fail("Say which header or query parameter carries the key.");
-        const keyName = typeof config.keyName === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(config.keyName) ? config.keyName : null;
+        const keyName = cleanKeyName(config.keyName);
         if (authMode !== "none" && !keyName) fail("Choose the key this source needs, from your Keys.");
         if (type === "dataSource") {
           const label = typeof config.label === "string" && config.label.trim() ? config.label.trim().slice(0, 40) : "Data source";
@@ -246,7 +247,7 @@ export function validateBlocks(input: unknown): AgentBlock[] {
       }
       case "memory": {
         const url = typeof config.url === "string" ? config.url.trim().replace(/\/+$/, "") : "";
-        const keyName = typeof config.keyName === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(config.keyName) ? config.keyName : null;
+        const keyName = cleanKeyName(config.keyName);
         if (!url) {
           // Placed, not connected yet: Dolphin keeps no agent memory, so it waits for the person's server.
           out.push({ id, type, config: { url: null, keyName } });
@@ -269,10 +270,10 @@ export function validateBlocks(input: unknown): AgentBlock[] {
         const leverage = Number(config.maxLeverage ?? 1);
         if (futures && !(Number.isInteger(leverage) && leverage >= 1 && leverage <= 5)) fail("The most leverage is a whole number from 1x to 5x.");
         const network = config.network === "live" ? "live" : "testnet";
-        const keyName = typeof config.keyName === "string" && config.keyName.trim() ? config.keyName.trim() : null;
-        const secretName = typeof config.secretName === "string" && config.secretName.trim() ? config.secretName.trim() : null;
-        for (const name of [keyName, secretName]) {
-          if (name !== null && !/^[A-Z][A-Z0-9_]{1,63}$/.test(name)) fail("A key name is capitals, digits and underscores, like BINANCE_API_KEY.");
+        const keyName = typeof config.keyName === "string" && config.keyName.trim() ? cleanKeyName(config.keyName) : null;
+        const secretName = typeof config.secretName === "string" && config.secretName.trim() ? cleanKeyName(config.secretName) : null;
+        if ((typeof config.keyName === "string" && config.keyName.trim() && !keyName) || (typeof config.secretName === "string" && config.secretName.trim() && !secretName)) {
+          fail(KEY_NAME_HINT);
         }
         out.push({ id, type, config: { account, futures, maxLeverage: futures ? leverage : 1, network, keyName, secretName } });
         break;

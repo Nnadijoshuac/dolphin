@@ -13,7 +13,7 @@ import { RULE_TEMPLATES } from "./lib/ruleTemplates";
 import { requireWalletAddress } from "./lib/walletAuth";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
 import { askJev, jevState } from "./lib/jev";
-import { afterCandle, BRAIN_KEY_NAMES, BRAIN_LABELS, cleanRule, decide, describeLocked, describeRule, EMPTY_STATE, redactReason, resultPct, resultUsd, simulate, TIMEFRAME_MS, TIMEFRAMES, VENUE_FEE_BPS, venueProblem, type BrainConfirm, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
+import { afterCandle, BRAIN_KEY_HINTS, BRAIN_KEY_NAMES, BRAIN_LABELS, cleanRule, decide, describeLocked, describeRule, EMPTY_STATE, redactReason, resultPct, resultUsd, simulate, TIMEFRAME_MS, TIMEFRAMES, VENUE_FEE_BPS, venueProblem, type BrainConfirm, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -342,14 +342,21 @@ export const updateRule = mutation({
 /** Pause or resume one rule: paused, it opens nothing new but still closes what it holds. */
 /** Plugs a brain into a rule's entries, or unplugs it (brain null). The brain port, lib/strategy.ts Rule.confirm. */
 export const setBrainCheck = mutation({
-  args: { conversationKey: v.string(), ruleId: v.string(), brain: v.union(v.literal("jev"), v.null()), minPct: v.optional(v.number()) },
-  handler: async (ctx, { conversationKey, ruleId, brain, minPct }) => {
+  args: {
+    conversationKey: v.string(),
+    ruleId: v.string(),
+    brain: v.union(v.literal("jev"), v.null()),
+    minPct: v.optional(v.number()),
+    /** Which of the person's keys the brain uses, by the name they gave it. */
+    keyName: v.optional(v.string()),
+  },
+  handler: async (ctx, { conversationKey, ruleId, brain, minPct, keyName }) => {
     const draft = await draftOfKey(ctx, conversationKey);
     const rules = rulesOf(draft);
     const rule = rules.find((candidate) => candidate.id === ruleId);
     if (!draft || !rule) throw new ConvexError("That rule is not in this agent.");
     const { confirm: _old, ...rest } = rule;
-    const cleaned = cleanRule(brain ? { ...rest, confirm: { brain, minPct: minPct ?? 60 } } : rest, rule.id);
+    const cleaned = cleanRule(brain ? { ...rest, confirm: { brain, minPct: minPct ?? 60, ...(keyName ? { keyName } : {}) } } : rest, rule.id);
     if ("problems" in cleaned) throw new ConvexError(`That does not fit the rule: ${cleaned.problems.join("; ")}.`);
     const next = { ...cleaned.rule, name: rule.name, ...(rule.locked ? { locked: rule.locked } : {}), ...(rule.grid ? { grid: rule.grid } : {}) };
     await ctx.db.patch(draft._id, { rules: rules.map((candidate) => (candidate.id === ruleId ? next : candidate)), updatedAt: Date.now() });
@@ -1060,9 +1067,22 @@ async function brainGate(
 ): Promise<{ take: boolean; reason: string; error: string | null }> {
   const confirm = rule.confirm as BrainConfirm;
   const label = BRAIN_LABELS[confirm.brain];
-  const keyName = BRAIN_KEY_NAMES[confirm.brain];
+  /*
+   * WHICH KEY, by the name the runner gave it (owner, 2026-10-17): the one the rule names, else a key
+   * whose name says it is for this brain ("Jev"), else the old fixed name. Names only are read here;
+   * the value is revealed once, below, for the one key chosen.
+   */
+  let keyName = confirm.keyName ?? null;
+  if (!keyName && owner) {
+    const names: string[] = await ctx.runQuery(internal.envVars.namesFor, { walletAddress: owner });
+    keyName = names.find((name) => BRAIN_KEY_HINTS[confirm.brain].test(name)) ?? null;
+  }
+  keyName ??= BRAIN_KEY_NAMES[confirm.brain];
   const apiKey: string | null = owner ? await ctx.runAction(internal.envVars.reveal, { walletAddress: owner, name: keyName }) : null;
-  if (!apiKey) return { take: false, reason: `Not traded: ${label} checks this rule's entries, and there is no ${keyName} in Keys.`, error: `Add ${keyName} in Keys so ${label} can check entries.` };
+  if (!apiKey) {
+    const missing = confirm.keyName ? `your key "${confirm.keyName}"` : `a ${label} key`;
+    return { take: false, reason: `Not traded: ${label} checks this rule's entries, and ${missing} is not in Keys.`, error: `Add ${missing} in Keys so ${label} can check entries.` };
+  }
   try {
     const verdict = await askJev(apiKey, jevState(rule.market, rule.timeframe, candles, reason, rule.action));
     if (verdict.take && verdict.pct >= confirm.minPct) return { take: true, reason: `${label} agreed, ${verdict.pct}% sure.`, error: null };

@@ -47,8 +47,7 @@ const SECTIONS: DocsSection[] = [
           <li>
             <strong>Brain.</strong> A model that must agree before each buy. The first brain is{" "}
             <strong>Jev</strong>, TypeSafe&rsquo;s fast decision model: on any rule, press <em>Ask Jev first</em>, or
-            tell the builder &ldquo;check every buy with Jev&rdquo;. Add your key in Keys as{" "}
-            <code>TYPESAFE_API_KEY</code>. No key or no answer means no trade. Exits never wait for it.
+            tell the builder &ldquo;check every buy with Jev&rdquo;. Add your key in Keys under any name you like, such as &ldquo;Jev&rdquo;. No key or no answer means no trade. Exits never wait for it.
           </li>
           <li>
             <strong>Hands.</strong> Where it trades: your Dolphin Wallet through PancakeSwap, Binance spot or futures

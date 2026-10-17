@@ -171,10 +171,14 @@ export const BUILDER_REPLY_SCHEMA = {
             cooldownMinutes: { type: ["number", "null"] },
             confirm: {
               type: ["object", "null"],
-              description: "null, unless the person asks for Jev (or an AI decision model) to approve each buy: then { brain: \"jev\", minPct: how sure it must be, 60 unless they said }.",
+              description: "null, unless the person asks for Jev (or an AI decision model) to approve each buy: then { brain: \"jev\", minPct: how sure it must be, 60 unless they said, keyName: the name of their key to use, exactly as listed under 'The person's keys', or null }.",
               additionalProperties: false,
-              required: ["brain", "minPct"],
-              properties: { brain: { type: "string", enum: ["jev"] }, minPct: { type: ["number", "null"] } },
+              required: ["brain", "minPct", "keyName"],
+              properties: {
+                brain: { type: "string", enum: ["jev"] },
+                minPct: { type: ["number", "null"] },
+                keyName: { type: ["string", "null"] },
+              },
             },
           },
         },

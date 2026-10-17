@@ -1,3 +1,5 @@
+import { MAX_VARS_PER_WALLET } from "./envVars";
+import { sameKeyName } from "./lib/keyNames";
 import { ConvexError, v } from "convex/values";
 import { formatUnits, getAddress } from "viem";
 
@@ -149,7 +151,7 @@ TRADING RULES - for an agent that trades on market conditions, write them in \`r
 - Example - "short BNB on 4-hour candles when the trend turns down, hold until it turns up, 2x, stop at 5%": venue binance-futures, market BNBUSDT, timeframe 4h, when [trend down 3], action short, until [trend up 2], stopLossPct 5, leverage 2.
 - When you write rules, add NO Schedule, Price trigger, Indicators, Signal, Risk limits, Swap or Safety block: the rule reads Binance's candles itself and carries its own size, stop and daily cap. A Price feed for the rule's token is welcome - it draws the live chart on the canvas.
 - Put the rule in \`rules\`, never only in the instructions: a rule written as prose does not trade.
-- THE BRAIN PORT: a rule can ask Jev (TypeSafe's fast decision model) to approve each buy before it trades - set confirm { brain "jev", minPct 60 } only when the person asks for Jev or for an AI to double-check entries. It runs on their own TYPESAFE_API_KEY from Keys; say so in one sentence. Otherwise confirm is null: a plain rule needs no AI and no key.
+- THE BRAIN PORT: a rule can ask Jev (TypeSafe's fast decision model) to approve each buy before it trades - set confirm { brain "jev", minPct 60 } only when the person asks for Jev or for an AI to double-check entries. It runs on their own Jev key from Keys: set keyName to the name they gave that key (see "The person's keys"), or null to use the one named for Jev; say in one sentence that it uses their own key. Otherwise confirm is null: a plain rule needs no AI and no key.
 - Rules start on PAPER (pretend money at live prices) while Autopilot is on. The person can switch Trading mode to Live in the agent panel - after accepting a real-money notice - to trade real funds from the Dolphin Wallet or their Binance account. Never ask for keys in the chat. Say this when you add rules.
 
 RECIPES - the shapes that work; add every block the job needs in one go:
@@ -755,11 +757,13 @@ export const updateDraft = mutation({
       if (!/^[A-Za-z0-9._:/-]{2,100}$/.test(model)) {
         throw new ConvexError("That model name does not look right. Use the provider's id, like gpt-4o-mini or openai/gpt-4o-mini.");
       }
-      const key = await ctx.db
+      // By the name the person gave it, any capitals (lib/keyNames.ts).
+      const keys = await ctx.db
         .query("userEnvVars")
-        .withIndex("by_wallet_name", (q) => q.eq("walletAddress", walletAddress).eq("name", args.brain!.keyName))
-        .unique();
-      if (!key) throw new ConvexError(`You have no key called ${args.brain.keyName}. Add it in the Keys tab first.`);
+        .withIndex("by_wallet_name", (q) => q.eq("walletAddress", walletAddress))
+        .take(MAX_VARS_PER_WALLET);
+      const key = keys.find((row) => sameKeyName(row.name, args.brain!.keyName));
+      if (!key) throw new ConvexError(`You have no key called "${args.brain.keyName}". Add it in the Keys tab first.`);
       if (!isBrainProvider(args.brain.provider)) throw new ConvexError("Choose a provider from the list.");
       // A model id from another provider would be refused on every run (owner, 2026-10-02: an OpenRouter id saved under OpenAI).
       const mismatch = modelProviderMismatch(args.brain.provider, model);
@@ -774,7 +778,7 @@ export const updateDraft = mutation({
           throw new ConvexError("The custom endpoint must be a public https:// URL, e.g. https://api.example.com/v1.");
         }
       }
-      brain = { provider: args.brain.provider, model, keyName: args.brain.keyName, walletAddress, baseUrl };
+      brain = { provider: args.brain.provider, model, keyName: key.name, walletAddress, baseUrl };
     }
 
     const blocks = args.blocks !== undefined ? validateBlocks(args.blocks) : ((existing?.blocks ?? []) as AgentBlock[]);
@@ -983,7 +987,7 @@ const RULES_ONLY_PROMPT = `You turn a person's description of a trading rule int
 - market: a Binance pair such as BNBUSDT. timeframe: 1m, 5m, 15m, 1h, 4h or 1d.
 - when: entry conditions, ALL must hold. until: exit conditions, ALL must hold (empty if only a stop or target).
 - Conditions (every field present, unused ones null): rsi (op above/below, value, period - 14 unless said), price_vs_ma (op, ma sma/ema, length), ma_cross (direction up/down, fast, slow, ma), macd_cross (direction), trend (direction, candles), price (op, value), change_pct (op, value, candles), fib (op near/above/below, value = level as a ratio like 0.618, candles = swing length, e.g. 50: a buy at the 61.8% pullback is fib near 0.618).
-- action: buy, or short (binance-futures only). sizeUsd: dollars per entry. stopLossPct / takeProfitPct: % price move, or null. leverage: 1 unless they asked. maxTradesPerDay: what they said, else 2. cooldownMinutes: what they said, else 0. name: null. confirm: null, unless they ask Jev (TypeSafe's decision model) to approve each buy: { "brain": "jev", "minPct": 60 or what they said }.
+- action: buy, or short (binance-futures only). sizeUsd: dollars per entry. stopLossPct / takeProfitPct: % price move, or null. leverage: 1 unless they asked. maxTradesPerDay: what they said, else 2. cooldownMinutes: what they said, else 0. name: null. confirm: null, unless they ask Jev (TypeSafe's decision model) to approve each buy: { "brain": "jev", "minPct": 60 or what they said, "keyName": the name of the key they said to use, else null }.
 - "Get out when X, or at a 0.3% gain, or at a 0.5% loss" means until [X], takeProfitPct 0.3, stopLossPct 0.5.
 - Plain words: "drops a lot" or "dips" = change_pct below -5 over 24 candles on 1h; "goes back up" = takeProfitPct 5 and until rsi above 60; "I have $30" = sizeUsd 30; no stop given = stopLossPct 6.
 Write only what they described; never invent a rule.`;
@@ -1054,10 +1058,18 @@ export const ask = action({
         keep: current.tools,
       });
 
+      /*
+       * THE PERSON'S KEYS, BY THEIR OWN NAMES (owner, 2026-10-17: "anytime the person says bush, we know
+       * this is what this person is referring to"). Names only - a value never enters a prompt.
+       */
+      const keyNames: string[] = ownerAddress ? await ctx.runQuery(internal.envVars.namesFor, { walletAddress: ownerAddress }) : [];
+      const keysNote = keyNames.length
+        ? `The person's keys, by the names they gave them: ${keyNames.map((name) => `"${name}"`).join(", ")}. When they refer to a key by any of these names (any capitals), use that exact name wherever a keyName is asked for. Never ask them to rename a key.`
+        : "The person has no keys saved yet. If a block or Jev needs one, tell them to add it in the Keys tab under any name they like.";
       const messages: ChatMessage[] = [
         {
           role: "system",
-          content: `${BUILD_PROMPT}\n\n${describeDraft(current, offered)}\n\n${describeOffered(offered)}`,
+          content: `${BUILD_PROMPT}\n\n${keysNote}\n\n${describeDraft(current, offered)}\n\n${describeOffered(offered)}`,
         },
         ...historyWithout(priorTurns, text),
         /*

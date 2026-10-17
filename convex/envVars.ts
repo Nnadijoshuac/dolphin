@@ -20,10 +20,10 @@ import { ConvexError, v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { cleanKeyName, KEY_NAME_HINT, sameKeyName } from "./lib/keyNames";
 import { open, seal } from "./lib/secretBox";
 import { requireWalletAddress } from "./lib/walletAuth";
 
-const NAME_PATTERN = /^[A-Z][A-Z0-9_]{1,63}$/;
 const MAX_VALUE_CHARS = 4_000;
 export const MAX_VARS_PER_WALLET = 50;
 
@@ -57,10 +57,9 @@ export const set = action({
   args: { sessionToken: v.string(), name: v.string(), value: v.string() },
   handler: async (ctx, args): Promise<{ name: string; last4: string }> => {
     const walletAddress: string = await ctx.runQuery(internal.envVars.walletFor, { sessionToken: args.sessionToken });
-    const name = args.name.trim().toUpperCase();
-    if (!NAME_PATTERN.test(name)) {
-      throw new ConvexError("Use a name like OPENAI_API_KEY: capital letters, digits and underscores, starting with a letter.");
-    }
+    // The name as the person typed it (lib/keyNames.ts): "Jev", "Bush", "My OpenRouter".
+    const name = cleanKeyName(args.name);
+    if (!name) throw new ConvexError(KEY_NAME_HINT);
     const value = args.value.trim();
     if (value.length === 0) throw new ConvexError("The value is empty.");
     if (value.length > MAX_VALUE_CHARS) throw new ConvexError(`Values are limited to ${MAX_VALUE_CHARS} characters.`);
@@ -76,20 +75,17 @@ export const store = internalMutation({
   args: { walletAddress: v.string(), name: v.string(), ciphertext: v.string(), iv: v.string(), last4: v.string() },
   handler: async (ctx, args) => {
     const now = new Date().toISOString();
-    const existing = await ctx.db
+    const rows = await ctx.db
       .query("userEnvVars")
-      .withIndex("by_wallet_name", (q) => q.eq("walletAddress", args.walletAddress).eq("name", args.name))
-      .unique();
+      .withIndex("by_wallet_name", (q) => q.eq("walletAddress", args.walletAddress))
+      .take(MAX_VARS_PER_WALLET);
+    // "jev" replaces "Jev": one key per name, whatever the capitals.
+    const existing = rows.find((row) => sameKeyName(row.name, args.name));
     if (existing) {
-      await ctx.db.patch(existing._id, { ciphertext: args.ciphertext, iv: args.iv, last4: args.last4, updatedAt: now });
+      await ctx.db.patch(existing._id, { name: args.name, ciphertext: args.ciphertext, iv: args.iv, last4: args.last4, updatedAt: now });
       return;
     }
-    const count = (
-      await ctx.db
-        .query("userEnvVars")
-        .withIndex("by_wallet_name", (q) => q.eq("walletAddress", args.walletAddress))
-        .take(MAX_VARS_PER_WALLET)
-    ).length;
+    const count = rows.length;
     if (count >= MAX_VARS_PER_WALLET) {
       throw new ConvexError(`You can keep up to ${MAX_VARS_PER_WALLET} variables. Remove one first.`);
     }
@@ -112,11 +108,31 @@ export const remove = mutation({
 
 export const sealedFor = internalQuery({
   args: { walletAddress: v.string(), name: v.string() },
-  handler: async (ctx, { walletAddress, name }) =>
-    ctx.db
+  handler: async (ctx, { walletAddress, name }) => {
+    const exact = await ctx.db
       .query("userEnvVars")
       .withIndex("by_wallet_name", (q) => q.eq("walletAddress", walletAddress).eq("name", name))
-      .unique(),
+      .unique();
+    if (exact) return exact;
+    // "bush" finds the key saved as "Bush" (lib/keyNames.ts). At most 50 rows per wallet.
+    const rows = await ctx.db
+      .query("userEnvVars")
+      .withIndex("by_wallet_name", (q) => q.eq("walletAddress", walletAddress))
+      .take(MAX_VARS_PER_WALLET);
+    return rows.find((row) => sameKeyName(row.name, name)) ?? null;
+  },
+});
+
+/** The names of a wallet's keys, never a value: for the builder chat and the brain port. */
+export const namesFor = internalQuery({
+  args: { walletAddress: v.string() },
+  handler: async (ctx, { walletAddress }) =>
+    (
+      await ctx.db
+        .query("userEnvVars")
+        .withIndex("by_wallet_name", (q) => q.eq("walletAddress", walletAddress))
+        .take(MAX_VARS_PER_WALLET)
+    ).map((row) => row.name),
 });
 
 /**

@@ -86,7 +86,10 @@ export function SiteHeader() {
   return (
     <>
       <header className="desktop-site-header sticky top-0 z-50 border-b border-line bg-canvas/92 backdrop-blur-xl">
-        <div className="site-frame flex h-[68px] items-center gap-8">
+        {/* Live is a full-width trading screen: the bar lines up with it there (owner, 2026-10-18). */}
+        <div
+          className={`${pathname.startsWith("/live") ? "mx-auto w-full max-w-[2000px] px-4 sm:px-6 xl:px-10" : "site-frame"} flex h-[68px] items-center gap-8`}
+        >
           <Link
             aria-label="Dolphin home"
             className="interactive flex shrink-0 items-center gap-2.5 justify-self-start no-underline"

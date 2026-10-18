@@ -27,7 +27,7 @@ export function LiveRun({ slug }: { slug: string }) {
     return (
       <div className={styles.page}>
         <Ticker />
-        <div className="site-frame pt-8">
+        <div className="mx-auto w-full max-w-[2000px] px-4 sm:px-6 xl:px-10 pt-8">
           <div className="skeleton h-[520px] rounded-[18px]" />
         </div>
       </div>
@@ -37,7 +37,7 @@ export function LiveRun({ slug }: { slug: string }) {
     return (
       <div className={styles.page}>
         <Ticker />
-        <div className="site-frame pt-16 text-center">
+        <div className="mx-auto w-full max-w-[2000px] px-4 sm:px-6 xl:px-10 pt-16 text-center">
           <p className={styles.muted}>No run with that link.</p>
           <Link className={`mt-4 inline-block ${styles.lime}`} href="/live">See who is live</Link>
         </div>
@@ -70,7 +70,7 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
   return (
     <div className={styles.page}>
       <Ticker />
-      <div className="site-frame pt-8">
+      <div className="mx-auto w-full max-w-[2000px] px-4 sm:px-6 xl:px-10 pt-8">
         {/* header: title + the key numbers in a row (Oripio) */}
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
@@ -135,8 +135,8 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
         </button>
 
         {/* three columns (Coinix trading): decision log | chart | wallet */}
-        <div className="mt-8 grid gap-4 xl:grid-cols-[270px_1fr_320px]">
-          <section className={`${styles.panel} order-3 p-4 xl:order-1`}>
+        <div className="mt-8 grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_360px] 2xl:grid-cols-[340px_minmax(0,1fr)_400px]">
+          <section className={`${styles.panel} order-3 flex min-h-0 flex-col p-4 xl:order-1`}>
             <div className="flex items-center justify-between px-1">
               <h2 className="text-sm font-semibold">Decision log</h2>
               <span className={`text-[11px] ${styles.muted}`}>its own words</span>
@@ -147,7 +147,9 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
                 {latestThought}
               </p>
             ) : null}
-            <div className={`${styles.book} mt-3 max-h-[380px] overflow-y-auto`}>
+            {/* On wide screens the list fills its card and scrolls inside it, so it never sets the row's height. */}
+            <div className="relative mt-3 min-h-[160px] flex-1">
+            <div className={`${styles.book} max-h-[420px] overflow-y-auto xl:absolute xl:inset-0 xl:max-h-none`}>
               {run.thoughts.length === 0 ? <p className={`px-1 text-xs ${styles.muted}`}>Its decisions appear here as it makes them.</p> : null}
               {run.thoughts.map((thought) => (
                 <div
@@ -162,9 +164,10 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
                 </div>
               ))}
             </div>
+            </div>
           </section>
 
-          <section className={`${styles.panel} order-1 p-5 sm:p-6 xl:order-2`}>
+          <section className={`${styles.panel} order-1 flex flex-col p-5 sm:p-6 xl:order-2`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className={`text-sm ${styles.muted}`}>{run.market?.replace("USDT", "/USDT")}</p>
@@ -219,13 +222,15 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
               </div>
             </section>
 
-            <section className={`${styles.panel} p-5`}>
+            <section className={`${styles.panel} flex min-h-0 flex-1 flex-col p-5`}>
               <p className="text-sm font-semibold">Its rules</p>
-              <ul className="mt-2 flex flex-col gap-2 text-[13px] leading-5 text-[#c9cbc3]">
+              <div className="relative mt-2 min-h-[80px] flex-1">
+              <ul className="flex flex-col gap-2 overflow-y-auto text-[13px] leading-5 text-[#c9cbc3] xl:absolute xl:inset-0">
                 {run.rules.map((rule) => (
                   <li key={rule}>{rule}</li>
                 ))}
               </ul>
+              </div>
             </section>
           </div>
         </div>
@@ -417,7 +422,7 @@ function CandleChart({ candles, trades }: { candles: Candle[]; trades: LiveRunDe
     .filter((m): m is { index: number; buy: boolean; price: number } => m !== null);
   const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => lo + span * f);
   return (
-    <svg className="mt-6 h-[260px] w-full sm:h-[320px]" preserveAspectRatio="none" viewBox={`0 0 ${W} ${H}`}>
+    <svg className="mt-6 h-[280px] w-full sm:h-[380px] 2xl:h-[460px]" preserveAspectRatio="none" viewBox={`0 0 ${W} ${H}`}>
       {grid.map((v) => (
         <g key={v}>
           <line stroke="rgba(255,255,255,0.05)" x1="0" x2={W - PAD} y1={y(v)} y2={y(v)} />

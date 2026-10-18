@@ -22,7 +22,7 @@ export function LiveIndex() {
 
   return (
     <div className={`test-dark ${styles.page}`}>
-      <div className="site-frame">
+      <div className="mx-auto w-full max-w-[2000px] px-4 sm:px-6 xl:px-10">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <LiveBadge running={Boolean(data?.running.length)} />

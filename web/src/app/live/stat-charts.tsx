@@ -16,7 +16,7 @@ const DOWN = "#ff5c5c";
 const GOLD = "#f3c13a";
 
 const tooltipStyle = {
-  background: "#141513",
+  background: "#20211b",
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 10,
   fontSize: 12,
@@ -48,7 +48,7 @@ export function ValueArea({ points, start }: { points: { t: number; usd: number 
           formatter={(value) => [`$${Number(value).toFixed(2)}`, "Wallet"]}
           labelFormatter={(t) => (Number(t) > 0 ? new Date(Number(t)).toLocaleString() : "Start")}
         />
-        <Area activeDot={{ r: 4, fill: color, stroke: "#0e0f0e", strokeWidth: 2 }} dataKey="usd" fill="url(#valueFill)" isAnimationActive stroke={color} strokeWidth={2} type="monotone" />
+        <Area activeDot={{ r: 4, fill: color, stroke: "#191a15", strokeWidth: 2 }} dataKey="usd" fill="url(#valueFill)" isAnimationActive stroke={color} strokeWidth={2} type="monotone" />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -103,7 +103,7 @@ export function PriceArea({ closes }: { closes: { t: number; c: number }[] }) {
           formatter={(value) => [Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 }), "Close"]}
           labelFormatter={(t) => new Date(Number(t)).toLocaleString()}
         />
-        <Area activeDot={{ r: 4, fill: GOLD, stroke: "#0e0f0e", strokeWidth: 2 }} dataKey="c" fill="url(#priceFill)" stroke={GOLD} strokeWidth={2} type="monotone" />
+        <Area activeDot={{ r: 4, fill: GOLD, stroke: "#191a15", strokeWidth: 2 }} dataKey="c" fill="url(#priceFill)" stroke={GOLD} strokeWidth={2} type="monotone" />
       </AreaChart>
     </ResponsiveContainer>
   );

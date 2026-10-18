@@ -7,13 +7,13 @@
   --lime-dim: rgba(243, 193, 58, 0.14);
   --up: #3ddc84;
   --down: #ff5c5c;
-  --panel: #0e0f0e;
-  --panel-2: #141513;
+  --panel: #191a15;
+  --panel-2: #20211b;
   --hair: rgba(255, 255, 255, 0.07);
   min-height: 100vh;
   padding: 0 0 80px;
   /* Dolphin's own: black, one gold accent (owner, 2026-10-18: no purple or green glows). */
-  background: #070807;
+  background: #131410; /* the site's own dark canvas, so the page and the header are one surface */
   color: #f2f3ee;
 }
 
@@ -23,7 +23,7 @@
 .lime { color: var(--lime); }
 
 /* ── ticker strip ── */
-.ticker { border-bottom: 1px solid var(--hair); overflow: hidden; white-space: nowrap; background: #0a0b0a; }
+.ticker { border-bottom: 1px solid var(--hair); overflow: hidden; white-space: nowrap; background: #10110d; }
 .tickerTrack { display: inline-flex; gap: 36px; padding: 10px 0; animation: tick 40s linear infinite; }
 .tickerItem { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: #c9cbc3; font-variant-numeric: tabular-nums; }
 @keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
@@ -51,7 +51,7 @@
 .startTick { position: absolute; top: -5px; width: 2px; height: 18px; background: rgba(255, 255, 255, 0.25); }
 
 /* ── range pills ── */
-.pills { display: inline-flex; gap: 4px; padding: 4px; border-radius: 10px; background: #0a0b0a; border: 1px solid var(--hair); }
+.pills { display: inline-flex; gap: 4px; padding: 4px; border-radius: 10px; background: #10110d; border: 1px solid var(--hair); }
 .pill { padding: 5px 10px; border-radius: 7px; font-size: 12px; color: #8a8c85; }
 .pillOn { background: var(--lime); color: #0b0c0a; font-weight: 600; }
 

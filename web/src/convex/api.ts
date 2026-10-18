@@ -1985,13 +1985,12 @@ export type LiveRunSummary = {
   walletAddress: string;
   market: string | null;
   startUsd: number;
-  targetUsd: number;
   floorUsd: number;
   lastUsd: number;
   lastValuedAt: number;
   startedAt: number;
   endedAt: number | null;
-  status: "running" | "won" | "lost" | "ended";
+  status: "running" | "lost" | "ended";
 };
 export type LiveRunDetail = LiveRunSummary & {
   timeframe: string | null;

@@ -45,18 +45,6 @@ export function LiveBadge({ running }: { running: boolean }) {
   );
 }
 
-/** $0 -> target, with the start marked and where it is now. */
-export function Track({ start, now, target }: { start: number; now: number; target: number }) {
-  const at = (v: number) => `${Math.max(0, Math.min(100, (v / target) * 100))}%`;
-  return (
-    <div className={styles.track}>
-      <div className={styles.fill} style={{ width: at(now) }} />
-      <div className={styles.startTick} style={{ left: at(start) }} />
-      <div className={styles.knob} style={{ left: at(now) }} />
-    </div>
-  );
-}
-
 /* ── live market data, straight from Binance's public API, in the viewer's browser ── */
 
 const BINANCE = "https://data-api.binance.vision/api/v3";

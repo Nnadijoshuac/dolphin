@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { LiveBadge, Ticker, Track, ago, dayOf, pct, price, usd, useCandles, useSecond, type Candle } from "@/app/live/live-bits";
+import { LiveBadge, Ticker, ago, dayOf, pct, price, usd, useCandles, useSecond, type Candle } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
 import { TokenLogo } from "@/components/brand-mark";
 import { RollingFigure } from "@/components/rolling-figure";
@@ -60,6 +60,9 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
   const position = run.engine.find((row) => row.position)?.position ?? null;
   const latestThought = run.engine.find((row) => row.reason)?.reason ?? null;
   const up = liveUsd >= run.startUsd;
+  // Highest and lowest the wallet has been valued at since the run began, now included.
+  const best = Math.max(liveUsd, ...run.history.map((point) => point.usd));
+  const low = Math.min(liveUsd, ...run.history.map((point) => point.usd));
   const exits = run.trades.filter((trade) => trade.kind === "exit" && trade.pnlPct !== null);
   const candles = useCandles(run.market, run.timeframe);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -93,13 +96,13 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
               <span className="text-lg font-medium tabular-nums" style={{ color: up ? "#3ddc84" : "#ff5c5c" }}>{usd(liveUsd)}</span>
             </div>
             <div className={styles.kpi}>
-              <span className={`text-xs ${styles.muted}`}>Target</span>
-              <span className={`text-lg font-medium tabular-nums ${styles.lime}`}>${run.targetUsd}</span>
+              <span className={`text-xs ${styles.muted}`}>Best</span>
+              <span className={`text-lg font-medium tabular-nums ${styles.lime}`}>{usd(best)}</span>
             </div>
             <div className={styles.kpi}>
               <span className={`text-xs ${styles.muted}`}>{running ? "Day" : "Status"}</span>
               <span className="text-lg font-medium tabular-nums">
-                {running ? (now ? dayOf(run.startedAt, now) : 1) : run.status === "won" ? "Won" : run.status === "lost" ? "Zero" : "Ended"}
+                {running ? (now ? dayOf(run.startedAt, now) : 1) : run.status === "lost" ? "Zero" : "Ended"}
               </span>
             </div>
           </div>
@@ -200,16 +203,23 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
               <p className="mt-2 text-sm font-semibold" style={{ color: up ? "#3ddc84" : "#ff5c5c" }}>
                 {pct(run.startUsd, liveUsd)} <span className={`font-normal ${styles.muted}`}>since the start</span>
               </p>
-              <div className="mt-6">
-                <Track now={liveUsd} start={run.startUsd} target={run.targetUsd} />
-                <div className={`mt-2 flex justify-between text-xs ${styles.muted}`}>
-                  <span>$0 · over</span>
-                  <span className={styles.lime}>${run.targetUsd} · wins</span>
-                </div>
+              <div className={`mt-6 grid grid-cols-3 gap-3 border-t border-white/5 pt-4 text-xs ${styles.muted}`}>
+                <span>
+                  Started
+                  <span className="mt-1 block text-sm font-medium tabular-nums text-white">{usd(run.startUsd)}</span>
+                </span>
+                <span>
+                  Best
+                  <span className={`mt-1 block text-sm font-medium tabular-nums ${styles.lime}`}>{usd(best)}</span>
+                </span>
+                <span>
+                  Lowest
+                  <span className="mt-1 block text-sm font-medium tabular-nums text-white">{usd(low)}</span>
+                </span>
               </div>
               {!running ? (
                 <p className="mt-5 text-lg font-semibold">
-                  {run.status === "won" ? `It made it to $${run.targetUsd}.` : run.status === "lost" ? "It went to zero." : "Its owner ended the run."}
+                  {run.status === "lost" ? "It went to zero." : "Its owner ended the run."}
                 </p>
               ) : null}
             </section>
@@ -220,11 +230,9 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
                 <p className="font-semibold">{alive ? `Next look in ${nextIn}s` : running ? "Not watching right now" : "Run over"}</p>
                 <p className={`text-sm ${styles.muted}`}>
                   {!running
-                    ? run.status === "won"
-                      ? `It reached $${run.targetUsd}. The agent stopped trading.`
-                      : run.status === "lost"
-                        ? "The wallet ran out. The agent stopped trading."
-                        : "Its owner ended the public run."
+                    ? run.status === "lost"
+                      ? "The wallet ran out. The agent stopped trading."
+                      : "Its owner ended the public run."
                     : position
                       ? `Holding a ${position.side} from ${price(position.entryPrice)}`
                       : "Not holding anything. Waiting for its entry."}

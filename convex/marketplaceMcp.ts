@@ -182,7 +182,7 @@ const TRADER_TOOLS = [
   {
     name: "list_live_runs",
     title: "Agents trading real money right now",
-    description: "Public runs on dolphinamp.xyz/live: an agent trading its own wallet's real money until it reaches $100 or zero. Each has its start, current value (read from BNB Chain) and status.",
+    description: "Public runs on dolphinamp.xyz/live: an agent trading its own wallet's real money until its wallet runs out or its owner ends the run. Each has its start, current value (read from BNB Chain) and status.",
     inputSchema: { type: "object", properties: {} },
     annotations: READ_ONLY,
   },

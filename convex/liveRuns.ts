@@ -1,12 +1,12 @@
 /**
  * PUBLIC RUNS (owner, 2026-10-18): "$6 → ?". Anyone can make an agent's run public: it trades its Dolphin
- * Wallet's real money and the whole thing is watchable at /live/<slug> until the wallet reaches its target
- * ($100) or its floor ($0). No time limit.
+ * Wallet's real money and the whole thing is watchable at /live/<slug> until the wallet runs out or its
+ * owner ends the run. No finish line and no time limit (owner, 2026-10-18: the global $100 target is gone).
  *
  * Every number is read from the chain, never typed in: `start` values the wallet before anything is
  * written, and `tick` (every 5 minutes, crons.ts) values it again, keeps a small history, copies the
- * engine's latest decisions, and ends the run - switching the agent's autopilot off - when it crosses the
- * target or the floor. The trading engine itself (strategy.ts) is not touched.
+ * engine's latest decisions, and ends the run - switching the agent's autopilot off - when the wallet falls
+ * to the floor. The trading engine itself (strategy.ts) is not touched.
  */
 
 import { ConvexError, v } from "convex/values";
@@ -20,7 +20,6 @@ import { describeRule, type Rule, type RuleState } from "./lib/strategy";
 import { verifiedTokens } from "./lib/tradeTokens";
 import { requireWalletAddress } from "./lib/walletAuth";
 
-const TARGET_USD = 100;
 const FLOOR_USD = 0;
 /** Below this the wallet cannot pay for a swap and its gas: the run is over. */
 const DUST_USD = 0.5;
@@ -107,7 +106,6 @@ export const create = internalMutation({
     const now = Date.now();
     await ctx.db.insert("liveRuns", {
       ...args,
-      targetUsd: TARGET_USD,
       floorUsd: FLOOR_USD,
       startedAt: now,
       status: "running",
@@ -131,7 +129,6 @@ export const start = action({
     if (!isAddress(prep.walletAddress, { strict: false })) throw new ConvexError("The agent's wallet address is not valid.");
     const startUsd = await walletUsd(prep.walletAddress);
     if (startUsd <= DUST_USD) throw new ConvexError(`The wallet holds $${startUsd.toFixed(2)}. Fund it first.`);
-    if (startUsd >= TARGET_USD) throw new ConvexError(`The wallet already holds $${startUsd.toFixed(2)}, at or past the $${TARGET_USD} target.`);
     const slug = Array.from({ length: 8 }, () => "abcdefghjkmnpqrstuvwxyz23456789"[Math.floor(Math.random() * 31)]).join("");
     await ctx.runMutation(internal.liveRuns.create, {
       slug,
@@ -186,7 +183,7 @@ export const record = internalMutation({
     for (const text of reasons) {
       if (!thoughts.some((thought) => thought.text === text)) thoughts = [...thoughts, { t: at, text }].slice(-THOUGHTS_CAP);
     }
-    const status = usd >= run.targetUsd ? "won" : usd <= Math.max(run.floorUsd, DUST_USD) ? "lost" : "running";
+    const status = usd <= Math.max(run.floorUsd, DUST_USD) ? "lost" : "running";
     await ctx.db.patch(run._id, { lastUsd: usd, lastValuedAt: at, history, thoughts, status, endedAt: status === "running" ? null : at });
     if (status !== "running") {
       // The run is over: the agent stops opening trades. Its owner can switch it back on.
@@ -224,7 +221,6 @@ function summary(run: Doc<"liveRuns">, market: string | null) {
     walletAddress: run.walletAddress,
     market,
     startUsd: run.startUsd,
-    targetUsd: run.targetUsd,
     floorUsd: run.floorUsd,
     lastUsd: run.lastUsd,
     lastValuedAt: run.lastValuedAt,
@@ -246,7 +242,6 @@ export const list = query({
   handler: async (ctx) => {
     const running = await ctx.db.query("liveRuns").withIndex("by_status_started", (q) => q.eq("status", "running")).order("desc").take(20);
     const finished = [
-      ...(await ctx.db.query("liveRuns").withIndex("by_status_started", (q) => q.eq("status", "won")).order("desc").take(5)),
       ...(await ctx.db.query("liveRuns").withIndex("by_status_started", (q) => q.eq("status", "lost")).order("desc").take(5)),
       ...(await ctx.db.query("liveRuns").withIndex("by_status_started", (q) => q.eq("status", "ended")).order("desc").take(5)),
     ].sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));

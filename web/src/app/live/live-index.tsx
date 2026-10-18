@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { LiveBadge, Ticker, Track, dayOf, pct, usd, useSecond } from "@/app/live/live-bits";
+import { LiveBadge, Ticker, dayOf, pct, usd, useSecond } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
 import { TokenLogo } from "@/components/brand-mark";
 import { liveRunsApi, myAgentsApi, type LiveRunSummary } from "@/convex/api";
@@ -20,7 +20,6 @@ import { useWalletSession } from "@/wallet/wallet-session";
 export function LiveIndex() {
   const data = useQuery(liveRunsApi.liveRuns.list, {});
   const now = useSecond();
-  const won = data?.finished.filter((run) => run.status === "won").length ?? 0;
 
   return (
     <div className={styles.page}>
@@ -31,14 +30,13 @@ export function LiveIndex() {
             {data?.running.length ? <LiveBadge running /> : null}
             <h1 className={`${styles.title} ${data?.running.length ? "mt-4" : ""}`}>Agents trading real money, live</h1>
             <p className={`mt-2 max-w-xl text-sm ${styles.muted}`}>
-              Each one starts with what is in its wallet and runs until it reaches $100 or runs out. Every trade is on BNB Chain.
+              Each one starts with what is in its wallet and trades it in the open until it runs out or its owner stops it. Every trade is on BNB Chain.
             </p>
           </div>
           {data ? (
             <div className="flex flex-wrap gap-5">
               <Kpi label="Live now" value={String(data.running.length)} />
               <Kpi label="Finished" value={String(data.finished.length)} />
-              <Kpi label="Reached $100" value={String(won)} />
             </div>
           ) : null}
         </header>
@@ -104,7 +102,7 @@ function Empty() {
   const steps = [
     ["1", "It starts with its own wallet", "Whatever the agent holds when its owner goes live is the starting line."],
     ["2", "It trades on its own", "Every decision shows up as it happens, and every trade is on BNB Chain."],
-    ["3", "It ends at $100 or zero", "No time limit. The run stops the moment the wallet gets to either one."],
+    ["3", "It runs until it runs out", "No finish line and no time limit. It ends at zero, or when its owner stops it."],
   ];
   return (
     <div className={`${styles.panel} mt-3 p-5`}>
@@ -126,7 +124,7 @@ function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
   const up = run.lastUsd >= run.startUsd;
   const base = (run.market ?? "").replace("USDT", "");
   const status =
-    run.status === "running" ? `Day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "won" ? "Reached $100" : run.status === "lost" ? "Ran out" : "Ended";
+    run.status === "running" ? `Day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "lost" ? "Ran out" : "Ended";
   return (
     <Link className={`${styles.card} p-5 no-underline`} href={`/live/${run.slug}`}>
       <div className="flex items-center justify-between gap-3">
@@ -143,14 +141,7 @@ function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
         <span className="text-[32px] font-semibold leading-none tabular-nums">{usd(run.lastUsd)}</span>
         <span className={`text-sm font-medium tabular-nums ${up ? "text-[#3ddc84]" : "text-[#ff5c5c]"}`}>{pct(run.startUsd, run.lastUsd)}</span>
       </div>
-      <div className="mt-5">
-        <Track now={run.lastUsd} start={run.startUsd} target={run.targetUsd} />
-      </div>
-      <div className={`mt-2 flex justify-between text-[11px] tabular-nums ${styles.muted}`}>
-        <span>$0</span>
-        <span>started {usd(run.startUsd)}</span>
-        <span>${run.targetUsd}</span>
-      </div>
+      <p className={`mt-3 text-[11px] tabular-nums ${styles.muted}`}>started with {usd(run.startUsd)}</p>
       {run.status === "running" ? <p className={`mt-4 border-t border-white/5 pt-3 text-[11px] ${styles.muted}`}>{status}</p> : null}
     </Link>
   );
@@ -173,7 +164,7 @@ function GoLive() {
     <section className={`${styles.panel} mt-3 p-5`}>
       <h2 className={styles.cardTitle}>Make your run public</h2>
       <p className={`mt-1 text-sm ${styles.muted}`}>
-        Pick an agent trading real money. Anyone with the link watches it live until its wallet reaches $100 or zero.
+        Pick an agent trading real money. Anyone with the link watches it live until its wallet runs out or you stop it.
       </p>
       {ready.length === 0 ? (
         <p className={`mt-4 text-sm ${styles.muted}`}>

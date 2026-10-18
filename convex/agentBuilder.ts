@@ -151,6 +151,7 @@ TRADING RULES - for an agent that trades on market conditions, write them in \`r
 - Example - "short BNB on 4-hour candles when the trend turns down, hold until it turns up, 2x, stop at 5%": venue binance-futures, market BNBUSDT, timeframe 4h, when [trend down 3], action short, until [trend up 2], stopLossPct 5, leverage 2.
 - When you write rules, add NO Schedule, Price trigger, Indicators, Signal, Risk limits, Swap or Safety block: the rule reads Binance's candles itself and carries its own size, stop and daily cap. A Price feed for the rule's token is welcome - it draws the live chart on the canvas.
 - Put the rule in \`rules\`, never only in the instructions: a rule written as prose does not trade.
+- REMOVING OR REPLACING A RULE: CURRENT DRAFT lists every rule the agent trades, with its id. To delete one, put its id in \`removeRuleIds\`. To change or replace one ("make it 5-minute candles", "use this rule instead"), put the old id in \`removeRuleIds\` AND write the new rule in \`rules\` - writing a new rule alone ADDS it beside the old one, and both trade. Editing the instructions or description never changes what trades. Never say a rule was removed or replaced unless its id is in removeRuleIds; Dolphin adds the true outcome to your reply.
 - THE BRAIN PORT: a rule can ask Jev (TypeSafe's fast decision model) to approve each buy before it trades - set confirm { brain "jev", minPct 60 } only when the person asks for Jev or for an AI to double-check entries. It runs on their own Jev key from Keys: set keyName to the name they gave that key (see "The person's keys"), or null to use the one named for Jev; say in one sentence that it uses their own key. Otherwise confirm is null: a plain rule needs no AI and no key.
 - Rules start on PAPER (pretend money at live prices) while Autopilot is on. The person can switch Trading mode to Live in the agent panel - after accepting a real-money notice - to trade real funds from the Dolphin Wallet or their Binance account. Never ask for keys in the chat. Say this when you add rules.
 
@@ -905,7 +906,9 @@ function historyWithout(
   }));
 }
 
-function describeDraft(draft: DraftSpec, offered: readonly OfferedTool[]): string {
+type BuilderRule = { id: string; words: string; holding: boolean };
+
+function describeDraft(draft: DraftSpec, offered: readonly OfferedTool[], rules: readonly BuilderRule[] = []): string {
   const idFor = (agentKey: string, toolName: string) =>
     offered.find((tool) => tool.agentKey === agentKey && tool.toolName === toolName)?.id;
   const tools =
@@ -925,6 +928,7 @@ function describeDraft(draft: DraftSpec, offered: readonly OfferedTool[]): strin
     `description: ${draft.description ?? "(not set)"}`,
     `instructions: ${draft.instructions ?? "(not set)"}`,
     `toolIds: ${tools}`,
+    `rules: ${rules.length === 0 ? "none" : `\n${rules.map((rule) => `- id ${rule.id}: ${rule.words}${rule.holding ? " (HOLDING A POSITION - cannot be removed until it sells)" : ""}`).join("\n")}`}`,
   ].join("\n");
 }
 
@@ -1053,6 +1057,7 @@ export const ask = action({
         { conversationKey, excludeMessageId: assistantId },
       );
 
+      const currentRules: BuilderRule[] = await ctx.runQuery(internal.strategy.rulesForBuilder, { conversationId });
       const offered = await ctx.runQuery(internal.agentBuilder.toolCatalog, {
         text: [text, current.description ?? ""].join(" "),
         keep: current.tools,
@@ -1069,7 +1074,7 @@ export const ask = action({
       const messages: ChatMessage[] = [
         {
           role: "system",
-          content: `${BUILD_PROMPT}\n\n${keysNote}\n\n${describeDraft(current, offered)}\n\n${describeOffered(offered)}`,
+          content: `${BUILD_PROMPT}\n\n${keysNote}\n\n${describeDraft(current, offered, currentRules)}\n\n${describeOffered(offered)}`,
         },
         ...historyWithout(priorTurns, text),
         /*
@@ -1202,17 +1207,55 @@ export const ask = action({
 
       /* Trading rules (fast rules, phase 2): lib/strategy.ts cleanRule decides; problems and warnings are said, never hidden. */
       let rulesNote = "";
+      const triedRules = Boolean(compiled.reply.rules && compiled.reply.rules.length > 0);
+      let addedRules = 0;
       if (compiled.reply.rules && compiled.reply.rules.length > 0) {
         const result: { added: string[]; problems: string[]; warnings: string[] } = await ctx.runMutation(internal.strategy.addRules, {
           conversationId,
           rules: compiled.reply.rules,
         });
+        addedRules = result.added.length;
         if (result.added.length > 0) applied.changed.push("tools");
         rulesNote = [
           ...(result.problems.length > 0 ? [`I could not add ${result.problems.join("; ")}.`] : []),
           ...result.warnings.map((warning) => `Warning: ${warning}`),
         ].join("\n\n");
       }
+
+      /*
+       * Removing rules (owner, 2026-10-19), AFTER adding, so a replacement is all or nothing: when the new
+       * rule could not be saved, the old one stays and keeps trading - never an agent left with no rule.
+       * A rule addRules already replaced in place (same market, timeframe and action) is not removed again.
+       */
+      let removeNote = "";
+      let removedRules = 0;
+      const removeIds = compiled.reply.removeRuleIds ?? [];
+      if (removeIds.length > 0 && triedRules && addedRules === 0) {
+        removeNote = "Nothing was replaced: the new rule could not be saved, so the old one keeps trading.";
+      } else if (removeIds.length > 0) {
+        const after: BuilderRule[] = triedRules ? await ctx.runQuery(internal.strategy.rulesForBuilder, { conversationId }) : currentRules;
+        const replacedInPlace = (id: string) => {
+          const before = currentRules.find((rule) => rule.id === id);
+          const now = after.find((rule) => rule.id === id);
+          return Boolean(before && now && before.words !== now.words);
+        };
+        const ids = removeIds.filter((id) => !replacedInPlace(id));
+        if (ids.length > 0) {
+          const removal: { removed: string[]; holding: string[]; unknown: string[] } = await ctx.runMutation(internal.strategy.removeRulesForBuilder, { conversationId, ruleIds: ids });
+          removedRules = removal.removed.length;
+          if (removal.removed.length > 0) applied.changed.push("tools");
+          removeNote = [
+            ...(removal.removed.length > 0 ? [`Removed ${removal.removed.length === 1 ? "rule" : "rules"}: ${removal.removed.join(", ")}. It no longer trades.`] : []),
+            ...(removal.holding.length > 0 ? [`Not removed: ${removal.holding.join(", ")} is holding a position. Sell it from the Trades tab first, then ask again.`] : []),
+            ...(removal.unknown.length > 0 && removal.removed.length === 0 && removal.holding.length === 0 ? ["No rule was removed: I could not match the rule you meant."] : []),
+          ].join("\n\n");
+        }
+      } else if (currentRules.length > 0 && /\b(delete|remove|drop|get rid of|replace)\b/i.test(text) && /\brules?\b/i.test(text)) {
+        removeNote = "No rule was removed. Say which rule to remove by its name.";
+      }
+      // The model's words never outrank what happened: a rule change that saved nothing says so first.
+      const askedRuleChange = triedRules || removeIds.length > 0 || removeNote !== "";
+      const ruleChangeFailed = askedRuleChange && addedRules === 0 && removedRules === 0;
 
       let gridNote = "";
       if (gridAsk && "missing" in gridAsk) {
@@ -1233,6 +1276,8 @@ export const ask = action({
       let reply = resolveToolIdReferences(stripRawPayloads(compiled.reply.reply), offered).trim();
       if (blockNote) reply = `${reply}${reply ? "\n\n" : ""}${blockNote}`;
       if (describedNote) reply = `${reply}${reply ? "\n\n" : ""}${describedNote}`;
+      if (ruleChangeFailed) reply = "The trading rules did not change.";
+      if (removeNote) reply = `${reply}${reply ? "\n\n" : ""}${removeNote}`;
       if (rulesNote) reply = `${reply}${reply ? "\n\n" : ""}${rulesNote}`;
       if (gridNote) reply = `${reply}${reply ? "\n\n" : ""}${gridNote}`;
       /*

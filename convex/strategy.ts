@@ -63,6 +63,63 @@ function newRuleId(): string {
  * timeframe and action replaces the old one (an update, not a duplicate).
  * Problems and warnings come back in words for the reply.
  */
+/** The agent's rules as the build chat sees them: id, in words, and whether it holds a position. */
+export const rulesForBuilder = internalQuery({
+  args: { conversationId: v.id("dolphinConversations") },
+  handler: async (ctx, { conversationId }) => {
+    const draft = await ctx.db.query("agentDrafts").withIndex("by_conversation", (q) => q.eq("conversationId", conversationId)).unique();
+    const rules = rulesOf(draft);
+    if (!draft || rules.length === 0) return [];
+    const states = await ctx.db.query("strategyRuns").withIndex("by_draft_rule", (q) => q.eq("draftId", draft._id)).take(MAX_RULES * 4);
+    return rules.map((rule) => ({
+      id: rule.id,
+      // A rule named by the builder carries its own short name; an auto-named one is already its description.
+      words: rule.name.length <= 40 ? `"${rule.name}": ${describeRule(rule)}` : describeRule(rule),
+      holding: Boolean((states.find((row) => row.ruleId === rule.id)?.state as RuleState | null)?.position),
+    }));
+  },
+});
+
+/**
+ * REMOVING RULES FROM THE BUILD CHAT (owner, 2026-10-19: "Dolphin should have the ability to"). Until now
+ * the chat could only add, so "delete the old rule" was answered with words and nothing changed, while the
+ * engine kept trading it. A rule holding a position is never removed here: its money would be left with
+ * no exit. The caller says what really happened, from this result, never from the model's own reply.
+ */
+/** A rule as a person names it: its own short name, or its market and timeframe. */
+function ruleLabel(rule: Rule): string {
+  return rule.name.length <= 40 ? `"${rule.name}"` : `the ${rule.market} ${rule.timeframe} rule`;
+}
+
+export const removeRulesForBuilder = internalMutation({
+  args: { conversationId: v.id("dolphinConversations"), ruleIds: v.array(v.string()) },
+  handler: async (ctx, { conversationId, ruleIds }): Promise<{ removed: string[]; holding: string[]; unknown: string[] }> => {
+    const draft = await ctx.db.query("agentDrafts").withIndex("by_conversation", (q) => q.eq("conversationId", conversationId)).unique();
+    const rules = rulesOf(draft);
+    const result = { removed: [] as string[], holding: [] as string[], unknown: [] as string[] };
+    if (!draft) return { ...result, unknown: ruleIds };
+    const drop = new Set<string>();
+    for (const id of new Set(ruleIds)) {
+      // By id, or by the rule's own name: a model sometimes passes the name it gave the rule.
+      const rule = rules.find((r) => r.id === id) ?? rules.find((r) => r.name.trim().toLowerCase() === id.trim().toLowerCase());
+      if (!rule) {
+        result.unknown.push(id);
+        continue;
+      }
+      const run = await ctx.db.query("strategyRuns").withIndex("by_draft_rule", (q) => q.eq("draftId", draft._id).eq("ruleId", rule.id)).unique();
+      if ((run?.state as RuleState | null)?.position) {
+        result.holding.push(ruleLabel(rule));
+        continue;
+      }
+      drop.add(rule.id);
+      result.removed.push(ruleLabel(rule));
+      if (run) await ctx.db.delete(run._id);
+    }
+    if (drop.size > 0) await ctx.db.patch(draft._id, { rules: rules.filter((rule) => !drop.has(rule.id)), updatedAt: Date.now() });
+    return result;
+  },
+});
+
 export const addRules = internalMutation({
   args: { conversationId: v.id("dolphinConversations"), rules: v.array(v.any()) },
   handler: async (ctx, { conversationId, rules }) => addRulesTo(ctx, conversationId, rules),

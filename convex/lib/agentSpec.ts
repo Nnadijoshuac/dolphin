@@ -83,6 +83,8 @@ export type BuilderReply = {
   describedTools?: { name: string; description: string; inputs: { name: string; description: string }[]; instructions: string }[] | null;
   /** Trading rules (fast rules, phase 2): raw, checked by lib/strategy.ts cleanRule before anything is saved. Null: none. */
   rules?: unknown[] | null;
+  /** Ids of the agent's current rules to remove (owner, 2026-10-19). Null: none. strategy.removeRulesForBuilder decides. */
+  removeRuleIds?: string[] | null;
 };
 
 /**
@@ -95,7 +97,7 @@ export const BUILDER_REPLY_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["reply", "name", "description", "instructions", "toolIds", "blocks", "describedTools", "rules"],
+    required: ["reply", "name", "description", "instructions", "toolIds", "blocks", "describedTools", "rules", "removeRuleIds"],
     properties: {
       reply: {
         type: "string",
@@ -182,6 +184,12 @@ export const BUILDER_REPLY_SCHEMA = {
             },
           },
         },
+      },
+      removeRuleIds: {
+        type: ["array", "null"],
+        items: { type: "string" },
+        description:
+          "Ids (from CURRENT DRAFT rules) of rules to remove, or null for none. To change or replace a rule, remove its id here AND write the new rule in rules.",
       },
       describedTools: {
         type: ["array", "null"],
@@ -317,6 +325,7 @@ export function parseBuilderReply(content: string): BuilderReply | null {
       toolIds: toolIds as string[] | null,
       describedTools,
       rules,
+      removeRuleIds: Array.isArray(record.removeRuleIds) ? (record.removeRuleIds as unknown[]).filter((id): id is string => typeof id === "string") : null,
       blocks: blocks && blocks.length ? blocks : null,
       purpose: record.purpose === "private" || record.purpose === "tools" || record.purpose === "hire" ? record.purpose : null,
     };

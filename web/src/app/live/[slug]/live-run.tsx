@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 
 import { LiveBadge, Ticker, Track, ago, dayOf, pct, price, usd, useCandles, useSecond, type Candle } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
+import { TokenLogo } from "@/components/brand-mark";
 import { RollingFigure } from "@/components/rolling-figure";
 import { PriceArea, ResultBars, ValueArea } from "@/app/live/stat-charts";
 import { liveRunsApi, type LiveRunDetail } from "@/convex/api";
@@ -78,7 +79,7 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
               <Link className={`text-sm no-underline ${styles.muted} hover:text-white`} href="/live">← Live runs</Link>
               <LiveBadge running={running} />
             </div>
-            <h1 className={`${styles.title} mt-3`}>{run.name}</h1>
+            <h1 className={`${styles.title} mt-4`}>{run.name}</h1>
             <p className={`mt-2 text-sm ${styles.muted}`}>
               {run.market ?? "—"} · {run.timeframe ?? ""} candles · real money on BNB Chain
             </p>
@@ -86,19 +87,19 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
           <div className="flex flex-wrap gap-5">
             <div className={styles.kpi}>
               <span className={`text-xs ${styles.muted}`}>Started</span>
-              <span className="text-xl font-semibold tabular-nums">{usd(run.startUsd)}</span>
+              <span className="text-lg font-medium tabular-nums">{usd(run.startUsd)}</span>
             </div>
             <div className={styles.kpi}>
               <span className={`text-xs ${styles.muted}`}>Now</span>
-              <span className="text-xl font-semibold tabular-nums" style={{ color: up ? "#3ddc84" : "#ff5c5c" }}>{usd(liveUsd)}</span>
+              <span className="text-lg font-medium tabular-nums" style={{ color: up ? "#3ddc84" : "#ff5c5c" }}>{usd(liveUsd)}</span>
             </div>
             <div className={styles.kpi}>
               <span className={`text-xs ${styles.muted}`}>Target</span>
-              <span className={`text-xl font-semibold tabular-nums ${styles.lime}`}>${run.targetUsd}</span>
+              <span className={`text-lg font-medium tabular-nums ${styles.lime}`}>${run.targetUsd}</span>
             </div>
             <div className={styles.kpi}>
               <span className={`text-xs ${styles.muted}`}>{running ? "Day" : "Status"}</span>
-              <span className="text-xl font-semibold tabular-nums">
+              <span className="text-lg font-medium tabular-nums">
                 {running ? (now ? dayOf(run.startedAt, now) : 1) : run.status === "won" ? "Won" : run.status === "lost" ? "Zero" : "Ended"}
               </span>
             </div>
@@ -107,7 +108,7 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
 
         {/* the newest move, first thing you see; tap it for the full story */}
         <button
-          className={`${styles.panel} ${styles.latest} ${styles.clickable} mt-8 flex w-full flex-wrap items-center gap-4 p-5 text-left`}
+          className={`${styles.panel} ${styles.latest} ${styles.clickable} mt-6 flex w-full flex-wrap items-center gap-4 p-5 text-left`}
           onClick={() =>
             setDetail(
               latestTrade
@@ -117,12 +118,12 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
           }
           type="button"
         >
-          <span className={`grid size-12 shrink-0 place-items-center rounded-2xl text-lg font-bold`} style={{ background: "rgba(243,193,58,0.14)", color: "#f3c13a" }}>
+          <span className={`grid size-10 shrink-0 place-items-center rounded-xl text-base font-bold`} style={{ background: "rgba(243,193,58,0.14)", color: "#f3c13a" }}>
             {latestTrade ? (latestTrade.kind === "enter" ? "B" : "S") : "•"}
           </span>
           <span className="min-w-0 flex-1">
             <span className={`block text-xs ${styles.muted}`}>Latest move {latestTrade && now ? `· ${ago(now - latestTrade.at)}` : ""}</span>
-            <span className="block truncate text-lg font-semibold">
+            <span className="block truncate text-base font-medium">
               {latestTrade
                 ? `${latestTrade.kind === "enter" ? (latestTrade.side === "short" ? "Shorted" : "Bought") : "Sold"} ${latestTrade.market.replace("USDT", "")} at ${price(latestTrade.price)} with ${usd(latestTrade.sizeUsd)}`
                 : position
@@ -135,12 +136,9 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
         </button>
 
         {/* three columns (Coinix trading): decision log | chart | wallet */}
-        <div className="mt-8 grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_360px] 2xl:grid-cols-[340px_minmax(0,1fr)_400px]">
-          <section className={`${styles.panel} order-3 flex min-h-0 flex-col p-4 xl:order-1`}>
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-sm font-semibold">Decision log</h2>
-              <span className={`text-[11px] ${styles.muted}`}>its own words</span>
-            </div>
+        <div className="mt-3 grid gap-3 xl:grid-cols-[300px_minmax(0,1fr)_360px] 2xl:grid-cols-[340px_minmax(0,1fr)_400px]">
+          <section className={`${styles.panel} order-3 flex min-h-0 flex-col p-5 xl:order-1`}>
+            <CardHead icon="log" meta="its own words" title="Decision log" />
             {latestThought ? (
               <p className={`${styles.panel2} mt-3 p-3 text-[13px] leading-5`}>
                 <span className={`mb-1 block text-[11px] ${styles.lime}`}>Latest</span>
@@ -167,11 +165,16 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
             </div>
           </section>
 
-          <section className={`${styles.panel} order-1 flex flex-col p-5 sm:p-6 xl:order-2`}>
+          <section className={`${styles.panel} order-1 flex flex-col p-5 xl:order-2`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className={`text-sm ${styles.muted}`}>{run.market?.replace("USDT", "/USDT")}</p>
-                <p className="mt-1 text-3xl font-semibold tabular-nums">{last ? price(last.c) : "—"}</p>
+                <div className="flex items-center gap-3">
+                  <span className={styles.chip}>
+                    <TokenLogo size={18} symbol={(run.market ?? "").replace("USDT", "")} />
+                  </span>
+                  <span className={styles.cardTitle}>{run.market?.replace("USDT", "/USDT")}</span>
+                </div>
+                <p className="mt-3 text-[28px] font-semibold tabular-nums">{last ? price(last.c) : "—"}</p>
                 {first && last ? (
                   <p className="text-sm" style={{ color: last.c >= first.o ? "#3ddc84" : "#ff5c5c" }}>
                     {pct(first.o, last.c)} over the last {candles.data?.length} candles
@@ -189,10 +192,10 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
             <CandleChart candles={candles.data ?? []} trades={run.trades} />
           </section>
 
-          <div className="order-2 flex flex-col gap-4 xl:order-3">
-            <section className={`${styles.panel} p-5 sm:p-6`}>
-              <p className={`text-sm ${styles.muted}`}>Wallet balance</p>
-              <div className={`${styles.balance} mt-2`}>
+          <div className="order-2 flex flex-col gap-3 xl:order-3">
+            <section className={`${styles.panel} p-5`}>
+              <CardHead icon="wallet" meta="on BNB Chain" title="Wallet balance" />
+              <div className={`${styles.balance} mt-4`}>
                 <RollingFigure value={liveFigure} />
               </div>
               <p className="mt-2 text-sm font-semibold" style={{ color: up ? "#3ddc84" : "#ff5c5c" }}>
@@ -223,8 +226,8 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
             </section>
 
             <section className={`${styles.panel} flex min-h-0 flex-1 flex-col p-5`}>
-              <p className="text-sm font-semibold">Its rules</p>
-              <div className="relative mt-2 min-h-[80px] flex-1">
+              <CardHead icon="rules" title="Its rules" />
+              <div className="relative mt-3 min-h-[80px] flex-1">
               <ul className="flex flex-col gap-2 overflow-y-auto text-[13px] leading-5 text-[#c9cbc3] xl:absolute xl:inset-0">
                 {run.rules.map((rule) => (
                   <li key={rule}>{rule}</li>
@@ -236,23 +239,22 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
         </div>
 
         {/* stat cards (Quantix) */}
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <Stat label="Since start" value={pct(run.startUsd, liveUsd)} tone={up ? "up" : "down"}>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <Stat icon="since" label="Since start" value={pct(run.startUsd, liveUsd)} tone={up ? "up" : "down"}>
             <ValueArea points={[...run.history, ...(now ? [{ t: now, usd: liveUsd }] : [])]} start={run.startUsd} />
           </Stat>
-          <Stat label="Trades" value={`${run.trades.length}`} sub={exits.length ? `${wins} of ${exits.length} closed in profit` : "none closed yet"}>
+          <Stat icon="trades" label="Trades" value={`${run.trades.length}`} sub={exits.length ? `${wins} of ${exits.length} closed in profit` : "none closed yet"}>
             <ResultBars results={[...exits].reverse().map((trade) => trade.pnlPct ?? 0)} />
           </Stat>
-          <Stat label="Last decision" value={lastCheck && now ? ago(now - lastCheck) : "—"} sub={`on the last closed ${run.timeframe ?? ""} candle`}>
+          <Stat icon="clock" label="Last decision" value={lastCheck && now ? ago(now - lastCheck) : "—"} sub={`on the last closed ${run.timeframe ?? ""} candle`}>
             <PriceArea closes={(candles.data ?? []).slice(-30).map((c) => ({ t: c.t, c: c.c }))} />
           </Stat>
         </div>
 
         {/* every trade, as a table (Oripio) */}
-        <section className={`${styles.panel} mt-4 p-5 sm:p-6`}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Every trade since it went live</h2>
-            <span className={`text-xs ${styles.muted}`}>each one on BNB Chain</span>
+        <section className={`${styles.panel} mt-3 p-5`}>
+          <div>
+            <CardHead icon="trades" meta="each one on BNB Chain" title="Every trade since it went live" />
           </div>
           {run.trades.length === 0 ? (
             <p className={`mt-4 text-sm ${styles.muted}`}>No trades yet. It only buys when its rule says so.</p>
@@ -315,6 +317,34 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
         </section>
       </div>
       {detail ? <DetailDrawer detail={detail} onClose={() => setDetail(null)} /> : null}
+    </div>
+  );
+}
+
+type IconName = "log" | "wallet" | "rules" | "trades" | "since" | "clock";
+
+const ICON_PATHS: Record<IconName, string> = {
+  log: "M4 6h16M4 12h10M4 18h13",
+  wallet: "M3 7h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zm0 0 2-3h11v3M16 13h2",
+  rules: "M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6",
+  trades: "M7 7h13l-3-3M17 17H4l3 3",
+  since: "M3 17l6-6 4 4 8-8M15 7h6v6",
+  clock: "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z",
+};
+
+/** Every card opens the same way: an icon chip, its title, and a quiet note on the right. */
+function CardHead({ icon, title, meta }: { icon: IconName; title: string; meta?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className={styles.chip}>
+          <svg aria-hidden fill="none" height="15" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="15">
+            <path d={ICON_PATHS[icon]} />
+          </svg>
+        </span>
+        <span className={`${styles.cardTitle} truncate`}>{title}</span>
+      </div>
+      {meta ? <span className={`shrink-0 text-[11px] ${styles.muted}`}>{meta}</span> : null}
     </div>
   );
 }
@@ -385,12 +415,12 @@ function DetailDrawer({ detail, onClose }: { detail: Detail; onClose: () => void
   );
 }
 
-function Stat({ label, value, sub, tone, children }: { label: string; value: string; sub?: string; tone?: "up" | "down"; children: React.ReactNode }) {
+function Stat({ icon, label, value, sub, tone, children }: { icon: IconName; label: string; value: string; sub?: string; tone?: "up" | "down"; children: React.ReactNode }) {
   return (
     <section className={`${styles.panel} p-5`}>
       <div className="min-w-0">
-        <p className={`text-sm ${styles.muted}`}>{label}</p>
-        <p className="mt-2 text-2xl font-semibold tabular-nums" style={tone ? { color: tone === "up" ? "#3ddc84" : "#ff5c5c" } : undefined}>
+        <CardHead icon={icon} title={label} />
+        <p className="mt-4 text-2xl font-semibold tabular-nums" style={tone ? { color: tone === "up" ? "#3ddc84" : "#ff5c5c" } : undefined}>
           {value}
         </p>
         {sub ? <p className={`mt-1 truncate text-xs ${styles.muted}`}>{sub}</p> : null}

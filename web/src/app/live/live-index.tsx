@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { LiveBadge, Track, dayOf, pct, usd, useSecond } from "@/app/live/live-bits";
+import { LiveBadge, Ticker, Track, dayOf, pct, usd, useSecond } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
+import { TokenLogo } from "@/components/brand-mark";
 import { liveRunsApi, myAgentsApi, type LiveRunSummary } from "@/convex/api";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
@@ -19,31 +20,41 @@ import { useWalletSession } from "@/wallet/wallet-session";
 export function LiveIndex() {
   const data = useQuery(liveRunsApi.liveRuns.list, {});
   const now = useSecond();
+  const won = data?.finished.filter((run) => run.status === "won").length ?? 0;
 
   return (
-    <div className={`test-dark ${styles.page}`}>
-      <div className="mx-auto w-full max-w-[2000px] px-4 sm:px-6 xl:px-10">
-        <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className={styles.page}>
+      <Ticker />
+      <div className="mx-auto w-full max-w-[2000px] px-4 pt-8 sm:px-6 xl:px-10">
+        <header className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <LiveBadge running={Boolean(data?.running.length)} />
-            <h1 className="mt-4 text-4xl font-bold sm:text-5xl">Agents trading real money, live</h1>
-            <p className="mt-2 max-w-xl text-[15px] text-muted">
-              Each one started with what is in its wallet and runs until it hits $100 or hits zero. Every trade is on BNB Chain.
+            {data?.running.length ? <LiveBadge running /> : null}
+            <h1 className={`${styles.title} ${data?.running.length ? "mt-4" : ""}`}>Agents trading real money, live</h1>
+            <p className={`mt-2 max-w-xl text-sm ${styles.muted}`}>
+              Each one starts with what is in its wallet and runs until it reaches $100 or runs out. Every trade is on BNB Chain.
             </p>
           </div>
+          {data ? (
+            <div className="flex flex-wrap gap-5">
+              <Kpi label="Live now" value={String(data.running.length)} />
+              <Kpi label="Finished" value={String(data.finished.length)} />
+              <Kpi label="Reached $100" value={String(won)} />
+            </div>
+          ) : null}
         </header>
 
-        <section className="mt-10">
+        <section className="mt-8">
+          <SectionHead meta={data?.running.length ? "tap one to watch" : undefined} title="Live now" />
           {data === undefined ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={`mt-3 ${GRID}`}>
               {[0, 1, 2].map((i) => (
-                <div className={`skeleton h-44 rounded-[22px]`} key={i} />
+                <div className="skeleton h-56 rounded-2xl" key={i} />
               ))}
             </div>
           ) : data.running.length === 0 ? (
-            <div className={`${styles.card} p-8 text-center text-muted`}>Nobody is live right now.</div>
+            <Empty />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={`mt-3 ${GRID}`}>
               {data.running.map((run) => (
                 <RunCard key={run.slug} now={now} run={run} />
               ))}
@@ -54,9 +65,9 @@ export function LiveIndex() {
         <GoLive />
 
         {data && data.finished.length > 0 ? (
-          <section className="mt-14">
-            <h2 className="text-lg font-semibold">Finished</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <section className="mt-10">
+            <SectionHead title="Finished" />
+            <div className={`mt-3 ${GRID}`}>
               {data.finished.map((run) => (
                 <RunCard key={run.slug} now={now} run={run} />
               ))}
@@ -68,32 +79,79 @@ export function LiveIndex() {
   );
 }
 
+const GRID = "grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.kpi}>
+      <span className={`text-xs ${styles.muted}`}>{label}</span>
+      <span className="text-lg font-medium tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function SectionHead({ title, meta }: { title: string; meta?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className={styles.cardTitle}>{title}</span>
+      {meta ? <span className={`text-[11px] ${styles.muted}`}>{meta}</span> : null}
+    </div>
+  );
+}
+
+/** Nobody is live: say how a run works, so the page still tells a visitor what they would be watching. */
+function Empty() {
+  const steps = [
+    ["1", "It starts with its own wallet", "Whatever the agent holds when its owner goes live is the starting line."],
+    ["2", "It trades on its own", "Every decision shows up as it happens, and every trade is on BNB Chain."],
+    ["3", "It ends at $100 or zero", "No time limit. The run stops the moment the wallet gets to either one."],
+  ];
+  return (
+    <div className={`${styles.panel} mt-3 p-5`}>
+      <p className="text-base font-medium">Nobody is live right now.</p>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        {steps.map(([n, title, body]) => (
+          <div className={`${styles.panel2} p-4`} key={n}>
+            <span className={`${styles.chip} text-xs font-semibold ${styles.lime}`}>{n}</span>
+            <p className="mt-3 text-sm font-medium">{title}</p>
+            <p className={`mt-1 text-[13px] ${styles.muted}`}>{body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
   const up = run.lastUsd >= run.startUsd;
+  const base = (run.market ?? "").replace("USDT", "");
+  const status =
+    run.status === "running" ? `Day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "won" ? "Reached $100" : run.status === "lost" ? "Ran out" : "Ended";
   return (
-    <Link className={`${styles.card} block p-5 no-underline transition-colors hover:border-[var(--line-strong)]`} href={`/live/${run.slug}`}>
+    <Link className={`${styles.card} p-5 no-underline`} href={`/live/${run.slug}`}>
       <div className="flex items-center justify-between gap-3">
-        <LiveBadge running={run.status === "running"} />
-        <span className="text-xs text-muted">
-          {run.status === "running" ? `Day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "won" ? "Hit $100" : run.status === "lost" ? "Hit zero" : "Ended"}
-        </span>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className={styles.chip}>{base ? <TokenLogo size={18} symbol={base} /> : null}</span>
+          <div className="min-w-0">
+            <p className={`${styles.cardTitle} truncate`}>{run.name}</p>
+            <p className={`text-[11px] ${styles.muted}`}>{run.market?.replace("USDT", "/USDT") ?? "—"}</p>
+          </div>
+        </div>
+        {run.status === "running" ? <LiveBadge running /> : <span className={`shrink-0 text-xs ${styles.muted}`}>{status}</span>}
       </div>
-      <h3 className="mt-4 truncate text-lg font-semibold text-ink">
-        {run.name}
-      </h3>
-      <p className="text-xs text-muted">{run.market ?? "—"}</p>
-      <div className="mt-4 flex items-baseline gap-3">
-        <span className="text-3xl font-bold tabular-nums text-ink">{usd(run.lastUsd)}</span>
-        <span className={`text-sm font-semibold ${up ? "text-[#3ddc97]" : "text-[#ff6b6b]"}`}>{pct(run.startUsd, run.lastUsd)}</span>
+      <div className="mt-6 flex items-baseline gap-3">
+        <span className="text-[32px] font-semibold leading-none tabular-nums">{usd(run.lastUsd)}</span>
+        <span className={`text-sm font-medium tabular-nums ${up ? "text-[#3ddc84]" : "text-[#ff5c5c]"}`}>{pct(run.startUsd, run.lastUsd)}</span>
       </div>
-      <div className="mt-4">
+      <div className="mt-5">
         <Track now={run.lastUsd} start={run.startUsd} target={run.targetUsd} />
       </div>
-      <div className="mt-2 flex justify-between text-[11px] text-muted">
+      <div className={`mt-2 flex justify-between text-[11px] tabular-nums ${styles.muted}`}>
         <span>$0</span>
         <span>started {usd(run.startUsd)}</span>
         <span>${run.targetUsd}</span>
       </div>
+      {run.status === "running" ? <p className={`mt-4 border-t border-white/5 pt-3 text-[11px] ${styles.muted}`}>{status}</p> : null}
     </Link>
   );
 }
@@ -112,20 +170,20 @@ function GoLive() {
   if (!wallet.isConnected || !built || built.length === 0) return null;
 
   return (
-    <section className={`${styles.card} mt-10 p-6`}>
-      <h2 className="text-lg font-semibold">Make your run public</h2>
-      <p className="mt-1 text-sm text-muted">
+    <section className={`${styles.panel} mt-3 p-5`}>
+      <h2 className={styles.cardTitle}>Make your run public</h2>
+      <p className={`mt-1 text-sm ${styles.muted}`}>
         Pick an agent trading real money. Anyone with the link watches it live until its wallet reaches $100 or zero.
       </p>
       {ready.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">
+        <p className={`mt-4 text-sm ${styles.muted}`}>
           None of your agents can go live yet. An agent needs Trading mode set to Live, Autopilot on, and an active trade key.
         </p>
       ) : (
         <ul className="mt-4 flex flex-col gap-2">
           {ready.map((agent) => (
-            <li className="flex items-center justify-between gap-3 rounded-xl bg-paper-muted px-4 py-3" key={agent.conversationKey}>
-              <span className="truncate font-medium text-ink">{agent.name}</span>
+            <li className={`${styles.panel2} flex items-center justify-between gap-3 px-4 py-3`} key={agent.conversationKey}>
+              <span className="truncate text-sm font-medium">{agent.name}</span>
               <button
                 className="shrink-0 rounded-full bg-[#f3c13a] px-4 py-2 text-sm font-semibold text-[#171813] disabled:opacity-50"
                 disabled={busy !== null || !session.sessionToken}
@@ -149,7 +207,7 @@ function GoLive() {
           ))}
         </ul>
       )}
-      {error ? <p className="mt-3 text-sm text-[#ff6b6b]">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm text-[#ff5c5c]">{error}</p> : null}
     </section>
   );
 }

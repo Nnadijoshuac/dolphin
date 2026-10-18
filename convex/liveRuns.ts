@@ -266,11 +266,13 @@ export const get = query({
     const draft = await ctx.db.get(run.draftId);
     const rules = ((draft?.rules ?? []) as Rule[]).slice(0, 6);
     const states = await ctx.db.query("strategyRuns").withIndex("by_draft_rule", (q) => q.eq("draftId", run.draftId)).take(20);
-    const trades = await ctx.db
+    const runTrades = await ctx.db
       .query("strategyTrades")
       .withIndex("by_draft", (q) => q.eq("draftId", run.draftId).gte("at", run.startedAt))
       .order("desc")
-      .take(60);
+      .take(1000);
+    const trades = runTrades.slice(0, 60);
+    const closed = runTrades.filter((trade) => trade.kind === "exit" && trade.pnlPct !== null);
     // The engine's minute clock: the next run it has booked. It looks at the market every minute, but
     // writes a decision only once per closed candle, so this - not lastCheckedAt - is its pulse.
     const clock = await ctx.db.query("strategyClock").withIndex("by_key", (q) => q.eq("key", "main")).unique();
@@ -282,6 +284,9 @@ export const get = query({
       rules: rules.map((rule) => describeRule(rule)),
       history: run.history,
       thoughts: [...run.thoughts].reverse(),
+      tradeCount: runTrades.length,
+      closedCount: closed.length,
+      winCount: closed.filter((trade) => (trade.pnlPct ?? 0) > 0).length,
       engine: states.map((row) => ({
         lastCheckedAt: row.lastCheckedAt,
         reason: row.lastReason ?? row.lastError ?? null,

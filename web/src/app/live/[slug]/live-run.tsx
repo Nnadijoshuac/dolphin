@@ -61,7 +61,6 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
   const latestThought = run.engine.find((row) => row.reason)?.reason ?? null;
   const up = liveUsd >= run.startUsd;
   const exits = run.trades.filter((trade) => trade.kind === "exit" && trade.pnlPct !== null);
-  const wins = exits.filter((trade) => (trade.pnlPct ?? 0) > 0).length;
   const candles = useCandles(run.market, run.timeframe);
   const [detail, setDetail] = useState<Detail | null>(null);
   const latestTrade = run.trades[0] ?? null;
@@ -158,7 +157,7 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
                   tabIndex={0}
                 >
                   <span className={styles.muted}>{now ? ago(now - thought.t).replace(" ago", "") : ""}</span>
-                  <span className={/no trade|waiting|not/i.test(thought.text) ? "text-[#c9cbc3]" : "text-[#3ddc84]"}>{thought.text}</span>
+                  <span className={thoughtColor(thought.text)}>{thought.text}</span>
                 </div>
               ))}
             </div>
@@ -220,7 +219,15 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
               <div className="min-w-0">
                 <p className="font-semibold">{alive ? `Next look in ${nextIn}s` : running ? "Not watching right now" : "Run over"}</p>
                 <p className={`text-sm ${styles.muted}`}>
-                  {position ? `Holding a ${position.side} from ${price(position.entryPrice)}` : "Not holding anything. Waiting for its entry."}
+                  {!running
+                    ? run.status === "won"
+                      ? `It reached $${run.targetUsd}. The agent stopped trading.`
+                      : run.status === "lost"
+                        ? "The wallet ran out. The agent stopped trading."
+                        : "Its owner ended the public run."
+                    : position
+                      ? `Holding a ${position.side} from ${price(position.entryPrice)}`
+                      : "Not holding anything. Waiting for its entry."}
                 </p>
               </div>
             </section>
@@ -243,7 +250,7 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
           <Stat icon="since" label="Since start" value={pct(run.startUsd, liveUsd)} tone={up ? "up" : "down"}>
             <ValueArea points={[...run.history, ...(now ? [{ t: now, usd: liveUsd }] : [])]} start={run.startUsd} />
           </Stat>
-          <Stat icon="trades" label="Trades" value={`${run.trades.length}`} sub={exits.length ? `${wins} of ${exits.length} closed in profit` : "none closed yet"}>
+          <Stat icon="trades" label="Trades" value={`${run.closedCount}`} sub={run.closedCount ? `${run.winCount} in profit, ${run.closedCount - run.winCount} at a loss` : "none closed yet"}>
             <ResultBars results={[...exits].reverse().map((trade) => trade.pnlPct ?? 0)} />
           </Stat>
           <Stat icon="clock" label="Last decision" value={lastCheck && now ? ago(now - lastCheck) : "—"} sub={`on the last closed ${run.timeframe ?? ""} candle`}>
@@ -319,6 +326,13 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
       {detail ? <DetailDrawer detail={detail} onClose={() => setDetail(null)} /> : null}
     </div>
   );
+}
+
+/** Losses read red, profits green, everything else (waiting, buying) quiet. */
+function thoughtColor(text: string): string {
+  if (/stop|loss|-\d+(\.\d+)?%/i.test(text)) return "text-[#ff5c5c]";
+  if (/profit|\+\d+(\.\d+)?%/i.test(text)) return "text-[#3ddc84]";
+  return "text-[#c9cbc3]";
 }
 
 type IconName = "log" | "wallet" | "rules" | "trades" | "since" | "clock";

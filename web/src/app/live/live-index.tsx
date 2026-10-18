@@ -78,7 +78,9 @@ function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
           {run.status === "running" ? `Day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "won" ? "Hit $100" : run.status === "lost" ? "Hit zero" : "Ended"}
         </span>
       </div>
-      <h3 className="mt-4 truncate text-lg font-semibold text-ink">{run.name}</h3>
+      <h3 className="mt-4 truncate text-lg font-semibold text-ink">
+        {run.name}
+      </h3>
       <p className="text-xs text-muted">{run.market ?? "—"}</p>
       <div className="mt-4 flex items-baseline gap-3">
         <span className="text-3xl font-bold tabular-nums text-ink">{usd(run.lastUsd)}</span>

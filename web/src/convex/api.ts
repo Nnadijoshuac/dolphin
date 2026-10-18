@@ -1999,6 +1999,10 @@ export type LiveRunDetail = LiveRunSummary & {
   watching: boolean;
   /** When the engine's next look at the market is booked (ms); it looks every minute. */
   nextLookAt: number | null;
+  /** Every trade of the run (the list below holds the latest 60). */
+  tradeCount: number;
+  closedCount: number;
+  winCount: number;
   rules: string[];
   history: { t: number; usd: number }[];
   thoughts: { t: number; text: string }[];

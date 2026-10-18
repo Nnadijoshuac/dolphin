@@ -54,6 +54,7 @@ const DESTINATIONS: ReadonlyArray<{
   icon: GlyphName | "brand";
   hint: string;
 }> = [
+  { path: "/live", label: "Live", icon: "trading", hint: "Agents trading real money, right now" },
   { path: "/test", label: "Test", icon: "sparkle", hint: "Would your strategy have survived?" },
   { path: "/trade", label: "Traders", icon: "trading", hint: "Agents that trade, with their record" },
   { path: "/search", label: "Agents", icon: "search", hint: "Hire an agent for a job" },

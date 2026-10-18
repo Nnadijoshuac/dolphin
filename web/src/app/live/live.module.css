@@ -1,0 +1,48 @@
+/* Public runs (owner, 2026-10-18): a page that never looks dead. The pulse, the sweep and the ticking
+   "checked Xs ago" are tied to real events: they stop being alive if the agent stops. */
+
+.page { min-height: 100vh; padding: 28px 0 80px; }
+
+.live { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px;
+  background: rgba(255, 70, 70, 0.12); color: #ff6b6b; font-size: 12px; font-weight: 700; }
+.dot { position: relative; width: 8px; height: 8px; border-radius: 99px; background: #ff4d4d; }
+.dot::after { content: ""; position: absolute; inset: -6px; border-radius: 99px; background: rgba(255, 77, 77, 0.45);
+  animation: ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+.dotIdle { background: var(--muted); }
+.dotIdle::after { display: none; }
+@keyframes ping { 0% { transform: scale(0.4); opacity: 1; } 80%, 100% { transform: scale(1.6); opacity: 0; } }
+
+.card { border: 1px solid var(--line); border-radius: 22px; background: var(--paper); }
+
+.balance { font-size: clamp(64px, 11vw, 132px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+
+/* $0 -> target track, with the start marker and a glowing "now" bead. */
+.track { position: relative; height: 10px; border-radius: 99px; background: var(--paper-muted); overflow: visible; }
+.fill { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: linear-gradient(90deg, #f3c13a, #ffd86b);
+  transition: width 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+.bead { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 99px;
+  background: #fff; box-shadow: 0 0 0 4px rgba(243, 193, 58, 0.35), 0 0 24px rgba(243, 193, 58, 0.8);
+  transition: left 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+.startTick { position: absolute; top: -6px; width: 2px; height: 22px; background: var(--line-strong); }
+
+/* The heartbeat line: an ECG trace sweeping left forever while the agent is checking. */
+.ecg { width: 100%; height: 40px; overflow: hidden; position: relative; }
+.ecgTrack { position: absolute; inset: 0; width: 200%; display: flex; animation: sweep 3.2s linear infinite; }
+.ecgTrack svg { width: 50%; height: 100%; }
+.ecgStill .ecgTrack { animation-play-state: paused; opacity: 0.35; }
+@keyframes sweep { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* New thoughts and trades slide in at the top. */
+.feedItem { animation: arrive 600ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes arrive { from { opacity: 0; transform: translateY(-10px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* A slow scan line across the hero, so even a still minute reads as live. */
+.scan { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+.scan::before { content: ""; position: absolute; top: 0; bottom: 0; width: 30%;
+  background: linear-gradient(90deg, transparent, rgba(243, 193, 58, 0.06), transparent);
+  animation: scan 6s ease-in-out infinite; }
+@keyframes scan { from { left: -30%; } to { left: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dot::after, .ecgTrack, .scan::before { animation: none; }
+}

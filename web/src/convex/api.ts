@@ -1976,3 +1976,51 @@ export const tradersApi = anyApi as unknown as {
     trader: Query<{ id: string }, HubTraderPage | null>;
   };
 };
+
+/** convex/liveRuns.ts - public runs ("$6 → ?"): one agent trading real money, watchable live. */
+export type LiveRunSummary = {
+  slug: string;
+  name: string;
+  ownerAddress: string;
+  walletAddress: string;
+  market: string | null;
+  startUsd: number;
+  targetUsd: number;
+  floorUsd: number;
+  lastUsd: number;
+  lastValuedAt: number;
+  startedAt: number;
+  endedAt: number | null;
+  status: "running" | "won" | "lost" | "ended";
+};
+export type LiveRunDetail = LiveRunSummary & {
+  timeframe: string | null;
+  /** The agent's autopilot is on. */
+  watching: boolean;
+  /** When the engine's next look at the market is booked (ms); it looks every minute. */
+  nextLookAt: number | null;
+  rules: string[];
+  history: { t: number; usd: number }[];
+  thoughts: { t: number; text: string }[];
+  engine: { lastCheckedAt: number; reason: string | null; position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null }[];
+  trades: {
+    at: number;
+    kind: "enter" | "exit";
+    side: "long" | "short";
+    market: string;
+    price: number;
+    sizeUsd: number;
+    pnlPct: number | null;
+    paper: boolean;
+    reason: string;
+    txHash: string | null;
+  }[];
+};
+export const liveRunsApi = anyApi as unknown as {
+  liveRuns: {
+    list: Query<Record<string, never>, { running: LiveRunSummary[]; finished: LiveRunSummary[] }>;
+    get: Query<{ slug: string }, LiveRunDetail | null>;
+    start: Action<{ sessionToken: string; conversationKey: string }, { slug: string; startUsd: number }>;
+    end: Mutation<{ sessionToken: string; slug: string }, null>;
+  };
+};

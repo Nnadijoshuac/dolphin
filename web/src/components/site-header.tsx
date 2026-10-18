@@ -21,6 +21,7 @@ import { useWallet } from "@/wallet/wallet-provider";
 // button on the RIGHT. Wallet and My agents live in the wallet button's menu; the network is in its tooltip
 // and the footer. Every label stays on one line.
 const navigation = [
+  { path: "/live", label: "Live", icon: "trading" as const },
   { path: "/trade", label: "Traders", icon: "trading" as const },
   { path: "/test", label: "Test", icon: "sparkle" as const },
   { path: "/search", label: "Agents", icon: "search" as const },
@@ -51,7 +52,7 @@ function subLinks(path: string, places: Places): SubLink[] {
   return [{ href: path, label: first[path] ?? "New agent" }, ...present];
 }
 
-const BRAND_HEADER_PATHS = ["/test", "/docs", "/setups", "/policies", "/whitepaper"];
+const BRAND_HEADER_PATHS = ["/live", "/test", "/docs", "/setups", "/policies", "/whitepaper"];
 const BRAND_HEADER_EXACT = ["/trade"];
 
 function isActiveRoute(pathname: string, path: string) {

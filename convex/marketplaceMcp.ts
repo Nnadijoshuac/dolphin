@@ -180,6 +180,20 @@ const TRADER_TOOLS = [
     annotations: READ_ONLY,
   },
   {
+    name: "list_live_runs",
+    title: "Agents trading real money right now",
+    description: "Public runs on dolphinamp.xyz/live: an agent trading its own wallet's real money until it reaches $100 or zero. Each has its start, current value (read from BNB Chain) and status.",
+    inputSchema: { type: "object", properties: {} },
+    annotations: READ_ONLY,
+  },
+  {
+    name: "get_live_run",
+    title: "One live run in full",
+    description: "One public run: its wallet value over time, its rules, what its engine last decided, and every trade since it went live with BscScan links. slug comes from list_live_runs.",
+    inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] },
+    annotations: READ_ONLY,
+  },
+  {
     name: "get_trader",
     title: "One trader in full",
     description: "One trader's rules, record and recent trades. id comes from list_traders.",
@@ -302,7 +316,7 @@ export async function handleMarketplaceMcp(ctx: ActionCtx, message: RpcMessage, 
             : "",
           groups.includes("proof") ? "Proof: get_escrow_job reads a hire's escrow job straight from BNB Chain." : "",
           groups.includes("traders")
-            ? "Traders: test_strategy replays a simple strategy on a year of real prices; best_strategies shows what tested best; list_traders and get_trader read every trader's record, losses included. Starting a trader happens on dolphinamp.xyz/trade with the person's own wallet."
+            ? "Traders: test_strategy replays a simple strategy on a year of real prices; best_strategies shows what tested best; list_traders and get_trader read every trader's record, losses included; list_live_runs and get_live_run follow agents trading real money live. Starting a trader happens on dolphinamp.xyz/trade with the person's own wallet."
             : "",
           "Nothing here is financial advice; past results do not predict future ones.",
         ]
@@ -355,6 +369,13 @@ export async function handleMarketplaceMcp(ctx: ActionCtx, message: RpcMessage, 
             return reply(await listTraders(ctx));
           case "get_trader":
             return reply(await getTrader(ctx, args));
+          case "list_live_runs":
+            return reply(text({ ...((await ctx.runQuery(api.liveRuns.list, {})) as object), page: `${SITE}/live` }));
+          case "get_live_run": {
+            const slug = typeof args.slug === "string" ? args.slug.trim().slice(0, 40) : "";
+            const run = slug ? await ctx.runQuery(api.liveRuns.get, { slug }) : null;
+            return reply(run ? text({ ...(run as object), page: `${SITE}/live/${slug}` }) : text("No live run with that slug. Use list_live_runs.", true));
+          }
           default:
             return reply(text(`No tool named ${name}.`, true));
         }

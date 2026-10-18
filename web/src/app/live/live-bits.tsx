@@ -1,10 +1,11 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import styles from "@/app/live/live.module.css";
 
-/** A clock that ticks every second, for "checked 12s ago". Only on the live pages. */
+/** A clock that ticks every second, for countdowns and "2m ago". Only on the live pages. */
 export function useSecond(): number {
   const [now, setNow] = useState(0);
   useEffect(() => {
@@ -37,35 +38,89 @@ export const pct = (from: number, to: number) => {
 
 export function LiveBadge({ running }: { running: boolean }) {
   return (
-    <span className={styles.live} style={running ? undefined : { background: "var(--paper-muted)", color: "var(--muted)" }}>
-      <span className={`${styles.dot} ${running ? "" : styles.dotIdle}`} />
+    <span className={`${styles.live} ${running ? "" : styles.ended}`}>
+      <span className={styles.dot} />
       {running ? "LIVE" : "ENDED"}
     </span>
   );
 }
 
-/** $0 -> target, with the start marked and the current value as a glowing bead. */
+/** $0 -> target, with the start marked and where it is now. */
 export function Track({ start, now, target }: { start: number; now: number; target: number }) {
   const at = (v: number) => `${Math.max(0, Math.min(100, (v / target) * 100))}%`;
   return (
     <div className={styles.track}>
       <div className={styles.fill} style={{ width: at(now) }} />
       <div className={styles.startTick} style={{ left: at(start) }} />
-      <div className={styles.bead} style={{ left: at(now) }} />
+      <div className={styles.knob} style={{ left: at(now) }} />
     </div>
   );
 }
 
-/** The heartbeat: sweeps while the agent is checking, goes still if it has not checked in 3 minutes. */
-export function Heartbeat({ alive }: { alive: boolean }) {
-  const path = "M0 20 L40 20 L48 6 L56 34 L64 20 L120 20 L128 12 L134 28 L140 20 L200 20";
+/* ── live market data, straight from Binance's public API, in the viewer's browser ── */
+
+const BINANCE = "https://data-api.binance.vision/api/v3";
+
+export type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
+
+export function useCandles(symbol: string | null, interval: string | null, limit = 72) {
+  return useQuery({
+    queryKey: ["live-candles", symbol, interval, limit],
+    enabled: Boolean(symbol && interval),
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+    placeholderData: (previous) => previous,
+    queryFn: async (): Promise<Candle[]> => {
+      const response = await fetch(`${BINANCE}/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+      if (!response.ok) throw new Error(`Binance ${response.status}`);
+      return ((await response.json()) as unknown[][]).map((row) => ({ t: Number(row[0]), o: +row[1]!, h: +row[2]!, l: +row[3]!, c: +row[4]!, v: +row[5]! }));
+    },
+  });
+}
+
+const TICKER_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "CAKEUSDT", "XVSUSDT"];
+
+export function useTickers() {
+  return useQuery({
+    queryKey: ["live-tickers"],
+    refetchInterval: 10_000,
+    staleTime: 8_000,
+    placeholderData: (previous) => previous,
+    queryFn: async () => {
+      const response = await fetch(`${BINANCE}/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(TICKER_SYMBOLS))}`);
+      if (!response.ok) throw new Error(`Binance ${response.status}`);
+      return ((await response.json()) as { symbol: string; lastPrice: string; priceChangePercent: string }[]).map((row) => ({
+        symbol: row.symbol.replace("USDT", "/USDT"),
+        price: Number(row.lastPrice),
+        change: Number(row.priceChangePercent),
+      }));
+    },
+  });
+}
+
+export function price(n: number): string {
+  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toFixed(2);
+  return n.toPrecision(4);
+}
+
+/** The scrolling price strip across the top: real prices, every 10 seconds. */
+export function Ticker() {
+  const { data } = useTickers();
+  if (!data?.length) return <div className={styles.ticker} style={{ height: 38 }} />;
+  const items = [...data, ...data];
   return (
-    <div className={`${styles.ecg} ${alive ? "" : styles.ecgStill}`} aria-hidden="true">
-      <div className={styles.ecgTrack}>
-        {[0, 1].map((i) => (
-          <svg key={i} preserveAspectRatio="none" viewBox="0 0 200 40">
-            <path d={path} fill="none" stroke="#f3c13a" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
-          </svg>
+    <div className={styles.ticker}>
+      <div className={styles.tickerTrack}>
+        {items.map((item, index) => (
+          <span className={styles.tickerItem} key={`${item.symbol}-${index}`}>
+            <span className="font-semibold text-[#f2f3ee]">{item.symbol}</span>
+            <span>{price(item.price)}</span>
+            <span style={{ color: item.change >= 0 ? "#3ddc84" : "#ff5c5c" }}>
+              {item.change >= 0 ? "+" : ""}
+              {item.change.toFixed(2)}%
+            </span>
+          </span>
         ))}
       </div>
     </div>

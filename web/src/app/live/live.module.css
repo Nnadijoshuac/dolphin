@@ -1,48 +1,112 @@
-/* Public runs (owner, 2026-10-18): a page that never looks dead. The pulse, the sweep and the ticking
-   "checked Xs ago" are tied to real events: they stop being alive if the agent stops. */
+/* Public runs, redesigned 2026-10-18 after Mahatir MD Ayat's "Quantix" dashboard (Dribbble, owner's pick):
+   jet-black panels, hairline borders, one lime accent, a live ticker, a big candle chart, small cards with
+   their own charts. Everything that moves is tied to a real event: prices, the engine's clock, trades. */
 
-.page { min-height: 100vh; padding: 28px 0 80px; }
+.page {
+  --lime: #f3c13a;
+  --lime-dim: rgba(243, 193, 58, 0.14);
+  --up: #3ddc84;
+  --down: #ff5c5c;
+  --panel: #0e0f0e;
+  --panel-2: #141513;
+  --hair: rgba(255, 255, 255, 0.07);
+  min-height: 100vh;
+  padding: 0 0 80px;
+  /* Dolphin's own: black, one gold accent (owner, 2026-10-18: no purple or green glows). */
+  background: #070807;
+  color: #f2f3ee;
+}
 
-.live { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px;
-  background: rgba(255, 70, 70, 0.12); color: #ff6b6b; font-size: 12px; font-weight: 700; }
-.dot { position: relative; width: 8px; height: 8px; border-radius: 99px; background: #ff4d4d; }
-.dot::after { content: ""; position: absolute; inset: -6px; border-radius: 99px; background: rgba(255, 77, 77, 0.45);
+.panel { background: var(--panel); border: 1px solid var(--hair); border-radius: 18px; }
+.panel2 { background: var(--panel-2); border: 1px solid var(--hair); border-radius: 14px; }
+.muted { color: #8a8c85; }
+.lime { color: var(--lime); }
+
+/* ── ticker strip ── */
+.ticker { border-bottom: 1px solid var(--hair); overflow: hidden; white-space: nowrap; background: #0a0b0a; }
+.tickerTrack { display: inline-flex; gap: 36px; padding: 10px 0; animation: tick 40s linear infinite; }
+.tickerItem { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: #c9cbc3; font-variant-numeric: tabular-nums; }
+@keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ── live pill ── */
+.live { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  background: var(--lime-dim); color: var(--lime); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+.dot { position: relative; width: 7px; height: 7px; border-radius: 99px; background: var(--lime); }
+.dot::after { content: ""; position: absolute; inset: -6px; border-radius: 99px; background: rgba(243, 193, 58, 0.4);
   animation: ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
-.dotIdle { background: var(--muted); }
-.dotIdle::after { display: none; }
-@keyframes ping { 0% { transform: scale(0.4); opacity: 1; } 80%, 100% { transform: scale(1.6); opacity: 0; } }
+.ended { background: rgba(255, 255, 255, 0.06); color: #8a8c85; }
+.ended .dot { background: #8a8c85; }
+.ended .dot::after { display: none; }
+@keyframes ping { 0% { transform: scale(0.4); opacity: 1; } 80%, 100% { transform: scale(1.7); opacity: 0; } }
 
-.card { border: 1px solid var(--line); border-radius: 22px; background: var(--paper); }
+.title { font-size: clamp(34px, 5vw, 56px); font-weight: 300; line-height: 1.05; }
 
-.balance { font-size: clamp(64px, 11vw, 132px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+/* ── balance ── */
+.balance { font-size: clamp(52px, 7vw, 84px); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.track { position: relative; height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); }
+.fill { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: var(--lime);
+  box-shadow: 0 0 18px rgba(243, 193, 58, 0.55); transition: width 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+.knob { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 99px;
+  background: #0e0f0e; border: 3px solid var(--lime); transition: left 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+.startTick { position: absolute; top: -5px; width: 2px; height: 18px; background: rgba(255, 255, 255, 0.25); }
 
-/* $0 -> target track, with the start marker and a glowing "now" bead. */
-.track { position: relative; height: 10px; border-radius: 99px; background: var(--paper-muted); overflow: visible; }
-.fill { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: linear-gradient(90deg, #f3c13a, #ffd86b);
-  transition: width 900ms cubic-bezier(0.16, 1, 0.3, 1); }
-.bead { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 99px;
-  background: #fff; box-shadow: 0 0 0 4px rgba(243, 193, 58, 0.35), 0 0 24px rgba(243, 193, 58, 0.8);
-  transition: left 900ms cubic-bezier(0.16, 1, 0.3, 1); }
-.startTick { position: absolute; top: -6px; width: 2px; height: 22px; background: var(--line-strong); }
+/* ── range pills ── */
+.pills { display: inline-flex; gap: 4px; padding: 4px; border-radius: 10px; background: #0a0b0a; border: 1px solid var(--hair); }
+.pill { padding: 5px 10px; border-radius: 7px; font-size: 12px; color: #8a8c85; }
+.pillOn { background: var(--lime); color: #0b0c0a; font-weight: 600; }
 
-/* The heartbeat line: an ECG trace sweeping left forever while the agent is checking. */
-.ecg { width: 100%; height: 40px; overflow: hidden; position: relative; }
-.ecgTrack { position: absolute; inset: 0; width: 200%; display: flex; animation: sweep 3.2s linear infinite; }
-.ecgTrack svg { width: 50%; height: 100%; }
-.ecgStill .ecgTrack { animation-play-state: paused; opacity: 0.35; }
-@keyframes sweep { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+/* ── countdown ring ── */
+.ring circle { transition: stroke-dashoffset 1s linear; }
 
-/* New thoughts and trades slide in at the top. */
+/* ── feed ── */
 .feedItem { animation: arrive 600ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-@keyframes arrive { from { opacity: 0; transform: translateY(-10px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes arrive { from { opacity: 0; transform: translateY(-8px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+.tag { font-size: 11px; font-weight: 600; color: var(--up); }
 
-/* A slow scan line across the hero, so even a still minute reads as live. */
-.scan { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
-.scan::before { content: ""; position: absolute; top: 0; bottom: 0; width: 30%;
-  background: linear-gradient(90deg, transparent, rgba(243, 193, 58, 0.06), transparent);
-  animation: scan 6s ease-in-out infinite; }
-@keyframes scan { from { left: -30%; } to { left: 100%; } }
+/* the newest candle breathes while the market is open */
+.liveCandle { animation: breathe 2.4s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: 0.55; } }
+
+/* ── index cards ── */
+.card { display: block; background: var(--panel); border: 1px solid var(--hair); border-radius: 18px; padding: 20px;
+  transition: border-color 200ms, transform 200ms; }
+.card:hover { border-color: rgba(243, 193, 58, 0.35); transform: translateY(-2px); }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot::after, .ecgTrack, .scan::before { animation: none; }
+  .dot::after, .tickerTrack, .liveCandle { animation: none; }
 }
+
+/* header numbers row (Oripio) */
+.kpi { display: flex; flex-direction: column; gap: 2px; padding-left: 18px; border-left: 1px solid var(--hair); }
+.kpi:first-child { padding-left: 0; border-left: 0; }
+
+/* decision log, styled like an order book */
+.book { font-variant-numeric: tabular-nums; }
+.bookRow { display: grid; grid-template-columns: 54px 1fr; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; }
+.bookRow:nth-child(odd) { background: rgba(255, 255, 255, 0.02); }
+
+/* data table (Oripio) */
+.table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.table th { text-align: left; font-weight: 500; color: #8a8c85; padding: 10px 12px; border-bottom: 1px solid var(--hair); font-size: 12px; }
+.table td { padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.table tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+/* latest move: the newest thing it did, first thing you see */
+.latest { position: relative; overflow: hidden; }
+.latest::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(243,193,58,0.10), transparent 60%);
+  animation: glow 3s ease-in-out infinite; pointer-events: none; }
+@keyframes glow { 50% { opacity: 0.35; } }
+
+/* rows you can open */
+.clickable { cursor: pointer; transition: background 150ms; }
+.clickable:hover { background: rgba(255, 255, 255, 0.05) !important; }
+
+/* detail drawer: how it decided */
+.scrim { position: fixed; inset: 0; z-index: 80; background: rgba(0, 0, 0, 0.55); animation: fade 200ms both; }
+.drawer { position: fixed; z-index: 81; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); overflow-y: auto;
+  background: #0e0f0e; border-left: 1px solid var(--hair); padding: 28px; animation: slide 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes fade { from { opacity: 0; } }
+@keyframes slide { from { transform: translateX(100%); } }
+
+/* the live price line across the chart */
+.priceLine { transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1); }

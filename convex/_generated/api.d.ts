@@ -107,6 +107,7 @@ import type * as lib_usageRank from "../lib/usageRank.js";
 import type * as lib_walletActionLogs from "../lib/walletActionLogs.js";
 import type * as lib_walletAuth from "../lib/walletAuth.js";
 import type * as lib_x402 from "../lib/x402.js";
+import type * as liveRuns from "../liveRuns.js";
 import type * as liveness from "../liveness.js";
 import type * as marketplaceMcp from "../marketplaceMcp.js";
 import type * as model_agent from "../model/agent.js";
@@ -242,6 +243,7 @@ declare const fullApi: ApiFromModules<{
   "lib/walletActionLogs": typeof lib_walletActionLogs;
   "lib/walletAuth": typeof lib_walletAuth;
   "lib/x402": typeof lib_x402;
+  liveRuns: typeof liveRuns;
   liveness: typeof liveness;
   marketplaceMcp: typeof marketplaceMcp;
   "model/agent": typeof model_agent;

@@ -1995,4 +1995,34 @@ export default defineSchema({
     .index("by_agent_tool", ["agentKey", "toolName"])
     /* The global throttle: how many trials have run recently, across everything. */
     .index("by_called_at", ["calledAt"]),
+
+  /**
+   * A PUBLIC RUN (owner, 2026-10-18: "$6 → ?"; anyone can make their own run public). One agent trading a
+   * Dolphin Wallet's real money, shown live at /live/<slug> until it reaches its target or its floor.
+   * Every value here is read from the chain by liveRuns.tick (every 5 minutes); nothing is typed in.
+   * `history` is the wallet's value over time, kept small (a point per 0.5% move or per hour, capped).
+   * `thoughts` is what the engine decided at each new check, copied from strategyRuns.lastReason when it
+   * changes - a capped list on this one row, never a row per check (AGENTS.md section 9).
+   */
+  liveRuns: defineTable({
+    slug: v.string(),
+    draftId: v.id("agentDrafts"),
+    conversationKey: v.string(),
+    ownerAddress: v.string(),
+    walletAddress: v.string(),
+    name: v.string(),
+    startUsd: v.number(),
+    targetUsd: v.number(),
+    floorUsd: v.number(),
+    startedAt: v.number(),
+    status: v.union(v.literal("running"), v.literal("won"), v.literal("lost"), v.literal("ended")),
+    endedAt: v.union(v.number(), v.null()),
+    lastUsd: v.number(),
+    lastValuedAt: v.number(),
+    history: v.array(v.object({ t: v.number(), usd: v.number() })),
+    thoughts: v.array(v.object({ t: v.number(), text: v.string() })),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_draft", ["draftId"])
+    .index("by_status_started", ["status", "startedAt"]),
 });

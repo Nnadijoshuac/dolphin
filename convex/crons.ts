@@ -174,4 +174,5 @@ crons.interval(
   {},
 );
 
+crons.interval("public runs: value each wallet, end at target or floor", { minutes: 5 }, internal.liveRuns.tick, {});
 export default crons;

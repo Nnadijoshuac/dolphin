@@ -110,13 +110,13 @@ export const viewport: Viewport = {
    * default controls sitting on top of it.
    *
    * The two themeColor entries are media-matched so the address bar follows
-   * the same canvas the page paints: --canvas is #f4f3ed light, #131410 dark.
+   * the same canvas the page paints: --canvas is #f4f3ed light, #0a0a0a dark.
    */
   colorScheme: "light dark",
   initialScale: 1,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f4f3ed" },
-    { media: "(prefers-color-scheme: dark)", color: "#131410" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
   ],
   width: "device-width",
   viewportFit: "cover",

@@ -120,24 +120,24 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --canvas: #131410;
-    --paper: #1c1d17;
-    --paper-strong: #232419;
-    --paper-muted: #26271f;
-    --ink: #f2f1e8;
-    --ink-soft: #d4d3c7;
-    --muted: #a3a396;
-    --faint: #94948a;
+    --canvas: #0a0a0a;
+    --paper: #131313;
+    --paper-strong: #191919;
+    --paper-muted: #1d1d1d;
+    --ink: #f4f4f2;
+    --ink-soft: #d6d6d2;
+    --muted: #a1a19c;
+    --faint: #929290;
     /* Non-text marks only, same rule as the light ramp. */
-    --faint-mark: #6a6b62;
-    --line: #32332a;
-    --line-strong: #45463b;
+    --faint-mark: #6a6a67;
+    --line: #262626;
+    --line-strong: #3a3a3a;
     --accent: #f0b90b;
     --accent-hover: #ffca2c;
     --accent-soft: #3a2f06;
     --accent-ink: #f7d354;
     --success: #a3a396;
-    --success-soft: #26271f;
+    --success-soft: #1d1d1d;
     --danger: #e0705f;
     --danger-soft: #331915;
     --info: #7fa8d6;
@@ -146,30 +146,30 @@
     /* Shadow does almost nothing on a dark ground; the border carries the edge. */
     --shadow-soft: 0 1px 2px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 34%);
     --shadow-float: 0 18px 48px rgb(0 0 0 / 52%);
-    --scrim: 19 20 16;
-    --scrim-canvas: 19 20 16;
+    --scrim: 10 10 10;
+    --scrim-canvas: 10 10 10;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --canvas: #131410;
-  --paper: #1c1d17;
-  --paper-strong: #232419;
-  --paper-muted: #26271f;
-  --ink: #f2f1e8;
-  --ink-soft: #d4d3c7;
-  --muted: #a3a396;
-  --faint: #94948a;
-  --faint-mark: #6a6b62;
-  --line: #32332a;
-  --line-strong: #45463b;
+  --canvas: #0a0a0a;
+  --paper: #131313;
+  --paper-strong: #191919;
+  --paper-muted: #1d1d1d;
+  --ink: #f4f4f2;
+  --ink-soft: #d6d6d2;
+  --muted: #a1a19c;
+  --faint: #929290;
+  --faint-mark: #6a6a67;
+  --line: #262626;
+  --line-strong: #3a3a3a;
   --accent: #f0b90b;
   --accent-hover: #ffca2c;
   --accent-soft: #3a2f06;
   --accent-ink: #f7d354;
   --success: #a3a396;
-  --success-soft: #26271f;
+  --success-soft: #1d1d1d;
   --danger: #e0705f;
   --danger-soft: #331915;
   --info: #7fa8d6;
@@ -177,8 +177,8 @@
   --focus: #ffd84d;
   --shadow-soft: 0 1px 2px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 34%);
   --shadow-float: 0 18px 48px rgb(0 0 0 / 52%);
-  --scrim: 19 20 16;
-  --scrim-canvas: 19 20 16;
+  --scrim: 10 10 10;
+  --scrim-canvas: 10 10 10;
 }
 
 @theme inline {

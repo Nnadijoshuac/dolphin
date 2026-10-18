@@ -266,6 +266,18 @@ export const get = query({
       .withIndex("by_draft", (q) => q.eq("draftId", run.draftId).gte("at", run.startedAt))
       .order("desc")
       .take(1000);
+    // A run can start while a position is open. Its first trade is then a sell, so the buy that opened
+    // it (made before the run started) is shown too - otherwise the page shows a sale of nothing.
+    const oldest = runTrades[runTrades.length - 1];
+    if (oldest && oldest.kind === "exit") {
+      const opener = await ctx.db
+        .query("strategyTrades")
+        .withIndex("by_draft", (q) => q.eq("draftId", run.draftId).lt("at", run.startedAt))
+        .order("desc")
+        .filter((q) => q.and(q.eq(q.field("kind"), "enter"), q.eq(q.field("ruleId"), oldest.ruleId)))
+        .first();
+      if (opener) runTrades.push(opener);
+    }
     const trades = runTrades.slice(0, 60);
     const closed = runTrades.filter((trade) => trade.kind === "exit" && trade.pnlPct !== null);
     // The engine's minute clock: the next run it has booked. It looks at the market every minute, but

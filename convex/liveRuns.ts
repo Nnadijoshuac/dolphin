@@ -335,7 +335,8 @@ export const get = query({
         pnlPct: trade.pnlPct,
         paper: trade.paper,
         reason: trade.reason,
-        txHash: trade.txHash ?? null,
+        // A Dolphin Wallet swap keeps its transaction hash as orderId (strategy.ts executeRule).
+        txHash: trade.txHash ?? (trade.network === "bsc" && /^0x[0-9a-fA-F]{64}$/.test(trade.orderId ?? "") ? trade.orderId! : null),
       })),
     };
   },

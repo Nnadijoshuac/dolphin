@@ -7,6 +7,7 @@ import { historyCandles } from "./lib/binanceMarket";
 import { DOLPHIN_SWAP_GAS_USD } from "./lib/grid";
 import { cleanRule, describeLocked, describeRule, simulate, TIMEFRAME_MS, VENUE_FEE_BPS, type Rule, type RuleState } from "./lib/strategy";
 import { TRADER_MARKET, TRADER_MAX_USD, TRADER_MIN_USD, traderById, traderRule, TRADERS } from "./lib/traders";
+import { endLiveRunsForDraft } from "./lib/liveRunEnd";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 import { mayRun } from "./traderSales";
 
@@ -196,6 +197,7 @@ export const stop = mutation({
     const wallet = (await requireWalletAddress(ctx, sessionToken, "Stopping a trader")).toLowerCase();
     const draft = await traderDraft(ctx, conversationKey, wallet);
     if (draft.autopilot) await ctx.db.patch(draft._id, { autopilot: { ...draft.autopilot, on: false }, updatedAt: Date.now() });
+    await endLiveRunsForDraft(ctx, draft._id);
   },
 });
 

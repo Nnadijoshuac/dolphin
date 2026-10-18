@@ -174,6 +174,8 @@ export const record = internalMutation({
   handler: async (ctx, { runId, usd, at, reasons }) => {
     const run = await ctx.db.get(runId);
     if (!run || run.status !== "running") return;
+    const agent = await ctx.db.get(run.draftId);
+    const stopped = !agent?.autopilot?.on;
     const last = run.history[run.history.length - 1];
     const history =
       !last || Math.abs(usd - last.usd) / Math.max(last.usd, 0.01) >= 0.005 || at - last.t >= 3_600_000
@@ -183,7 +185,7 @@ export const record = internalMutation({
     for (const text of reasons) {
       if (!thoughts.some((thought) => thought.text === text)) thoughts = [...thoughts, { t: at, text }].slice(-THOUGHTS_CAP);
     }
-    const status = usd <= Math.max(run.floorUsd, DUST_USD) ? "lost" : "running";
+    const status = usd <= Math.max(run.floorUsd, DUST_USD) ? "lost" : stopped ? "ended" : "running";
     await ctx.db.patch(run._id, { lastUsd: usd, lastValuedAt: at, history, thoughts, status, endedAt: status === "running" ? null : at });
     if (status !== "running") {
       // The run is over: the agent stops opening trades. Its owner can switch it back on.

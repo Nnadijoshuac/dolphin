@@ -81,6 +81,7 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
       <Ticker />
       <div className={`${styles.desk} flex flex-col gap-2 p-2 xl:h-[max(calc(100dvh-69px-38px),940px)]`}>
         <TopBar alive={alive} chain={chain.data ?? null} liveFigure={liveFigure} liveUsd={liveUsd} market={market} nextIn={nextIn} now={now} run={run} />
+        {!running ? <RunEnded run={run} /> : null}
 
         <div className="grid min-h-0 flex-1 gap-2 xl:grid-cols-[minmax(300px,22%)_minmax(0,1fr)_minmax(300px,21%)]">
           {/* LEFT: the agent's own desk - money, signal, risk, engine */}
@@ -166,6 +167,36 @@ function Flash({ value, children, className }: { value: number | null; children:
     <span className={`${className ?? ""} ${tone === "up" ? styles.flashUp : tone === "down" ? styles.flashDown : ""}`} key={key}>
       {children}
     </span>
+  );
+}
+
+/** A finished run says so plainly, with how it ended, and points the visitor at building their own. */
+function RunEnded({ run }: { run: LiveRunDetail }) {
+  const hours = Math.max(1, Math.round(((run.endedAt ?? run.lastValuedAt) - run.startedAt) / 3_600_000));
+  const why = run.status === "lost" ? "The wallet ran out of money." : "Its owner stopped the agent.";
+  const up = run.lastUsd >= run.startUsd;
+  return (
+    <section className={`${styles.dpanel} ${styles.runEnded} flex shrink-0 flex-wrap items-center gap-x-8 gap-y-4 px-5 py-4`}>
+      <div className="min-w-0 flex-1">
+        <p className="text-[18px] font-semibold">This run has ended</p>
+        <p className={`mt-1 text-[13px] ${styles.muted}`}>
+          {why} It finished at <span className={`${styles.mono} text-white`}>{usd(run.lastUsd)}</span>,{" "}
+          <span className={styles.mono} style={{ color: up ? UP : DOWN }}>
+            {pct(run.startUsd, run.lastUsd)}
+          </span>{" "}
+          from its {usd(run.startUsd)} start, after {run.closedCount} closed trade{run.closedCount === 1 ? "" : "s"} over {hours} hour{hours === 1 ? "" : "s"}. Everything below is
+          the full record.
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
+        <Link className="rounded-full bg-[#f3c13a] px-5 py-2.5 text-sm font-semibold text-[#0b0c0a] no-underline" href="/dolphin?mode=build&new=1">
+          Build your own trading agent
+        </Link>
+        <Link className="rounded-full border border-white/15 px-5 py-2.5 text-sm text-[#d6d6d2] no-underline hover:text-white" href="/live">
+          See who is live
+        </Link>
+      </div>
+    </section>
   );
 }
 

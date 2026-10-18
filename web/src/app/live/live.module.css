@@ -151,3 +151,6 @@
 @media (prefers-reduced-motion: reduce) {
   .blip, .flashUp, .flashDown, .tapeRow { animation: none; }
 }
+
+/* a finished run: a gold edge, so the end is the first thing read */
+.runEnded { box-shadow: inset 3px 0 0 var(--lime); background: linear-gradient(90deg, rgba(243, 193, 58, 0.07), transparent 55%), var(--desk-panel, #0f0f0f); }

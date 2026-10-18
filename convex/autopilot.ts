@@ -34,6 +34,7 @@ import { internalAction, internalMutation, internalQuery, mutation } from "./_ge
 import { activeBlocks, bscPairFor, poolCandles, TRIGGER_TYPES, type AgentBlock, type MarketConfig } from "./lib/agentBlocks";
 import { verifiedTokens } from "./lib/tradeTokens";
 import { bscPublicClient } from "./lib/bscClient";
+import { endLiveRunsForDraft } from "./lib/liveRunEnd";
 import { syncTriggers } from "./lib/triggerSync";
 import { randomHex, requireWalletAddress } from "./lib/walletAuth";
 
@@ -92,6 +93,7 @@ export const setAutopilot = mutation({
     if (!on) {
       await syncTriggers(ctx, draft._id, blocks, false);
       if (draft.autopilot) await ctx.db.patch(draft._id, { autopilot: { ...draft.autopilot, on: false } });
+      await endLiveRunsForDraft(ctx, draft._id);
       return { on: false, triggers: 0 };
     }
 

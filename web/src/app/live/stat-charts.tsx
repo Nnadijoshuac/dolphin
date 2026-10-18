@@ -72,7 +72,7 @@ export function ResultBars({ results }: { results: number[] }) {
       <BarChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: 4 }}>
         <ReferenceLine stroke="rgba(255,255,255,0.15)" y={0} />
         <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.04)" }} formatter={(value) => [`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}%`, "Result"]} labelFormatter={(i) => `Trade ${i}`} />
-        <Bar dataKey="pnl" radius={[3, 3, 3, 3]}>
+        <Bar dataKey="pnl" maxBarSize={14} radius={[3, 3, 3, 3]}>
           {data.map((d) => (
             <Cell fill={d.pnl >= 0 ? UP : DOWN} key={d.i} />
           ))}

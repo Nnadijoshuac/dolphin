@@ -287,6 +287,30 @@ export const get = query({
         reason: row.lastReason ?? row.lastError ?? null,
         position: ((row.state as RuleState | null)?.position ?? null) as RuleState["position"],
       })),
+      // Each rule's own numbers and live state, so the page can show how far the market is from its
+      // trigger, how much of its daily cap is used, and where its stop and target sit.
+      desk: rules.map((rule) => {
+        const row = states.find((state) => state.ruleId === rule.id);
+        const state = (row?.state ?? null) as RuleState | null;
+        const today = new Date().toISOString().slice(0, 10);
+        return {
+          id: rule.id,
+          name: rule.name,
+          timeframe: rule.timeframe,
+          when: rule.when,
+          until: rule.until,
+          stopLossPct: rule.stopLossPct,
+          takeProfitPct: rule.takeProfitPct,
+          sizeUsd: rule.sizeUsd,
+          maxTradesPerDay: rule.maxTradesPerDay,
+          cooldownMinutes: rule.cooldownMinutes,
+          tradesToday: state && state.tradesDay === today ? state.tradesToday : 0,
+          lastTradeAt: state?.lastTradeAt ?? null,
+          lastCheckedAt: row?.lastCheckedAt ?? null,
+          reason: row?.lastReason ?? row?.lastError ?? null,
+          position: state?.position ?? null,
+        };
+      }),
       trades: trades.map((trade) => ({
         at: trade.at,
         kind: trade.kind,

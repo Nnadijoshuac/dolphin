@@ -1992,6 +1992,33 @@ export type LiveRunSummary = {
   endedAt: number | null;
   status: "running" | "lost" | "ended";
 };
+/** One condition of a trading rule, as convex/lib/strategy.ts stores it. */
+export type LiveCondition =
+  | { kind: "rsi"; op: "above" | "below"; value: number; period?: number }
+  | { kind: "price_vs_ma"; op: "above" | "below"; ma: "sma" | "ema"; length: number }
+  | { kind: "ma_cross"; direction: "up" | "down"; fast: number; slow: number; ma?: "sma" | "ema" }
+  | { kind: "macd_cross"; direction: "up" | "down" }
+  | { kind: "trend"; direction: "up" | "down"; candles: number }
+  | { kind: "price"; op: "above" | "below"; value: number }
+  | { kind: "change_pct"; op: "above" | "below"; value: number; candles: number }
+  | { kind: "fib"; op: "near" | "above" | "below"; value: number; candles: number };
+export type LiveDeskRule = {
+  id: string;
+  name: string;
+  timeframe: string;
+  when: LiveCondition[];
+  until: LiveCondition[];
+  stopLossPct: number | null;
+  takeProfitPct: number | null;
+  sizeUsd: number;
+  maxTradesPerDay: number;
+  cooldownMinutes: number;
+  tradesToday: number;
+  lastTradeAt: number | null;
+  lastCheckedAt: number | null;
+  reason: string | null;
+  position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null;
+};
 export type LiveRunDetail = LiveRunSummary & {
   timeframe: string | null;
   /** The agent's autopilot is on. */
@@ -2006,6 +2033,8 @@ export type LiveRunDetail = LiveRunSummary & {
   history: { t: number; usd: number }[];
   thoughts: { t: number; text: string }[];
   engine: { lastCheckedAt: number; reason: string | null; position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null }[];
+  /** Each rule's own numbers and live state. Absent on a backend older than 2026-10-18. */
+  desk?: LiveDeskRule[];
   trades: {
     at: number;
     kind: "enter" | "exit";

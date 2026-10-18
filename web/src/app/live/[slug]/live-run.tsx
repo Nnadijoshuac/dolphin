@@ -550,7 +550,9 @@ function ChartPanel({ run, desk, frame, onFrame, lastPrice }: { run: LiveRunDeta
   const positionRule = desk.find((rule) => rule.position) ?? null;
   const watchRule = frameRule ?? desk[desk.length - 1] ?? null;
   const watchLine = watchRule?.when.find((c) => c.kind === "rsi");
-  const status = position
+  const status = run.status !== "running"
+    ? "Run over · the agent is no longer trading"
+    : position
     ? `In a trade since ${new Date(position.openedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })} · entry ${position.entryPrice.toFixed(2)}`
     : watchRule
       ? `No open trade · waiting for ${watchLine && watchLine.kind === "rsi" ? `RSI under ${watchLine.value}` : "its entry"} on ${watchRule.timeframe}`

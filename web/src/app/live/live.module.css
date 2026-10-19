@@ -201,3 +201,23 @@
 .runCard:hover { transform: translateY(-3px); box-shadow: 0 0 0 1px rgba(243, 193, 58, 0.3), 0 18px 40px rgba(0, 0, 0, 0.45); }
 .coinBubble { position: relative; display: grid; place-items: center; border-radius: 999px; padding: 3px; background: #141414;
   box-shadow: 0 0 0 2px #1d1d1d, 0 4px 12px rgba(0, 0, 0, 0.4); }
+
+/* ── the phone (owner, 2026-10-19: "make the mobile version very beautiful") ── */
+.mobileLabel { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #a8aaa3; }
+.mobileChips { scrollbar-width: none; }
+.mobileChips::-webkit-scrollbar { display: none; }
+.mobileChip { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 8px 14px 8px 10px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); transition: border-color 200ms, background 200ms; }
+.mobileChipOn { border-color: rgba(243, 193, 58, 0.6); background: linear-gradient(135deg, rgba(243, 193, 58, 0.14), rgba(255, 255, 255, 0.03)); }
+.mobileTabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06); }
+.mobileTab { padding: 9px 0; border-radius: 9px; font-size: 13px; font-weight: 600; color: #8a8c85; transition: background 200ms, color 200ms; }
+.mobileTabOn { background: rgba(243, 193, 58, 0.14); color: var(--lime); }
+.mobileTrade { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.025); }
+.mobileBar { position: fixed; z-index: 40; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 18px;
+  background: rgba(16, 16, 16, 0.86); border: 1px solid rgba(255, 255, 255, 0.09); backdrop-filter: blur(16px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); }
+
+/* a watch tile on the phone: the card, laid out as a column */
+.coinCard.tile { display: flex; flex-direction: column; align-items: center; }

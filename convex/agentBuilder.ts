@@ -1231,7 +1231,7 @@ export const ask = action({
       const triedRules = Boolean(compiled.reply.rules && compiled.reply.rules.length > 0);
       let addedRules = 0;
       if (compiled.reply.rules && compiled.reply.rules.length > 0) {
-        const result: { added: string[]; problems: string[]; warnings: string[] } = await ctx.runMutation(internal.strategy.addRules, {
+        const result: { added: string[]; saved: string[]; problems: string[]; warnings: string[] } = await ctx.runMutation(internal.strategy.addRules, {
           conversationId,
           rules: compiled.reply.rules,
         });
@@ -1246,10 +1246,11 @@ export const ask = action({
         if (addedRules === 0) {
           const retry = pinVenue(await extractRules(text, keyLedger(ctx)));
           if (retry.length > 0) {
-            const second: { added: string[]; problems: string[]; warnings: string[] } = await ctx.runMutation(internal.strategy.addRules, { conversationId, rules: retry });
+            const second: { added: string[]; saved: string[]; problems: string[]; warnings: string[] } = await ctx.runMutation(internal.strategy.addRules, { conversationId, rules: retry });
             if (second.added.length > 0) {
               addedRules = second.added.length;
               applied.changed.push("tools");
+              result.saved = second.saved;
               result.problems = second.problems;
               result.warnings = second.warnings;
             } else console.warn("[agentBuilder] rules refused again:", JSON.stringify({ problems: second.problems, raw: retry }).slice(0, 4000));
@@ -1257,7 +1258,13 @@ export const ask = action({
         }
         if (result.added.length > 0) applied.changed.push("tools");
         // Three rules with the same shape share their warnings: each is said once.
+        /*
+         * WHAT WILL TRADE, IN THE ENGINE'S OWN WORDS (2026-10-19). Asked for "sell when RSI rises above 55, or
+         * at a 3% loss", the free model saved only the 3% stop and its reply still described both exits. The
+         * model's prose is not the record; the saved rule is, so the reply ends with it.
+         */
         rulesNote = [
+          ...(result.saved.length > 0 ? [`What will trade:\n${[...new Set(result.saved)].map((words) => `- ${words}`).join("\n")}`] : []),
           ...(result.problems.length > 0 ? [`I could not add ${[...new Set(result.problems)].join("; ")}.`] : []),
           ...[...new Set(result.warnings)].map((warning) => `Warning: ${warning}`),
         ].join("\n\n");

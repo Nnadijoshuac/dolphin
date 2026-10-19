@@ -126,15 +126,17 @@ export const addRules = internalMutation({
 });
 
 /** One path for every new rule - the build chat's and a template's - so every one passes the same checks. */
-async function addRulesTo(ctx: MutationCtx, conversationId: Id<"dolphinConversations">, rules: unknown[]): Promise<{ added: string[]; problems: string[]; warnings: string[] }> {
+async function addRulesTo(ctx: MutationCtx, conversationId: Id<"dolphinConversations">, rules: unknown[]): Promise<{ added: string[]; saved: string[]; problems: string[]; warnings: string[] }> {
   {
     // A first message that only asks for a rule still has a draft to hold it (as documents do).
     const conversation = await ctx.db.get(conversationId);
-    if (!conversation) return { added: [], problems: ["the conversation is gone"], warnings: [] };
+    if (!conversation) return { added: [], saved: [], problems: ["the conversation is gone"], warnings: [] };
     const draft = await ctx.db.get(await ensureDraft(ctx, conversation));
-    if (!draft) return { added: [], problems: ["the draft could not be made"], warnings: [] };
+    if (!draft) return { added: [], saved: [], problems: ["the draft could not be made"], warnings: [] };
     let current = rulesOf(draft);
     const added: string[] = [];
+    /** Each saved rule as the engine reads it - what the builder's reply ends with. */
+    const saved: string[] = [];
     const problems: string[] = [];
     const warnings: string[] = [];
     let blocks = (draft.blocks ?? []) as AgentBlock[];
@@ -178,10 +180,11 @@ async function addRulesTo(ctx: MutationCtx, conversationId: Id<"dolphinConversat
       }
       current = same ? current.map((rule) => (rule.id === same.id ? made.rule : rule)) : [...current, made.rule];
       added.push(made.rule.name);
+      saved.push(describeRule(made.rule));
       warnings.push(...made.warnings);
     }
     if (added.length > 0) await ctx.db.patch(draft._id, { rules: current, blocks: validateBlocks(blocks), updatedAt: Date.now() });
-    return { added, problems, warnings };
+    return { added, saved, problems, warnings };
   }
 }
 

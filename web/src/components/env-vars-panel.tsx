@@ -3,7 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
-import { BRAIN_PROVIDER_OPTIONS, envVarsApi } from "@/convex/api";
+import { envVarsApi } from "@/convex/api";
 import { convexClient } from "@/providers/convex-provider";
 import { toast } from "@/store/use-toast-store";
 import { toUserMessage } from "@/wallet/wallet-errors";
@@ -19,10 +19,6 @@ import { useWalletSession } from "@/wallet/wallet-session";
  * and replacing a key means pasting it again. That is the same promise a
  * hosting provider makes about env vars, and the only honest one.
  */
-
-/* The usual names for the providers a Brain can run on (BRAIN_PROVIDER_OPTIONS); any name works. */
-// Names a person would give their keys (owner, 2026-10-17): no API_KEY_UNDERSCORES anywhere they can see.
-const SUGGESTED = ["Jev", ...BRAIN_PROVIDER_OPTIONS.filter((option) => option.id !== "custom").map((option) => option.label), "Binance"];
 
 function errorText(cause: unknown, fallback: string): string {
   const data = (cause as { data?: unknown } | null)?.data;
@@ -64,90 +60,52 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
     }
   };
 
+  /*
+   * A PLAIN FORM FIRST, THEN THE KEYS (owner, 2026-10-19: "it should start with add key... name of key,
+   * pasting key, just like a normal form, and then save key. Then under it your already existing keys...
+   * all those suggestions or quick fill should go out").
+   */
   return (
     <div>
-      {variables === undefined ? (
-        <p className="text-[0.78rem] text-muted">Loading your keys…</p>
-      ) : variables.length === 0 ? (
-        <p className="text-[0.78rem] leading-relaxed text-muted">
-          No keys yet. Add the API key your agent&apos;s brain should run on.
-        </p>
-      ) : (
-        <ul className="space-y-1.5">
-          {variables.map((variable) => (
-            <li className="group flex items-center gap-2 rounded-lg bg-paper-muted/70 px-3 py-2" key={variable.name}>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[0.8rem] font-medium text-ink">{variable.name}</p>
-                <p className="font-mono text-[0.68rem] text-muted">
-                  {variable.last4 ? `••••${variable.last4}` : "••••"} ·{" "}
-                  {new Date(variable.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                </p>
-              </div>
-              <button
-                aria-label={`Remove ${variable.name}`}
-                className="rounded-md px-2 py-1 !text-[0.7rem] font-semibold text-muted transition-colors hover:bg-paper hover:text-danger"
-                onClick={async () => {
-                  try {
-                    await removeVariable({ sessionToken, name: variable.name });
-                  } catch (cause) {
-                    toast.error(errorText(cause, "Could not remove that key."));
-                  }
-                }}
-                type="button"
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
+      <p className="text-[13px] font-semibold text-ink">Keys</p>
       <form
-        className="mt-4 space-y-2 border-t border-line/60 pt-4"
+        className="mt-3 space-y-2.5"
         onSubmit={(event) => {
           event.preventDefault();
           void save();
         }}
       >
         <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Add a key</p>
-        <input
-          aria-label="Name it"
-          autoComplete="off"
-          data-1p-ignore
-          data-lpignore="true"
-          name="dolphin-variable-name"
-          className={fieldClass}
-          maxLength={40}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Name it - Jev, OpenRouter, Grok…"
-          spellCheck={false}
-          value={name}
-        />
-        <div className="flex flex-wrap gap-1">
-          {SUGGESTED.filter((suggestion) => !variables?.some((variable) => variable.name.toLowerCase() === suggestion.toLowerCase())).map((suggestion) => (
-            <button
-              className="rounded-full border border-line px-2 py-0.5 !text-[0.64rem] text-muted transition-colors hover:border-line-strong hover:text-ink"
-              key={suggestion}
-              onClick={() => setName(suggestion)}
-              type="button"
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-        <input
-          aria-label="Value"
-          autoComplete="off"
-          className={`${fieldClass} secret-field font-mono`}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder="Paste the key"
-          spellCheck={false}
-          type="text"
-          data-1p-ignore
-          data-lpignore="true"
-          name="dolphin-secret"
-          value={value}
-        />
+        <label className="block">
+          <span className="mb-1 block text-[0.72rem] text-muted">Key name</span>
+          <input
+            autoComplete="off"
+            className={fieldClass}
+            data-1p-ignore
+            data-lpignore="true"
+            maxLength={40}
+            name="dolphin-variable-name"
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Name this key"
+            spellCheck={false}
+            value={name}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[0.72rem] text-muted">Key</span>
+          <input
+            autoComplete="off"
+            className={`${fieldClass} secret-field font-mono`}
+            data-1p-ignore
+            data-lpignore="true"
+            name="dolphin-secret"
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="Paste the key"
+            spellCheck={false}
+            type="text"
+            value={value}
+          />
+        </label>
         <button
           className="flex h-8 w-full items-center justify-center rounded-lg bg-ink !text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-30"
           disabled={saving || name.trim().length < 1 || value.trim().length === 0}
@@ -159,6 +117,43 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
           Stored encrypted for this wallet only. Dolphin never shows a key again, and uses it only when your agent runs.
         </p>
       </form>
+
+      <div className="mt-5 border-t border-line/60 pt-4">
+        <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Your keys</p>
+        {variables === undefined ? (
+          <p className="mt-2 text-[0.78rem] text-muted">Loading your keys…</p>
+        ) : variables.length === 0 ? (
+          <p className="mt-2 text-[0.78rem] leading-relaxed text-muted">No keys saved yet.</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {variables.map((variable) => (
+              <li className="group flex items-center gap-2 rounded-lg bg-paper-muted/70 px-3 py-2" key={variable.name}>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[0.8rem] font-medium text-ink">{variable.name}</p>
+                  <p className="font-mono text-[0.68rem] text-muted">
+                    {variable.last4 ? `••••${variable.last4}` : "••••"} ·{" "}
+                    {new Date(variable.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                  </p>
+                </div>
+                <button
+                  aria-label={`Remove ${variable.name}`}
+                  className="rounded-md px-2 py-1 !text-[0.7rem] font-semibold text-muted transition-colors hover:bg-paper hover:text-danger"
+                  onClick={async () => {
+                    try {
+                      await removeVariable({ sessionToken, name: variable.name });
+                    } catch (cause) {
+                      toast.error(errorText(cause, "Could not remove that key."));
+                    }
+                  }}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

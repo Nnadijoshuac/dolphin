@@ -351,6 +351,12 @@ async function chatCompletionOnce(options: {
   endpoint?: BrainEndpoint;
   /** Counts each request one of Dolphin's keys sends, per key (convex/modelKeys.ts keyLedger). */
   ledger?: KeyLedger;
+  /**
+   * False turns the model's thinking off, on Dolphin's own models only. For a reply that fills a fixed
+   * JSON schema the thinking is mostly spent tokens: measured 2026-10-19 on the build that failed three
+   * times in prod, nemotron-3-ultra took 29-89 s and ~1,000 tokens with it, 16 s and 246 tokens without.
+   */
+  reasoning?: boolean;
 }): Promise<ChatResult> {
   const endpoint = options.endpoint;
   if (endpoint?.provider === "anthropic") return anthropicCompletion(options, endpoint);
@@ -401,6 +407,8 @@ async function chatCompletionOnce(options: {
     max_tokens: options.maxTokens ?? 4096,
     temperature: options.temperature ?? 0.2,
   };
+
+  if (options.reasoning === false && !endpoint) body.reasoning = { enabled: false };
 
   if (useFallbacks) {
     // OpenRouter's own fallback: when every provider for `model` is exhausted

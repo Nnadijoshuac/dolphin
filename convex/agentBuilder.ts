@@ -975,6 +975,9 @@ async function compileTurn(messages: ChatMessage[], ledger: KeyLedger): Promise<
       // 4,500 when replies began carrying trading rules: cut off twice on the first rule request
       // (2026-10-03), the reasoning having spent most of the budget before the JSON began.
       maxTokens: 12_000,
+      // Filling the draft schema needs no long thinking, and the thinking is what ran past the timeout
+      // (2026-10-19: three builds in prod failed at 168 s, every model in the chain timed out).
+      reasoning: false,
     });
     const reply = parseBuilderReply(result.content);
     if (reply) return { reply, model: result.model };
@@ -1007,6 +1010,7 @@ async function extractRules(text: string, ledger: KeyLedger): Promise<unknown[]>
     responseSchema: RULES_ONLY_SCHEMA,
     temperature: 0.1,
     maxTokens: 6_000,
+    reasoning: false,
   }).catch(() => null);
   if (!result) return [];
   const body = result.content.slice(result.content.indexOf("{"), result.content.lastIndexOf("}") + 1);

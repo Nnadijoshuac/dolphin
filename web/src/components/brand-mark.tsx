@@ -113,6 +113,8 @@ const TOKEN_LOGO_FILES: Record<string, string> = {
   FDUSD: "/tokens/fdusd.png",
   WBNB: "/tokens/wbnb.png",
   BTCB: "/tokens/btcb.png",
+  // A rule on BTCUSDT trades BTCB, Bitcoin on BNB Chain: the same coin, the same mark.
+  BTC: "/tokens/btcb.png",
   ETH: "/tokens/eth.png",
   CAKE: "/tokens/cake.png",
   XVS: "/tokens/xvs.png",

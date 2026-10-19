@@ -55,17 +55,8 @@ export function ValueArea({ points, start }: { points: { t: number; usd: number 
 }
 
 export function ResultBars({ results }: { results: number[] }) {
-  // Nothing closed yet: quiet placeholder bars, so the card keeps its shape without inventing results.
-  if (results.length === 0) {
-    const ghost = [3, 5, 2, 6, 4, 7, 3, 5, 4, 6].map((h, i) => ({ i, h }));
-    return (
-      <ResponsiveContainer height={72} width="100%">
-        <BarChart data={ghost} margin={{ top: 6, right: 4, bottom: 0, left: 4 }}>
-          <Bar dataKey="h" fill="rgba(255,255,255,0.06)" isAnimationActive={false} radius={[3, 3, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    );
-  }
+  // Nothing closed yet: said in words. Placeholder bars read as data (owner's rule: never a plausible fake).
+  if (results.length === 0) return <div className="flex h-[72px] items-center justify-center rounded-lg border border-dashed border-white/[0.07] text-[12px] text-[#8a8c85]">No closed trades yet - each one appears here, green or red.</div>;
   const data = results.map((pnl, i) => ({ i: i + 1, pnl }));
   return (
     <ResponsiveContainer height={72} width="100%">

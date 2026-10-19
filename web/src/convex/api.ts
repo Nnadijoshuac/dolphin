@@ -2005,6 +2005,8 @@ export type LiveCondition =
 export type LiveDeskRule = {
   id: string;
   name: string;
+  /** The rule's own market (2026-10-19: one run can watch several coins). Absent on an older backend. */
+  market?: string;
   timeframe: string;
   when: LiveCondition[];
   until: LiveCondition[];

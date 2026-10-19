@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { compact, readCondition, rsiSeries, useChainPulse, useMarketStream, useRuleCandles, type MarketStream, type WireEvent } from "@/app/live/desk-feeds";
-import { LiveBadge, Ticker, ago, dayOf, pct, price, usd, useSecond, type Candle } from "@/app/live/live-bits";
+import { LiveBadge, Ticker, ago, dayOf, pct, price, usd, useSecond, useTickers, type Candle } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
 import { ResultBars, ValueArea } from "@/app/live/stat-charts";
 import { TokenLogo } from "@/components/brand-mark";
@@ -67,7 +67,12 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
   const held = useWalletHoldings(addresses, "USD", false);
   const liveFigure = typeof held.headline === "object" ? held.headline.figure : usd(run.lastUsd);
   const liveUsd = typeof held.headline === "object" ? Number(held.headline.figure.replace(/[^0-9.]/g, "")) : run.lastUsd;
-  const market = useMarketStream(run.market);
+  // A run can watch several coins (The Dip: BNB, ETH, BTC). The watchlist picks which one the market panels show.
+  const coins = [...new Set(desk.map((rule) => rule.market ?? run.market).filter((m): m is string => Boolean(m)))];
+  const [picked, setPicked] = useState<string | null>(null);
+  const coin = picked && coins.includes(picked) ? picked : (coins[0] ?? run.market);
+  const coinRules = desk.filter((rule) => (rule.market ?? run.market) === coin);
+  const market = useMarketStream(coin);
   const chain = useChainPulse();
   const [detail, setDetail] = useState<Detail | null>(null);
   // The chart opens on the timeframe of the newest rule - the one its owner set last.
@@ -80,25 +85,25 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
     <div className={styles.page}>
       <Ticker />
       <div className={`${styles.desk} flex flex-col gap-2 p-2 xl:h-[max(calc(100dvh-69px-38px),940px)]`}>
-        <TopBar alive={alive} chain={chain.data ?? null} liveFigure={liveFigure} liveUsd={liveUsd} market={market} nextIn={nextIn} now={now} run={run} />
+        <TopBar alive={alive} chain={chain.data ?? null} coin={coin} liveFigure={liveFigure} liveUsd={liveUsd} market={market} nextIn={nextIn} now={now} run={run} />
         {!running ? <RunEnded run={run} /> : null}
 
         <div className="grid min-h-0 flex-1 gap-2 xl:grid-cols-[minmax(300px,22%)_minmax(0,1fr)_minmax(300px,21%)]">
           {/* LEFT: the agent's own desk - money, signal, risk, engine */}
           <div className="flex min-h-0 flex-col gap-2">
             <Treasury liveFigure={liveFigure} liveUsd={liveUsd} now={now} run={run} />
-            <Panel live meta={desk.length ? `${desk.length} rule${desk.length === 1 ? "" : "s"}` : undefined} title="Signal desk">
-              <div className="flex flex-col divide-y divide-white/5">
+            <Panel className="min-h-[200px] flex-1" live meta={coins.length > 1 ? "tap a coin to watch it" : "what it waits for"} title="Watchlist">
+              <div className="flex h-full flex-col gap-2 overflow-y-auto p-2">
                 {desk.length === 0 ? <p className={`p-3 text-xs ${styles.muted}`}>Syncing the agent&apos;s rules…</p> : null}
                 {desk.map((rule) => (
-                  <RuleSignal key={rule.id} market={run.market} rule={rule} />
-                ))}
-              </div>
-            </Panel>
-            <Panel className="min-h-[160px] flex-1" title="Risk desk">
-              <div className="flex h-full flex-col divide-y divide-white/5 overflow-y-auto">
-                {desk.map((rule) => (
-                  <RuleRisk key={rule.id} lastPrice={lastPrice} now={now} rule={rule} />
+                  <CoinCard
+                    key={rule.id}
+                    market={rule.market ?? run.market}
+                    now={now}
+                    onPick={() => setPicked(rule.market ?? run.market)}
+                    rule={rule}
+                    selected={(rule.market ?? run.market) === coin}
+                  />
                 ))}
               </div>
             </Panel>
@@ -106,7 +111,7 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
 
           {/* CENTRE: the market the agent trades, and its own words */}
           <div className="flex min-h-0 flex-col gap-2">
-            <ChartPanel desk={desk} frame={frame} lastPrice={lastPrice} onFrame={setFrame} run={run} />
+            <ChartPanel coin={coin} desk={coinRules} frame={frame} lastPrice={lastPrice} onFrame={setFrame} run={run} />
             <div className="grid min-h-0 gap-2 xl:h-[31%] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
               <DecisionLog onOpen={setDetail} run={run} />
               <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
@@ -211,7 +216,9 @@ function TopBar({
   now,
   alive,
   nextIn,
+  coin,
 }: {
+  coin: string | null;
   run: LiveRunDetail;
   market: MarketStream;
   chain: { block: number; gasGwei: number; at: number } | null;
@@ -223,7 +230,7 @@ function TopBar({
 }) {
   const t = market.ticker;
   const feedAge = market.lastMessageAt && now ? Math.max(0, now - market.lastMessageAt) : null;
-  const base = (run.market ?? "").replace("USDT", "");
+  const base = (coin ?? "").replace("USDT", "");
   return (
     <div className={`${styles.dpanel} flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 px-4 py-2.5`}>
       <div className="flex items-center gap-3">
@@ -238,7 +245,7 @@ function TopBar({
       <div className="flex items-center gap-3 border-l border-white/5 pl-6">
         <span className={styles.chip}>{base ? <TokenLogo size={18} symbol={base} /> : null}</span>
         <div>
-          <p className={`text-[11px] ${styles.muted}`}>{run.market?.replace("USDT", "/USDT")}</p>
+          <p className={`text-[11px] ${styles.muted}`}>{coin?.replace("USDT", "/USDT")}</p>
           <Flash className={`${styles.mono} text-[22px] font-semibold leading-none`} value={t?.last ?? null}>
             {t ? t.last.toFixed(2) : "—"}
           </Flash>
@@ -305,9 +312,13 @@ function Treasury({ run, liveFigure, liveUsd, now }: { run: LiveRunDetail; liveF
             {pct(run.startUsd, liveUsd)}
           </span>
         </div>
-        <div className="mt-1">
-          <ValueArea points={[...run.history, ...(now ? [{ t: now, usd: liveUsd }] : [])]} start={run.startUsd} />
-        </div>
+        {run.history.length >= 3 ? (
+          <div className="mt-1">
+            <ValueArea points={[...run.history, ...(now ? [{ t: now, usd: liveUsd }] : [])]} start={run.startUsd} />
+          </div>
+        ) : (
+          <p className={`mt-3 text-[11.5px] ${styles.muted}`}>The value curve draws itself as the wallet moves - read from the chain every 5 minutes.</p>
+        )}
         <div className={`mt-1 grid grid-cols-3 gap-2 text-[11px] ${styles.muted}`}>
           <span>
             Start<span className={`${styles.mono} block text-[13px] text-white`}>{usd(run.startUsd)}</span>
@@ -324,153 +335,108 @@ function Treasury({ run, liveFigure, liveUsd, now }: { run: LiveRunDetail; liveF
   );
 }
 
-/** What the rule is waiting for, and how far the market is from it - on the engine's own candles and math. */
-function RuleSignal({ rule, market }: { rule: LiveDeskRule; market: string | null }) {
+/**
+ * ONE COIN THE AGENT WATCHES (owner, 2026-10-19: "modern and wowy" - and the three Signal cards all showed BNB's
+ * RSI). Its live price and day, an RSI dial with the buy zone lit, how far it is from buying, and - while it
+ * holds - the trade's live result. Each card reads its OWN coin's candles.
+ */
+function CoinCard({ rule, market, selected, onPick, now }: { rule: LiveDeskRule; market: string | null; selected: boolean; onPick: () => void; now: number }) {
   const candles = useRuleCandles(market, rule.timeframe);
+  const tickers = useTickers();
+  const base = (market ?? "").replace("USDT", "");
+  const ticker = tickers.data?.find((t) => t.symbol === market?.replace("USDT", "/USDT"));
   const closes = candles.data?.closed.map((c) => c.c) ?? [];
-  const withForming = candles.data?.forming ? [...closes, candles.data.forming.c] : closes;
-  const holding = rule.position !== null;
-  const conditions = holding ? rule.until : rule.when;
-  const rsiCondition = conditions.find((c) => c.kind === "rsi");
-  const closedRsi = rsiCondition ? readCondition(rsiCondition, closes).value : null;
-  const formingRsi = rsiCondition ? readCondition(rsiCondition, withForming).value : null;
   const buyLine = rule.when.find((c) => c.kind === "rsi");
   const sellLine = rule.until.find((c) => c.kind === "rsi");
-  return (
-    <div className="px-3 py-2.5">
-      <div className="flex items-center justify-between gap-2 text-[12px]">
-        <span className="truncate font-medium text-[#e9e9e5]">{rule.name}</span>
-        <span className={`${styles.tf}`}>{rule.timeframe}</span>
-      </div>
-      <p className={`mt-0.5 text-[11px] ${styles.muted}`}>{holding ? "Holding - waiting to sell" : "Flat - waiting to buy"}</p>
-      {rsiCondition ? (
-        <>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className={`text-[11px] ${styles.muted}`}>RSI({rsiCondition.period ?? 14}) on closed candles</span>
-            <span className={`${styles.mono} text-[18px] font-semibold`}>{closedRsi === null ? "—" : closedRsi.toFixed(1)}</span>
-          </div>
-          <RsiGauge buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null} forming={formingRsi} sell={sellLine && sellLine.kind === "rsi" ? sellLine.value : null} value={closedRsi} />
-          <p className="mt-1.5 text-[11px] text-[#c9cbc3]">
-            {closedRsi === null
-              ? "Reading candles…"
-              : rsiCondition.kind === "rsi"
-                ? distanceWords(closedRsi, rsiCondition.op, rsiCondition.value, holding)
-                : null}
-          </p>
-        </>
-      ) : null}
-      <ul className="mt-2 flex flex-col gap-1">
-        {conditions
-          .filter((c) => c.kind !== "rsi")
-          .map((condition, index) => {
-            const read = readCondition(condition, closes);
-            return (
-              <li className="flex items-center justify-between text-[11px]" key={index}>
-                <span className={styles.muted}>{read.label}</span>
-                <span style={{ color: read.met === null ? "#8a8c85" : read.met ? UP : "#c9cbc3" }}>{read.met === null ? "engine checks" : read.met ? "met" : "not yet"}</span>
-              </li>
-            );
-          })}
-      </ul>
-    </div>
-  );
-}
-
-function distanceWords(value: number, op: "above" | "below", line: number, holding: boolean): string {
-  const gap = Math.abs(value - line).toFixed(1);
-  const met = op === "below" ? value < line : value > line;
-  if (met) return holding ? `Past its sell line (${line}). It sells on this candle's close.` : `Past its buy line (${line}). It buys on this candle's close.`;
-  return `${gap} points from its ${holding ? "sell" : "buy"} line at ${line}.`;
-}
-
-/** 0-100 with the buy and sell lines marked, the closed reading as a knob, the forming one as a ghost. */
-function RsiGauge({ value, forming, buy, sell }: { value: number | null; forming: number | null; buy: number | null; sell: number | null }) {
-  return (
-    <div className="relative mt-2 h-2.5 rounded-full bg-white/[0.06]">
-      {buy !== null ? <div className="absolute inset-y-0 left-0 rounded-l-full bg-[rgba(61,220,132,0.18)]" style={{ width: `${buy}%` }} /> : null}
-      {sell !== null ? <div className="absolute inset-y-0 right-0 rounded-r-full bg-[rgba(255,92,92,0.16)]" style={{ width: `${100 - sell}%` }} /> : null}
-      {buy !== null ? <div className="absolute -top-1 h-[18px] w-px bg-[#3ddc84]" style={{ left: `${buy}%` }} /> : null}
-      {sell !== null ? <div className="absolute -top-1 h-[18px] w-px bg-[#ff5c5c]" style={{ left: `${sell}%` }} /> : null}
-      {forming !== null ? <div className={`${styles.ghostKnob}`} style={{ left: `${Math.max(0, Math.min(100, forming))}%` }} /> : null}
-      {value !== null ? <div className={styles.gaugeKnob} style={{ left: `${Math.max(0, Math.min(100, value))}%` }} /> : null}
-    </div>
-  );
-}
-
-function RuleRisk({ rule, now, lastPrice }: { rule: LiveDeskRule; now: number; lastPrice: number | null }) {
+  const holding = rule.position !== null;
+  const rsi = buyLine ? readCondition(buyLine, closes).value : sellLine ? readCondition(sellLine, closes).value : null;
+  const livePrice = ticker?.price ?? candles.data?.forming?.c ?? null;
+  const pnl = rule.position && livePrice ? ((livePrice - rule.position.entryPrice) / rule.position.entryPrice) * 100 * (rule.position.side === "short" ? -1 : 1) : null;
   const cooldownLeft = rule.lastTradeAt && now ? rule.lastTradeAt + rule.cooldownMinutes * 60_000 - now : 0;
-  const position = rule.position;
-  const sign = position?.side === "short" ? -1 : 1;
-  const stop = position && rule.stopLossPct !== null ? position.entryPrice * (1 - (sign * rule.stopLossPct) / 100) : null;
-  const target = position && rule.takeProfitPct !== null ? position.entryPrice * (1 + (sign * rule.takeProfitPct) / 100) : null;
-  const pnl = position && lastPrice ? (((lastPrice - position.entryPrice) / position.entryPrice) * 100 * sign) : null;
+  const atLine = rsi !== null && buyLine && buyLine.kind === "rsi" && (buyLine.op === "below" ? rsi < buyLine.value : rsi > buyLine.value);
   return (
-    <div className="px-3 py-2.5 text-[12px]">
-      <div className="flex items-center justify-between">
-        <span className="truncate font-medium text-[#e9e9e5]">{rule.name}</span>
-        <span className={styles.tf}>{rule.timeframe}</span>
-      </div>
-      <div className={`mt-2 grid grid-cols-3 gap-2 text-[11px] ${styles.muted}`}>
-        <span>
-          Size<span className={`${styles.mono} block text-[13px] text-white`}>{usd(rule.sizeUsd)}</span>
-        </span>
-        <span>
-          Stop<span className={`${styles.mono} block text-[13px]`} style={{ color: DOWN }}>{rule.stopLossPct === null ? "none" : `-${rule.stopLossPct}%`}</span>
-        </span>
-        <span>
-          Target<span className={`${styles.mono} block text-[13px]`} style={{ color: UP }}>{rule.takeProfitPct === null ? "none" : `+${rule.takeProfitPct}%`}</span>
-        </span>
-      </div>
-      <div className="mt-2">
-        <div className={`flex justify-between text-[11px] ${styles.muted}`}>
-          <span>Trades today</span>
-          <span className={styles.mono}>
-            {rule.tradesToday}/{rule.maxTradesPerDay}
+    <button className={`${styles.coinCard} ${selected ? styles.coinCardOn : ""} ${holding ? styles.coinCardHolding : ""}`} onClick={onPick} type="button">
+      <div className="flex items-center gap-2.5">
+        <span className={styles.chip}>{base ? <TokenLogo size={18} symbol={base} /> : null}</span>
+        <div className="min-w-0 flex-1 text-left">
+          <p className="text-[13px] font-semibold leading-tight text-white">{base}</p>
+          <p className={`${styles.mono} text-[12px] leading-tight text-[#c9cbc3]`}>{livePrice ? price(livePrice) : "—"}</p>
+        </div>
+        {ticker ? (
+          <span
+            className={`${styles.mono} rounded-md px-1.5 py-0.5 text-[11px] font-semibold`}
+            style={{ color: ticker.change >= 0 ? UP : DOWN, background: ticker.change >= 0 ? "rgba(61,220,132,0.1)" : "rgba(255,92,92,0.1)" }}
+          >
+            {ticker.change >= 0 ? "+" : ""}
+            {ticker.change.toFixed(2)}%
           </span>
-        </div>
-        <div className="mt-1 flex gap-[3px]">
-          {Array.from({ length: Math.min(rule.maxTradesPerDay, 20) }, (_, i) => (
-            <span className="h-1.5 flex-1 rounded-sm" key={i} style={{ background: i < rule.tradesToday ? GOLD : "rgba(255,255,255,0.07)" }} />
-          ))}
+        ) : null}
+      </div>
+      <div className="mt-2.5 flex items-center gap-3">
+        <RsiDial buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null} sell={sellLine && sellLine.kind === "rsi" ? sellLine.value : null} value={rsi} />
+        <div className="min-w-0 flex-1 text-left">
+          {holding && rule.position ? (
+            <>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#f3c13a]">In a trade</p>
+              <p className={`${styles.mono} text-[18px] font-semibold leading-tight`} style={{ color: pnl === null ? undefined : pnl >= 0 ? UP : DOWN }}>
+                {pnl === null ? "—" : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%`}
+              </p>
+              <p className={`text-[11px] ${styles.muted}`}>
+                from {price(rule.position.entryPrice)} · exits +{rule.takeProfitPct ?? "—"}% / −{rule.stopLossPct ?? "—"}%
+              </p>
+            </>
+          ) : (
+            <>
+              <p className={`text-[11px] ${styles.muted}`}>RSI on {rule.timeframe} candles</p>
+              <p className="text-[12.5px] leading-snug text-[#e4e4df]">
+                {rsi === null || !buyLine || buyLine.kind !== "rsi"
+                  ? "Reading candles…"
+                  : atLine
+                    ? "At its buy line - buys on this candle's close"
+                    : `${Math.abs(rsi - buyLine.value).toFixed(1)} points from buying`}
+              </p>
+              <p className={`mt-0.5 text-[11px] ${styles.muted}`}>
+                {usd(rule.sizeUsd)} · +{rule.takeProfitPct ?? "—"}% / −{rule.stopLossPct ?? "—"}% · {rule.tradesToday}/{rule.maxTradesPerDay} today
+                {cooldownLeft > 0 ? ` · cooling ${Math.ceil(cooldownLeft / 60_000)}m` : ""}
+              </p>
+            </>
+          )}
         </div>
       </div>
-      <p className={`mt-2 text-[11px] ${styles.muted}`}>
-        {cooldownLeft > 0 ? `Cooling down: next entry allowed in ${Math.ceil(cooldownLeft / 60_000)}m` : `Cooldown ${rule.cooldownMinutes}m after each trade · ready`}
-      </p>
-      {position ? (
-        <div className={`${styles.panel2} mt-2 p-2`}>
-          <div className="flex justify-between text-[11px]">
-            <span className={styles.muted}>Open {position.side} from</span>
-            <span className={styles.mono}>{position.entryPrice.toFixed(2)}</span>
-          </div>
-          <div className="mt-1 flex justify-between text-[11px]">
-            <span className={styles.muted}>Live P&amp;L</span>
-            <span className={styles.mono} style={{ color: pnl === null ? undefined : pnl >= 0 ? UP : DOWN }}>
-              {pnl === null ? "—" : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%`}
-            </span>
-          </div>
-          {stop !== null && target !== null && lastPrice ? <StopTargetBar price={lastPrice} stop={stop} target={target} /> : null}
-        </div>
-      ) : null}
-    </div>
+    </button>
   );
 }
 
-/** Where the price sits between the stop and the target. */
-function StopTargetBar({ stop, target, price: p }: { stop: number; target: number; price: number }) {
-  const lo = Math.min(stop, target);
-  const hi = Math.max(stop, target);
-  const at = Math.max(0, Math.min(100, ((p - lo) / (hi - lo)) * 100));
+/** RSI as a dial: 0 to 100 on a 240° arc, the buy zone lit green, the sell zone red, the reading as a gold knob on the arc. */
+function RsiDial({ value, buy, sell }: { value: number | null; buy: number | null; sell: number | null }) {
+  const R = 32;
+  const C = 40;
+  const start = 150;
+  const sweep = 240;
+  const at = (v: number) => {
+    const a = ((start + (sweep * Math.max(0, Math.min(100, v))) / 100) * Math.PI) / 180;
+    return [C + R * Math.cos(a), C + R * Math.sin(a)] as const;
+  };
+  const arc = (from: number, to: number) => {
+    const [x1, y1] = at(from);
+    const [x2, y2] = at(to);
+    return `M ${x1} ${y1} A ${R} ${R} 0 ${((to - from) / 100) * sweep > 180 ? 1 : 0} 1 ${x2} ${y2}`;
+  };
+  const [nx, ny] = value === null ? [C, C] : at(value);
   return (
-    <div className="mt-2">
-      <div className="relative h-1.5 rounded-full" style={{ background: `linear-gradient(90deg, ${DOWN}55, rgba(255,255,255,0.08), ${UP}55)` }}>
-        <div className={styles.gaugeKnob} style={{ left: `${at}%` }} />
-      </div>
-      <div className={`mt-1 flex justify-between text-[10px] ${styles.muted} ${styles.mono}`}>
-        <span>stop {stop.toFixed(2)}</span>
-        <span>target {target.toFixed(2)}</span>
-      </div>
-    </div>
+    <svg className="shrink-0" height="74" viewBox="0 0 80 74" width="80">
+      <path d={arc(0, 100)} fill="none" stroke="rgba(255,255,255,0.16)" strokeLinecap="round" strokeWidth="6" />
+      {buy !== null ? <path d={arc(0, buy)} fill="none" stroke={UP} strokeLinecap="round" strokeOpacity="0.9" strokeWidth="6" /> : null}
+      {sell !== null ? <path d={arc(sell, 100)} fill="none" stroke={DOWN} strokeLinecap="round" strokeOpacity="0.75" strokeWidth="6" /> : null}
+      {/* The reading rides the arc as a gold knob, so the number in the middle stays clear. */}
+      {value !== null ? <circle className={styles.dialKnob} cx={nx} cy={ny} fill="#0e0f0e" r="4.5" stroke={GOLD} strokeWidth="2.5" /> : null}
+      <text fill="#ffffff" fontSize="18" fontWeight="700" textAnchor="middle" x={C} y={C + 6}>
+        {value === null ? "—" : value.toFixed(0)}
+      </text>
+      <text fill="#8a8c85" fontSize="9" textAnchor="middle" x={C} y={C + 26}>
+        RSI
+      </text>
+    </svg>
   );
 }
 
@@ -531,8 +497,8 @@ function useSize<T extends HTMLElement>() {
   return [setEl, size] as const;
 }
 
-function ChartPanel({ run, desk, frame, onFrame, lastPrice }: { run: LiveRunDetail; desk: LiveDeskRule[]; frame: string; onFrame: (tf: string) => void; lastPrice: number | null }) {
-  const data = useRuleCandles(run.market, frame);
+function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice }: { run: LiveRunDetail; coin: string | null; desk: LiveDeskRule[]; frame: string; onFrame: (tf: string) => void; lastPrice: number | null }) {
+  const data = useRuleCandles(coin, frame);
   const ruleFrames = new Set(desk.map((rule) => rule.timeframe));
   const frameRule = desk.find((rule) => rule.timeframe === frame) ?? null;
   // The forming candle follows the live price between refreshes, so the chart moves with every trade.
@@ -563,7 +529,7 @@ function ChartPanel({ run, desk, frame, onFrame, lastPrice }: { run: LiveRunDeta
         <span className="flex items-center gap-4">
           <span className="flex items-center gap-2">
             <span className={styles.blip} />
-            {run.market?.replace("USDT", "/USDT")}
+            {coin?.replace("USDT", "/USDT")}
           </span>
           {last ? (
             <span className={`${styles.mono} hidden gap-3 normal-case tracking-normal text-[#c9cbc3] lg:flex`}>
@@ -596,7 +562,7 @@ function ChartPanel({ run, desk, frame, onFrame, lastPrice }: { run: LiveRunDeta
           candles={candles}
           position={position && positionRule ? { entry: position.entryPrice, side: position.side, stopPct: positionRule.stopLossPct, targetPct: positionRule.takeProfitPct } : null}
           sell={sellLine && sellLine.kind === "rsi" ? sellLine.value : null}
-          trades={run.trades}
+          trades={run.trades.filter((trade) => trade.market === coin)}
         />
       </div>
     </section>
@@ -897,7 +863,7 @@ function Wire({ market, run, now }: { market: MarketStream; run: LiveRunDetail; 
     <Panel className="min-h-[150px] xl:h-[30%]" live meta="prints, walls, trades" title="Market wire">
       <div className="relative h-full">
         <div className="absolute inset-0 overflow-y-auto px-2 py-1">
-          {events.length === 0 ? <p className={`p-2 text-xs ${styles.muted}`}>Quiet so far. Large trades and walls show up here.</p> : null}
+          {events.length === 0 ? <div className={styles.empty}>Quiet so far. Trades over $25k, big resting orders and the agent&apos;s own trades land here.</div> : null}
           {events.map((event) => (
             <div className={`${styles.feedItem} border-b border-white/[0.04] py-1.5`} key={event.id}>
               <div className="flex items-center justify-between gap-2">

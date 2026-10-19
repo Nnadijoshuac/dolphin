@@ -310,6 +310,7 @@ export const get = query({
         return {
           id: rule.id,
           name: rule.name,
+          market: rule.market,
           timeframe: rule.timeframe,
           when: rule.when,
           until: rule.until,

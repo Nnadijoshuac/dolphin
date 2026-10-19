@@ -10,13 +10,14 @@ const loaderStyle = {
 } as CSSProperties;
 
 /**
- * `working`: the fin patrols while an agent works (the chat). `done`: the
- * dolphin leaps - used for plain page loads such as "Show more" (owner,
- * 2026-09-29: "the dolphin state of finished work, just the jumping").
+ * `done`: the dolphin leaps and dives back in - every loader, the chat's
+ * "Thinking…" included (owner, 2026-09-29: "just the jumping"; 2026-10-19:
+ * "change it to the one where the dolphin is diving"). `working`: the fin
+ * patrols on the surface, kept for a caller that wants it.
  */
 export function DolphinLoader({
   label,
-  state = "working",
+  state = "done",
   className = "",
   showLabel = true,
 }: {

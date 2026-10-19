@@ -70,12 +70,13 @@ const SECTIONS: DocsSection[] = [
               <tr>
                 <td>Rules</td>
                 <td>
-                  <code>check_rule</code> <code>backtest_rule</code>
+                  <code>check_rule</code> <code>backtest_rule</code> <code>builder_guide</code>
                 </td>
                 <td>
                   Check a trading rule in Dolphin&rsquo;s rule language, then replay it over up to 1,500 past candles with
                   the engine Dolphin&rsquo;s agents trade with - fees, stops and leverage included. A rule can ask Jev to
-                  approve each buy; backtests show every buy Jev would be asked about.
+                  approve each buy; backtests show every buy Jev would be asked about. <code>builder_guide</code> tells an assistant
+                  what Dolphin&rsquo;s build chat can and cannot build, so the prompt it writes gets exactly that.
                 </td>
               </tr>
               <tr>

@@ -18,11 +18,11 @@ test("one address serves every group unless the URL names some", async () => {
   assert.deepEqual(groupsFrom("nonsense"), GROUP_NAMES);
   assert.deepEqual(groupsFrom("market, RULES,market"), ["market", "rules"]);
   const all = await names();
-  for (const tool of ["search_agents", "get_agent", "call_agent", "list_categories", "get_reviews", "get_price", "get_candles", "get_indicators", "check_rule", "backtest_rule", "get_escrow_job"]) {
+  for (const tool of ["search_agents", "get_agent", "call_agent", "list_categories", "get_reviews", "get_price", "get_candles", "get_indicators", "check_rule", "backtest_rule", "builder_guide", "get_escrow_job"]) {
     assert.ok(all.includes(tool), tool);
   }
   assert.equal(new Set(all).size, all.length, "no tool name appears twice");
-  assert.deepEqual(await names(["rules"]), ["check_rule", "backtest_rule"]);
+  assert.deepEqual(await names(["rules"]), ["check_rule", "backtest_rule", "builder_guide"]);
 });
 
 test("every tool says it only reads, except call_agent which runs a publisher's read tool", () => {

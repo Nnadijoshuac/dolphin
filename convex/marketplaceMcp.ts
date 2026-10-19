@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { internalMutation, type ActionCtx } from "./_generated/server";
 import { MarketDataError } from "./lib/binanceMarket";
+import { BUILDER_GUIDE, BUILDER_GUIDE_TOOL } from "./lib/builderGuide";
 import { callMcpTool, listMcpTools, MCP_PROTOCOL_VERSION, McpError, openMcpSession } from "./lib/mcpClient";
 import { backtestRule, checkRule, getCandles, getEscrowJob, getIndicators, getPrice, MARKET_TOOLS, PROOF_TOOLS, RULE_TOOLS, text } from "./lib/mcpMarket";
 import { readExecutionCapability } from "./lib/toolCapability";
@@ -22,7 +23,7 @@ import { TEST_COINS, TEST_ENTRIES, TEST_STOPS, TEST_TARGETS } from "./strategyTe
  *
  *   marketplace  search_agents, get_agent, call_agent, list_categories, get_reviews
  *   market       get_price, get_candles, get_indicators          (lib/mcpMarket.ts)
- *   rules        check_rule, backtest_rule                         (lib/mcpMarket.ts)
+ *   rules        check_rule, backtest_rule (lib/mcpMarket.ts), builder_guide (lib/builderGuide.ts)
  *   proof        get_escrow_job                                    (lib/mcpMarket.ts)
  *   traders      test_strategy, best_strategies, list_traders, get_trader  (2026-10-17: what /test
  *                and /trade show. The owner's standing rule: every feature that ships lands here too.)
@@ -207,7 +208,7 @@ type ToolDefinition = { name: string; title: string; description: string; inputS
 export const GROUPS: Record<Group, readonly ToolDefinition[]> = {
   marketplace: MARKETPLACE_TOOLS,
   market: MARKET_TOOLS,
-  rules: RULE_TOOLS,
+  rules: [...RULE_TOOLS, BUILDER_GUIDE_TOOL],
   proof: PROOF_TOOLS,
   traders: TRADER_TOOLS,
 };
@@ -312,7 +313,7 @@ export async function handleMarketplaceMcp(ctx: ActionCtx, message: RpcMessage, 
             : "",
           groups.includes("market") ? "Market: get_price, get_candles and get_indicators read Binance pairs like BNBUSDT, on closed candles." : "",
           groups.includes("rules")
-            ? "Rules: write a rule in Dolphin's rule language, check_rule it, then backtest_rule it on Binance history with the live engine. A rule that tests well can be added to a Dolphin agent in its build chat."
+            ? "Rules: write a rule in Dolphin's rule language, check_rule it, then backtest_rule it on Binance history with the live engine. A rule that tests well can be added to a Dolphin agent in its build chat. Before writing ANY prompt for Dolphin's build chat, call builder_guide: it lists what the builder can and cannot build, and a prompt that asks for anything outside it will not get it."
             : "",
           groups.includes("proof") ? "Proof: get_escrow_job reads a hire's escrow job straight from BNB Chain." : "",
           groups.includes("traders")
@@ -359,6 +360,8 @@ export async function handleMarketplaceMcp(ctx: ActionCtx, message: RpcMessage, 
             return reply(checkRule(args));
           case "backtest_rule":
             return reply(await backtestRule(args));
+          case "builder_guide":
+            return reply(text(BUILDER_GUIDE));
           case "get_escrow_job":
             return reply(await getEscrowJob(args));
           case "test_strategy":

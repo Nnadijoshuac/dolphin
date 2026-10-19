@@ -59,6 +59,7 @@ import type * as lib_binanceMarket from "../lib/binanceMarket.js";
 import type * as lib_binanceTrade from "../lib/binanceTrade.js";
 import type * as lib_bscClient from "../lib/bscClient.js";
 import type * as lib_builderBlocks from "../lib/builderBlocks.js";
+import type * as lib_builderGuide from "../lib/builderGuide.js";
 import type * as lib_categorize from "../lib/categorize.js";
 import type * as lib_dataSources from "../lib/dataSources.js";
 import type * as lib_decisionTools from "../lib/decisionTools.js";
@@ -196,6 +197,7 @@ declare const fullApi: ApiFromModules<{
   "lib/binanceTrade": typeof lib_binanceTrade;
   "lib/bscClient": typeof lib_bscClient;
   "lib/builderBlocks": typeof lib_builderBlocks;
+  "lib/builderGuide": typeof lib_builderGuide;
   "lib/categorize": typeof lib_categorize;
   "lib/dataSources": typeof lib_dataSources;
   "lib/decisionTools": typeof lib_decisionTools;

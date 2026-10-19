@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { SITE_URL } from "@/constants/site";
-import { fetchAgentIdsForSitemap, fetchCategories } from "@/server/convex";
+import { fetchAgentIdsForSitemap, fetchCategories, fetchLiveRuns, fetchSetups, fetchTraders } from "@/server/convex";
 
 /**
  * The sitemap. There was none.
@@ -40,27 +40,37 @@ import { fetchAgentIdsForSitemap, fetchCategories } from "@/server/convex";
 export const revalidate = 3_600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
 
+  /*
+   * Every page a person could land on from a search (2026-10-19). This listed three; /live, /trade, /test,
+   * /agents, the docs and the whitepaper were missing, and so was every trader, live run and setup page.
+   * Priority is relative and honest: the pages that say what Dolphin is, then the hubs, then the reference.
+   */
+  // No lastModified on a static page: claiming each changed when the sitemap was built is the lie noted above.
+  const page = (path: string, priority: number, changeFrequency: "daily" | "weekly" | "monthly" = "weekly") => ({
+    url: `${SITE_URL}${path}`,
+    changeFrequency,
+    priority,
+  });
   const staticRoutes: MetadataRoute.Sitemap = [
-    {
-      url: `${SITE_URL}/`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 1,
-    },
-    {
-      url: `${SITE_URL}/search`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.8,
-    },
-    {
-      url: `${SITE_URL}/set-and-quest`,
-      lastModified: now,
-      changeFrequency: "daily",
-      priority: 0.9,
-    },
+    page("/", 1, "daily"),
+    page("/agents", 0.9, "daily"),
+    page("/set-and-quest", 0.9, "daily"),
+    page("/trade", 0.8, "daily"),
+    page("/live", 0.8, "daily"),
+    page("/test", 0.8),
+    page("/search", 0.8, "daily"),
+    page("/setups", 0.7, "daily"),
+    page("/dolphin", 0.7),
+    page("/docs", 0.7),
+    page("/docs/use", 0.6),
+    page("/docs/build", 0.6),
+    page("/docs/traders", 0.6),
+    page("/docs/mcp", 0.6),
+    page("/docs/payments", 0.5),
+    page("/docs/api", 0.5),
+    page("/whitepaper", 0.6, "monthly"),
+    ...["terms", "privacy", "risk", "disclaimer", "security", "conflicts"].map((name) => page(`/policies/${name}`, 0.2, "monthly")),
   ];
 
   /*
@@ -68,9 +78,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
    * sitemap containing only the two static routes is a smaller sitemap; a
    * sitemap route that throws is a 500 served to every crawler that asks.
    */
-  const [categories, agents] = await Promise.all([
+  const [categories, agents, traders, runs, setups] = await Promise.all([
     fetchCategories(),
     fetchAgentIdsForSitemap(),
+    fetchTraders(),
+    fetchLiveRuns(),
+    fetchSetups(),
   ]);
 
   const categoryRoutes: MetadataRoute.Sitemap = categories
@@ -79,7 +92,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .filter((category) => category.count > 0)
     .map((category) => ({
       url: `${SITE_URL}/search?category=${encodeURIComponent(category.slug)}`,
-      lastModified: now,
       changeFrequency: "daily" as const,
       priority: 0.7,
     }));
@@ -96,5 +108,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticRoutes, ...categoryRoutes, ...agentRoutes];
+  const traderRoutes: MetadataRoute.Sitemap = traders.map((trader) => ({
+    url: `${SITE_URL}/trade/${encodeURIComponent(trader.id)}`,
+    changeFrequency: "daily" as const,
+    priority: 0.7,
+  }));
+  // A running run changes every few minutes; a finished one never again.
+  const runRoutes: MetadataRoute.Sitemap = runs.map((run) => ({
+    url: `${SITE_URL}/live/${encodeURIComponent(run.slug)}`,
+    lastModified: new Date(run.endedAt ?? run.lastValuedAt),
+    changeFrequency: run.status === "running" ? ("hourly" as const) : ("never" as const),
+    priority: run.status === "running" ? 0.7 : 0.4,
+  }));
+  const setupRoutes: MetadataRoute.Sitemap = setups.map((setup) => ({
+    url: `${SITE_URL}/setups/${encodeURIComponent(setup.id)}`,
+    lastModified: new Date(setup.listedAt),
+    changeFrequency: "weekly" as const,
+    priority: 0.5,
+  }));
+
+  return [...staticRoutes, ...categoryRoutes, ...traderRoutes, ...runRoutes, ...setupRoutes, ...agentRoutes];
 }

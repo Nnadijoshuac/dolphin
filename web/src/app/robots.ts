@@ -23,12 +23,36 @@ export default function robots(): MetadataRoute.Robots {
     return { rules: [{ userAgent: "*", disallow: "/" }] };
   }
 
+  const disallow = ["/my-agents", "/wallet", "/onboarding", "/account", "/admin", "/manage"];
   return {
     rules: [
+      { userAgent: "*", allow: "/", disallow },
+      /*
+       * AI SEARCH AND ANSWER ENGINES, BY NAME (2026-10-19). "*" already lets them in; naming them leaves
+       * no doubt for a crawler that only obeys a group addressed to it, and states the choice: Dolphin
+       * wants to be what ChatGPT, Claude, Perplexity, Gemini and Copilot answer with when someone asks
+       * for an AI agent marketplace. The training crawlers are allowed for the same reason.
+       */
       {
-        userAgent: "*",
+        userAgent: [
+          "OAI-SearchBot",
+          "ChatGPT-User",
+          "GPTBot",
+          "Claude-SearchBot",
+          "Claude-User",
+          "ClaudeBot",
+          "PerplexityBot",
+          "Perplexity-User",
+          "Google-Extended",
+          "Applebot-Extended",
+          "Bingbot",
+          "DuckAssistBot",
+          "Amazonbot",
+          "meta-externalagent",
+          "CCBot",
+        ],
         allow: "/",
-        disallow: ["/my-agents", "/wallet", "/onboarding"],
+        disallow,
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

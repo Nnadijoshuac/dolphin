@@ -127,6 +127,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html
       className={`${geistSans.variable} ${geistMono.variable} ${doto.variable} ${instrumentSerif.variable} h-full antialiased`}
       lang="en"
+      // The /live pages set data-theme="dark" on <html> before React loads (app/live/layout.tsx); only that attribute differs.
+      suppressHydrationWarning
     >
       <body className="min-h-screen bg-canvas text-ink">
         <AppProviders>

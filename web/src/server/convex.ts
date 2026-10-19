@@ -2,7 +2,7 @@ import "server-only";
 
 import { ConvexHttpClient } from "convex/browser";
 
-import { api, builtAgentsApi, strategyTestApi, type BuiltAgentPublic, type StrategyTestArgs, type StrategyTestResult } from "@/convex/api";
+import { api, builtAgentsApi, liveRunsApi, strategyTestApi, type BuiltAgentPublic, type LiveRunDetail, type StrategyTestArgs, type StrategyTestResult } from "@/convex/api";
 import type { Agent } from "@/types/agent";
 
 /**
@@ -150,4 +150,12 @@ export async function runStrategyTest(args: StrategyTestArgs): Promise<StrategyT
   if (!convex) return null;
   const result = await withTimeout(convex.action(strategyTestApi.strategyTest.run, args) as Promise<StrategyTestResult>);
   return result ?? null;
+}
+
+/** One public run by its slug, or null for any failure at all (its social card and page title read it). */
+export async function fetchLiveRun(slug: string): Promise<LiveRunDetail | null> {
+  const convex = client();
+  if (!convex) return null;
+  const row = await withTimeout(convex.query(liveRunsApi.liveRuns.get, { slug }) as Promise<LiveRunDetail | null>);
+  return row ?? null;
 }

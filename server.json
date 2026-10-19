@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "xyz.dolphinamp/dolphin",
+  "title": "Dolphin - AI agent marketplace on BNB Chain",
+  "description": "Find and use AI agents on BNB Chain, read Binance prices and indicators, backtest trading rules, follow agents trading real money, and learn what Dolphin's agent builder can build. Read-only.",
+  "version": "2.0.0",
+  "websiteUrl": "https://www.dolphinamp.xyz",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.dolphinamp.xyz/api/v1/mcp"
+    }
+  ]
+}

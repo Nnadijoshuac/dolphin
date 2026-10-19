@@ -3,11 +3,13 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 
 import { compact, readCondition, rsiSeries, useChainPulse, useMarketStream, useRuleCandles, type MarketStream, type WireEvent } from "@/app/live/desk-feeds";
 import { LiveBadge, Ticker, ago, dayOf, pct, price, usd, useSecond, useTickers, type Candle } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
 import { RsiDial, RsiTrack } from "@/app/live/rsi-dial";
+import { TChange } from "@/app/live/tcard";
 import { ResultBars, ValueArea } from "@/app/live/stat-charts";
 import { TokenLogo } from "@/components/brand-mark";
 import { RollingFigure } from "@/components/rolling-figure";
@@ -228,7 +230,6 @@ function MobileRunView({
    * Type: tDisplay / tTitle / tValue / tBody / tLabel / tCaption only.
    */
   const running = run.status === "running";
-  const up = liveUsd >= run.startUsd;
   const t = market.ticker;
   const [tab, setTab] = useState<"agent" | "position" | "trades" | "book" | "tape">("agent");
   const rule = coinRules[0] ?? desk[0] ?? null;
@@ -259,10 +260,10 @@ function MobileRunView({
           <p className={styles.tValue}>
             <RollingFigure value={liveFigure} />
           </p>
-          <p className={styles.tCaption} style={{ color: up ? UP : DOWN }}>
-            {pct(run.startUsd, liveUsd)}
-          </p>
+          <TChange value={run.startUsd > 0 ? ((liveUsd - run.startUsd) / run.startUsd) * 100 : null} />
         </div>
+        {/* Share: small, where the account is */}
+        <ShareButton change={pct(run.startUsd, liveUsd)} icon liveFigure={liveFigure} run={run} />
       </header>
       {!running ? (
         <div className="px-4 pt-3">
@@ -290,8 +291,9 @@ function MobileRunView({
             <Flash className={styles.tDisplay} value={t?.last ?? null}>
               {t ? price(t.last) : "—"}
             </Flash>
-            <p className={`${styles.tBody} mt-1`} style={{ color: t ? (t.changePct >= 0 ? UP : DOWN) : undefined }}>
-              {t ? `${t.changePct >= 0 ? "+" : ""}${t.changePct.toFixed(2)}% today` : "—"}
+            <p className="mt-1.5 flex items-center gap-1.5">
+              <TChange value={t?.changePct ?? null} />
+              <span className={styles.tCaption}>today</span>
             </p>
           </div>
           <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-right">
@@ -430,11 +432,10 @@ function MobileRunView({
       )}
 
       {/* where an app pins Buy / Sell */}
-      <div className={styles.appActions}>
+      <div className={`${styles.appActions} !grid-cols-1`}>
         <Link className={`${styles.appPrimary} no-underline`} href="/dolphin?mode=build&new=1">
-          Build one like this
+          Build an agent like this
         </Link>
-        <ShareButton change={pct(run.startUsd, liveUsd)} className={styles.appSecondary} liveFigure={liveFigure} run={run} />
       </div>
     </div>
   );
@@ -508,14 +509,23 @@ function PositionBlock({ rule }: { rule: LiveDeskRule }) {
  * to X, Reddit, Telegram or WhatsApp, or to copy it. Calm and one line, the way the owner posts on X: what
  * it is, the real number, and where to check it.
  */
-function ShareButton({ run, liveFigure, change, className }: { run: LiveRunDetail; liveFigure: string; change: string; className?: string }) {
+function ShareButton({ run, liveFigure, change, className, icon }: { run: LiveRunDetail; liveFigure: string; change: string; className?: string; icon?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button className={className ?? styles.watchButton} onClick={() => setOpen(true)} type="button">
-        Share
-      </button>
-      {open ? <ShareSheet change={change} liveFigure={liveFigure} onClose={() => setOpen(false)} run={run} /> : null}
+      {icon ? (
+        <button aria-label="Share this run" className={styles.shareIcon} onClick={() => setOpen(true)} type="button">
+          <svg aria-hidden className="size-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13" />
+          </svg>
+        </button>
+      ) : (
+        <button className={className ?? styles.watchButton} onClick={() => setOpen(true)} type="button">
+          Share
+        </button>
+      )}
+      {/* At the document's top level: a blurred bar is a containing block for fixed children, and trapped the sheet inside it. */}
+      {open ? createPortal(<ShareSheet change={change} liveFigure={liveFigure} onClose={() => setOpen(false)} run={run} />, document.body) : null}
     </>
   );
 }
@@ -531,11 +541,13 @@ function ShareSheet({ run, liveFigure, change, onClose }: { run: LiveRunDetail; 
     : `An AI agent traded real money in public. ${run.name} finished at ${liveFigure} (${change}) on ${coinWords}. Every trade is on BNB Chain.`;
   const redditTitle = `${run.name}: an AI agent trading ${liveFigure} of real money live on ${coinWords} - every trade verifiable on BNB Chain`;
   const enc = encodeURIComponent;
+  // Public social platforms only (owner, 2026-10-19: "remove WhatsApp - what we need is social media, public").
   const targets = [
     { name: "X", href: `https://x.com/intent/post?text=${enc(post)}&url=${enc(url)}`, mark: "𝕏" },
     { name: "Reddit", href: `https://www.reddit.com/submit?url=${enc(url)}&title=${enc(redditTitle)}`, mark: "r/" },
-    { name: "Telegram", href: `https://t.me/share/url?url=${enc(url)}&text=${enc(post)}`, mark: "✈" },
-    { name: "WhatsApp", href: `https://wa.me/?text=${enc(`${post} ${url}`)}`, mark: "◔" },
+    { name: "Threads", href: `https://www.threads.net/intent/post?text=${enc(`${post} ${url}`)}`, mark: "@" },
+    { name: "LinkedIn", href: `https://www.linkedin.com/sharing/share-offsite/?url=${enc(url)}`, mark: "in" },
+    { name: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${enc(url)}`, mark: "f" },
   ];
   const copy = async (what: "post" | "link") => {
     try {
@@ -561,7 +573,7 @@ function ShareSheet({ run, liveFigure, change, onClose }: { run: LiveRunDetail; 
           {post} <span className="text-[#f3c13a]">{url.replace("https://", "")}</span>
         </p>
         <p className={`${styles.tCaption} mt-1 text-right`}>{post.length + 24} / 280 on X</p>
-        <div className="mt-4 grid grid-cols-4 gap-2">
+        <div className="mt-4 grid grid-cols-5 gap-2">
           {targets.map((target) => (
             <a className={styles.shareTarget} href={target.href} key={target.name} rel="noreferrer" target="_blank">
               <span className={styles.shareMark}>{target.mark}</span>
@@ -718,7 +730,7 @@ function TopBar({
           </p>
         </div>
         <Kv label="Since start" tone={liveUsd >= run.startUsd ? "up" : "down"} value={pct(run.startUsd, liveUsd)} />
-        <ShareButton change={pct(run.startUsd, liveUsd)} className={styles.deskShare} liveFigure={liveFigure} run={run} />
+        <ShareButton change={pct(run.startUsd, liveUsd)} icon liveFigure={liveFigure} run={run} />
         <div className="hidden flex-col gap-1 border-l border-white/5 pl-5 2xl:flex">
           <Status label="Binance feed" ok={feedAge !== null && feedAge < 5000} value={feedAge === null ? "connecting" : `${(feedAge / 1000).toFixed(1)}s`} />
           <Status label="BNB Chain" ok={Boolean(chain && now - chain.at < 15_000)} value={chain ? `#${chain.block.toLocaleString("en-US")}` : "reading"} />
@@ -919,7 +931,7 @@ function useSize<T extends HTMLElement>() {
   return [setEl, size] as const;
 }
 
-function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice, flat }: { run: LiveRunDetail; coin: string | null; desk: LiveDeskRule[]; frame: string; onFrame: (tf: string) => void; lastPrice: number | null; flat?: boolean }) {
+function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice, flat, tabs = true }: { run: LiveRunDetail; coin: string | null; desk: LiveDeskRule[]; frame: string; onFrame: (tf: string) => void; lastPrice: number | null; flat?: boolean; tabs?: boolean }) {
   const data = useRuleCandles(coin, frame);
   const ruleFrames = new Set(desk.map((rule) => rule.timeframe));
   const frameRule = desk.find((rule) => rule.timeframe === frame) ?? null;
@@ -958,6 +970,7 @@ function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice, flat }: { run:
   if (flat) {
     return (
       <section className="flex h-full flex-col">
+        {tabs ? (
         <div className={styles.tfTabs}>
           {TIMEFRAMES.map((tf) => (
             <button className={`${styles.tfTab} ${tf === frame ? styles.tfTabOn : ""}`} key={tf} onClick={() => onFrame(tf)} type="button">
@@ -966,6 +979,7 @@ function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice, flat }: { run:
             </button>
           ))}
         </div>
+        ) : null}
         <div className="relative min-h-0 flex-1">{chart}</div>
       </section>
     );

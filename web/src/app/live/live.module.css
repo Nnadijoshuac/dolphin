@@ -271,5 +271,12 @@
   font-size: 14px; line-height: 1.45; color: #e4e4df; }
 .shareTarget { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; border-radius: 12px; text-decoration: none;
   background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); }
-.shareMark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; font-size: 16px; font-weight: 700; color: #0b0c0a; background: var(--lime); }
+.shareMark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; font-size: 16px; font-weight: 700; color: #0b0c0a; background: #f3c13a; }
 .deskShare { padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #0b0c0a; background: var(--lime); }
+
+/* numbers like the template (shadcn-fintech, MIT): bold sans with tabular figures - overrides the mono above */
+.tDisplay { font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif; font-size: 32px; font-weight: 700; }
+.tValue { font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif; font-weight: 600; }
+.shareIcon { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; color: #d6d6d2;
+  background: #262626; border: 1px solid rgba(255, 255, 255, 0.08); transition: color 150ms, background 150ms; }
+.shareIcon:hover { color: #fff; background: #303030; }

@@ -50,3 +50,27 @@ export function RsiDial({ value, buy, sell, size = 80 }: { value: number | null;
     </svg>
   );
 }
+
+/**
+ * RSI on a straight track, for a trading app's rows and its signal strip: 0 to 100, the buy zone lit, and the
+ * Dolphin riding to the reading. Where an exchange draws your order line, this draws what the agent waits for.
+ */
+export function RsiTrack({ value, buy, height = 22 }: { value: number | null; buy: number | null; height?: number }) {
+  const at = value === null ? null : Math.max(0, Math.min(100, value));
+  return (
+    <div className="relative w-full" style={{ height }}>
+      <div className="absolute inset-x-0 top-1/2 h-[4px] -translate-y-1/2 rounded-full bg-white/[0.10]" />
+      {buy !== null ? <div className="absolute left-0 top-1/2 h-[4px] -translate-y-1/2 rounded-full" style={{ width: `${buy}%`, background: UP }} /> : null}
+      {buy !== null ? <div className="absolute top-1/2 h-[10px] w-px -translate-y-1/2 bg-[#3ddc84]" style={{ left: `${buy}%` }} /> : null}
+      {at !== null ? (
+        <span
+          className={`${styles.trackDolphin} absolute top-1/2 grid -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full`}
+          style={{ left: `${at}%`, width: height, height, background: GOLD }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- a 14px mark inside a dot, not content */}
+          <img alt="" height={height - 8} src="/dolphin-logo.png" width={height - 8} />
+        </span>
+      ) : null}
+    </div>
+  );
+}

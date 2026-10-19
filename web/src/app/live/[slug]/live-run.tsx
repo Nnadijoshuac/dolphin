@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { compact, readCondition, rsiSeries, useChainPulse, useMarketStream, useRuleCandles, type MarketStream, type WireEvent } from "@/app/live/desk-feeds";
 import { LiveBadge, Ticker, ago, dayOf, pct, price, usd, useSecond, useTickers, type Candle } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
-import { RsiDial } from "@/app/live/rsi-dial";
+import { RsiDial, RsiTrack } from "@/app/live/rsi-dial";
 import { ResultBars, ValueArea } from "@/app/live/stat-charts";
 import { TokenLogo } from "@/components/brand-mark";
 import { RollingFigure } from "@/components/rolling-figure";
@@ -220,179 +220,221 @@ function MobileRunView({
   onOpen: (detail: Detail) => void;
 }) {
   /*
-   * ONE TYPE SCALE (owner, 2026-10-19: "strict font hierarchy... things in boxes that don't need boxes,
-   * things nested that don't need nesting"). Six roles, nothing else on the phone:
-   *   tDisplay 40 the wallet, once · tTitle 22 the agent · tValue 16 numbers · tBody 14 sentences ·
-   *   tLabel 11 caps section and stat names · tCaption 12 secondary lines.
-   * Boxes only where something is tapped or framed: the chart, the coin tiles, the market card.
+   * A TRADING APP, FOR AN AGENT (owner, 2026-10-19: "make it like a real trading app but for agentic
+   * trading"). Built the way exchange apps build a pair on a phone - flat, edge to edge: the account on top,
+   * the pair and its price, the chart full-bleed, one row of underlined tabs, and actions pinned at the
+   * bottom. The account is the AGENT's; where an app pins Buy / Sell, nobody here places orders - the agent
+   * does - so the bar holds what a viewer can do: build one like it, or pass it on.
+   * Type: tDisplay / tTitle / tValue / tBody / tLabel / tCaption only.
    */
   const running = run.status === "running";
   const up = liveUsd >= run.startUsd;
-  const best = Math.max(liveUsd, ...run.history.map((point) => point.usd));
-  const low = Math.min(liveUsd, ...run.history.map((point) => point.usd));
-  const tickers = useTickers();
-  const [tab, setTab] = useState<"book" | "trades" | "wire">("book");
-  const rate = run.closedCount ? `${Math.round((run.winCount / run.closedCount) * 100)}%` : "—";
+  const t = market.ticker;
+  const [tab, setTab] = useState<"agent" | "position" | "trades" | "book" | "tape">("agent");
+  const rule = coinRules[0] ?? desk[0] ?? null;
+  const candles = useRuleCandles(coin, rule?.timeframe ?? null);
+  const buyLine = rule?.when.find((c) => c.kind === "rsi") ?? null;
+  const rsi = buyLine ? readCondition(buyLine, candles.data?.closed.map((c) => c.c) ?? []).value : null;
+  const holding = desk.find((r) => r.position) ?? null;
 
   return (
-    <div className={`${styles.desk} flex flex-col gap-7 px-4 pb-28 pt-5`}>
-      {/* who, and the money */}
-      <section>
-        <div className="flex items-center gap-2">
-          <Link className={`${styles.tCaption} no-underline`} href="/live">
-            ← Live
-          </Link>
-          <LiveBadge running={running} />
-          <span className={styles.tCaption}>Day {now ? dayOf(run.startedAt, now) : 1}</span>
+    <div className="pb-28">
+      {/* the account: the agent's */}
+      <header className={styles.appTopBar}>
+        <Link aria-label="All live runs" className="-ml-1 grid size-8 place-items-center rounded-full text-[18px] text-white no-underline" href="/live">
+          ←
+        </Link>
+        <span className={styles.appAvatar}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- the brand mark in an avatar dot */}
+          <img alt="" height={20} src="/dolphin-logo.png" width={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className={`${styles.tBody} truncate !font-semibold !text-white`}>{run.name}</p>
+          <p className={`${styles.tCaption} flex items-center gap-1.5`}>
+            {running ? <span className={styles.blip} /> : null}
+            {running ? `Live · day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "lost" ? "Ran out" : "Ended"}
+          </p>
         </div>
-        <h1 className={`${styles.tTitle} mt-4`}>{run.name}</h1>
-        <div className="mt-2 flex items-baseline gap-3">
-          <span className={styles.tDisplay}>
+        <div className="text-right">
+          <p className={styles.tValue}>
             <RollingFigure value={liveFigure} />
-          </span>
-          <span className={`${styles.tValue} !text-[14px]`} style={{ color: up ? UP : DOWN }}>
+          </p>
+          <p className={styles.tCaption} style={{ color: up ? UP : DOWN }}>
             {pct(run.startUsd, liveUsd)}
-          </span>
+          </p>
         </div>
-        <p className={`${styles.tCaption} mt-1`}>Real money on BNB Chain</p>
-        {/* the numbers: one row, no boxes */}
-        <dl className={`${styles.statRow} mt-5`}>
-          <MobileStat label="Start" value={usd(run.startUsd)} />
-          <MobileStat label="Best" tone="gold" value={usd(best)} />
-          <MobileStat label="Low" value={usd(low)} />
-          <MobileStat label="Won" value={rate} />
-        </dl>
-      </section>
-      {!running ? <RunEnded run={run} /> : null}
+      </header>
+      {!running ? (
+        <div className="px-4 pt-3">
+          <RunEnded run={run} />
+        </div>
+      ) : null}
 
-      {/* the market: which coin, then its chart */}
-      <section className="flex flex-col gap-3">
+      {/* the pair */}
+      <section className="px-4 pt-4">
         {coins.length > 1 ? (
-          // Up to three share the width evenly; more than that scroll sideways.
-          <div className={coins.length <= 3 ? "grid grid-cols-3 gap-2" : `${styles.mobileChips} -mx-4 flex gap-2 overflow-x-auto px-4`}>
-            {coins.map((m) => {
-              const t = tickers.data?.find((row) => row.symbol === m.replace("USDT", "/USDT"));
-              const on = m === coin;
+          <div className="flex gap-1.5">
+            {coins.map((m) => (
+              <button className={`${styles.appCoinPick} ${m === coin ? styles.appCoinPickOn : ""}`} key={m} onClick={() => onCoin(m)} type="button">
+                {m.replace("USDT", "")}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="mt-3 flex items-center gap-2">
+          <TokenLogo size={22} symbol={(coin ?? "").replace("USDT", "")} />
+          <span className={`${styles.tBody} !font-semibold !text-white`}>{coin?.replace("USDT", "/USDT")}</span>
+        </div>
+        <div className="mt-1 flex items-end justify-between gap-4">
+          <div>
+            <Flash className={styles.tDisplay} value={t?.last ?? null}>
+              {t ? price(t.last) : "—"}
+            </Flash>
+            <p className={`${styles.tBody} mt-1`} style={{ color: t ? (t.changePct >= 0 ? UP : DOWN) : undefined }}>
+              {t ? `${t.changePct >= 0 ? "+" : ""}${t.changePct.toFixed(2)}% today` : "—"}
+            </p>
+          </div>
+          <dl className="grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-right">
+            <dt className={styles.tCaption}>24h high</dt>
+            <dd className={`${styles.tCaption} !text-white`}>{t ? price(t.high) : "—"}</dd>
+            <dt className={styles.tCaption}>24h low</dt>
+            <dd className={`${styles.tCaption} !text-white`}>{t ? price(t.low) : "—"}</dd>
+            <dt className={styles.tCaption}>24h vol</dt>
+            <dd className={`${styles.tCaption} !text-white`}>{t ? `$${compact(t.quoteVolume)}` : "—"}</dd>
+          </dl>
+        </div>
+      </section>
+
+      {/* the chart, full-bleed */}
+      <div className="mt-3 h-[340px]">
+        <ChartPanel coin={coin} desk={coinRules} flat frame={frame} lastPrice={t?.last ?? null} onFrame={onFrame} run={run} />
+      </div>
+
+      {/* where an exchange draws your order line: what the agent waits for, on this coin */}
+      {rule ? (
+        <section className="border-y border-white/[0.06] px-4 py-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className={styles.tLabel}>{holding && (holding.market ?? run.market) === coin ? "In a trade" : "The agent waits for"}</p>
+            <p className={styles.tCaption}>
+              RSI {rsi === null ? "—" : rsi.toFixed(1)}
+              {buyLine && buyLine.kind === "rsi" ? ` · buys under ${buyLine.value}` : ""}
+            </p>
+          </div>
+          <div className="mt-2">
+            <RsiTrack buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null} value={rsi} />
+          </div>
+          <p className={`${styles.tBody} mt-1.5`}>
+            {rsi === null || !buyLine || buyLine.kind !== "rsi"
+              ? "Reading candles…"
+              : rsi < buyLine.value
+                ? "At its buy line - it buys when this candle closes."
+                : `${(rsi - buyLine.value).toFixed(1)} points from buying ${(coin ?? "").replace("USDT", "")}.`}
+            <span className={styles.tCaption}> {alive ? `Next look in ${nextIn}s.` : ""}</span>
+          </p>
+        </section>
+      ) : null}
+
+      {/* everything else, one tab at a time */}
+      <nav className={styles.appTabs}>
+        {(
+          [
+            ["agent", "Agent"],
+            ["position", "Position"],
+            ["trades", `Trades${run.tradeCount ? ` ${run.tradeCount}` : ""}`],
+            ["book", "Book"],
+            ["tape", "Tape"],
+          ] as const
+        ).map(([key, label]) => (
+          <button className={`${styles.appTab} ${tab === key ? styles.appTabOn : ""}`} key={key} onClick={() => setTab(key)} type="button">
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "agent" ? (
+        <section>
+          {rule ? (
+            <p className={`${styles.tBody} px-4 py-3`}>
+              {buyLine && buyLine.kind === "rsi"
+                ? `Buys sharp dips: RSI under ${buyLine.value} on ${rule.timeframe} candles, ${usd(rule.sizeUsd)} a trade. Sells at +${rule.takeProfitPct ?? "—"}% or cuts at −${rule.stopLossPct ?? "—"}%. At most ${rule.maxTradesPerDay} a day per coin.`
+                : null}
+            </p>
+          ) : null}
+          <p className={`${styles.tLabel} px-4 pb-1`}>Watching</p>
+          {desk.map((r) => (
+            <AgentCoinRow key={r.id} market={r.market ?? run.market} onPick={() => onCoin(r.market ?? run.market ?? "")} rule={r} selected={(r.market ?? run.market) === coin} />
+          ))}
+          <p className={`${styles.tLabel} px-4 pb-1 pt-5`}>Its decisions</p>
+          <div className="flex h-[300px] flex-col px-2">
+            <DecisionLog bare onOpen={onOpen} run={run} />
+          </div>
+        </section>
+      ) : tab === "position" ? (
+        <section className="px-4 py-4">
+          {holding && holding.position ? (
+            <PositionBlock rule={holding} />
+          ) : (
+            <p className={styles.tBody}>No open position. It holds only after its rule buys, and only for one coin at a time.</p>
+          )}
+          <dl className={`${styles.statRow} mt-5`}>
+            <MobileStat label="Start" value={usd(run.startUsd)} />
+            <MobileStat label="Best" tone="gold" value={usd(Math.max(liveUsd, ...run.history.map((p) => p.usd)))} />
+            <MobileStat label="Low" value={usd(Math.min(liveUsd, ...run.history.map((p) => p.usd)))} />
+            <MobileStat label="Won" value={run.closedCount ? `${run.winCount}/${run.closedCount}` : "—"} />
+          </dl>
+        </section>
+      ) : tab === "trades" ? (
+        <section>
+          {run.trades.length === 0 ? (
+            <p className={`${styles.tBody} px-4 py-4 !text-[#8a8c85]`}>No trades yet. It only buys when its rule says so.</p>
+          ) : (
+            run.trades.map((trade) => {
+              const buy = trade.kind === "enter" && trade.side === "long";
               return (
-                <button className={`${styles.mobileChip} ${on ? styles.mobileChipOn : ""}`} key={m} onClick={() => onCoin(m)} type="button">
-                  <TokenLogo size={20} symbol={m.replace("USDT", "")} />
-                  <span className={`${styles.tBody} !font-semibold`}>{m.replace("USDT", "")}</span>
-                  <span className={styles.tCaption} style={{ color: t ? (t.change >= 0 ? UP : DOWN) : undefined }}>
-                    {t ? `${t.change >= 0 ? "+" : ""}${t.change.toFixed(2)}%` : "—"}
+                <button className={styles.appRow} key={`${trade.at}-${trade.kind}`} onClick={() => onOpen(tradeDetail(trade, run))} type="button">
+                  <TokenLogo size={26} symbol={trade.market.replace("USDT", "")} />
+                  <span className="min-w-0 flex-1">
+                    <span className={`${styles.tBody} block !font-semibold`} style={{ color: buy ? GOLD : DOWN }}>
+                      {buy ? "Bought" : "Sold"} {trade.market.replace("USDT", "")}
+                    </span>
+                    <span className={`${styles.tCaption} block`}>
+                      {price(trade.price)} · {usd(trade.sizeUsd)} · {now ? ago(now - trade.at) : ""}
+                    </span>
+                  </span>
+                  <span className={styles.tValue} style={{ color: trade.pnlPct === null ? "#8a8c85" : trade.pnlPct >= 0 ? UP : DOWN }}>
+                    {trade.pnlPct === null ? "open" : `${trade.pnlPct >= 0 ? "+" : ""}${trade.pnlPct.toFixed(2)}%`}
                   </span>
                 </button>
               );
-            })}
-          </div>
-        ) : null}
-        <div className="h-[380px]">
-          <ChartPanel coin={coin} desk={coinRules} frame={frame} lastPrice={market.ticker?.last ?? null} onFrame={onFrame} run={run} />
-        </div>
-      </section>
-
-      {/* what each coin waits for */}
-      <section>
-        <p className={styles.tLabel}>Watching</p>
-        <div className={`mt-3 grid gap-2 ${desk.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-          {desk.map((rule, index) => (
-            <div className={desk.length !== 3 && desk.length % 2 === 1 && index === desk.length - 1 ? "col-span-2" : ""} key={rule.id}>
-              <CoinTile market={rule.market ?? run.market} onPick={() => onCoin(rule.market ?? run.market ?? "")} rule={rule} selected={(rule.market ?? run.market) === coin} />
-            </div>
-          ))}
-        </div>
-        {/* the engine, in one line - no box */}
-        <div className="mt-4 flex items-center gap-3">
-          <Ring alive={alive} seconds={nextIn} />
-          <div>
-            <p className={styles.tBody}>{alive ? `Looks again in ${nextIn}s` : running ? "Not watching right now" : "Run over"}</p>
-            <p className={styles.tCaption}>Every minute, on closed candles · no AI in the order path</p>
-          </div>
-        </div>
-      </section>
-
-      {/* the market floor: one card, one panel at a time */}
-      <section>
-        <div className={styles.mobileTabs}>
-          {(
-            [
-              ["book", "Order book"],
-              ["trades", "Trades"],
-              ["wire", "Wire"],
-            ] as const
-          ).map(([key, label]) => (
-            <button className={`${styles.mobileTab} ${tab === key ? styles.mobileTabOn : ""}`} key={key} onClick={() => setTab(key)} type="button">
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className={`${styles.dpanel} mt-2 flex h-[420px] flex-col px-2 py-2`}>
-          {tab === "book" ? <OrderBook bare market={market} /> : tab === "trades" ? <Tape bare market={market} /> : <Wire bare market={market} now={now} run={run} />}
-        </div>
-      </section>
-
-      {/* its own words */}
-      <section>
-        <p className={styles.tLabel}>Decisions</p>
-        <div className="mt-2 flex h-[260px] flex-col">
-          <DecisionLog bare onOpen={onOpen} run={run} />
-        </div>
-      </section>
-
-      {/* every trade, as rows a thumb can tap */}
-      <section>
-        <div className="flex items-baseline justify-between">
-          <p className={styles.tLabel}>Every trade</p>
-          <span className={styles.tCaption}>{run.tradeCount} · each on BNB Chain</span>
-        </div>
-        {run.trades.length === 0 ? (
-          <p className={`${styles.tBody} mt-3 !text-[#8a8c85]`}>No trades yet. It only buys when its rule says so.</p>
-        ) : (
-          <ul className="mt-2 flex flex-col">
-            {run.trades.map((trade) => {
-              const buy = trade.kind === "enter" && trade.side === "long";
-              return (
-                <li className="border-b border-white/5 last:border-0" key={`${trade.at}-${trade.kind}`}>
-                  <button className="flex w-full items-center gap-3 py-3 text-left" onClick={() => onOpen(tradeDetail(trade, run))} type="button">
-                    <TokenLogo size={22} symbol={trade.market.replace("USDT", "")} />
-                    <span className="min-w-0 flex-1">
-                      <span className={`${styles.tBody} block !font-semibold`} style={{ color: buy ? GOLD : DOWN }}>
-                        {buy ? "Bought" : "Sold"} {trade.market.replace("USDT", "")}
-                      </span>
-                      <span className={`${styles.tCaption} block`}>
-                        {price(trade.price)} · {usd(trade.sizeUsd)} · {now ? ago(now - trade.at) : ""}
-                      </span>
-                    </span>
-                    <span className={styles.tValue} style={{ color: trade.pnlPct === null ? "#8a8c85" : trade.pnlPct >= 0 ? UP : DOWN }}>
-                      {trade.pnlPct === null ? "open" : `${trade.pnlPct >= 0 ? "+" : ""}${trade.pnlPct.toFixed(2)}%`}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <p className={`${styles.tCaption} mt-4`}>
-          Wallet{" "}
-          <a className="text-[#c9cbc3]" href={`https://bscscan.com/address/${run.walletAddress}`} rel="noreferrer" target="_blank">
-            {run.walletAddress.slice(0, 6)}…{run.walletAddress.slice(-4)} ↗
-          </a>{" "}
-          · Not financial advice.
-        </p>
-        <OwnerEnd run={run} />
-      </section>
-
-      {/* pinned: the money, and the way to pass it on */}
-      <div className={styles.mobileBar}>
-        <div className="min-w-0">
-          <p className={styles.tCaption}>{run.name}</p>
-          <p className={styles.tValue}>
-            {liveFigure}{" "}
-            <span className={styles.tCaption} style={{ color: up ? UP : DOWN }}>
-              {pct(run.startUsd, liveUsd)}
-            </span>
+            })
+          )}
+          <p className={`${styles.tCaption} px-4 py-4`}>
+            Wallet{" "}
+            <a className="text-[#c9cbc3]" href={`https://bscscan.com/address/${run.walletAddress}`} rel="noreferrer" target="_blank">
+              {run.walletAddress.slice(0, 6)}…{run.walletAddress.slice(-4)} ↗
+            </a>{" "}
+            · Not financial advice.
           </p>
+          <div className="px-4">
+            <OwnerEnd run={run} />
+          </div>
+        </section>
+      ) : tab === "book" ? (
+        <div className="flex h-[440px] flex-col px-2 py-2">
+          <OrderBook bare market={market} />
         </div>
-        <ShareButton name={run.name} />
+      ) : (
+        <div className="flex h-[440px] flex-col gap-3 px-2 py-2 [&>div]:flex-1">
+          <Tape bare market={market} />
+        </div>
+      )}
+
+      {/* where an app pins Buy / Sell */}
+      <div className={styles.appActions}>
+        <Link className={`${styles.appPrimary} no-underline`} href="/dolphin?mode=build&new=1">
+          Build one like this
+        </Link>
+        <ShareButton change={pct(run.startUsd, liveUsd)} className={styles.appSecondary} liveFigure={liveFigure} run={run} />
       </div>
     </div>
   );
@@ -409,65 +451,143 @@ function MobileStat({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
-/** A watched coin as a tile: the Dolphin dial, its price, and how far it is from buying. */
-function CoinTile({ rule, market, selected, onPick }: { rule: LiveDeskRule; market: string | null; selected: boolean; onPick: () => void }) {
+/** One coin the agent watches, as a market-list row: its price and day, and the Dolphin on its RSI track. */
+function AgentCoinRow({ rule, market, selected, onPick }: { rule: LiveDeskRule; market: string | null; selected: boolean; onPick: () => void }) {
   const candles = useRuleCandles(market, rule.timeframe);
   const tickers = useTickers();
   const base = (market ?? "").replace("USDT", "");
-  const ticker = tickers.data?.find((t) => t.symbol === market?.replace("USDT", "/USDT"));
-  const closes = candles.data?.closed.map((c) => c.c) ?? [];
+  const ticker = tickers.data?.find((row) => row.symbol === market?.replace("USDT", "/USDT"));
   const buyLine = rule.when.find((c) => c.kind === "rsi");
-  const rsi = buyLine ? readCondition(buyLine, closes).value : null;
-  const holding = rule.position !== null;
-  const livePrice = ticker?.price ?? null;
-  const pnl = rule.position && livePrice ? ((livePrice - rule.position.entryPrice) / rule.position.entryPrice) * 100 : null;
+  const rsi = buyLine ? readCondition(buyLine, candles.data?.closed.map((c) => c.c) ?? []).value : null;
   return (
-    <button className={`${styles.coinCard} ${selected ? styles.coinCardOn : ""} ${holding ? styles.coinCardHolding : ""} ${styles.tile} h-full !px-1.5 !py-3 text-center`} onClick={onPick} type="button">
-      <span className="flex items-center gap-1.5">
-        <TokenLogo size={18} symbol={base} />
-        <span className={`${styles.tBody} !font-semibold`}>{base}</span>
+    <button className={`${styles.appRow} ${selected ? styles.appRowOn : ""}`} onClick={onPick} type="button">
+      <TokenLogo size={28} symbol={base} />
+      <span className="w-[86px] shrink-0">
+        <span className={`${styles.tBody} block !font-semibold !text-white`}>{base}</span>
+        <span className={`${styles.tCaption} block`}>{ticker ? price(ticker.price) : "—"}</span>
       </span>
-      <span className={styles.tCaption}>{livePrice ? price(livePrice) : "—"}</span>
-      <span className="my-1">
-        <RsiDial buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null} sell={null} size={84} value={rsi} />
+      <span className="min-w-0 flex-1">
+        <RsiTrack buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null} height={20} value={rsi} />
       </span>
-      <span className={styles.tCaption}>
-        {holding && pnl !== null
-          ? `In a trade ${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%`
-          : rsi === null || !buyLine || buyLine.kind !== "rsi"
-            ? "Reading…"
-            : rsi < buyLine.value
-              ? "At its buy line"
-              : `${(rsi - buyLine.value).toFixed(1)} to buy`}
+      <span className="w-[54px] shrink-0 text-right">
+        <span className={`${styles.tValue} block`}>{rsi === null ? "—" : rsi.toFixed(0)}</span>
+        <span className={`${styles.tCaption} block`}>RSI</span>
       </span>
     </button>
   );
 }
 
-/** Pass the run on: the phone's own share sheet, or the link copied where there is none. */
-function ShareButton({ name }: { name: string }) {
-  const [copied, setCopied] = useState(false);
+/** The open trade, as an app shows a position: entry, the live result, and where it exits. */
+function PositionBlock({ rule }: { rule: LiveDeskRule }) {
+  const tickers = useTickers();
+  const p = rule.position!;
+  const base = (rule.market ?? "").replace("USDT", "");
+  const live = tickers.data?.find((row) => row.symbol === rule.market?.replace("USDT", "/USDT"))?.price ?? null;
+  const pnl = live ? ((live - p.entryPrice) / p.entryPrice) * 100 : null;
   return (
-    <button
-      className={styles.watchButton}
-      onClick={async () => {
-        const url = window.location.href;
-        const text = `${name} is trading real money live on Dolphin - every trade on BNB Chain.`;
-        try {
-          if (navigator.share) await navigator.share({ title: name, text, url });
-          else {
-            await navigator.clipboard.writeText(url);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1600);
-          }
-        } catch {
-          // The person closed the share sheet: nothing to do.
-        }
-      }}
-      type="button"
-    >
-      {copied ? "Link copied" : "Share"}
-    </button>
+    <div>
+      <div className="flex items-center gap-2">
+        <TokenLogo size={22} symbol={base} />
+        <span className={`${styles.tBody} !font-semibold !text-white`}>{base} · long</span>
+      </div>
+      <p className={`${styles.tDisplay} mt-2`} style={{ color: pnl === null ? undefined : pnl >= 0 ? UP : DOWN }}>
+        {pnl === null ? "—" : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}%`}
+      </p>
+      <dl className={`${styles.statRow} mt-4 !grid-cols-3`}>
+        <MobileStat label="Entry" value={price(p.entryPrice)} />
+        <MobileStat label="Target" value={rule.takeProfitPct === null ? "—" : price(p.entryPrice * (1 + rule.takeProfitPct / 100))} />
+        <MobileStat label="Stop" value={rule.stopLossPct === null ? "—" : price(p.entryPrice * (1 - rule.stopLossPct / 100))} />
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * PASS THE RUN ON (owner, 2026-10-19: "make the share have a post on X template and Reddit and all that").
+ * A sheet with the post already written from the run's live numbers - never a made-up figure - and one tap
+ * to X, Reddit, Telegram or WhatsApp, or to copy it. Calm and one line, the way the owner posts on X: what
+ * it is, the real number, and where to check it.
+ */
+function ShareButton({ run, liveFigure, change, className }: { run: LiveRunDetail; liveFigure: string; change: string; className?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className={className ?? styles.watchButton} onClick={() => setOpen(true)} type="button">
+        Share
+      </button>
+      {open ? <ShareSheet change={change} liveFigure={liveFigure} onClose={() => setOpen(false)} run={run} /> : null}
+    </>
+  );
+}
+
+function ShareSheet({ run, liveFigure, change, onClose }: { run: LiveRunDetail; liveFigure: string; change: string; onClose: () => void }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const url = typeof window === "undefined" ? `https://www.dolphinamp.xyz/live/${run.slug}` : window.location.href.split("?")[0]!;
+  const coins = [...new Set((run.desk ?? []).map((rule) => (rule.market ?? run.market ?? "").replace("USDT", "")).filter(Boolean))];
+  const coinWords = coins.length > 1 ? `${coins.slice(0, -1).join(", ")} and ${coins[coins.length - 1]}` : (coins[0] ?? "crypto");
+  const running = run.status === "running";
+  const post = running
+    ? `An AI agent is trading real money in public. ${run.name}: ${liveFigure} (${change}) on ${coinWords}. Every trade on BNB Chain.`
+    : `An AI agent traded real money in public. ${run.name} finished at ${liveFigure} (${change}) on ${coinWords}. Every trade is on BNB Chain.`;
+  const redditTitle = `${run.name}: an AI agent trading ${liveFigure} of real money live on ${coinWords} - every trade verifiable on BNB Chain`;
+  const enc = encodeURIComponent;
+  const targets = [
+    { name: "X", href: `https://x.com/intent/post?text=${enc(post)}&url=${enc(url)}`, mark: "𝕏" },
+    { name: "Reddit", href: `https://www.reddit.com/submit?url=${enc(url)}&title=${enc(redditTitle)}`, mark: "r/" },
+    { name: "Telegram", href: `https://t.me/share/url?url=${enc(url)}&text=${enc(post)}`, mark: "✈" },
+    { name: "WhatsApp", href: `https://wa.me/?text=${enc(`${post} ${url}`)}`, mark: "◔" },
+  ];
+  const copy = async (what: "post" | "link") => {
+    try {
+      await navigator.clipboard.writeText(what === "post" ? `${post} ${url}` : url);
+      setCopied(what);
+      setTimeout(() => setCopied(null), 1600);
+    } catch {
+      // Clipboard refused (an old browser or a denied permission): the text stays on screen to copy by hand.
+    }
+  };
+  return (
+    <>
+      <div className={styles.scrim} onClick={onClose} />
+      <div aria-label="Share this run" className={styles.shareSheet} role="dialog">
+        <div className="flex items-center justify-between">
+          <p className={styles.tTitle}>Share this run</p>
+          <button aria-label="Close" className={`${styles.tBody} px-2`} onClick={onClose} type="button">
+            ✕
+          </button>
+        </div>
+        <p className={`${styles.tLabel} mt-4`}>The post</p>
+        <p className={`${styles.sharePreview} mt-2`}>
+          {post} <span className="text-[#f3c13a]">{url.replace("https://", "")}</span>
+        </p>
+        <p className={`${styles.tCaption} mt-1 text-right`}>{post.length + 24} / 280 on X</p>
+        <div className="mt-4 grid grid-cols-4 gap-2">
+          {targets.map((target) => (
+            <a className={styles.shareTarget} href={target.href} key={target.name} rel="noreferrer" target="_blank">
+              <span className={styles.shareMark}>{target.mark}</span>
+              <span className={styles.tCaption}>{target.name}</span>
+            </a>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button className={styles.appSecondary} onClick={() => void copy("post")} type="button">
+            {copied === "post" ? "Copied" : "Copy post"}
+          </button>
+          <button className={styles.appSecondary} onClick={() => void copy("link")} type="button">
+            {copied === "link" ? "Copied" : "Copy link"}
+          </button>
+        </div>
+        {typeof navigator !== "undefined" && "share" in navigator ? (
+          <button
+            className={`${styles.tBody} mt-3 w-full py-2 text-center !text-[#8a8c85]`}
+            onClick={() => void navigator.share({ title: run.name, text: post, url }).catch(() => undefined)}
+            type="button"
+          >
+            More…
+          </button>
+        ) : null}
+      </div>
+    </>
   );
 }
 
@@ -598,6 +718,7 @@ function TopBar({
           </p>
         </div>
         <Kv label="Since start" tone={liveUsd >= run.startUsd ? "up" : "down"} value={pct(run.startUsd, liveUsd)} />
+        <ShareButton change={pct(run.startUsd, liveUsd)} className={styles.deskShare} liveFigure={liveFigure} run={run} />
         <div className="hidden flex-col gap-1 border-l border-white/5 pl-5 2xl:flex">
           <Status label="Binance feed" ok={feedAge !== null && feedAge < 5000} value={feedAge === null ? "connecting" : `${(feedAge / 1000).toFixed(1)}s`} />
           <Status label="BNB Chain" ok={Boolean(chain && now - chain.at < 15_000)} value={chain ? `#${chain.block.toLocaleString("en-US")}` : "reading"} />
@@ -798,7 +919,7 @@ function useSize<T extends HTMLElement>() {
   return [setEl, size] as const;
 }
 
-function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice }: { run: LiveRunDetail; coin: string | null; desk: LiveDeskRule[]; frame: string; onFrame: (tf: string) => void; lastPrice: number | null }) {
+function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice, flat }: { run: LiveRunDetail; coin: string | null; desk: LiveDeskRule[]; frame: string; onFrame: (tf: string) => void; lastPrice: number | null; flat?: boolean }) {
   const data = useRuleCandles(coin, frame);
   const ruleFrames = new Set(desk.map((rule) => rule.timeframe));
   const frameRule = desk.find((rule) => rule.timeframe === frame) ?? null;
@@ -824,6 +945,31 @@ function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice }: { run: LiveR
     : watchRule
       ? `No open trade · waiting for ${watchLine && watchLine.kind === "rsi" ? `RSI under ${watchLine.value}` : "its entry"} on ${watchRule.timeframe}`
       : null;
+  const chart = (
+    <CandleChart
+      buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null}
+      candles={candles}
+      position={position && positionRule ? { entry: position.entryPrice, side: position.side, stopPct: positionRule.stopLossPct, targetPct: positionRule.takeProfitPct } : null}
+      sell={sellLine && sellLine.kind === "rsi" ? sellLine.value : null}
+      trades={run.trades.filter((trade) => trade.market === coin)}
+    />
+  );
+  // Flat, the way a trading app draws it on a phone: underlined timeframes over a full-bleed chart, no card.
+  if (flat) {
+    return (
+      <section className="flex h-full flex-col">
+        <div className={styles.tfTabs}>
+          {TIMEFRAMES.map((tf) => (
+            <button className={`${styles.tfTab} ${tf === frame ? styles.tfTabOn : ""}`} key={tf} onClick={() => onFrame(tf)} type="button">
+              {tf}
+              {ruleFrames.has(tf) ? <span className={styles.tfDot} /> : null}
+            </button>
+          ))}
+        </div>
+        <div className="relative min-h-0 flex-1">{chart}</div>
+      </section>
+    );
+  }
   return (
     <section className={`${styles.dpanel} flex h-full min-h-[320px] flex-1 flex-col`}>
       <header className={`${styles.dhead} !h-auto flex-wrap gap-y-2 py-2`}>
@@ -857,15 +1003,7 @@ function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice }: { run: LiveR
           <span className={`ml-auto hidden text-[11px] lg:inline ${styles.muted}`}>B / S: the agent&apos;s buys and sells · yellow line: price now</span>
         </div>
       ) : null}
-      <div className="relative min-h-0 flex-1">
-        <CandleChart
-          buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null}
-          candles={candles}
-          position={position && positionRule ? { entry: position.entryPrice, side: position.side, stopPct: positionRule.stopLossPct, targetPct: positionRule.takeProfitPct } : null}
-          sell={sellLine && sellLine.kind === "rsi" ? sellLine.value : null}
-          trades={run.trades.filter((trade) => trade.market === coin)}
-        />
-      </div>
+      <div className="relative min-h-0 flex-1">{chart}</div>
     </section>
   );
 }

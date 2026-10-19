@@ -236,3 +236,40 @@
 .statRow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid rgba(255, 255, 255, 0.07); padding-top: 14px; }
 .stat { padding: 0 10px; border-left: 1px solid rgba(255, 255, 255, 0.07); }
 .stat:first-child { padding-left: 0; border-left: 0; }
+
+/* ── the trading-app phone layout (owner, 2026-10-19: "a real trading app, but for agentic trading") ── */
+.tfTabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.tfTab { position: relative; padding: 10px 10px 9px; font-size: 13px; font-weight: 600; color: #8a8c85; border-bottom: 2px solid transparent; }
+.tfTabOn { color: #fff; border-bottom-color: var(--lime); }
+.tfDot { position: absolute; top: 7px; right: 3px; width: 4px; height: 4px; border-radius: 99px; background: var(--up); }
+.appTabs { display: flex; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid rgba(255, 255, 255, 0.07); padding: 0 8px; }
+.appTabs::-webkit-scrollbar { display: none; }
+.appTab { flex: 0 0 auto; padding: 13px 12px 11px; font-size: 14px; font-weight: 600; color: #8a8c85; border-bottom: 2px solid transparent; }
+.appTabOn { color: #fff; border-bottom-color: var(--lime); }
+.appTopBar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: rgba(10, 10, 10, 0.88); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.appAvatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: var(--lime); }
+.appRow { display: flex; width: 100%; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); text-align: left; }
+.appRowOn { background: linear-gradient(90deg, rgba(243, 193, 58, 0.08), transparent 70%); box-shadow: inset 2px 0 0 var(--lime); }
+.appCoinPick { padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #8a8c85; border: 1px solid rgba(255, 255, 255, 0.08); }
+.appCoinPickOn { color: #0b0c0a; background: var(--lime); border-color: var(--lime); }
+.appActions { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr auto; gap: 10px;
+  padding: 10px 16px max(12px, env(safe-area-inset-bottom)); background: rgba(10, 10, 10, 0.92); backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.appPrimary { display: grid; place-items: center; height: 46px; border-radius: 12px; font-size: 15px; font-weight: 700; color: #0b0c0a; background: var(--lime); }
+.appSecondary { display: grid; place-items: center; height: 46px; padding: 0 20px; border-radius: 12px; font-size: 15px; font-weight: 600; color: #fff;
+  background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.1); }
+.trackDolphin { transition: left 700ms cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 0 0 2px #0e0f0e, 0 0 10px rgba(243, 193, 58, 0.5); }
+
+/* the share sheet: a bottom sheet on a phone, a centred card on a desk */
+.shareSheet { position: fixed; z-index: 81; left: 0; right: 0; bottom: 0; padding: 20px 16px max(20px, env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0; background: #121212; border-top: 1px solid rgba(255, 255, 255, 0.08); animation: sheetUp 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (min-width: 768px) { .shareSheet { left: 50%; right: auto; bottom: auto; top: 50%; width: 440px; border-radius: 18px; transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.08); animation: fade 200ms both; } }
+@keyframes sheetUp { from { transform: translateY(100%); } }
+.sharePreview { padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 14px; line-height: 1.45; color: #e4e4df; }
+.shareTarget { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; border-radius: 12px; text-decoration: none;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); }
+.shareMark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; font-size: 16px; font-weight: 700; color: #0b0c0a; background: var(--lime); }
+.deskShare { padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #0b0c0a; background: var(--lime); }

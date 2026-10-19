@@ -239,12 +239,9 @@ function MobileRunView({
   const holding = desk.find((r) => r.position) ?? null;
 
   return (
-    <div className="pb-28">
-      {/* the account: the agent's */}
+    <div className="pb-10">
+      {/* the account: the agent's - who on the left, its money and Share on the right */}
       <header className={styles.appTopBar}>
-        <Link aria-label="All live runs" className="-ml-1 grid size-8 place-items-center rounded-full text-[18px] text-white no-underline" href="/live">
-          ←
-        </Link>
         <span className={styles.appAvatar}>
           {/* eslint-disable-next-line @next/next/no-img-element -- the brand mark in an avatar dot */}
           <img alt="" height={20} src="/dolphin-logo.png" width={20} />
@@ -256,8 +253,8 @@ function MobileRunView({
             {running ? `Live · day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "lost" ? "Ran out" : "Ended"}
           </p>
         </div>
-        <div className="text-right">
-          <p className={styles.tValue}>
+        <div className="flex flex-col items-end gap-1">
+          <p className={`${styles.tValue} leading-none`}>
             <RollingFigure value={liveFigure} />
           </p>
           <TChange value={run.startUsd > 0 ? ((liveUsd - run.startUsd) / run.startUsd) * 100 : null} />
@@ -431,12 +428,6 @@ function MobileRunView({
         </div>
       )}
 
-      {/* where an app pins Buy / Sell */}
-      <div className={`${styles.appActions} !grid-cols-1`}>
-        <Link className={`${styles.appPrimary} no-underline`} href="/dolphin?mode=build&new=1">
-          Build an agent like this
-        </Link>
-      </div>
     </div>
   );
 }
@@ -700,7 +691,6 @@ function TopBar({
   return (
     <div className={`${styles.dpanel} flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 px-4 py-2.5`}>
       <div className="flex items-center gap-3">
-        <Link className={`text-xs no-underline ${styles.muted} hover:text-white`} href="/live">← Live</Link>
         <LiveBadge running={run.status === "running"} />
         <div className="min-w-0">
           <p className="truncate text-[15px] font-semibold leading-tight">{run.name}</p>

@@ -67,7 +67,7 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
    */
   return (
     <div>
-      <p className="text-[13px] font-semibold text-ink">Keys</p>
+      <p className="text-[13px] font-semibold text-ink">Add a key</p>
       <form
         className="mt-3 space-y-2.5"
         onSubmit={(event) => {
@@ -75,7 +75,6 @@ function SignedInVariables({ sessionToken }: { sessionToken: string }) {
           void save();
         }}
       >
-        <p className="text-[0.66rem] font-semibold uppercase tracking-[0.08em] text-muted">Add a key</p>
         <label className="block">
           <span className="mb-1 block text-[0.72rem] text-muted">Key name</span>
           <input

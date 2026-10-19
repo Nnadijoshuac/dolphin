@@ -28,9 +28,10 @@ const GOLD = "#f3c13a";
 const GREEN = "#3ddc84";
 
 /*
- * Display type with character (owner, 2026-10-19: "interesting fonts... old English... unusual fonts you see in
- * very nice design and branding"): the name in blackletter, UnifrakturMaguntia; the line and the number in
- * Instrument Serif, the site's own serif. Both SIL Open Font License, in public/fonts.
+ * Display type with character (owner, 2026-10-19: "interesting fonts, like you see in very nice branding" -
+ * blackletter was tried and rejected: it fought the gold render). Editorial luxury instead: the name, the line
+ * and the number all in Instrument Serif - the site's own serif, tall and refined against liquid gold - and the
+ * small labels in Geist. Chosen beside Syne and Fraunces on the real card. SIL Open Font License, public/fonts.
  */
 const font = (file: string) => readFile(join(process.cwd(), "public", "fonts", file));
 
@@ -40,11 +41,10 @@ async function dataUri(file: string, type: string) {
 
 export default async function OpengraphImage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [run, art, logo, blackletter, serif, serifItalic, sans] = await Promise.all([
+  const [run, art, logo, serif, serifItalic, sans] = await Promise.all([
     fetchLiveRun(decodeURIComponent(slug)),
     dataUri("live/gold-dolphin.jpg", "image/jpeg"),
     dataUri("dolphin-logo.png", "image/png"),
-    font("unifraktur-maguntia.woff"),
     font("instrument-serif.woff"),
     font("instrument-serif-italic.woff"),
     font("geist-600.woff"),
@@ -78,8 +78,8 @@ export default async function OpengraphImage({ params }: { params: Promise<{ slu
           </div>
 
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <span style={{ display: "flex", fontFamily: "Instrument Serif", fontStyle: "italic", fontSize: 40, color: MUTED }}>An AI agent trading real money</span>
-            <span style={{ display: "flex", marginTop: 4, fontFamily: "Unifraktur", fontSize: name.length > 16 ? 100 : 128, lineHeight: 1.0, color: INK }}>{name}</span>
+            <span style={{ display: "flex", fontFamily: "Instrument Serif", fontStyle: "italic", fontSize: 36, color: MUTED }}>An AI agent trading real money</span>
+            <span style={{ display: "flex", marginTop: 2, fontFamily: "Instrument Serif", fontSize: name.length > 14 ? 116 : 150, lineHeight: 0.95, color: INK }}>{name}</span>
             {started ? (
               <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginTop: 22 }}>
                 <span style={{ fontFamily: "Instrument Serif", fontSize: 84, lineHeight: 1, color: GOLD }}>{started}</span>
@@ -104,7 +104,6 @@ export default async function OpengraphImage({ params }: { params: Promise<{ slu
       fonts: [
         // First, so every small label (brand, LIVE, coins) falls back to the site's own sans.
         { name: "Geist", data: sans, style: "normal", weight: 600 },
-        { name: "Unifraktur", data: blackletter, style: "normal", weight: 400 },
         { name: "Instrument Serif", data: serif, style: "normal", weight: 400 },
         { name: "Instrument Serif", data: serifItalic, style: "italic", weight: 400 },
       ],

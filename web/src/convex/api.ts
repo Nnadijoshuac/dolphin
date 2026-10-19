@@ -1991,6 +1991,13 @@ export type LiveRunSummary = {
   startedAt: number;
   endedAt: number | null;
   status: "running" | "lost" | "ended";
+  /** On the /live list only (2026-10-19): every coin, each rule in brief, the latest decision, recent value. */
+  card?: {
+    markets: string[];
+    rules: { market: string; timeframe: string; buyRsiBelow: number | null; words: string; takeProfitPct: number | null; stopLossPct: number | null; sizeUsd: number }[];
+    lastThought: { t: number; text: string } | null;
+    history: { t: number; usd: number }[];
+  };
 };
 /** One condition of a trading rule, as convex/lib/strategy.ts stores it. */
 export type LiveCondition =

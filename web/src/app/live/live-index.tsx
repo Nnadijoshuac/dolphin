@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { LiveBadge, Ticker, dayOf, pct, usd, useSecond } from "@/app/live/live-bits";
+import { LiveBadge, Ticker, ago, dayOf, pct, usd, useSecond } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
 import { TokenLogo } from "@/components/brand-mark";
 import { liveRunsApi, myAgentsApi, type LiveRunSummary } from "@/convex/api";
@@ -24,35 +24,24 @@ export function LiveIndex() {
   return (
     <div className={styles.page}>
       <Ticker />
-      <div className="mx-auto w-full max-w-[2000px] px-4 pt-8 sm:px-6 xl:px-10">
-        <header className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            {data?.running.length ? <LiveBadge running /> : null}
-            <h1 className={`${styles.title} ${data?.running.length ? "mt-4" : ""}`}>Agents trading real money, live</h1>
-            <p className={`mt-2 max-w-xl text-sm ${styles.muted}`}>
-              Each one starts with what is in its wallet and trades it in the open until it runs out or its owner stops it. Every trade is on BNB Chain.
-            </p>
-          </div>
-          {data ? (
-            <div className="flex flex-wrap gap-5">
-              <Kpi label="Live now" value={String(data.running.length)} />
-              <Kpi label="Finished" value={String(data.finished.length)} />
-            </div>
-          ) : null}
+      <div className={`${styles.desk} mx-auto w-full max-w-[2000px] px-4 pt-8 sm:px-6 xl:px-10`}>
+        <header>
+          {data?.running.length ? <LiveBadge running /> : null}
+          <h1 className={`${styles.title} ${data?.running.length ? "mt-4" : ""}`}>Agents trading real money</h1>
+          <p className={`mt-2 text-sm ${styles.muted}`}>Every trade on BNB Chain. Tap one to watch it.</p>
         </header>
 
         <section className="mt-8">
-          <SectionHead meta={data?.running.length ? "tap one to watch" : undefined} title="Live now" />
           {data === undefined ? (
-            <div className={`mt-3 ${GRID}`}>
+            <div className={`${GRID}`}>
               {[0, 1, 2].map((i) => (
-                <div className="skeleton h-56 rounded-2xl" key={i} />
+                <div className="skeleton h-48 rounded-2xl" key={i} />
               ))}
             </div>
           ) : data.running.length === 0 ? (
             <Empty />
           ) : (
-            <div className={`mt-3 ${GRID}`}>
+            <div className={GRID}>
               {data.running.map((run) => (
                 <RunCard key={run.slug} now={now} run={run} />
               ))}
@@ -65,9 +54,9 @@ export function LiveIndex() {
         {data && data.finished.length > 0 ? (
           <section className="mt-10">
             <SectionHead title="Finished" />
-            <div className={`mt-3 ${GRID}`}>
+            <div className="mt-3 flex flex-col gap-2">
               {data.finished.map((run) => (
-                <RunCard key={run.slug} now={now} run={run} />
+                <FinishedRow key={run.slug} now={now} run={run} />
               ))}
             </div>
           </section>
@@ -77,16 +66,7 @@ export function LiveIndex() {
   );
 }
 
-const GRID = "grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
-
-function Kpi({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.kpi}>
-      <span className={`text-xs ${styles.muted}`}>{label}</span>
-      <span className="text-lg font-medium tabular-nums">{value}</span>
-    </div>
-  );
-}
+const GRID = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4";
 
 function SectionHead({ title, meta }: { title: string; meta?: string }) {
   return (
@@ -120,29 +100,66 @@ function Empty() {
   );
 }
 
+/**
+ * A LIVE RUN ON THE LIST, SHORT (owner, 2026-10-19: "a short card is good enough... like Guild, circles
+ * overlapping, a little bigger... everything must have a function"). What a visitor needs to choose one:
+ * which coins it trades, who it is, what its money is doing, and that it is live. The detail is one tap away.
+ */
 function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
   const up = run.lastUsd >= run.startUsd;
-  const base = (run.market ?? "").replace("USDT", "");
-  const status =
-    run.status === "running" ? `Day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "lost" ? "Ran out" : "Ended";
+  const markets = run.card?.markets.length ? run.card.markets : run.market ? [run.market] : [];
+  const live = run.status === "running";
   return (
-    <Link className={`${styles.card} p-5 no-underline`} href={`/live/${run.slug}`}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className={styles.chip}>{base ? <TokenLogo size={18} symbol={base} /> : null}</span>
-          <div className="min-w-0">
-            <p className={`${styles.cardTitle} truncate`}>{run.name}</p>
-            <p className={`text-[11px] ${styles.muted}`}>{run.market?.replace("USDT", "/USDT") ?? "—"}</p>
-          </div>
-        </div>
-        {run.status === "running" ? <LiveBadge running /> : <span className={`shrink-0 text-xs ${styles.muted}`}>{status}</span>}
+    <Link className={`${styles.dpanel} ${styles.runCard} block p-5 no-underline`} href={`/live/${run.slug}`}>
+      <div className="flex items-start justify-between gap-3">
+        <span className="flex -space-x-4">
+          {markets.map((m, i) => (
+            <span className={styles.coinBubble} key={m} style={{ zIndex: markets.length - i }}>
+              <TokenLogo size={40} symbol={m.replace("USDT", "")} />
+            </span>
+          ))}
+        </span>
+        {live ? <span className={styles.blip} /> : null}
       </div>
-      <div className="mt-6 flex items-baseline gap-3">
-        <span className="text-[32px] font-semibold leading-none tabular-nums">{usd(run.lastUsd)}</span>
-        <span className={`text-sm font-medium tabular-nums ${up ? "text-[#3ddc84]" : "text-[#ff5c5c]"}`}>{pct(run.startUsd, run.lastUsd)}</span>
+      <p className="mt-4 truncate text-[18px] font-semibold text-white">{run.name}</p>
+      <p className={`text-[12px] ${styles.muted}`}>
+        {markets.map((m) => m.replace("USDT", "")).join(" · ")} · Day {now ? dayOf(run.startedAt, now) : 1}
+      </p>
+      <div className="mt-4 flex items-baseline justify-between gap-3">
+        <span className={`${styles.mono} text-[26px] font-semibold leading-none text-white`}>{usd(run.lastUsd)}</span>
+        <span className={`${styles.mono} text-[13px] font-semibold`} style={{ color: up ? "#3ddc84" : "#ff5c5c" }}>
+          {pct(run.startUsd, run.lastUsd)}
+        </span>
       </div>
-      <p className={`mt-3 text-[11px] tabular-nums ${styles.muted}`}>started with {usd(run.startUsd)}</p>
-      {run.status === "running" ? <p className={`mt-4 border-t border-white/5 pt-3 text-[11px] ${styles.muted}`}>{status}</p> : null}
+      <p className={`mt-1 text-[11.5px] ${styles.muted}`}>from {usd(run.startUsd)}</p>
+    </Link>
+  );
+}
+
+/** A finished run: one line - who, which coins, where it ended against where it started. */
+function FinishedRow({ run, now }: { run: LiveRunSummary; now: number }) {
+  const up = run.lastUsd >= run.startUsd;
+  const markets = run.card?.markets.length ? run.card.markets : run.market ? [run.market] : [];
+  const hours = Math.max(1, Math.round(((run.endedAt ?? run.lastValuedAt) - run.startedAt) / 3_600_000));
+  return (
+    <Link className={`${styles.dpanel} flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3.5 no-underline transition-colors hover:border-white/20`} href={`/live/${run.slug}`}>
+      <span className="flex -space-x-2">
+        {markets.map((m, i) => (
+          <span className={styles.coinBubble} key={m} style={{ zIndex: markets.length - i }}>
+            <TokenLogo size={18} symbol={m.replace("USDT", "")} />
+          </span>
+        ))}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-white">{run.name}</span>
+      <span className={`${styles.mono} text-[13px] text-[#c9cbc3]`}>
+        {usd(run.startUsd)} → {usd(run.lastUsd)}
+      </span>
+      <span className={`${styles.mono} text-[13px] font-semibold`} style={{ color: up ? "#3ddc84" : "#ff5c5c" }}>
+        {pct(run.startUsd, run.lastUsd)}
+      </span>
+      <span className={`text-[12px] ${styles.muted}`}>
+        {run.status === "lost" ? "ran out" : "stopped by its owner"} · {hours}h{now && run.endedAt ? ` · ${ago(now - run.endedAt)}` : ""}
+      </span>
     </Link>
   );
 }

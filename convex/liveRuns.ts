@@ -232,6 +232,34 @@ function summary(run: Doc<"liveRuns">, market: string | null) {
   };
 }
 
+/**
+ * WHAT THE /live LIST SHOWS OF A RUN (owner, 2026-10-19: "that card was not what I wanted"; it said BNB/USDT
+ * for a run that watches three coins). Every coin it trades, each rule in brief (what it waits for, its exits,
+ * its size), its latest decision, and its value over the last points - all already on the run and its draft.
+ */
+async function cardOf(ctx: QueryCtx, run: Doc<"liveRuns">) {
+  const draft = await ctx.db.get(run.draftId);
+  const rules = ((draft?.rules ?? []) as Rule[]).slice(0, 6);
+  const rsiBelow = (rule: Rule) => {
+    const c = rule.when.find((cond) => cond.kind === "rsi");
+    return c && c.kind === "rsi" && c.op === "below" ? c.value : null;
+  };
+  return {
+    markets: [...new Set(rules.map((rule) => rule.market))],
+    rules: rules.map((rule) => ({
+      market: rule.market,
+      timeframe: rule.timeframe,
+      buyRsiBelow: rsiBelow(rule),
+      words: describeRule(rule),
+      takeProfitPct: rule.takeProfitPct,
+      stopLossPct: rule.stopLossPct,
+      sizeUsd: rule.sizeUsd,
+    })),
+    lastThought: run.thoughts[run.thoughts.length - 1] ?? null,
+    history: run.history.slice(-60),
+  };
+}
+
 async function marketOf(ctx: QueryCtx, draftId: Id<"agentDrafts">): Promise<string | null> {
   const draft = await ctx.db.get(draftId);
   const rule = (draft?.rules ?? [])[0] as Rule | undefined;
@@ -248,8 +276,8 @@ export const list = query({
       ...(await ctx.db.query("liveRuns").withIndex("by_status_started", (q) => q.eq("status", "ended")).order("desc").take(5)),
     ].sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
     return {
-      running: await Promise.all(running.map(async (run) => summary(run, await marketOf(ctx, run.draftId)))),
-      finished: await Promise.all(finished.slice(0, 8).map(async (run) => summary(run, await marketOf(ctx, run.draftId)))),
+      running: await Promise.all(running.map(async (run) => ({ ...summary(run, await marketOf(ctx, run.draftId)), card: await cardOf(ctx, run) }))),
+      finished: await Promise.all(finished.slice(0, 8).map(async (run) => ({ ...summary(run, await marketOf(ctx, run.draftId)), card: await cardOf(ctx, run) }))),
     };
   },
 });

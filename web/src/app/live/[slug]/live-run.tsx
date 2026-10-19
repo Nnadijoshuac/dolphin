@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { compact, readCondition, rsiSeries, useChainPulse, useMarketStream, useRuleCandles, type MarketStream, type WireEvent } from "@/app/live/desk-feeds";
 import { LiveBadge, Ticker, ago, dayOf, pct, price, usd, useSecond, useTickers, type Candle } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
+import { RsiDial } from "@/app/live/rsi-dial";
 import { ResultBars, ValueArea } from "@/app/live/stat-charts";
 import { TokenLogo } from "@/components/brand-mark";
 import { RollingFigure } from "@/components/rolling-figure";
@@ -92,8 +93,8 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
           {/* LEFT: the agent's own desk - money, signal, risk, engine */}
           <div className="flex min-h-0 flex-col gap-2">
             <Treasury liveFigure={liveFigure} liveUsd={liveUsd} now={now} run={run} />
-            <Panel className="min-h-[200px] flex-1" live meta={coins.length > 1 ? "tap a coin to watch it" : "what it waits for"} title="Watchlist">
-              <div className="flex h-full flex-col gap-2 overflow-y-auto p-2">
+            <Panel live meta={coins.length > 1 ? "tap a coin to watch it" : "what it waits for"} title="Watchlist">
+              <div className="flex flex-col gap-2 p-2">
                 {desk.length === 0 ? <p className={`p-3 text-xs ${styles.muted}`}>Syncing the agent&apos;s rules…</p> : null}
                 {desk.map((rule) => (
                   <CoinCard
@@ -107,17 +108,16 @@ function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
                 ))}
               </div>
             </Panel>
+            {/* The log scrolls inside whatever height is left, so the column never ends in dead space. */}
+            <DecisionLog onOpen={setDetail} run={run} />
           </div>
 
-          {/* CENTRE: the market the agent trades, and its own words */}
+          {/* CENTRE: the market the agent trades */}
           <div className="flex min-h-0 flex-col gap-2">
             <ChartPanel coin={coin} desk={coinRules} frame={frame} lastPrice={lastPrice} onFrame={setFrame} run={run} />
-            <div className="grid min-h-0 gap-2 xl:h-[31%] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-              <DecisionLog onOpen={setDetail} run={run} />
-              <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
-                <EngineCard alive={alive} desk={desk} nextIn={nextIn} now={now} run={run} />
-                <Performance run={run} />
-              </div>
+            <div className="grid min-h-0 gap-2 xl:h-[22%] xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+              <EngineCard alive={alive} desk={desk} nextIn={nextIn} now={now} run={run} />
+              <Performance run={run} />
             </div>
           </div>
 
@@ -372,8 +372,8 @@ function CoinCard({ rule, market, selected, onPick, now }: { rule: LiveDeskRule;
           </span>
         ) : null}
       </div>
-      <div className="mt-2.5 flex items-center gap-3">
-        <RsiDial buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null} sell={sellLine && sellLine.kind === "rsi" ? sellLine.value : null} value={rsi} />
+      <div className="mt-1.5 flex items-center gap-3">
+        <RsiDial buy={buyLine && buyLine.kind === "rsi" ? buyLine.value : null} sell={sellLine && sellLine.kind === "rsi" ? sellLine.value : null} size={66} value={rsi} />
         <div className="min-w-0 flex-1 text-left">
           {holding && rule.position ? (
             <>
@@ -404,39 +404,6 @@ function CoinCard({ rule, market, selected, onPick, now }: { rule: LiveDeskRule;
         </div>
       </div>
     </button>
-  );
-}
-
-/** RSI as a dial: 0 to 100 on a 240° arc, the buy zone lit green, the sell zone red, the reading as a gold knob on the arc. */
-function RsiDial({ value, buy, sell }: { value: number | null; buy: number | null; sell: number | null }) {
-  const R = 32;
-  const C = 40;
-  const start = 150;
-  const sweep = 240;
-  const at = (v: number) => {
-    const a = ((start + (sweep * Math.max(0, Math.min(100, v))) / 100) * Math.PI) / 180;
-    return [C + R * Math.cos(a), C + R * Math.sin(a)] as const;
-  };
-  const arc = (from: number, to: number) => {
-    const [x1, y1] = at(from);
-    const [x2, y2] = at(to);
-    return `M ${x1} ${y1} A ${R} ${R} 0 ${((to - from) / 100) * sweep > 180 ? 1 : 0} 1 ${x2} ${y2}`;
-  };
-  const [nx, ny] = value === null ? [C, C] : at(value);
-  return (
-    <svg className="shrink-0" height="74" viewBox="0 0 80 74" width="80">
-      <path d={arc(0, 100)} fill="none" stroke="rgba(255,255,255,0.16)" strokeLinecap="round" strokeWidth="6" />
-      {buy !== null ? <path d={arc(0, buy)} fill="none" stroke={UP} strokeLinecap="round" strokeOpacity="0.9" strokeWidth="6" /> : null}
-      {sell !== null ? <path d={arc(sell, 100)} fill="none" stroke={DOWN} strokeLinecap="round" strokeOpacity="0.75" strokeWidth="6" /> : null}
-      {/* The reading rides the arc as a gold knob, so the number in the middle stays clear. */}
-      {value !== null ? <circle className={styles.dialKnob} cx={nx} cy={ny} fill="#0e0f0e" r="4.5" stroke={GOLD} strokeWidth="2.5" /> : null}
-      <text fill="#ffffff" fontSize="18" fontWeight="700" textAnchor="middle" x={C} y={C + 6}>
-        {value === null ? "—" : value.toFixed(0)}
-      </text>
-      <text fill="#8a8c85" fontSize="9" textAnchor="middle" x={C} y={C + 26}>
-        RSI
-      </text>
-    </svg>
   );
 }
 
@@ -738,7 +705,7 @@ function CandleChart({
 
 function DecisionLog({ run, onOpen }: { run: LiveRunDetail; onOpen: (detail: Detail) => void }) {
   return (
-    <Panel className="min-h-[200px]" live meta="every closed candle" title="Decision log">
+    <Panel className="min-h-[180px] flex-1" live meta="every closed candle" title="Decision log">
       <div className="relative h-full">
         <div className={`${styles.book} absolute inset-0 overflow-y-auto px-1 py-1`}>
           {run.thoughts.length === 0 ? <p className={`px-2 py-2 text-xs ${styles.muted}`}>Its decisions appear here as it makes them.</p> : null}

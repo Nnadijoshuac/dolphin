@@ -28,7 +28,9 @@ export function RsiDial({ value, buy, sell, size = 80 }: { value: number | null;
   };
   const [nx, ny] = value === null ? [C, C] : at(value);
   return (
-    <svg className="shrink-0" height={(size * 74) / 80} viewBox="0 0 80 74" width={size}>
+    // A margin all round: the Dolphin's disc (radius 11) reaches past the arc (8 from the top edge), and was
+    // cut off at its head whenever the reading sat near the top (owner, 2026-10-19).
+    <svg className="shrink-0 overflow-visible" height={(size * 88) / 92} viewBox="-6 -7 92 88" width={size}>
       <path d={arc(0, 100)} fill="none" stroke="rgba(255,255,255,0.16)" strokeLinecap="round" strokeWidth="6" />
       {buy !== null ? <path d={arc(0, buy)} fill="none" stroke={UP} strokeLinecap="round" strokeOpacity="0.9" strokeWidth="6" /> : null}
       {sell !== null ? <path d={arc(sell, 100)} fill="none" stroke={DOWN} strokeLinecap="round" strokeOpacity="0.75" strokeWidth="6" /> : null}

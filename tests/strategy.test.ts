@@ -295,3 +295,24 @@ test("a locked rule's words and reasons never carry its conditions", () => {
   for (const reason of reasons.map(redactReason)) assert.doesNotMatch(reason, /RSI|\d+\.\d|below 37|above 66/, reason);
   assert.equal(redactReason("Stop-loss: in at $790, now $758 - 4.05% against the position; your stop is 4%."), "Stop-loss: in at $790, now $758 - 4.05% against the position; your stop is 4%.");
 });
+
+test("the builder's padding and its repeated exit do not refuse a good rule (The Dip, 2026-10-19)", () => {
+  const base = { venue: "dolphin-wallet", market: "BNBUSDT", timeframe: "15m", action: "buy", sizeUsd: 5, stopLossPct: 3, takeProfitPct: 2, maxTradesPerDay: 3 };
+  const rsi = { kind: "rsi", op: "below", value: 20, period: 14, direction: null, candles: null, length: null, fast: null, slow: null, ma: null };
+  const empty = { kind: "price", op: null, value: null, direction: null, candles: null, length: null, fast: null, slow: null, ma: null, period: null };
+  // Prod: the entry padded with empty price conditions, past the 6-condition cap.
+  const padded = cleanRule({ ...base, when: [rsi, empty, empty, empty, empty, empty, empty], until: [] }, "x");
+  assert.ok(!("problems" in padded), "problems" in padded ? padded.problems.join("; ") : "");
+  if (!("problems" in padded)) assert.deepEqual(padded.rule.when, [{ kind: "rsi", op: "below", value: 20, period: 14 }]);
+  // Dev: "+2%" written again as an until with no candle count - left out, said, the target and stop kept.
+  const repeated = cleanRule({ ...base, when: [rsi], until: [{ kind: "change_pct", direction: "above", op: null, value: 2, candles: null }] }, "x");
+  assert.ok(!("problems" in repeated));
+  if (!("problems" in repeated)) {
+    assert.deepEqual(repeated.rule.until, []);
+    assert.equal(repeated.rule.takeProfitPct, 2);
+    assert.ok(repeated.warnings.some((w) => /left out an exit condition/.test(w)));
+  }
+  // An entry that does not read still refuses the rule, and an unreadable exit with no target or stop does too.
+  assert.ok("problems" in cleanRule({ ...base, when: [{ ...rsi, op: null }], until: [] }, "x"));
+  assert.ok("problems" in cleanRule({ ...base, stopLossPct: null, takeProfitPct: null, when: [rsi], until: [{ kind: "change_pct", op: "above", value: 2, candles: null }] }, "x"));
+});

@@ -623,14 +623,37 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
   if (!action) problems.push("the action must be buy or short (it sells through its exits)");
   if (action === "short" && venue !== "binance-futures") problems.push("shorting needs the Binance Futures venue");
 
+  /*
+   * AN EXTRA EXIT THAT DOES NOT READ (owner, 2026-10-19). Asked for "sell at +2% or at a 3% loss", the model
+   * set takeProfitPct 2 and stopLossPct 3 - and ALSO wrote "+2%" as an until condition with no candle count,
+   * which refused all three rules. An exit condition that cannot be read is left out when the rule has its
+   * own target or stop to exit on, and the reply says so. An entry condition never is: entries stay strict.
+   */
+  const hasOwnExit = typeof r.takeProfitPct === "number" || typeof r.stopLossPct === "number";
+  const droppedExits: string[] = [];
   const conditions = (list: unknown, label: string): Condition[] => {
-    const items = Array.isArray(list) ? list : [];
+    /*
+     * FILLER IS NOT A CONDITION (owner, 2026-10-19: "three rules on 15-minute candles... buy when RSI(14)
+     * drops below 20" was refused as "at most 6 conditions; a price condition needs a price"). The builder's
+     * strict schema makes the model write every field of every condition, and it pads the list with empty
+     * ones. A condition that does not read AND carries no number at all asks for nothing: it is dropped.
+     * One with a number that does not read is a real request gone wrong, and still refuses the rule.
+     */
+    const items = (Array.isArray(list) ? list : []).filter((item) => {
+      if (typeof cleanCondition(item) !== "string") return true;
+      const c = (item ?? {}) as Record<string, unknown>;
+      // Only an EMPTY condition of a kind Dolphin knows is filler; an unknown kind is always reported.
+      const known = ["rsi", "price_vs_ma", "ma_cross", "macd_cross", "trend", "price", "change_pct", "fib"].includes(String(c.kind));
+      return !known || ["value", "level", "length", "fast", "slow", "candles"].some((key) => typeof c[key] === "number");
+    });
     if (items.length > LIMITS.maxConditions) problems.push(`${label}: at most ${LIMITS.maxConditions} conditions`);
     const out: Condition[] = [];
     for (const item of items.slice(0, LIMITS.maxConditions)) {
       const cleaned = cleanCondition(item);
-      if (typeof cleaned === "string") problems.push(`${label}: ${cleaned}`);
-      else out.push(cleaned);
+      if (typeof cleaned === "string") {
+        if (label === "until" && hasOwnExit) droppedExits.push(cleaned);
+        else problems.push(`${label}: ${cleaned}`);
+      } else out.push(cleaned);
     }
     return out;
   };
@@ -674,7 +697,7 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
   }
 
   if (problems.length > 0) return { problems };
-  const warnings: string[] = [];
+  const warnings: string[] = droppedExits.map((why) => `I left out an exit condition I could not read (${why}); it exits on its own target and stop.`);
   if ((leverage as number) > LIMITS.comfortableLeverage) {
     warnings.push(
       `${leverage}x is above the usual 1-3x. A move of about ${liquidationMovePct(leverage as number)}% against the position would liquidate it, and everything in it would be lost.`,

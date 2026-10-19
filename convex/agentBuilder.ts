@@ -1215,10 +1215,30 @@ export const ask = action({
           rules: compiled.reply.rules,
         });
         addedRules = result.added.length;
+        // A rule the checks refused is logged as the model wrote it: the reply says what failed, this shows why.
+        if (result.problems.length > 0) console.warn("[agentBuilder] rules refused:", JSON.stringify({ problems: result.problems, raw: compiled.reply.rules }).slice(0, 4000));
+        /*
+         * A SECOND ATTEMPT (owner, 2026-10-19). When every rule the build reply wrote was refused, the
+         * person's words go once more to the rules-only prompt (extractRules) - one job, one schema - and
+         * only if that fails too does the reply say nothing changed.
+         */
+        if (addedRules === 0) {
+          const retry = await extractRules(text, keyLedger(ctx));
+          if (retry.length > 0) {
+            const second: { added: string[]; problems: string[]; warnings: string[] } = await ctx.runMutation(internal.strategy.addRules, { conversationId, rules: retry });
+            if (second.added.length > 0) {
+              addedRules = second.added.length;
+              applied.changed.push("tools");
+              result.problems = second.problems;
+              result.warnings = second.warnings;
+            } else console.warn("[agentBuilder] rules refused again:", JSON.stringify({ problems: second.problems, raw: retry }).slice(0, 4000));
+          }
+        }
         if (result.added.length > 0) applied.changed.push("tools");
+        // Three rules with the same shape share their warnings: each is said once.
         rulesNote = [
-          ...(result.problems.length > 0 ? [`I could not add ${result.problems.join("; ")}.`] : []),
-          ...result.warnings.map((warning) => `Warning: ${warning}`),
+          ...(result.problems.length > 0 ? [`I could not add ${[...new Set(result.problems)].join("; ")}.`] : []),
+          ...[...new Set(result.warnings)].map((warning) => `Warning: ${warning}`),
         ].join("\n\n");
       }
 

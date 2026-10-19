@@ -666,6 +666,9 @@ export const record = internalMutation({
         paper: v.optional(v.boolean()),
         network: v.optional(v.union(v.literal("testnet"), v.literal("live"), v.literal("bsc"))),
         orderId: v.optional(v.string()),
+        marketPrice: v.optional(v.number()),
+        route: v.optional(v.string()),
+        measured: v.optional(v.boolean()),
       }),
     ),
   },
@@ -1042,6 +1045,7 @@ export const tick = internalAction({
         // On paper every decision "executes" at the closed candle's price; Live sends a real order first.
         const held = armedDraft.helds[rule.id] ?? null;
         let execution: Execution = { real: false };
+        let marketPrice: number | null = null;
         let order: number | undefined;
         if (decision.type !== "none") {
           // One order per rule at a time: take the lock, or leave the rule to the run that has it.
@@ -1067,6 +1071,8 @@ export const tick = internalAction({
             continue;
           }
           execution = outcome;
+          // The market's own price at the decision is kept beside the fill, so every trade shows what it cost.
+          marketPrice = decision.price;
           // What the venue really paid is the price of record.
           if (outcome.real) decision = { ...decision, price: outcome.price };
         }
@@ -1091,7 +1097,16 @@ export const tick = internalAction({
                 pnlPct: decision.type === "exit" && state.position ? resultPct(state.position.side, state.position.entryPrice, decision.price, rule.leverage) : null,
                 reason: decision.reason,
                 candleTime: judged.openTime,
-                ...(execution.real ? { paper: false, network: execution.network, ...(execution.orderId ? { orderId: execution.orderId } : {}) } : {}),
+                ...(execution.real
+                  ? {
+                      paper: false,
+                      network: execution.network,
+                      ...(execution.orderId ? { orderId: execution.orderId } : {}),
+                      ...(marketPrice !== null ? { marketPrice } : {}),
+                      ...(execution.route ? { route: execution.route } : {}),
+                      ...(execution.measured !== undefined ? { measured: execution.measured } : {}),
+                    }
+                  : {}),
               };
         if (trade) trades++;
         await ctx.runMutation(internal.strategy.record, {
@@ -1217,7 +1232,7 @@ export const marketCandles = action({
 
 type Execution =
   | { real: false }
-  | { real: true; network: "testnet" | "live" | "bsc"; price: number; orderId: string | null; held: Held | null };
+  | { real: true; network: "testnet" | "live" | "bsc"; price: number; orderId: string | null; held: Held | null; route?: string; measured?: boolean };
 
 const STABLES = /(USDT|USDC|FDUSD|BUSD|U)$/;
 
@@ -1288,10 +1303,10 @@ async function execute(ctx: ActionCtx, draft: ArmedDraft, rule: Rule, decision: 
     if (decision.type === "enter") {
       // Sell slightly under the quote later: what arrives can be a little less than quoted.
       const qty = (Math.floor(out * 0.995 * 1e6) / 1e6).toString();
-      return { real: true, network: "bsc", price: out > 0 ? rule.sizeUsd / out : decision.price, orderId: result.transactionHash ?? null, held: { qty, orderId: result.transactionHash ?? null, stopOrderId: null } };
+      return { real: true, network: "bsc", price: out > 0 ? rule.sizeUsd / out : decision.price, orderId: result.transactionHash ?? null, held: { qty, orderId: result.transactionHash ?? null, stopOrderId: null }, route: result.route, measured: result.measured };
     }
     const sold = Number((held as Held).qty);
-    return { real: true, network: "bsc", price: sold > 0 ? out / sold : decision.price, orderId: result.transactionHash ?? null, held: null };
+    return { real: true, network: "bsc", price: sold > 0 ? out / sold : decision.price, orderId: result.transactionHash ?? null, held: null, route: result.route, measured: result.measured };
   }
 
   // The Binance Wallet (Agentic Wallet) signs through a CLI on the builder's own machine.

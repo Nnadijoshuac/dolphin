@@ -85,6 +85,17 @@ import {
 import { requireSessionToken, useWalletSession } from "./wallet-session";
 import { reportToConsole } from "@/lib/console-report";
 
+/** The routers a trade key may be given an allowance to, and the swap calls it may make (convex/lib/tradeKeyPolicy.ts). */
+const PANCAKE_V2 = "0x10ed43c718714eb63d5aa57b78b54704e256024e";
+const PANCAKE_V3 = "0x1b81d678ffb9c0263b24a97847620c99d213eb14";
+const TRADE_KEY_ROUTERS = new Set([PANCAKE_V2, PANCAKE_V3]);
+const TRADE_KEY_CALLS = new Set([
+  `${PANCAKE_V2} swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)`,
+  `${PANCAKE_V2} swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)`,
+  `${PANCAKE_V2} swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)`,
+  `${PANCAKE_V3} exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))`,
+]);
+
 /**
  * Dolphin's Altana wallet - a passkey-backed smart account, separate from the
  * wagmi/injected wallet in wallet-provider.tsx. See altana-policy.ts for why it
@@ -757,10 +768,16 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           throw new Error("This trade key signs only on Dolphin's backend.");
         },
       };
-      // Only ever the V2 router, only capped - checked here too, before the passkey signs.
-      const V2_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E".toLowerCase();
-      if (input.approvals.some((approval) => approval.spender.toLowerCase() !== V2_ROUTER || BigInt(approval.amount) <= BigInt(0))) {
-        throw new Error("Refusing an allowance to anything but PancakeSwap's V2 router.");
+      /*
+       * Checked here too, before the passkey signs (owner, 2026-10-19: V3's single-pool swap added, its
+       * multicall never): allowances only to PancakeSwap's two routers, only capped; calls only to the
+       * swap functions a trade key may make. Mirrors convex/lib/tradeKeyPolicy.ts.
+       */
+      if (input.approvals.some((approval) => !TRADE_KEY_ROUTERS.has(approval.spender.toLowerCase()) || BigInt(approval.amount) <= BigInt(0))) {
+        throw new Error("Refusing an allowance to anything but PancakeSwap's routers.");
+      }
+      if (stored.calls.some((call) => !call.signature || !TRADE_KEY_CALLS.has(`${call.to.toLowerCase()} ${call.signature}`))) {
+        throw new Error("Refusing a trade key that may call something other than PancakeSwap's swaps.");
       }
       setIsBusy(true);
       setError(null);
@@ -823,13 +840,10 @@ export function AltanaWalletProvider({ children }: PropsWithChildren) {
           const zeroed = await altanaClient().execute({
             wallet: { address: wallet.address },
             signer: adminSigner(),
-            calls: approvalTokens.map((token) => ({
+            // Both routers, for every token the grant approved: a key granted before V3 just zeroes a zero.
+            calls: [...new Set(approvalTokens.map((token) => token.toLowerCase()))].flatMap((token) => [...TRADE_KEY_ROUTERS].map((spender) => ({ token, spender }))).map(({ token, spender }) => ({
               to: token as Address,
-              data: encodeFunctionData({
-                abi: erc20Abi,
-                functionName: "approve",
-                args: ["0x10ED43C718714eb63d5aA57B78B54704E256024E" as Address, BigInt(0)],
-              }),
+              data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender as Address, BigInt(0)] }),
             })),
             chainId: ALTANA_NETWORK.chainId,
           });

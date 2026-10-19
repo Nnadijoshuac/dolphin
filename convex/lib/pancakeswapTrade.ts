@@ -99,7 +99,57 @@ const V3_ROUTER_ABI = parseAbi([
   "function unwrapWETH9(uint256 amountMinimum, address recipient) payable",
   "function refundETH() payable",
   "function multicall(bytes[] data) payable returns (bytes[] results)",
+  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96) params) payable returns (uint256 amountOut)",
 ]);
+
+/**
+ * ONE V3 POOL, ONE CALL - the swap an agent's trade key may make (owner, 2026-10-19: "reroute through
+ * their V3, the cheapest route possible"). Measured that day for $6 of BNB: the V3 0.01% pool filled
+ * within 0.02% of Binance's price, the V2 pool the key was limited to at +0.27%.
+ *
+ * Verified on BNB Chain 2026-10-19 against PANCAKE_V3_SWAP_ROUTER: exactInputSingle WITH a deadline
+ * (selector 0x414bf389) exists - an unfunded call reverts "STF"; the deadline-less layout (0x04e45aaf)
+ * reverts with no reason, i.e. not this router. Paying with native BNB works without multicall: the
+ * router wraps the call's value (simulated: 0.0083 BNB -> 5.9988 USDT, 722.75 vs Binance 722.91).
+ * Without multicall nothing can be unwrapped, so BNB BOUGHT here arrives as WBNB - the same asset.
+ */
+export function buildSingleV3Swap({
+  route,
+  recipient,
+  payNative,
+  slippageBps = TRADE_SLIPPAGE_BPS,
+  nowSeconds = Math.floor(Date.now() / 1000),
+}: {
+  route: TradeRoute;
+  recipient: Address;
+  /** Pay the input as native BNB (the call's value) rather than from a WBNB balance. */
+  payNative: boolean;
+  slippageBps?: number;
+  nowSeconds?: number;
+}): TradeCall {
+  if (route.venue !== "v3" || route.path.length !== 2 || route.fees.length !== 1) throw new Error("A single V3 swap needs a one-pool route.");
+  if (payNative && getAddress(route.path[0]) !== WBNB_BSC) throw new Error("Only BNB can be paid as native value.");
+  return {
+    to: PANCAKE_V3_SWAP_ROUTER,
+    ...(payNative ? { value: route.amountInRaw } : {}),
+    data: encodeFunctionData({
+      abi: V3_ROUTER_ABI,
+      functionName: "exactInputSingle",
+      args: [
+        {
+          tokenIn: getAddress(route.path[0]),
+          tokenOut: getAddress(route.path[1]),
+          fee: route.fees[0]!,
+          recipient: getAddress(recipient),
+          deadline: BigInt(nowSeconds + TRADE_DEADLINE_SECONDS),
+          amountIn: route.amountInRaw,
+          amountOutMinimum: minimumOut(route.amountOutRaw, slippageBps),
+          sqrtPriceLimitX96: BigInt(0),
+        },
+      ],
+    }),
+  };
+}
 
 function onChain(side: TradeSide): Address {
   return side.address ? getAddress(side.address) : WBNB_BSC;
@@ -374,7 +424,11 @@ function assertSwapArguments(router: Address, data: Hex, owner: Address, refuse:
     } catch {
       return refuse("This trade carried a PancakeSwap v3 call Dolphin does not use.");
     }
-    if (decoded.functionName === "exactInput") {
+    if (decoded.functionName === "exactInputSingle") {
+      const params = decoded.args[0] as { recipient: string; amountOutMinimum: bigint };
+      if (getAddress(params.recipient) !== owner) refuse("This trade would send its proceeds to another address.");
+      if (params.amountOutMinimum <= BigInt(0)) refuse("This trade had no minimum output.");
+    } else if (decoded.functionName === "exactInput") {
       const params = decoded.args[0] as { recipient: string; amountOutMinimum: bigint };
       const recipient = getAddress(params.recipient);
       if (recipient !== owner && recipient !== PANCAKE_V3_SWAP_ROUTER) refuse("This trade would send its proceeds to another address.");

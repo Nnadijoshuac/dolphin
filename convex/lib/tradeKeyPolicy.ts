@@ -16,7 +16,7 @@
 
 import { getAddress, parseUnits } from "viem";
 
-import { PANCAKE_V2_ROUTER, WBNB_BSC } from "./pancakeswapTrade";
+import { PANCAKE_V2_ROUTER, PANCAKE_V3_SWAP_ROUTER, WBNB_BSC } from "./pancakeswapTrade";
 import type { TradeToken } from "./tradeTokens";
 
 export const SESSION_SWAP_SIGNATURES = [
@@ -24,6 +24,14 @@ export const SESSION_SWAP_SIGNATURES = [
   "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)",
   "swapExactTokensForETHSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)",
 ] as const;
+
+/**
+ * V3, ONE FUNCTION (owner, 2026-10-19: the V2-only key paid ~0.27% a fill where V3's 0.01% pool paid
+ * ~0.02%). exactInputSingle swaps through one pool and makes no other call, so it carries nothing inside
+ * it the way multicall could - multicall stays forbidden. Its recipient is an argument, exactly like the
+ * V2 swaps: bounded by the same allowances and caps, and checked by assertTradeCallsAllowed before signing.
+ */
+export const SESSION_V3_SWAP_SIGNATURE = "exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))" as const;
 
 /** Each cap is the daily limit x this, so a position bought at one price can still be sold after a move. */
 export const SELL_HEADROOM = 1.25;
@@ -54,7 +62,10 @@ export function tradeKeyPolicy({
   priceOf: (token: TradeToken) => number | null;
 }): TradeKeyPolicy {
   if (!(dailyUsd > 0) || !(durationDays > 0) || !(bnbPriceUsd > 0)) throw new Error("A trade key needs a positive daily limit, duration and BNB price.");
-  const calls = SESSION_SWAP_SIGNATURES.map((signature) => ({ to: PANCAKE_V2_ROUTER as string, signature }));
+  const calls = [
+    ...SESSION_SWAP_SIGNATURES.map((signature) => ({ to: PANCAKE_V2_ROUTER as string, signature: signature as string })),
+    { to: PANCAKE_V3_SWAP_ROUTER as string, signature: SESSION_V3_SWAP_SIGNATURE as string },
+  ];
   /*
    * ROOM TO SELL WHAT IT BOUGHT (measured on prod, 2026-10-04: BNB Pulse could not sell). The caps were
    * the daily dollars at the GRANT's prices, exactly. The rule bought $4 of BNB (0.005065) under a
@@ -73,12 +84,9 @@ export function tradeKeyPolicy({
     if (!priceUsd || !(priceUsd > 0)) continue;
     const decimals = Math.min(token.decimals, 18);
     spend.push({ limit: parseUnits((usd / priceUsd).toFixed(decimals), token.decimals).toString(), period: "day", token: address });
-    approvals.push({
-      token: address,
-      spender: PANCAKE_V2_ROUTER,
-      amount: parseUnits(((usd * durationDays) / priceUsd).toFixed(decimals), token.decimals).toString(),
-      symbol: token.symbol,
-    });
+    // The same capped allowance to each router the key may call; the daily spend cap above binds both together.
+    const amount = parseUnits(((usd * durationDays) / priceUsd).toFixed(decimals), token.decimals).toString();
+    for (const spender of [PANCAKE_V2_ROUTER, PANCAKE_V3_SWAP_ROUTER]) approvals.push({ token: address, spender, amount, symbol: token.symbol });
   }
   return { calls, spend, approvals };
 }

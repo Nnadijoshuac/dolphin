@@ -55,11 +55,15 @@ import { bscPairFor, type AgentBlock } from "./lib/agentBlocks";
 import { bscPublicClient } from "./lib/bscClient";
 import {
   PANCAKE_V2_ROUTER,
+  PANCAKE_V3_SWAP_ROUTER,
   WBNB_BSC,
   assertTradeCallsAllowed,
+  buildSingleV3Swap,
   buildTradeCalls,
   describeRoute,
   quoteTrade,
+  type TradeCall,
+  type TradeRoute,
   type TradeSide,
 } from "./lib/pancakeswapTrade";
 import { open, seal } from "./lib/secretBox";
@@ -427,7 +431,10 @@ export const executeTrade = internalAction({
       safety: v.any(),
     }),
   },
-  handler: async (ctx, { draftId, agentName, ticket }): Promise<{ attempted: boolean; executed: boolean; text: string; transactionHash?: string; amountOut?: string }> => {
+  handler: async (
+    ctx,
+    { draftId, agentName, ticket },
+  ): Promise<{ attempted: boolean; executed: boolean; text: string; transactionHash?: string; amountOut?: string; route?: string; measured?: boolean }> => {
     const key: Doc<"agentTradeKeys"> | null = await ctx.runQuery(internal.autotrade.activeKey, { draftId });
     if (!key || !key.ciphertext || !key.iv) return { attempted: false, executed: false, text: "" };
 
@@ -441,10 +448,26 @@ export const executeTrade = internalAction({
       return { attempted: true, executed: false, text: "The amount could not be read, so nothing was traded." };
     }
 
+    /*
+     * THE CHEAPEST ROUTE THE KEY ALLOWS (owner, 2026-10-19). A key granted since then may also call V3's
+     * exactInputSingle (lib/tradeKeyPolicy.ts); an older key stays on V2 until it is granted again.
+     * BNB on the V3 path is held as WBNB - the same asset - because unwrapping needs multicall, which no
+     * key may call. So a sale of BNB spends WBNB when the wallet holds enough, else native BNB.
+     */
+    const permissions = JSON.parse(key.permissionsJson) as StoredPermissions;
+    const keyAllowsV3 = permissions.calls.some((call) => getAddress(call.to) === PANCAKE_V3_SWAP_ROUTER);
+    const wbnbSide: TradeSide = { address: WBNB_BSC, symbol: "WBNB", decimals: 18 };
+    const balanceOf = (side: TradeSide) =>
+      side.address
+        ? bscPublicClient.readContract({ address: getAddress(side.address) as Address, abi: erc20Abi, functionName: "balanceOf", args: [wallet] })
+        : bscPublicClient.getBalance({ address: wallet });
+    const nativeIn = tokenIn.address === null;
+    const wbnbHeld = nativeIn ? await balanceOf(wbnbSide) : BigInt(0);
+    // Spend WBNB first: it is what a V3 buy left behind, and it pays no value-wrapping.
+    const payIn: TradeSide = nativeIn && wbnbHeld >= amountInRaw ? wbnbSide : tokenIn;
+
     // Enough to sell? A trade that would revert costs gas and proves nothing.
-    const balance = tokenIn.address
-      ? await bscPublicClient.readContract({ address: getAddress(tokenIn.address) as Address, abi: erc20Abi, functionName: "balanceOf", args: [wallet] })
-      : await bscPublicClient.getBalance({ address: wallet });
+    const balance = payIn === wbnbSide ? wbnbHeld : await balanceOf(tokenIn);
     if (balance < amountInRaw) {
       return {
         attempted: true,
@@ -453,27 +476,37 @@ export const executeTrade = internalAction({
       };
     }
 
-    // The key may only call V2's swaps: pick the best V2 route.
-    const routes = (await quoteTrade({ publicClient: bscPublicClient as never, tokenIn, tokenOut, amountInRaw })).filter((candidate) => candidate.venue === "v2");
-    const route = routes[0];
-    if (!route) return { attempted: true, executed: false, text: "Not traded: PancakeSwap v2 had no route for that swap right now." };
-    const built = buildTradeCalls({ route, tokenIn, tokenOut, recipient: wallet });
-    assertTradeCallsAllowed(built, tokenIn, wallet);
-    // The owner's passkey set the allowance at grant time; the key cannot approve. Only the swap is sent.
-    const calls = built.filter((call) => getAddress(call.to) === PANCAKE_V2_ROUTER);
+    // Every pool PancakeSwap prices, then only what this key may call: V2's swaps, and one V3 pool at a time.
+    const quoted = await quoteTrade({ publicClient: bscPublicClient as never, tokenIn: payIn, tokenOut, amountInRaw });
+    const routes = quoted.filter((candidate) => candidate.venue === "v2" || (keyAllowsV3 && candidate.path.length === 2 && candidate.fees.length === 1));
+    const route: TradeRoute | undefined = routes[0];
+    if (!route) return { attempted: true, executed: false, text: "Not traded: PancakeSwap had no route for that swap right now." };
+    // A V3 buy of BNB pays out WBNB (see above); a V2 one pays native BNB, as before.
+    const outSide: TradeSide = route.venue === "v3" && tokenOut.address === null ? wbnbSide : tokenOut;
+    const router = route.venue === "v3" ? PANCAKE_V3_SWAP_ROUTER : PANCAKE_V2_ROUTER;
+    let calls: TradeCall[];
+    if (route.venue === "v3") {
+      calls = [buildSingleV3Swap({ route, recipient: wallet, payNative: payIn.address === null })];
+      assertTradeCallsAllowed(calls, payIn, wallet);
+    } else {
+      const built = buildTradeCalls({ route, tokenIn: payIn, tokenOut, recipient: wallet });
+      assertTradeCallsAllowed(built, payIn, wallet);
+      // The owner's passkey set the allowance at grant time; the key cannot approve. Only the swap is sent.
+      calls = built.filter((call) => getAddress(call.to) === PANCAKE_V2_ROUTER);
+    }
     if (calls.length !== 1) return { attempted: true, executed: false, text: "Not traded: the swap did not fit the trade key." };
-    if (tokenIn.address) {
+    if (payIn.address) {
       const allowance = await bscPublicClient.readContract({
-        address: getAddress(tokenIn.address) as Address,
+        address: getAddress(payIn.address) as Address,
         abi: erc20Abi,
         functionName: "allowance",
-        args: [wallet, PANCAKE_V2_ROUTER],
+        args: [wallet, router],
       });
       if (allowance < amountInRaw) {
         return {
           attempted: true,
           executed: false,
-          text: `Not traded: the ${tokenIn.symbol} allowance you granted with this key is used up. Grant a new key to keep trading.`,
+          text: `Not traded: the ${payIn.symbol} allowance you granted with this key is used up. Grant a new key to keep trading.`,
         };
       }
     }
@@ -528,14 +561,35 @@ export const executeTrade = internalAction({
       console.warn("[autotrade] trade executed but could not be recorded yet:", result.transactionHash, cause);
     }
 
-    const out = formatUnits(route.amountOutRaw, tokenOut.decimals);
+    /*
+     * WHAT REALLY ARRIVED (owner, 2026-10-19: "a way for us to verify"), read from the receipt: the
+     * token's Transfer events into the wallet. Native BNB leaves no Transfer, so a V2 sale for BNB keeps
+     * the quote, and says so.
+     */
+    let receivedRaw: bigint | null = null;
+    if (outSide.address) {
+      try {
+        const receipt = await bscPublicClient.waitForTransactionReceipt({ hash: result.transactionHash as Hex, timeout: 20_000 });
+        const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+        const token = getAddress(outSide.address);
+        receivedRaw = receipt.logs
+          .filter((log) => getAddress(log.address) === token && log.topics[0] === TRANSFER && log.topics[2] && getAddress(`0x${log.topics[2].slice(26)}`) === wallet)
+          .reduce((sum, log) => sum + BigInt(log.data), BigInt(0));
+        if (receivedRaw === BigInt(0)) receivedRaw = null;
+      } catch (cause) {
+        console.warn("[autotrade] receipt not read yet; using the quote:", result.transactionHash, cause instanceof Error ? cause.message : cause);
+      }
+    }
+    const out = formatUnits(receivedRaw ?? route.amountOutRaw, outSide.decimals);
     return {
       attempted: true,
       executed: true,
       transactionHash: result.transactionHash,
-      // The quoted output; what arrives can be a little less (slippage), so rule exits sell slightly under it.
+      // From the receipt when it could be read; otherwise the quote, which can run a little over what arrives.
       amountOut: out,
-      text: `Traded: sold ${ticket.amountIn} ${tokenIn.symbol} for about ${Number(out).toPrecision(6)} ${tokenOut.symbol} on ${describeRoute(route)}. Transaction ${result.transactionHash}.`,
+      route: describeRoute(route),
+      measured: receivedRaw !== null,
+      text: `Traded: sold ${ticket.amountIn} ${payIn.symbol} for ${receivedRaw !== null ? "" : "about "}${Number(out).toPrecision(6)} ${outSide.symbol} on ${describeRoute(route)}. Transaction ${result.transactionHash}.`,
     };
   },
 });

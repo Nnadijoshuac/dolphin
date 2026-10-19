@@ -1518,6 +1518,13 @@ export default defineSchema({
     orderRef: v.optional(v.union(v.string(), v.null())),
     txHash: v.optional(v.union(v.string(), v.null())),
     latencyMs: v.optional(v.union(v.number(), v.null())),
+    /**
+     * VERIFYING A FILL (owner, 2026-10-19). Binance's price when the rule decided, the pool that filled it
+     * ("PancakeSwap v3 · 0.01% pool"), and whether the amount came from the chain receipt (true) or the quote.
+     */
+    marketPrice: v.optional(v.number()),
+    route: v.optional(v.string()),
+    measured: v.optional(v.boolean()),
   }).index("by_draft", ["draftId", "at"]),
 
   agentKnowledge: defineTable({

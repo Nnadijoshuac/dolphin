@@ -2046,6 +2046,12 @@ export type LiveRunDetail = LiveRunSummary & {
     paper: boolean;
     reason: string;
     txHash: string | null;
+    /** The pool that filled it, e.g. "PancakeSwap v3 · 0.01% pool". Null on trades before 2026-10-19. */
+    route?: string | null;
+    /** Binance's price when the rule decided: the fill against it is what the trade cost. */
+    marketPrice?: number | null;
+    /** True when the amount was read from the chain receipt, false when it is the quote. */
+    measured?: boolean | null;
   }[];
 };
 export const liveRunsApi = anyApi as unknown as {

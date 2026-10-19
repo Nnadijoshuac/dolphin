@@ -19,6 +19,7 @@ import { encodeFunctionData, getAddress, parseAbi, parseUnits, type Address } fr
 
 import {
   assertTradeCallsAllowed,
+  buildSingleV3Swap,
   buildTradeCalls,
   encodeV3Path,
   PANCAKE_V2_ROUTER,
@@ -26,7 +27,7 @@ import {
   WBNB_BSC,
   type TradeRoute,
 } from "../convex/lib/pancakeswapTrade";
-import { SESSION_SWAP_SIGNATURES, tradeKeyPolicy } from "../convex/lib/tradeKeyPolicy";
+import { SESSION_SWAP_SIGNATURES, SESSION_V3_SWAP_SIGNATURE, tradeKeyPolicy } from "../convex/lib/tradeKeyPolicy";
 import { verifiedTokens } from "../convex/lib/tradeTokens";
 
 const WALLET = getAddress("0x1111111111111111111111111111111111111111");
@@ -44,6 +45,7 @@ const V3 = parseAbi([
   "function unwrapWETH9(uint256 amountMinimum, address recipient) payable",
   "function multicall(bytes[] data) payable returns (bytes[] results)",
   "function sweepToken(address token, uint256 amountMinimum, address recipient) payable",
+  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96) params) payable returns (uint256 amountOut)",
 ]);
 
 const usdtIn = { address: USDT as string, symbol: "USDT", decimals: 18 };
@@ -60,22 +62,25 @@ function policy() {
 }
 
 describe("the on-chain policy a trade key is granted", () => {
-  it("grants only the three V2 swap functions - no approve(), no V3, never a bare target", () => {
+  it("grants the three V2 swaps and V3's single-pool swap only - no approve(), no multicall, never a bare target", () => {
     const { calls } = policy();
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
     for (const call of calls) {
-      assert.equal(getAddress(call.to), PANCAKE_V2_ROUTER);
       assert.ok(call.signature, "a call without a signature would allow every function on the router");
-      assert.ok((SESSION_SWAP_SIGNATURES as readonly string[]).includes(call.signature!));
+      if (getAddress(call.to) === PANCAKE_V2_ROUTER) assert.ok((SESSION_SWAP_SIGNATURES as readonly string[]).includes(call.signature!));
+      else {
+        assert.equal(getAddress(call.to), PANCAKE_V3_SWAP_ROUTER);
+        assert.equal(call.signature, SESSION_V3_SWAP_SIGNATURE);
+      }
     }
     assert.ok(!calls.some((call) => call.signature?.startsWith("approve")), "the key must not approve anything");
-    assert.ok(!calls.some((call) => getAddress(call.to) === PANCAKE_V3_SWAP_ROUTER), "V3 multicall could carry any inner call");
+    assert.ok(!calls.some((call) => call.signature?.startsWith("multicall")), "V3 multicall could carry any inner call");
   });
 
-  it("sets allowances only to the V2 router, capped at daily limit x days", () => {
+  it("sets allowances only to PancakeSwap's two routers, capped at daily limit x days", () => {
     const { approvals } = policy();
     assert.ok(approvals.length > 0);
-    for (const approval of approvals) assert.equal(getAddress(approval.spender), PANCAKE_V2_ROUTER);
+    for (const approval of approvals) assert.ok([PANCAKE_V2_ROUTER, PANCAKE_V3_SWAP_ROUTER].includes(getAddress(approval.spender)));
     const usdt = approvals.find((approval) => approval.symbol === "USDT")!;
     assert.equal(usdt.amount, parseUnits("87.5", 18).toString(), "$10 a day x 7 days at $1, x1.25 room to sell after a price move");
   });
@@ -144,6 +149,35 @@ describe("the argument checks before signing (the chain cannot see arguments)", 
     const sweep = encodeFunctionData({ abi: V3, functionName: "sweepToken", args: [CAKE, BigInt(0), ATTACKER] });
     const data = encodeFunctionData({ abi: V3, functionName: "multicall", args: [[sweep]] });
     assert.throws(() => assertTradeCallsAllowed([{ to: PANCAKE_V3_SWAP_ROUTER, data }], usdtIn, WALLET), /does not use/);
+  });
+
+  it("ATTACK: a V3 single-pool swap that sends the proceeds to another address is refused", () => {
+    const data = encodeFunctionData({
+      abi: V3,
+      functionName: "exactInputSingle",
+      args: [{ tokenIn: USDT, tokenOut: WBNB_BSC, fee: 100, recipient: ATTACKER, deadline, amountIn: BigInt(1e18), amountOutMinimum: BigInt(1), sqrtPriceLimitX96: BigInt(0) }],
+    });
+    assert.throws(() => assertTradeCallsAllowed([{ to: PANCAKE_V3_SWAP_ROUTER, data }], usdtIn, WALLET), /another address/);
+  });
+
+  it("ATTACK: a V3 single-pool swap with no minimum output is refused", () => {
+    const data = encodeFunctionData({
+      abi: V3,
+      functionName: "exactInputSingle",
+      args: [{ tokenIn: USDT, tokenOut: WBNB_BSC, fee: 100, recipient: WALLET, deadline, amountIn: BigInt(1e18), amountOutMinimum: BigInt(0), sqrtPriceLimitX96: BigInt(0) }],
+    });
+    assert.throws(() => assertTradeCallsAllowed([{ to: PANCAKE_V3_SWAP_ROUTER, data }], usdtIn, WALLET), /minimum output/);
+  });
+
+  it("the trade key's own V3 swap passes: USDT -> WBNB, and BNB paid as value -> USDT", () => {
+    const buy = buildSingleV3Swap({ route: { venue: "v3", path: [USDT, WBNB_BSC], fees: [100], amountInRaw: BigInt(6e18), amountOutRaw: BigInt(83e14) }, recipient: WALLET as Address, payNative: false });
+    assert.doesNotThrow(() => assertTradeCallsAllowed([buy], usdtIn, WALLET));
+    assert.equal(buy.value, undefined);
+    const sell = buildSingleV3Swap({ route: { venue: "v3", path: [WBNB_BSC, USDT], fees: [100], amountInRaw: BigInt(83e14), amountOutRaw: BigInt(6e18) }, recipient: WALLET as Address, payNative: true });
+    assert.doesNotThrow(() => assertTradeCallsAllowed([sell], { address: null, symbol: "BNB", decimals: 18 }, WALLET));
+    assert.equal(sell.value, BigInt(83e14));
+    assert.throws(() => buildSingleV3Swap({ route: { venue: "v3", path: [USDT, WBNB_BSC], fees: [100], amountInRaw: BigInt(1), amountOutRaw: BigInt(1) }, recipient: WALLET as Address, payNative: true }), /Only BNB/);
+    assert.throws(() => buildSingleV3Swap({ route: { venue: "v3", path: [USDT, WBNB_BSC, CAKE], fees: [100, 500], amountInRaw: BigInt(1), amountOutRaw: BigInt(1) }, recipient: WALLET as Address, payNative: false }), /one-pool/);
   });
 
   it("ATTACK: approving an attacker as spender is refused", () => {

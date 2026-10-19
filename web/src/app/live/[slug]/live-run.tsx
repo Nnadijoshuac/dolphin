@@ -936,6 +936,8 @@ function TradesTable({ run, now, onOpen }: { run: LiveRunDetail; now: number; on
                   <th>Action</th>
                   <th>Price</th>
                   <th>Size</th>
+                  <th>Pool</th>
+                  <th>Cost vs market</th>
                   <th>Result</th>
                   <th>Why</th>
                   <th>Proof</th>
@@ -955,6 +957,8 @@ function TradesTable({ run, now, onOpen }: { run: LiveRunDetail; now: number; on
                       </td>
                       <td>{price(trade.price)}</td>
                       <td>{usd(trade.sizeUsd)}</td>
+                      <td className={styles.muted}>{trade.route ? trade.route.replace("PancakeSwap ", "") : "—"}</td>
+                      <td className={styles.mono}>{fillCost(trade) ?? "—"}</td>
                       <td style={{ color: trade.pnlPct === null ? undefined : trade.pnlPct >= 0 ? UP : DOWN }}>
                         {trade.pnlPct === null ? "—" : `${trade.pnlPct >= 0 ? "+" : ""}${trade.pnlPct.toFixed(2)}%`}
                       </td>
@@ -988,6 +992,18 @@ function TradesTable({ run, now, onOpen }: { run: LiveRunDetail; now: number; on
   );
 }
 
+/**
+ * What a fill cost against the market (owner, 2026-10-19: "a way for us to verify"): a buy above Binance's
+ * price at the decision, or a sale below it, is the price of trading on chain - fee, pool and slippage.
+ */
+function fillCost(trade: LiveRunDetail["trades"][number]): string | null {
+  if (!trade.marketPrice || trade.paper) return null;
+  const buying = (trade.kind === "enter") === (trade.side === "long");
+  // Positive: paid more (or got less) than the market. Negative: the fill beat it.
+  const cost = ((buying ? trade.price - trade.marketPrice : trade.marketPrice - trade.price) / trade.marketPrice) * 100;
+  return `${cost >= 0 ? "+" : "−"}${Math.abs(cost).toFixed(3)}%`;
+}
+
 /** Losses read red, profits green, everything else (waiting, buying) quiet. */
 function thoughtColor(text: string): string {
   if (/stop|loss|-\d+(\.\d+)?%/i.test(text)) return "text-[#ff5c5c]";
@@ -1009,6 +1025,9 @@ function tradeDetail(trade: LiveRunDetail["trades"][number], run: LiveRunDetail)
       ["Price", price(trade.price)],
       ...(trade.pnlPct !== null ? ([["Result", `${trade.pnlPct >= 0 ? "+" : ""}${trade.pnlPct.toFixed(2)}%`]] as [string, string][]) : []),
       ["Money", trade.paper ? "practice" : "real, on BNB Chain"],
+      ...(trade.route ? ([["Pool", trade.route]] as [string, string][]) : []),
+      ...(trade.marketPrice ? ([["Market price then", price(trade.marketPrice)], ["Cost vs market", fillCost(trade) ?? "—"]] as [string, string][]) : []),
+      ...(trade.measured !== undefined && trade.measured !== null ? ([["Amount", trade.measured ? "read from the chain receipt" : "the swap's quote"]] as [string, string][]) : []),
     ],
     tx: trade.txHash,
   };

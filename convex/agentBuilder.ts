@@ -1205,6 +1205,23 @@ export const ask = action({
         if (result.skipped.length > 0) describedNote = `I could not add ${result.skipped.join("; ")}.`;
       }
 
+      /*
+       * THE DOLPHIN WALLET UNLESS THEY SAID BINANCE (owner, 2026-10-19). Asked for three rules "from the
+       * Dolphin Wallet", the model wrote all three on binance-spot - so the agent had no trade key to grant
+       * and would have needed a Binance API key nobody mentioned. A Binance venue is kept only when the person
+       * named Binance in this conversation; a short keeps futures, the only venue that can short.
+       */
+      const saidBinance = [text, ...priorTurns.filter((turn) => turn.role === "user").map((turn) => turn.content)].some((words) => /binance/i.test(words));
+      const pinVenue = (rules: unknown[]): unknown[] =>
+        saidBinance
+          ? rules
+          : rules.map((raw) => {
+              const rule = raw as { venue?: unknown; action?: unknown } | null;
+              return rule && typeof rule === "object" && rule.action !== "short" && String(rule.venue ?? "").startsWith("binance") ? { ...rule, venue: "dolphin-wallet" } : raw;
+            });
+      if (compiled.reply.rules) compiled.reply.rules = pinVenue(compiled.reply.rules);
+      if (!saidBinance && compiled.reply.blocks) compiled.reply.blocks = compiled.reply.blocks.filter((block) => block.type !== "binance");
+
       /* Trading rules (fast rules, phase 2): lib/strategy.ts cleanRule decides; problems and warnings are said, never hidden. */
       let rulesNote = "";
       const triedRules = Boolean(compiled.reply.rules && compiled.reply.rules.length > 0);
@@ -1223,7 +1240,7 @@ export const ask = action({
          * only if that fails too does the reply say nothing changed.
          */
         if (addedRules === 0) {
-          const retry = await extractRules(text, keyLedger(ctx));
+          const retry = pinVenue(await extractRules(text, keyLedger(ctx)));
           if (retry.length > 0) {
             const second: { added: string[]; problems: string[]; warnings: string[] } = await ctx.runMutation(internal.strategy.addRules, { conversationId, rules: retry });
             if (second.added.length > 0) {

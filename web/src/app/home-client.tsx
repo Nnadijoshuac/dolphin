@@ -1,0 +1,666 @@
+"use client";
+
+import Link from "next/link";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+
+import { CategoryGlyph } from "@/components/category-glyph";
+import {
+  BuildBand,
+  CategoryTiles,
+  FeaturedTabs,
+} from "@/components/discover-sections";
+import {
+  CatalogUnavailable,
+  useBackendStatus,
+  useReportBackendStatus,
+} from "@/components/backend-status";
+import { HomeStory } from "@/components/home-story";
+import { MobileAgentRow } from "@/components/mobile-agent-row";
+import { OnboardingPrompt } from "@/components/onboarding-prompt";
+import { categoryDescription, categoryLabel } from "@/constants/agents";
+import {
+  useAgentList,
+  useAgentShelves,
+  useAgentSignals,
+  useCategoryFacets,
+} from "@/hooks/use-agents";
+import { useFavorites } from "@/hooks/use-favorites";
+import { track } from "@/lib/analytics";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import type { AgentShelfData } from "@/convex/api";
+import type { AgentCategory } from "@/types/agent";
+
+import styles from "./page.module.css";
+
+type CatalogFilter = {
+  value: AgentCategory | null;
+  label: string;
+  description: string;
+  /** Null for "All agents", whose count is the catalog total rather than a facet. */
+  count: number | null;
+};
+
+const ALL_AGENTS_FILTER: CatalogFilter = {
+  value: null,
+  label: "All agents",
+  description:
+    "Choose the job, not a generic score. Each role is compared using evidence that fits the work.",
+  count: null,
+};
+
+const categoryChangeEvent = "dolphin:discover-category-change";
+
+/**
+ * A URL `?category=` value, or null.
+ *
+ * DELIBERATELY NOT VALIDATED against a known list. Category slugs are an open
+ * set (see the note in @/constants/agents) and the browse chips are read from
+ * the catalog, so this cannot know the valid set at the moment it runs - the
+ * facets may not have loaded yet. Anything slug-shaped is passed through to the
+ * backend, which either has agents in it or does not; the empty state already
+ * says so. The old version tested against a hardcoded five and silently dropped
+ * every other category on the floor.
+ */
+function readCategoryParam(value: string | null): AgentCategory | null {
+  if (!value) return null;
+  const trimmed = value.trim().toLowerCase();
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(trimmed) ? trimmed : null;
+}
+
+function getSelectedCategorySnapshot(): AgentCategory | null {
+  if (typeof window === "undefined") return null;
+  // Mid-navigation the address can still be the previous page's.
+  if (window.location.pathname !== "/") return null;
+
+  return readCategoryParam(
+    new URLSearchParams(window.location.search).get("category"),
+  );
+}
+
+function subscribeToCategoryChanges(onStoreChange: () => void) {
+  window.addEventListener("popstate", onStoreChange);
+  window.addEventListener(categoryChangeEvent, onStoreChange);
+
+  return () => {
+    window.removeEventListener("popstate", onStoreChange);
+    window.removeEventListener(categoryChangeEvent, onStoreChange);
+  };
+}
+
+function CatalogSkeleton() {
+  return (
+    <div
+      aria-busy="true"
+      aria-live="polite"
+      className={styles.agentGrid}
+      role="status"
+    >
+      <span className="sr-only">Loading agent catalog</span>
+      {[0, 1, 2, 3].map((item) => (
+        <div aria-hidden="true" className={styles.skeletonCard} key={item}>
+          <div className="flex items-center justify-between gap-4">
+            <div className="skeleton h-[58px] w-[58px] rounded-[14px]" />
+            <div className="skeleton h-6 w-24 rounded-full" />
+          </div>
+          <div className="mt-7 space-y-3">
+            <div className="skeleton h-3 w-24 rounded-md" />
+            <div className="skeleton h-7 w-2/3 rounded-md" />
+            <div className="skeleton h-4 w-full rounded-md" />
+            <div className="skeleton h-4 w-4/5 rounded-md" />
+          </div>
+          <div className="mt-8 grid grid-cols-2 gap-4 border-t border-line pt-5">
+            <div className="skeleton h-10 rounded-md" />
+            <div className="skeleton h-10 rounded-md" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type CatalogNoticeProps = {
+  title: string;
+  body: string;
+  state: "empty" | "unavailable";
+  actionLabel?: string;
+  actionDisabled?: boolean;
+  onAction?: () => void;
+};
+
+function CatalogNotice({
+  title,
+  body,
+  state,
+  actionLabel,
+  actionDisabled,
+  onAction,
+}: CatalogNoticeProps) {
+  return (
+    <div
+      className={styles.catalogNotice}
+      role={state === "unavailable" ? "alert" : "status"}
+    >
+      <span aria-hidden="true" className={styles.noticeIcon}>
+        <CategoryGlyph color="currentColor" name="info" size={20} strokeWidth={2} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-muted">
+          {state === "unavailable" ? "Unavailable" : "Nothing here yet"}
+        </p>
+        <h3 className="mt-1 text-xl font-semibold tracking-[-0.03em] text-ink">
+          {title}
+        </h3>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{body}</p>
+        {actionLabel && onAction ? (
+          <button
+            className={styles.noticeAction}
+            disabled={actionDisabled}
+            onClick={onAction}
+            type="button"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function DiscoverPage() {
+  const requestedCategory = useSyncExternalStore(
+    subscribeToCategoryChanges,
+    getSelectedCategorySnapshot,
+    () => null,
+  );
+  const isMobile = useMobileLayout();
+  const facets = useCategoryFacets();
+  // The app opens the first live category. An explicit URL selection wins.
+  const selectedCategory = requestedCategory ?? (isMobile ? facets.categories[0]?.slug ?? null : null);
+
+  /*
+   * PAGINATED, and the category filter is an index range rather than a
+   * client-side `.filter()` over the whole catalog (2026-09-07). The old shape
+   * loaded every agent before it could draw one card.
+   */
+  const { agents, status, isLoading, loadMore } = useAgentList({
+    category: selectedCategory ?? undefined,
+    // Desktop no longer renders a catalog grid here (it links to /search), so
+    // only the phone layout reads it - one fewer 24-row read per desktop visit.
+    enabled: isMobile && (selectedCategory !== null || !facets.isLoading),
+  });
+
+  /*
+   * THE CHIPS, FROM THE CATALOG. See the note in @/constants/agents for what
+   * this replaced and what it cost: a hardcoded five, against a backend that
+   * classifies into thirteen, so eight categories - including `general`, the
+   * fallback every unclassified agent lands in - had no chip anywhere on the
+   * site.
+   */
+  const backend = useBackendStatus();
+  useReportBackendStatus(backend, "discover");
+
+  /* One batched query for every card on the page, never one per card. */
+  const signals = useAgentSignals(agents);
+
+  /*
+   * THE STORE FRONT (2026-09-25, reshaped 2026-09-29): the shelves now feed
+   * one tabbed carousel (components/discover-sections.tsx).
+   */
+  const { shelves: catalogShelves, isLoading: shelvesLoading } = useAgentShelves();
+  /*
+   * "Your favorites" leads, for a connected wallet that has starred anything:
+   * the owner's "a favorite ranks higher for you" (2026-09-28). Nobody else's
+   * Discover changes - see convex/favorites.ts.
+   */
+  const favorites = useFavorites();
+  const shelves = useMemo<AgentShelfData[]>(
+    () =>
+      favorites.visible && favorites.agents.length > 0
+        ? [
+            {
+              id: "favorites",
+              title: "Your favorites",
+              subtitle: "Agents you starred",
+              href: "",
+              agents: favorites.agents,
+            },
+            ...catalogShelves,
+          ]
+        : catalogShelves,
+    [catalogShelves, favorites.agents, favorites.visible],
+  );
+  const shelfAgents = useMemo(() => shelves.flatMap((shelf) => shelf.agents), [shelves]);
+  const shelfSignals = useAgentSignals(shelfAgents);
+
+  const catalogFilters = useMemo<readonly CatalogFilter[]>(
+    () => [
+      ...(!isMobile || facets.categories.length === 0 ? [ALL_AGENTS_FILTER] : []),
+      ...facets.categories.map((facet) => ({
+        value: facet.slug,
+        label: facet.label,
+        description:
+          categoryDescription(facet.slug) ??
+          `Agents the catalog classifies as ${facet.label.toLowerCase()}.`,
+        count: facet.count,
+      })),
+    ],
+    [facets.categories, isMobile],
+  );
+
+  const hasCatalog = agents.length > 0;
+  /*
+   * A REAL ERROR STATE. Both of these were literals - `const isError = false`
+   * and `const refetch = () => undefined` - which made every error branch below
+   * unreachable and left "the catalog is empty" as the only thing this page
+   * could say about a backend it could not reach. See components/backend-status.
+   */
+  const isUnavailable = backend.kind === "unreachable" || backend.kind === "unconfigured";
+  const isFetching = status === "LoadingMore";
+  const displayedAgents = agents;
+  const selectedOption = catalogFilters.find(
+    (option) => option.value === selectedCategory,
+  );
+  const selectedLabel = selectedOption?.label ?? categoryLabel(selectedCategory);
+  const selectedDescription =
+    selectedOption?.description ??
+    categoryDescription(selectedCategory) ??
+    "Explore every role in the shared catalog.";
+  /* Show the skeleton only while there is genuinely nothing to draw yet. */
+  const showInitialLoading = isLoading && !hasCatalog && !isUnavailable;
+  const showUnavailable = isUnavailable && !hasCatalog;
+
+  /*
+   * An old "/?category=" link on desktop goes to that category's search page:
+   * the landing page no longer filters a catalog of its own.
+   */
+  useEffect(() => {
+    // Read the media query directly: during hydration isMobile can still be the server's false.
+    /*
+     * Only when the address really is the landing page. Arriving here by the
+     * navbar from /search?category=yield, this runs before Next has updated
+     * the address bar, so the old query was read and it sent the person
+     * straight back to search (owner report, 2026-09-29).
+     */
+    if (
+      window.location.pathname === "/" &&
+      requestedCategory &&
+      !window.matchMedia("(max-width: 767px)").matches
+    ) {
+      window.location.replace(`/search?category=${requestedCategory}`);
+    }
+  }, [isMobile, requestedCategory]);
+
+  /** Emitted once the catalog has actually rendered, not on mount. */
+  const reportedCatalog = useRef(false);
+  useEffect(() => {
+    if (reportedCatalog.current || isLoading) return;
+    reportedCatalog.current = true;
+    track("catalog_viewed", {
+      surface: "discover",
+      categoryCount: facets.isLoading ? null : facets.categories.length,
+    });
+  }, [isLoading, facets.isLoading, facets.categories.length]);
+
+  function updateSelectedCategory(category: AgentCategory | null) {
+    if (category === selectedCategory) return;
+
+    const url = new URL(window.location.href);
+    if (category) {
+      url.searchParams.set("category", category);
+    } else {
+      url.searchParams.delete("category");
+    }
+
+    window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    window.dispatchEvent(new Event(categoryChangeEvent));
+  }
+
+  /*
+   * Focus follows selection by ELEMENT ID rather than through a refs array.
+   *
+   * The array version (`filterRefs.current[index]?.focus()`) tripped
+   * react-hooks/refs: the React Compiler cannot prove a function defined in the
+   * component body is only ever called from an event handler, so touching
+   * `.current` inside one reads to it as a render-time ref access. Ids are
+   * stable, derived from the slug rather than the index, and remove the array
+   * entirely - there is nothing left to keep in sync with the rendered list.
+   */
+  function chipId(value: AgentCategory | null) {
+    return `catalog-filter-${value ?? "all"}`;
+  }
+
+  function selectFilter(index: number) {
+    const option = catalogFilters[index];
+    if (!option) return;
+
+    updateSelectedCategory(option.value);
+    document.getElementById(chipId(option.value))?.focus();
+    if (isMobile) {
+      document.getElementById(chipId(option.value))?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    }
+
+    if (option.value) {
+      track("category_selected", {
+        surface: "discover",
+        category: option.value,
+        count: option.count,
+      });
+    }
+  }
+
+  function handleFilterKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    index: number,
+  ) {
+    let nextIndex: number | null = null;
+
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = (index + 1) % catalogFilters.length;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = (index - 1 + catalogFilters.length) % catalogFilters.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = catalogFilters.length - 1;
+    }
+
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    selectFilter(nextIndex);
+  }
+
+  /*
+   * THE COUNT IS THE MATCHING TOTAL, NOT THE LOADED PAGE.
+   *
+   * This printed `agents.length`, which is how many have been fetched so far -
+   * so it said "24 records" with a "Show more agents" button directly beneath
+   * it. On a page that prints a source and a check-timestamp beside every
+   * metric, the one number describing our own inventory was the misleading one.
+   *
+   * The real total comes from convex/facets.ts, which counts the live catalog on
+   * a schedule. When it has not been computed yet the loaded count is shown with
+   * a "+" rather than dressed up as a total.
+   */
+  const matchingTotal = selectedCategory
+    ? (facets.categories.find((facet) => facet.slug === selectedCategory)?.count ?? null)
+    : facets.totalLive || null;
+
+  const resultStatus = showInitialLoading
+    ? "Syncing with the catalog"
+    : showUnavailable
+      ? "Catalog unavailable"
+      : matchingTotal !== null
+        ? `${matchingTotal.toLocaleString()} ${matchingTotal === 1 ? "record" : "records"}`
+        : `${displayedAgents.length}+ records loaded`;
+
+  return (
+    <div className={styles.page}>
+      {/*
+       * Full-bleed hero: the video IS the background, not a picture inside a
+       * card. `site-frame` moved off the section and onto the copy — the
+       * section now spans the viewport so the video can, while the text stays
+       * on the same 1280px measure as every other section on the page.
+       */}
+      <section aria-labelledby="discover-heading" className={`${styles.heroSection} test-dark`}>
+        {/*
+         * Deferred, poster-backed and reduced-motion-aware. It used to be a
+         * bare autoplaying <video> with no poster and no preload hint, which
+         * made an MP4 on a third-party CDN the Largest Contentful Paint of the
+         * entire site. See components/hero-video.tsx.
+         */}
+        {/* The gold dolphin leading the pod (campaign/assets/ART-STYLE.md), in place of the birds video. */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- one static, pre-sized artwork */}
+        <img alt="" className={styles.heroArt} fetchPriority="high" src="/home-hero-pod.jpg" />
+        <div className={styles.heroOverlayArt} />
+
+        <div className="site-frame">
+          <div className={styles.heroCopy}>
+            <p className="eyebrow">Trading agents on BNB Chain</p>
+            <h1 className={styles.heroTitle} id="discover-heading">
+              <span>Test a strategy.</span>
+              <span>Let an agent trade it.</span>
+            </h1>
+            <p className="body-copy mt-6 max-w-[46ch]">
+              See what your idea would have made this year. Run it on practice money. When it works, others can run it too.
+            </p>
+            <div className={styles.heroActions}>
+              <Link className={styles.heroPrimary} href="/test?ref=home-hero">
+                Test a strategy
+              </Link>
+              <Link className={styles.heroSecondary} href="/trade">
+                See live traders
+              </Link>
+            </div>
+            {/* Phones: one product picture, as Cash App does - a real result card, not art under the words. */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- the cached share card itself */}
+            <img
+              alt="A strategy test result: ETH bought after an 8% daily drop made +35.9% while ETH fell 40.9%"
+              className={styles.heroShot}
+              src="/test/card?coin=ETH&entry=dip&level=8&target=12&stop=8&to=2026-10-12&v=art2"
+            />
+          </div>
+        </div>
+      </section>
+
+      <HomeStory />
+      {/*
+        Phones: four agents for hire from the "Ready to hire" shelf the page already loads (owner, 2026-10-14:
+        without them it stopped feeling like a marketplace), then one link to the full catalog.
+      */}
+      {isMobile && shelves[0]?.agents.length ? (
+        <section aria-labelledby="mobile-hire" className={styles.mobileHire}>
+          <h2 id="mobile-hire">Agents for hire</h2>
+          <p>Paid per job, held in escrow until they deliver.</p>
+          <div className={styles.mobileRows}>
+            {shelves[0].agents.slice(0, 4).map((agent) => (
+              <MobileAgentRow agent={agent} key={agent.agentKey} signals={shelfSignals.get(agent.agentKey)} surface="discover" />
+            ))}
+          </div>
+        </section>
+      ) : null}
+      <div className={styles.mobileAgentsLink}>
+        <Link href="/search">See all {facets.totalLive > 0 ? facets.totalLive : ""} agents →</Link>
+      </div>
+
+      {!isMobile ? (
+        <div className="desktop-only site-frame">
+          <CategoryTiles categories={facets.categories} isLoading={facets.isLoading} />
+          <FeaturedTabs isLoading={shelvesLoading} shelves={shelves} signals={shelfSignals} />
+          <BuildBand />
+        </div>
+      ) : null}
+      {/*
+        Offered here, after the page has made its case, rather than as a
+        forced interstitial. It carries its own site-frame, so it sits outside
+        the one above. See components/onboarding-prompt.tsx.
+      */}
+      {!isMobile ? (
+        <div className="desktop-only mt-12">
+          <OnboardingPrompt />
+        </div>
+      ) : null}
+      {!isMobile ? (
+        <div className="desktop-only site-frame">
+          <div className="discover-closing">
+            <Link className="discover-link discover-link--big" href="/search">
+              Browse all {facets.totalLive > 0 ? facets.totalLive.toLocaleString() : ""} agents
+              <CategoryGlyph color="currentColor" name="arrow-right" size={16} strokeWidth={2} />
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      <section
+        aria-labelledby="catalog-heading"
+        id="browse-by-role"
+        className={`site-frame py-14 sm:py-20 ${styles.catalogSection} hidden`}
+      >
+        <div className={styles.catalogLayout}>
+          <aside className={styles.catalogAside}>
+            <p className="text-sm font-semibold text-accent-ink">Catalog</p>
+            <h2 className={`section-title mt-3 ${styles.catalogHeading}`} id="catalog-heading">
+              {selectedLabel}
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-muted">{selectedDescription}</p>
+            <p aria-live="polite" className={styles.resultCount}>
+              {resultStatus}
+              {isFetching && hasCatalog ? " · Refreshing" : ""}
+            </p>
+
+            {/*
+             * ===================================================================
+             * THE FILTER RAIL, WHICH WAS NEVER RENDERED. (2026-09-08)
+             * ===================================================================
+             * `catalogFilters`, `filterRefs`, `selectFilter` and
+             * `handleFilterKeyDown` all existed in this component, fully written,
+             * including roving-tabindex keyboard handling - and NOTHING IN THE
+             * JSX USED ANY OF THEM. `.filterScroller` sat unreferenced in
+             * page.module.css for the same reason.
+             *
+             * So this section (id="browse-by-role") offered no roles to click.
+             * The aside printed the name and description of the SELECTED
+             * category while giving no way to select one: the only route to a
+             * filtered Discover was hand-editing `?category=` in the URL bar.
+             *
+             * It is a listbox-style toolbar rather than tabs, because the panel
+             * it controls is the same panel in every state - only its contents
+             * change - and because the roving tabindex below is what makes one
+             * Tab stop with arrow-key traversal, instead of thirteen Tab stops.
+             */}
+            <div
+              aria-label="Filter the catalog by role"
+              className={styles.filterScroller}
+              role="toolbar"
+            >
+              {facets.isLoading
+                ? [0, 1, 2, 3, 4].map((item) => (
+                    <span
+                      aria-hidden="true"
+                      className="skeleton h-9 w-24 shrink-0 rounded-full"
+                      key={item}
+                    />
+                  ))
+                : catalogFilters.map((option, index) => {
+                    const isSelected = option.value === selectedCategory;
+
+                    return (
+                      <button
+                        aria-pressed={isSelected}
+                        className={`${styles.filterChip} ${
+                          isSelected ? styles.filterChipActive : ""
+                        }`}
+                        id={chipId(option.value)}
+                        key={option.value ?? "all"}
+                        onClick={() => selectFilter(index)}
+                        onKeyDown={(event) => handleFilterKeyDown(event, index)}
+                        /* Roving tabindex: one stop for the whole rail. */
+                        tabIndex={
+                          isSelected || (selectedCategory === null && index === 0)
+                            ? 0
+                            : -1
+                        }
+                        type="button"
+                      >
+                        {option.label}
+                        {option.count !== null ? (
+                          <span className={styles.filterChipCount}>
+                            {option.count.toLocaleString()}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+              {/* Not a catalog filter: whole trading setups have their own page (owner, 2026-10-04: "a new category"). */}
+              {facets.isLoading ? null : (
+                <Link className={styles.filterChip} href="/setups">
+                  Trading setups
+                </Link>
+              )}
+            </div>
+
+            <div className={styles.readingGuide}>
+              <p className="font-semibold text-ink">Read the record first</p>
+              <ul className="mt-3 space-y-2.5 text-sm leading-5 text-muted">
+                <li>Confirm the agent identity and publisher.</li>
+                <li>Check the source behind every available metric.</li>
+                <li>Review requested access before you hire.</li>
+              </ul>
+            </div>
+          </aside>
+
+          <div
+            aria-busy={showInitialLoading || isFetching}
+            className={styles.catalogPanel}
+            id="agent-catalog"
+          >
+            {isUnavailable && hasCatalog ? (
+              <div className={styles.refreshAlert} role="alert">
+                <span>
+                  The connection to the catalog dropped. These are the last
+                  records Dolphin received, and they may be out of date.
+                </span>
+              </div>
+            ) : null}
+
+            {showInitialLoading ? (
+              <CatalogSkeleton />
+            ) : showUnavailable ? (
+              <CatalogUnavailable
+                status={
+                  backend as Extract<
+                    typeof backend,
+                    { kind: "unreachable" | "unconfigured" }
+                  >
+                }
+              />
+            ) : displayedAgents.length === 0 ? (
+              <CatalogNotice
+                actionLabel={selectedCategory ? "Show all agents" : undefined}
+                body={
+                  selectedCategory
+                    ? "No catalog records are available for this role yet. Choose another role or show every agent."
+                    : "The shared catalog does not contain any agent records yet."
+                }
+                onAction={
+                  selectedCategory ? () => updateSelectedCategory(null) : undefined
+                }
+                state="empty"
+                title={selectedCategory ? `No ${selectedLabel} agents yet` : "Catalog is empty"}
+              />
+            ) : (
+              <>
+                <div className={`mobile-only ${styles.mobileRows}`}>
+                  {displayedAgents.map((agent) => (
+                    <MobileAgentRow agent={agent} key={agent.agentKey} signals={signals.get(agent.agentKey)} surface="discover" />
+                  ))}
+                </div>
+                {status === "CanLoadMore" ? (
+                  <div className={styles.viewAllRow}>
+                    <button onClick={() => loadMore()} type="button">
+                      Show more agents
+                      <span aria-hidden="true">
+                        <CategoryGlyph
+                          color="currentColor"
+                          name="arrow-right"
+                          size={16}
+                          strokeWidth={2}
+                        />
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}

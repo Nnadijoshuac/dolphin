@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Conflicts of interest",
   description: "How Dolphin keeps its own agents, and anyone who pays it, separate from how it measures and ranks agents.",
+  alternates: { canonical: "/policies/conflicts" },
 };
 
 /**

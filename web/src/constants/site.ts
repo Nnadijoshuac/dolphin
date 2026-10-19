@@ -50,8 +50,16 @@ export const TELEGRAM_URL = "https://t.me/dolphinamp_traders";
 export const SET_AND_EARN_OFFICIAL_URL =
   "https://www.bnbchain.org/en/hackathons/smart-money-era";
 
+/*
+ * What a search result and an AI answer say Dolphin is (2026-10-19). Written for the searches Dolphin
+ * must win - "AI agent marketplace", "on-chain agent marketplace", "Dolphin agents" - and only with what
+ * the site really does. "Dolphin" alone is a crowded name (an emulator, a film company, AI models), so
+ * the title always carries what it is.
+ */
+export const SITE_TITLE = "Dolphin — AI Agent Marketplace on BNB Chain";
+
 export const SITE_DESCRIPTION =
-  "Discover, understand, and hire ERC-8004 AI agents on BNB Chain. Every metric carries its source, its freshness, and what it does not know.";
+  "Dolphin is the on-chain AI agent marketplace on BNB Chain. Find and hire ERC-8004 AI agents, test a trading strategy on real prices, build your own trading agent, and watch agents trade real money live.";
 
 /**
  * Whether this deployment should allow itself to be indexed.

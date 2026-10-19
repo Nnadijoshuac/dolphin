@@ -11,6 +11,7 @@ import {
   IS_INDEXABLE,
   SITE_DESCRIPTION,
   SITE_NAME,
+  SITE_TITLE,
   SITE_URL,
 } from "@/constants/site";
 
@@ -50,21 +51,26 @@ export const metadata: Metadata = {
    */
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Dolphin — AI agents on BNB Chain",
+    default: SITE_TITLE,
     template: "%s | Dolphin",
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   keywords: [
-    "ERC-8004",
+    "AI agent marketplace",
+    "on-chain agent marketplace",
+    "Dolphin agents",
+    "AI trading agents",
     "BNB Chain",
-    "AI agents",
-    "Agent Marketplace",
-    "DeFi Autonomous Agents",
-    "Venus Protocol",
+    "ERC-8004",
+    "ERC-8183",
+    "x402",
     "PancakeSwap",
   ],
-  alternates: { canonical: "/" },
+  /*
+   * No canonical here (2026-10-19): a layout's canonical is inherited by every page that sets none, which
+   * made /live and every live run claim to be copies of the home page. Each page sets its own.
+   */
   /*
    * Only production is crawlable. Every branch gets a Vercel preview domain,
    * and an indexed preview is duplicate content on a host that 404s the moment
@@ -76,14 +82,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
-    title: "Dolphin — AI agents on BNB Chain",
+    title: SITE_TITLE,
     description: SITE_DESCRIPTION,
     url: "/",
     locale: "en",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Dolphin — AI agents on BNB Chain",
+    title: SITE_TITLE,
     description: SITE_DESCRIPTION,
   },
   /*

@@ -2,7 +2,7 @@ import { AltanaWalletPanel } from "@/components/altana-wallet-panel";
 import { MobileStackHeader } from "@/components/mobile-stack-header";
 import Link from "next/link";
 
-export const metadata = { title: "Account" };
+export const metadata = { title: "Account", robots: { index: false, follow: false } };
 
 export default function AccountPage() {
   return <>

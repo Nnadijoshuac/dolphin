@@ -2,7 +2,7 @@ import "server-only";
 
 import { ConvexHttpClient } from "convex/browser";
 
-import { api, builtAgentsApi, liveRunsApi, strategyTestApi, type BuiltAgentPublic, type LiveRunDetail, type StrategyTestArgs, type StrategyTestResult } from "@/convex/api";
+import { api, builtAgentsApi, liveRunsApi, setupsApi, strategyTestApi, tradersApi, type BuiltAgentPublic, type LiveRunDetail, type LiveRunSummary, type SetupCard, type StrategyTestArgs, type StrategyTestResult, type TraderCard } from "@/convex/api";
 import type { Agent } from "@/types/agent";
 
 /**
@@ -158,4 +158,63 @@ export async function fetchLiveRun(slug: string): Promise<LiveRunDetail | null> 
   if (!convex) return null;
   const row = await withTimeout(convex.query(liveRunsApi.liveRuns.get, { slug }) as Promise<LiveRunDetail | null>);
   return row ?? null;
+}
+
+/*
+ * THE CRAWLABLE CATALOG (2026-10-19). Measured on prod: not one page's server HTML linked to a single
+ * agent, trader or live run - the catalog loads in the browser, so every one of those pages was an orphan
+ * a crawler could reach only through the sitemap. These reads feed /agents (a plain server-rendered
+ * directory), the sitemap and per-page titles. Same rule as above: never throw, degrade to empty.
+ */
+
+export type DirectoryAgent = { tokenId: string; name: string; tagline: string | null; category: Agent["category"]; updatedAt: string | null };
+
+/** Every listed agent with what a directory line needs, paged like the sitemap read. */
+export async function fetchAgentDirectory(): Promise<DirectoryAgent[]> {
+  const convex = client();
+  if (!convex) return [];
+  const collected: DirectoryAgent[] = [];
+  let cursor: string | null = null;
+  while (collected.length < SITEMAP_MAX_AGENTS) {
+    const page: { page: Agent[]; isDone: boolean; continueCursor: string } | null = await withTimeout(
+      convex.query(api.agents.list, { paginationOpts: { numItems: SITEMAP_PAGE_SIZE, cursor } }),
+    );
+    if (!page) break;
+    for (const agent of page.page) {
+      if (!agent.tokenId) continue;
+      collected.push({
+        tokenId: agent.tokenId,
+        name: agent.name,
+        tagline: agent.tagline || null,
+        category: agent.category,
+        updatedAt: agent.registryVerification?.registered?.asOf ?? null,
+      });
+    }
+    if (page.isDone) break;
+    cursor = page.continueCursor;
+  }
+  return collected;
+}
+
+/** Dolphin's hireable traders (/trade), or none. */
+export async function fetchTraders(): Promise<TraderCard[]> {
+  const convex = client();
+  if (!convex) return [];
+  const row = await withTimeout(convex.query(tradersApi.traders.list, {}) as Promise<{ traders: TraderCard[] }>);
+  return row?.traders ?? [];
+}
+
+/** Public live runs, running first, or none. */
+export async function fetchLiveRuns(): Promise<LiveRunSummary[]> {
+  const convex = client();
+  if (!convex) return [];
+  const row = await withTimeout(convex.query(liveRunsApi.liveRuns.list, {}) as Promise<{ running: LiveRunSummary[]; finished: LiveRunSummary[] }>);
+  return row ? [...row.running, ...row.finished] : [];
+}
+
+/** Listed trading setups (/setups), or none. */
+export async function fetchSetups(): Promise<SetupCard[]> {
+  const convex = client();
+  if (!convex) return [];
+  return (await withTimeout(convex.query(setupsApi.setups.list, {}) as Promise<SetupCard[]>)) ?? [];
 }

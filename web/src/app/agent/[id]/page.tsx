@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { AgentDetailClient } from "@/app/agent/[id]/agent-detail-client";
 import { BuiltAgentPage } from "@/components/built-agent-page";
 import { categoryLabel } from "@/constants/agents";
-import { SITE_NAME } from "@/constants/site";
+import { JsonLd } from "@/components/json-ld";
+import { SITE_NAME, SITE_URL } from "@/constants/site";
 import { fetchAgent, fetchBuiltAgent } from "@/server/convex";
 
 /**
@@ -176,24 +177,33 @@ export default async function AgentPage({ params }: AgentPageProps) {
          * rich-result badge would be exactly the fabrication AGENTS.md SS5
          * forbids - in the one place it would be most rewarded.
          */
-        <script
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+        <JsonLd
+          data={[
+            {
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
               name: agent.name,
               applicationCategory: "BusinessApplication",
               description: agent.tagline || agent.description || undefined,
               identifier: agent.agentKey,
-              url: `/agent/${encodeURIComponent(agent.tokenId)}`,
+              // Absolute (2026-10-19): schema.org URLs are not resolved against the page.
+              url: `${SITE_URL}/agent/${encodeURIComponent(agent.tokenId)}`,
               image: agent.iconUrl || undefined,
               operatingSystem: "Web",
               author: agent.publisher
                 ? { "@type": "Organization", name: agent.publisher }
                 : undefined,
-            }),
-          }}
-          type="application/ld+json"
+            },
+            {
+              "@context": "https://schema.org",
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "Dolphin", item: SITE_URL },
+                { "@type": "ListItem", position: 2, name: `${categoryLabel(agent.category)} agents`, item: `${SITE_URL}/search?category=${encodeURIComponent(agent.category)}` },
+                { "@type": "ListItem", position: 3, name: agent.name },
+              ],
+            },
+          ]}
         />
       ) : null}
       {/*

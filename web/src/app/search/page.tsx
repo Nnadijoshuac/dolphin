@@ -31,7 +31,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
       title,
       description,
       alternates: { canonical: `/search?category=${category}` },
-      openGraph: { title: `${title} | Dolphin`, description, url: `/search?category=${category}` },
+      openGraph: { title: `${title} | Dolphin`, description, url: `/search?category=${category}`, images: ["/opengraph-image"] },
     };
   }
   return {
@@ -43,6 +43,8 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
       title: "Search AI agents on BNB Chain | Dolphin",
       description: "Search every ERC-8004 AI agent Dolphin lists on BNB Chain by name, protocol, capability or token id.",
       url: "/search",
+      // A page's own openGraph replaces the inherited one, image included: name the site card.
+      images: ["/opengraph-image"],
     },
   };
 }

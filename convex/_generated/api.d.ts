@@ -78,6 +78,7 @@ import type * as lib_knowledgeTools from "../lib/knowledgeTools.js";
 import type * as lib_knowledgeValidators from "../lib/knowledgeValidators.js";
 import type * as lib_leakedReasoning from "../lib/leakedReasoning.js";
 import type * as lib_liveMetric from "../lib/liveMetric.js";
+import type * as lib_liveRunEnd from "../lib/liveRunEnd.js";
 import type * as lib_manualExclusions from "../lib/manualExclusions.js";
 import type * as lib_mcpClient from "../lib/mcpClient.js";
 import type * as lib_mcpMarket from "../lib/mcpMarket.js";
@@ -214,6 +215,7 @@ declare const fullApi: ApiFromModules<{
   "lib/knowledgeValidators": typeof lib_knowledgeValidators;
   "lib/leakedReasoning": typeof lib_leakedReasoning;
   "lib/liveMetric": typeof lib_liveMetric;
+  "lib/liveRunEnd": typeof lib_liveRunEnd;
   "lib/manualExclusions": typeof lib_manualExclusions;
   "lib/mcpClient": typeof lib_mcpClient;
   "lib/mcpMarket": typeof lib_mcpMarket;

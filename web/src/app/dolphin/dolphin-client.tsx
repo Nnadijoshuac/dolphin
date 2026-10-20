@@ -10,6 +10,7 @@ import "@xyflow/react/dist/style.css";
 import styles from "@/app/dolphin/dolphin-chat.module.css";
 import { AgentCanvas, type CanvasRun } from "@/components/agent-canvas";
 import { AgentDraftPanel, EMPTY_AGENT_DRAFT } from "@/components/agent-draft-panel";
+import { AsciiDolphins } from "@/components/ascii-dolphins";
 import { BrandMark } from "@/components/brand-mark";
 import { CategoryGlyph } from "@/components/category-glyph";
 import { DolphinLoader } from "@/components/dolphin-loader";
@@ -1340,7 +1341,9 @@ export function DolphinClient({
              * page with its input pinned to the floor makes the visitor look
              * for what to do; an input in the centre is the thing to do.
              */
-            <div className="dolphin-empty-hero flex min-h-full flex-col items-center justify-center px-4 pb-[10vh] pt-10">
+            <div className="dolphin-empty-hero relative flex min-h-full flex-col items-center justify-center px-4 pb-[10vh] pt-10">
+              <AsciiDolphins className="absolute inset-0 z-0 h-full w-full opacity-80" />
+              <div className="relative z-10 flex w-full flex-col items-center">
               <h1 className="sr-only">
                 {building ? "Build an agent" : trying ? `Try ${draftName}` : "Ask the marketplace"}
               </h1>
@@ -1386,6 +1389,7 @@ export function DolphinClient({
                     {suggestion}
                   </button>
                 ))}
+              </div>
               </div>
             </div>
           ) : (

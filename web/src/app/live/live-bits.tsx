@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
+import { useBinancePush } from "@/app/live/binance-push";
 import styles from "@/app/live/live.module.css";
 
 /** A clock that ticks every second, for countdowns and "2m ago". Only on the live pages. */
@@ -68,13 +69,20 @@ export function useCandles(symbol: string | null, interval: string | null, limit
 
 const TICKER_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "CAKEUSDT", "XVSUSDT"];
 
+type TickerRow = { symbol: string; price: number; change: number };
+
+/**
+ * The price strip: loaded once, then moved by Binance's mini-ticker stream the moment a price changes
+ * (2026-10-20; it asked the REST API every 10 seconds before). The 24h change is the stream's own
+ * rolling 24h open against its last price, as the REST field is.
+ */
 export function useTickers() {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: ["live-tickers"],
-    refetchInterval: 10_000,
-    staleTime: 8_000,
+    staleTime: Infinity,
     placeholderData: (previous) => previous,
-    queryFn: async () => {
+    queryFn: async (): Promise<TickerRow[]> => {
       const response = await fetch(`${BINANCE}/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(TICKER_SYMBOLS))}`);
       if (!response.ok) throw new Error(`Binance ${response.status}`);
       return ((await response.json()) as { symbol: string; lastPrice: string; priceChangePercent: string }[]).map((row) => ({
@@ -84,6 +92,20 @@ export function useTickers() {
       }));
     },
   });
+  useBinancePush(
+    TICKER_SYMBOLS.map((symbol) => `${symbol.toLowerCase()}@miniTicker`).join("/"),
+    (data) => {
+      const symbol = String(data.s ?? "").replace("USDT", "/USDT");
+      const last = Number(data.c);
+      const open = Number(data.o);
+      if (!symbol || !Number.isFinite(last) || !(open > 0)) return;
+      queryClient.setQueryData<TickerRow[]>(["live-tickers"], (rows) =>
+        rows?.map((row) => (row.symbol === symbol ? { symbol, price: last, change: ((last - open) / open) * 100 } : row)),
+      );
+    },
+    () => void queryClient.invalidateQueries({ queryKey: ["live-tickers"] }),
+  );
+  return query;
 }
 
 export function price(n: number): string {
@@ -92,7 +114,7 @@ export function price(n: number): string {
   return n.toPrecision(4);
 }
 
-/** The scrolling price strip across the top: real prices, every 10 seconds. */
+/** The scrolling price strip across the top: real prices, pushed as they move. */
 export function Ticker() {
   const { data } = useTickers();
   if (!data?.length) return <div className={styles.ticker} style={{ height: 38 }} />;

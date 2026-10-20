@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { useBinancePush } from "@/app/live/binance-push";
 import type { Candle } from "@/app/live/live-bits";
 import type { LiveCondition } from "@/convex/api";
 import { bscPublicClient } from "@/services/chain";
@@ -156,14 +157,34 @@ export function useChainPulse() {
 }
 
 /** Candles for a rule's own timeframe: the 200 closed ones the engine judges, plus the one forming. */
+export type RuleCandles = { closed: Candle[]; forming: Candle | null };
+
+/** One kline-stream message applied to the candles: a tick moves the forming candle, a close appends it. */
+export function applyKline(current: RuleCandles | undefined, k: Record<string, unknown>): RuleCandles | undefined {
+  if (!current) return current;
+  const candle = { t: Number(k.t), o: Number(k.o), h: Number(k.h), l: Number(k.l), c: Number(k.c), v: Number(k.v), closeTime: Number(k.T) };
+  if (!Number.isFinite(candle.t) || !Number.isFinite(candle.c)) return current;
+  const lastClosed = current.closed[current.closed.length - 1];
+  // Already closed and counted (a late or repeated message): nothing changes.
+  if (lastClosed && candle.t <= lastClosed.t) return current;
+  if (k.x === true) return { closed: [...current.closed, candle].slice(-200), forming: null };
+  return { ...current, forming: candle };
+}
+
+/**
+ * Loaded once, then kept current by Binance's kline stream (2026-10-20): every tick moves the forming
+ * candle, and a close moves it into the closed list - the moment it happens, where this used to ask the
+ * REST API every 10 seconds. A reconnect reloads, so nothing that passed while the socket was down is lost.
+ */
 export function useRuleCandles(symbol: string | null, timeframe: string | null) {
-  return useQuery({
-    queryKey: ["live-rule-candles", symbol, timeframe],
+  const queryClient = useQueryClient();
+  const queryKey = ["live-rule-candles", symbol, timeframe];
+  const query = useQuery({
+    queryKey,
     enabled: Boolean(symbol && timeframe),
-    refetchInterval: 10_000,
-    staleTime: 8_000,
+    staleTime: Infinity,
     placeholderData: (previous) => previous,
-    queryFn: async (): Promise<{ closed: Candle[]; forming: Candle | null }> => {
+    queryFn: async (): Promise<RuleCandles> => {
       const response = await fetch(`${REST}/klines?symbol=${symbol}&interval=${timeframe}&limit=201`);
       if (!response.ok) throw new Error(`Binance ${response.status}`);
       const rows = (await response.json()) as unknown[][];
@@ -174,6 +195,15 @@ export function useRuleCandles(symbol: string | null, timeframe: string | null) 
       return { closed, forming };
     },
   });
+  useBinancePush(
+    symbol && timeframe ? `${symbol.toLowerCase()}@kline_${timeframe}` : null,
+    (data) => {
+      const k = data.k as Record<string, unknown> | undefined;
+      if (k) queryClient.setQueryData<RuleCandles>(queryKey, (current) => applyKline(current, k));
+    },
+    () => void queryClient.invalidateQueries({ queryKey }),
+  );
+  return query;
 }
 
 /* ── the engine's indicator math, mirrored from convex/lib/indicators.ts (web/ may not import it) ── */

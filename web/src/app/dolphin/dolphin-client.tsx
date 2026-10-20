@@ -458,6 +458,7 @@ function ChatHistory({
   entries,
   onClear,
   onClose,
+  translucent = false,
   onNew,
   onOpen,
   onRemove,
@@ -469,6 +470,8 @@ function ChatHistory({
   /** Deletes every chat in the list, from the database too. */
   onClear: () => void;
   onClose?: () => void;
+  /** On the empty screen the sea shows through the panel (owner, 2026-10-20). */
+  translucent?: boolean;
   onNew: () => void;
   onOpen: (conversationKey: string) => void;
   /** Deletes one chat, from the database too. */
@@ -479,7 +482,9 @@ function ChatHistory({
   return (
     <aside
       aria-label="Chat history"
-      className="flex h-full min-h-0 flex-col border-r border-line/60 bg-paper px-3 pb-4 pt-3"
+      className={`flex h-full min-h-0 flex-col border-r border-line/60 px-3 pb-4 pt-3 ${
+        translucent ? "bg-paper/60" : "bg-paper"
+      }`}
     >
       <div className="flex h-9 items-center gap-2 px-2">
         <h2 className="min-w-0 flex-1 text-[13px] font-semibold text-ink">Chats</h2>
@@ -1193,6 +1198,12 @@ export function DolphinClient({
       ref={measurePanels}
       style={panels.style}
     >
+      {/*
+        * The sea fills the whole shell, behind the history panel as well as the chat, so a dolphin
+        * can swim under the translucent panel. Negative z: it sits above the shell's own background
+        * (the shell isolates its stacking context) and below every column.
+        */}
+      {isEmpty ? <AsciiDolphins className="pointer-events-none absolute inset-0 -z-10 h-full w-full opacity-80" /> : null}
       {panels.columns
         ? panels.handles.map((handle) => (
             <ResizeHandle
@@ -1227,6 +1238,7 @@ export function DolphinClient({
             onPin={togglePin}
             onRename={renameChat}
             onRemove={removeSavedConversation}
+            translucent={isEmpty}
           />
         </div>
       </div>
@@ -1364,7 +1376,6 @@ export function DolphinClient({
              * for what to do; an input in the centre is the thing to do.
              */
             <div className="dolphin-empty-hero relative flex min-h-full flex-col items-center justify-center px-4 pb-[10vh] pt-10">
-              <AsciiDolphins className="absolute inset-0 z-0 h-full w-full opacity-80" />
               <div className="relative z-10 flex w-full flex-col items-center">
               <h1 className="sr-only">
                 {building ? "Build an agent" : trying ? `Try ${draftName}` : "Ask the marketplace"}

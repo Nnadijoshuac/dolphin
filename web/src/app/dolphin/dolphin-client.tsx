@@ -483,7 +483,7 @@ function ChatHistory({
     <aside
       aria-label="Chat history"
       className={`flex h-full min-h-0 flex-col border-r border-line/60 px-3 pb-4 pt-3 ${
-        translucent ? "bg-paper/60" : "bg-paper"
+        translucent ? "bg-paper/65" : "bg-paper"
       }`}
     >
       <div className="flex h-9 items-center gap-2 px-2">
@@ -1498,6 +1498,7 @@ export function DolphinClient({
               maximized={maximized === "draft"}
               onMaximize={() => setMaximized((current) => (current === "draft" ? null : "draft"))}
               onPopOut={() => popOut("draft")}
+              translucent={isEmpty && maximized !== "draft"}
               {...draftPanelActions}
             />
           </div>

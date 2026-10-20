@@ -132,6 +132,7 @@ export function AgentDraftPanel({
   onMaximize,
   onPopOut,
   onPopIn,
+  translucent = false,
 }: {
   draft: AgentDraft;
   onClose?: () => void;
@@ -160,6 +161,8 @@ export function AgentDraftPanel({
   onMaximize?: () => void;
   onPopOut?: () => void;
   onPopIn?: () => void;
+  /** On the empty Build screen the sea shows through the panel (owner, 2026-10-20). */
+  translucent?: boolean;
 }) {
   // Draft, or the builder's own keys (owner, 2026-09-28: "a new tab ... to manage their envs").
   const [tab, setTab] = useState<"draft" | "keys">("draft");
@@ -173,7 +176,9 @@ export function AgentDraftPanel({
   return (
     <aside
       aria-label="Agent draft"
-      className="flex h-full min-h-0 flex-col border-l border-line/60 bg-paper px-3 pb-4 pt-3"
+      className={`flex h-full min-h-0 flex-col border-l border-line/60 px-3 pb-4 pt-3 ${
+        translucent ? "bg-paper/65" : "bg-paper"
+      }`}
     >
       {/* WHO THIS AGENT IS, AND WHETHER IT ACTS ON ITS OWN (owner, 2026-10-03: UI review points 4 and 6). */}
       <div className="flex items-start gap-2.5 px-2 py-1.5">

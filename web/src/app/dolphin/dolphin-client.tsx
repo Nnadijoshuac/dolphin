@@ -1019,7 +1019,10 @@ export function DolphinClient({
         submit(draft);
       }}
     >
-      <div className="flex w-full flex-col rounded-[1.4rem] border border-line/80 bg-paper p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-14px_rgba(15,23,42,0.18)]">
+      <div className={`flex w-full flex-col rounded-[1.4rem] border border-line/80 p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-14px_rgba(15,23,42,0.18)] ${
+        /* On the empty screen the sea shows through the box; once there is a conversation it is solid. */
+        isEmpty ? "bg-paper/50 backdrop-blur-md" : "bg-paper"
+      }`}>
         {/*
           * THE PLACEHOLDER SHIMMERS (owner, 2026-09-29), in Chat, Build and
           * Try alike. A native placeholder cannot carry a moving gradient, so

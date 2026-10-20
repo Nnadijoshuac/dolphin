@@ -557,6 +557,23 @@ function ChatHistory({
   );
 }
 
+/**
+ * The composer grows with what is typed, up to three lines, then stops and scrolls inside itself
+ * (owner, 2026-10-20: "exactly like Claude's"). Measured from the element's own line height and
+ * padding, so it holds at any font size and under the shell's zoom.
+ */
+const COMPOSER_MAX_LINES = 3;
+function fitComposer(el: HTMLTextAreaElement) {
+  const css = getComputedStyle(el);
+  const line = parseFloat(css.lineHeight) || parseFloat(css.fontSize) * 1.6;
+  const pad = parseFloat(css.paddingTop) + parseFloat(css.paddingBottom);
+  const max = Math.round(line * COMPOSER_MAX_LINES + pad);
+  el.style.height = "auto";
+  const full = el.scrollHeight;
+  el.style.height = `${Math.min(full, max)}px`;
+  el.style.overflowY = full > max + 1 ? "auto" : "hidden";
+}
+
 export function DolphinClient({
   seedAgentKey,
   seedAgentName,
@@ -610,6 +627,10 @@ export function DolphinClient({
   const composerKey = conversationKey ?? NEW_CONVERSATION;
   const storedComposer = useDolphinPlaceStore((state) => state.composer[composerKey]);
   const draft = mounted ? (storedComposer ?? "") : "";
+  // Refit whenever the text changes from anywhere (typing, a suggestion, a restored draft, a send).
+  useEffect(() => {
+    if (textareaRef.current) fitComposer(textareaRef.current);
+  }, [draft]);
   /** The composer's text, remembered per conversation as it is typed. */
   const setComposerText = useCallback(
     (text: string) => useDolphinPlaceStore.getState().setComposer(composerKey, text),
@@ -718,7 +739,6 @@ export function DolphinClient({
       if (text.trim().length === 0 || isSending) return;
       if (activeMode !== "chat" && !BUILD_BACKEND_CONNECTED) return;
       setComposerText("");
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
       void send(text);
     },
     [activeMode, isSending, send, setComposerText],
@@ -1044,13 +1064,12 @@ export function DolphinClient({
             aria-label={
               building ? "Describe the agent to build" : trying ? `Message ${draftName}` : "Message Dolphin"
             }
-            className={`max-h-[400px] w-full resize-none overflow-x-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none placeholder:text-faint focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ${
+            className={`sleek-scroll w-full resize-none overflow-x-hidden overflow-y-hidden bg-transparent px-2.5 py-2 text-[0.94rem] leading-relaxed text-ink outline-none placeholder:text-faint focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ${
               isEmpty ? "min-h-[3.4rem]" : "min-h-0"
             }`}
             onChange={(event) => {
               setComposerText(event.target.value);
-              event.target.style.height = "auto";
-              event.target.style.height = `${Math.min(event.target.scrollHeight, 400)}px`;
+              fitComposer(event.target);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {

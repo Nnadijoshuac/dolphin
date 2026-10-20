@@ -24,3 +24,6 @@
   outline: none !important;
   box-shadow: none !important;
 }
+
+/* The composer's scrollbar once it passes three lines: the thin thumb only, no arrow buttons. */
+.shell textarea::-webkit-scrollbar-button { display: none; }

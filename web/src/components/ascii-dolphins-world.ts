@@ -80,8 +80,6 @@ export class World {
   time = 0;
   dolphins: Dolphin[] = [];
   splashes: Splash[] = [];
-  /** Small drops that ring out across the whole sea, so empty water still moves like water. */
-  drops: Splash[] = [];
   private baseLength = 200;
   private nextSceneAt = 0;
   private nextScene: Scene = "pair";
@@ -102,10 +100,6 @@ export class World {
   step(dt: number) {
     this.time += dt;
     while (this.splashes.length && this.time - this.splashes[0].t0 > 2.4) this.splashes.shift();
-    while (this.drops.length && this.time - this.drops[0].t0 > 3.2) this.drops.shift();
-    if (this.width > 0 && Math.random() < dt * 3) {
-      this.drops.push({ x: rand(0, this.width), y: rand(0, this.height), t0: this.time, size: rand(16, 46) });
-    }
     if (this.dolphins.length === 0 && this.time >= this.nextSceneAt) {
       this.spawn(this.nextScene, false);
       this.nextScene = this.nextScene === "pair" ? "solo" : "pair";

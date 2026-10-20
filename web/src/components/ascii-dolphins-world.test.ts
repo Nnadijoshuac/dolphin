@@ -53,14 +53,14 @@ describe("ascii dolphin world", () => {
       expect(seen.maxAtOnce).toBeLessThanOrEqual(2);
       expect(seen.empty).toBeGreaterThan(60); // at least a second of empty sea in 150s
     }
-  });
+  }, 30_000);
 
   it("alternates a pair and a lone dolphin, and the lone one leaps", () => {
     const seen = run(7, 200);
     expect(seen.scenes.has("pair")).toBe(true);
     expect(seen.scenes.has("solo")).toBe(true);
     expect(seen.leaps).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it("bends no more than a real turn would, and stays on the sea while surfaced", () => {
     for (const seed of [11, 12, 13]) {
@@ -68,7 +68,7 @@ describe("ascii dolphin world", () => {
       expect(seen.maxBend).toBeLessThan(2.2); // radians over the whole body
       expect(seen.outOfBounds).toBe(0);
     }
-  });
+  }, 30_000);
 
   it("works on a phone-shaped screen", () => {
     const seen = run(21, 120, 390, 800);

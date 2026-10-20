@@ -15,7 +15,8 @@
  *   Raster: every cell near a dolphin is sampled against a parametric outline (body, melon and
  *   beak, flippers, dorsal ridge, flukes) in body coordinates, five points per cell, so the
  *   silhouette is anti-aliased into edge glyphs. A leaping dolphin grows, casts a shadow on the
- *   water and lands in rings of spray.
+ *   water and lands in a burst of spray. (No rings around it: owner, 2026-10-20, "water ripple is
+ *   not perfect circles"; the wavy swell over the whole sea is what he liked.)
  *   Glyphs: the ramp follows the shading. On a dark page a lit cell is a dense glyph; on a light
  *   page ink is dark, so the ramp flips. Colours come from the page's own tokens.
  *
@@ -23,7 +24,7 @@
  */
 import { useEffect, useRef } from "react";
 
-import { clamp, NODES, TAU, World, type Dolphin, type Splash } from "./ascii-dolphins-world";
+import { clamp, NODES, TAU, World, type Dolphin } from "./ascii-dolphins-world";
 
 const STEP = 1 / 60;
 const RAMP = ".:;t%S8#@";
@@ -235,9 +236,9 @@ class Renderer {
   }
 
   /**
-   * Sun glints on the water: a scatter of cells that brighten and fade, each on its own slow beat.
-   * (The first version drew long "~" crests across the screen; they read as dashed lines, not
-   * water: owner, 2026-10-20.) Painted to its own layer at about 12 fps and blitted every frame.
+   * The sea itself: sparse "~" and "." that drift as two crossing swells pass over the grid, so
+   * the water reads as water where nothing is swimming. Painted to its own layer at about 12 fps
+   * (it moves slowly) and blitted every frame.
    */
   private paintRipples(t: number) {
     const g = this.ripple.getContext("2d");
@@ -250,19 +251,22 @@ class Renderer {
     g.font = `500 ${Math.round(ch * 0.74)}px ${this.fontFamily}`;
     g.textAlign = "center";
     g.textBaseline = "middle";
-    const strength = palette.dark ? 1 : 1.3;
-    const glyphs = [".", ":", "'"];
-    for (let level = 0; level < 3; level++) {
-      const alpha = (0.11 + level * 0.08) * strength;
-      g.fillStyle = `rgba(${ir},${ig},${ib},${alpha.toFixed(2)})`;
+    const strength = palette.dark ? 1 : 1.25;
+    const bands: [string, string][] = [
+      ["~", `rgba(${ir},${ig},${ib},${(0.17 * strength).toFixed(2)})`],
+      ["~", `rgba(${ir},${ig},${ib},${(0.1 * strength).toFixed(2)})`],
+      [".", `rgba(${ir},${ig},${ib},${(0.11 * strength).toFixed(2)})`],
+    ];
+    for (let b = 0; b < bands.length; b++) {
+      g.fillStyle = bands[b][1];
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const h = hash(c, r, 71);
-          if (h < 0.88) continue;
-          // Each glint has its own phase and rate; only the peak of the beat is bright.
-          const beat = Math.pow(Math.max(0, Math.sin(t * (0.5 + h * 0.9) + h * 97)), 3);
-          const lv = beat > 0.75 ? 2 : beat > 0.4 ? 1 : beat > 0.12 ? 0 : -1;
-          if (lv === level) g.fillText(glyphs[(c + r) % glyphs.length], c * cw + cw / 2, r * ch + ch / 2);
+          // Long crests running across the screen, bent slowly along their length, like swell.
+          const v =
+            Math.sin(r * 0.72 + t * 0.6 + 2.4 * Math.sin(c * 0.06 + t * 0.18)) +
+            Math.sin(r * 0.45 - t * 0.4 + 1.9 * Math.sin(c * 0.04 - t * 0.12 + 1.3));
+          const band = v > 1.75 ? 0 : v > 1.5 ? 1 : v > 1.3 ? 2 : -1;
+          if (band === b) g.fillText(bands[b][0], c * cw + cw / 2, r * ch + ch / 2);
         }
       }
     }
@@ -377,31 +381,6 @@ class Renderer {
     });
   }
 
-  /**
-   * Rings spreading across the water: from a splash (bold, two rings, `life` 2.2s) or from a small
-   * drop (faint, one ring then a trailing echo, `life` 3s).
-   */
-  private drawRings(list: Splash[], time: number, life: number, weight: number) {
-    const { ctx, palette } = this;
-    const [ir, ig, ib] = palette.ink;
-    for (const s of list) {
-      const a = time - s.t0;
-      for (let j = 0; j < 2; j++) {
-        const aj = a - j * 0.22;
-        if (aj < 0 || aj > life) continue;
-        const R = s.size * (0.25 + aj * 0.9);
-        const alpha = Math.pow(1 - aj / life, 1.5) * (j ? 0.32 : 0.5) * weight;
-        ctx.fillStyle = `rgba(${ir},${ig},${ib},${alpha.toFixed(2)})`;
-        const glyph = life < 3 && aj < 0.25 * life ? "o" : ".";
-        const steps = Math.max(18, Math.round((TAU * R) / (this.cw * 1.1)));
-        for (let k = 0; k < steps; k++) {
-          const ang = (k / steps) * TAU;
-          ctx.fillText(glyph, s.x + Math.cos(ang) * R, s.y + Math.sin(ang) * R);
-        }
-      }
-    }
-  }
-
   /** Gold spray flung outward in the first moments of a splash. */
   private drawSpray(world: World) {
     const { ctx, palette } = this;
@@ -449,8 +428,6 @@ class Renderer {
     ctx.font = `600 ${Math.round(ch * 0.74)}px ${this.fontFamily}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    this.drawRings(world.drops, world.time, 3.2, 1);
-    this.drawRings(world.splashes, world.time, 2.2, 1);
 
     // A leaping dolphin's shadow on the water, thrown away from the light and growing with height.
     for (let i = 0; i < flag.length; i++) {

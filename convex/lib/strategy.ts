@@ -158,6 +158,16 @@ export type Decision =
 /** Binance's taker fee for each venue; PancakeSwap's pool fee for the Dolphin Wallet. In basis points. Backtests charge it on every fill. */
 export const VENUE_FEE_BPS: Record<Venue, number> = { "binance-spot": 10, "binance-futures": 5, "binance-wallet": 10, "dolphin-wallet": 25 };
 
+/**
+ * Whether a candle of this rule's timeframe can have closed since the last one it judged (2026-10-20).
+ * `lastCandle` is that candle's OPEN time, so the next one closes at lastCandle + 2 timeframes. The engine
+ * wakes every minute for the 1-minute rules; a 15-minute rule needs a look 4 times an hour, not 60, and
+ * every decision is made on a closed candle, so skipping the other 56 fetches changes no trade.
+ */
+export function candleMayHaveClosed(lastCandle: number | null, timeframe: Timeframe, now: number): boolean {
+  return lastCandle === null || now >= lastCandle + 2 * TIMEFRAME_MS[timeframe];
+}
+
 /* ── Bounds: a rule can never ask for more than these ── */
 export const LIMITS = {
   maxConditions: 6,

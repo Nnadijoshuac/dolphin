@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { afterCandle, breakEvenWinPct, cleanRule, contradiction, decide, describeLocked, redactReason, describeRule, EMPTY_STATE, holds, observe, resultPct, simulate, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
+import { afterCandle, breakEvenWinPct, candleMayHaveClosed, cleanRule, contradiction, decide, describeLocked, redactReason, describeRule, EMPTY_STATE, holds, observe, resultPct, simulate, resultUsd, venueProblem, type Candle, type Rule, type RuleState } from "../convex/lib/strategy";
 
 const H4 = 4 * 60 * 60 * 1000;
 const T0 = Date.UTC(2026, 9, 1);
@@ -315,4 +315,14 @@ test("the builder's padding and its repeated exit do not refuse a good rule (The
   // An entry that does not read still refuses the rule, and an unreadable exit with no target or stop does too.
   assert.ok("problems" in cleanRule({ ...base, when: [{ ...rsi, op: null }], until: [] }, "x"));
   assert.ok("problems" in cleanRule({ ...base, stopLossPct: null, takeProfitPct: null, when: [rsi], until: [{ kind: "change_pct", op: "above", value: 2, candles: null }] }, "x"));
+});
+
+test("the engine looks at a rule only when its next candle can have closed", () => {
+  const open = Date.UTC(2026, 9, 20, 12, 0); // the last judged 15m candle opened 12:00, closed 12:15
+  const at = (minute: number) => Date.UTC(2026, 9, 20, 12, minute);
+  assert.equal(candleMayHaveClosed(null, "15m", at(1)), true, "a rule never looked at is looked at");
+  assert.equal(candleMayHaveClosed(open, "15m", at(16)), false, "12:15-12:30 is still forming at 12:16");
+  assert.equal(candleMayHaveClosed(open, "15m", at(29)), false);
+  assert.equal(candleMayHaveClosed(open, "15m", at(30)), true, "12:15-12:30 closed at 12:30");
+  assert.equal(candleMayHaveClosed(open, "1m", open + 2 * 60_000), true);
 });

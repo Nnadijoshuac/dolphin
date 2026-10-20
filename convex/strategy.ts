@@ -13,7 +13,7 @@ import { RULE_TEMPLATES } from "./lib/ruleTemplates";
 import { requireWalletAddress } from "./lib/walletAuth";
 import { verifiedTokenBySymbol } from "./lib/tradeTokens";
 import { askJev, jevState } from "./lib/jev";
-import { afterCandle, BRAIN_KEY_HINTS, BRAIN_KEY_NAMES, BRAIN_LABELS, cleanRule, decide, describeLocked, describeRule, EMPTY_STATE, redactReason, resultPct, resultUsd, simulate, TIMEFRAME_MS, TIMEFRAMES, VENUE_FEE_BPS, venueProblem, type BrainConfirm, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
+import { afterCandle, BRAIN_KEY_HINTS, BRAIN_KEY_NAMES, BRAIN_LABELS, candleMayHaveClosed, cleanRule, decide, describeLocked, describeRule, EMPTY_STATE, redactReason, resultPct, resultUsd, simulate, TIMEFRAME_MS, TIMEFRAMES, VENUE_FEE_BPS, venueProblem, type BrainConfirm, type Candle, type LossGuard, type Rule, type RuleState, type SimResult } from "./lib/strategy";
 
 /**
  * TRADING RULES, RUN WITH NO AI (owner, 2026-10-03; Agent/PLAN-2026-10-03-fast-rules-binance-export.md, phase 2).
@@ -976,6 +976,8 @@ export const tick = internalAction({
           await ctx.runMutation(internal.strategy.record, { draftId, ruleId: rule.id, state, lastError: `Paused: ${misfits[rule.id]}.`, trade: null });
           continue;
         }
+        // Nothing new to judge until this rule's next candle closes: no Binance fetch, no write.
+        if (!candleMayHaveClosed(state.lastCandle, rule.timeframe, now)) continue;
         const key = `${rule.venue === "binance-futures" ? "f" : "s"}:${rule.market}:${rule.timeframe}`;
         if (!cache.has(key)) cache.set(key, closedCandles(rule.venue, rule.market, rule.timeframe, 200, now));
         let candles: Candle[];

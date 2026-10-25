@@ -2028,6 +2028,7 @@ export type LiveDeskRule = {
   reason: string | null;
   position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null;
 };
+export type LiveTradeKey = { status: "active" | "expired" | "none"; expiresAt: number | null };
 export type LiveRunDetail = LiveRunSummary & {
   timeframe: string | null;
   /** The agent's autopilot is on. */
@@ -2044,8 +2045,7 @@ export type LiveRunDetail = LiveRunSummary & {
   engine: { lastCheckedAt: number; reason: string | null; position: { side: "long" | "short"; entryPrice: number; openedAt: number } | null }[];
   /** Each rule's own numbers and live state. Absent on a backend older than 2026-10-18. */
   desk?: LiveDeskRule[];
-  /** The agent's limited trade key: when it stops working. Never the key itself. Absent before 2026-10-25. */
-  tradeKey?: { status: "active" | "expired" | "none"; expiresAt: number | null };
+
   trades: {
     at: number;
     kind: "enter" | "exit";
@@ -2069,6 +2069,8 @@ export const liveRunsApi = anyApi as unknown as {
   liveRuns: {
     list: Query<Record<string, never>, { running: LiveRunSummary[]; finished: LiveRunSummary[] }>;
     get: Query<{ slug: string }, LiveRunDetail | null>;
+    /** The run's trade-key expiry, for its signed-in owner only; null for anyone else. */
+    ownerKey: Query<{ slug: string; sessionToken: string }, LiveTradeKey | null>;
     start: Action<{ sessionToken: string; conversationKey: string }, { slug: string; startUsd: number }>;
     end: Mutation<{ sessionToken: string; slug: string }, null>;
   };

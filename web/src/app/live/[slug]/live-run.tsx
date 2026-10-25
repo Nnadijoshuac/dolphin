@@ -13,7 +13,7 @@ import { TChange } from "@/app/live/tcard";
 import { ResultBars, ValueArea } from "@/app/live/stat-charts";
 import { TokenLogo } from "@/components/brand-mark";
 import { RollingFigure } from "@/components/rolling-figure";
-import { liveRunsApi, type LiveDeskRule, type LiveRunDetail } from "@/convex/api";
+import { liveRunsApi, type LiveDeskRule, type LiveRunDetail, type LiveTradeKey } from "@/convex/api";
 import { useWalletHoldings } from "@/hooks/use-wallet-holdings";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
@@ -232,6 +232,7 @@ function MobileRunView({
    * Type: tDisplay / tTitle / tValue / tBody / tLabel / tCaption only.
    */
   const running = run.status === "running";
+  const ownerKey = useOwnerKey(run);
   const t = market.ticker;
   const [tab, setTab] = useState<"agent" | "position" | "trades" | "book" | "tape">("agent");
   const rule = coinRules[0] ?? desk[0] ?? null;
@@ -254,7 +255,7 @@ function MobileRunView({
             {running ? <span className={styles.blip} /> : null}
             {running ? `Live · day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "lost" ? "Ran out" : "Ended"}
             {(() => {
-              const key = running ? keyLeft(run.tradeKey, now) : null;
+              const key = running ? keyLeft(ownerKey, now) : null;
               return key ? <span style={key.soon ? { color: DOWN } : undefined}>{` · key ${key.text === "Expired" ? "expired" : `${key.text} left`}`}</span> : null;
             })()}
           </p>
@@ -691,6 +692,7 @@ function TopBar({
   alive: boolean;
   nextIn: number;
 }) {
+  const ownerKey = useOwnerKey(run);
   const t = market.ticker;
   const feedAge = market.lastMessageAt && now ? Math.max(0, now - market.lastMessageAt) : null;
   const base = (coin ?? "").replace("USDT", "");
@@ -727,7 +729,7 @@ function TopBar({
         </div>
         <Kv label="Since start" tone={liveUsd >= run.startUsd ? "up" : "down"} value={pct(run.startUsd, liveUsd)} />
         {(() => {
-          const key = keyLeft(run.tradeKey, now);
+          const key = keyLeft(ownerKey, now);
           return key ? (
             <div title={`Its trade key stops working ${key.when}`}>
               <Kv label="Key expires in" tone={key.soon ? "down" : undefined} value={key.text} />
@@ -746,10 +748,22 @@ function TopBar({
 }
 
 /**
+ * The run's trade key, for its owner only (owner, 2026-10-25): asked of the backend only when the connected,
+ * signed-in wallet is the run's owner, and the backend checks that session again. Anyone else gets nothing.
+ */
+function useOwnerKey(run: LiveRunDetail): LiveTradeKey | null {
+  const wallet = useWallet();
+  const session = useWalletSession();
+  const isOwner = Boolean(wallet.address && session.sessionToken && wallet.address.toLowerCase() === run.ownerAddress.toLowerCase());
+  const key = useQuery(liveRunsApi.liveRuns.ownerKey, isOwner ? { slug: run.slug, sessionToken: session.sessionToken! } : "skip");
+  return isOwner ? (key ?? null) : null;
+}
+
+/**
  * When the agent's trade key stops working, in words (owner, 2026-10-25: "a 'when key expires' place").
  * Past it the agent cannot buy, and cannot sell what it holds, until its owner renews the key.
  */
-function keyLeft(key: LiveRunDetail["tradeKey"], now: number): { text: string; soon: boolean; when: string } | null {
+function keyLeft(key: LiveTradeKey | null | undefined, now: number): { text: string; soon: boolean; when: string } | null {
   if (!key || key.status === "none" || key.expiresAt === null || !now) return null;
   const when = new Date(key.expiresAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const left = key.expiresAt - now;

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 import { compact, readCondition, rsiSeries, useChainPulse, useMarketStream, useRuleCandles, type MarketStream, type WireEvent } from "@/app/live/desk-feeds";
@@ -61,6 +61,8 @@ export function LiveRun({ slug }: { slug: string }) {
 const UP = "#3ddc84";
 const DOWN = "#ff5c5c";
 const GOLD = "#f3c13a";
+/** The entry level: white, so it can never be mistaken for the gold line of the price now (owner, 2026-10-25). */
+const ENTRY = "#f2f2ee";
 const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 
 function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
@@ -251,6 +253,10 @@ function MobileRunView({
           <p className={`${styles.tCaption} flex items-center gap-1.5`}>
             {running ? <span className={styles.blip} /> : null}
             {running ? `Live · day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "lost" ? "Ran out" : "Ended"}
+            {(() => {
+              const key = running ? keyLeft(run.tradeKey, now) : null;
+              return key ? <span style={key.soon ? { color: DOWN } : undefined}>{` · key ${key.text === "Expired" ? "expired" : `${key.text} left`}`}</span> : null;
+            })()}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
@@ -720,6 +726,14 @@ function TopBar({
           </p>
         </div>
         <Kv label="Since start" tone={liveUsd >= run.startUsd ? "up" : "down"} value={pct(run.startUsd, liveUsd)} />
+        {(() => {
+          const key = keyLeft(run.tradeKey, now);
+          return key ? (
+            <div title={`Its trade key stops working ${key.when}`}>
+              <Kv label="Key expires in" tone={key.soon ? "down" : undefined} value={key.text} />
+            </div>
+          ) : null;
+        })()}
         <ShareButton change={pct(run.startUsd, liveUsd)} icon liveFigure={liveFigure} run={run} />
         <div className="hidden flex-col gap-1 border-l border-white/5 pl-5 2xl:flex">
           <Status label="Binance feed" ok={feedAge !== null && feedAge < 5000} value={feedAge === null ? "connecting" : `${(feedAge / 1000).toFixed(1)}s`} />
@@ -729,6 +743,20 @@ function TopBar({
       </div>
     </div>
   );
+}
+
+/**
+ * When the agent's trade key stops working, in words (owner, 2026-10-25: "a 'when key expires' place").
+ * Past it the agent cannot buy, and cannot sell what it holds, until its owner renews the key.
+ */
+function keyLeft(key: LiveRunDetail["tradeKey"], now: number): { text: string; soon: boolean; when: string } | null {
+  if (!key || key.status === "none" || key.expiresAt === null || !now) return null;
+  const when = new Date(key.expiresAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const left = key.expiresAt - now;
+  if (key.status === "expired" || left <= 0) return { text: "Expired", soon: true, when };
+  const hours = Math.floor(left / 3_600_000);
+  const text = hours >= 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h` : hours >= 1 ? `${hours}h ${Math.floor((left % 3_600_000) / 60_000)}m` : `${Math.max(1, Math.floor(left / 60_000))}m`;
+  return { text, soon: left < 24 * 3_600_000, when };
 }
 
 function Kv({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
@@ -918,7 +946,7 @@ function useSize<T extends HTMLElement>() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [el]);
-  return [setEl, size] as const;
+  return [setEl, size, el] as const;
 }
 
 function ChartPanel({ run, coin, desk, frame, onFrame, lastPrice, flat, tabs = true }: { run: LiveRunDetail; coin: string | null; desk: LiveDeskRule[]; frame: string; onFrame: (tf: string) => void; lastPrice: number | null; flat?: boolean; tabs?: boolean }) {
@@ -1026,11 +1054,84 @@ function CandleChart({
   sell: number | null;
   position: { entry: number; side: "long" | "short"; stopPct: number | null; targetPct: number | null } | null;
 }) {
-  const [ref, { w: W, h: H }] = useSize<HTMLDivElement>();
+  const [ref, { w: W, h: H }, node] = useSize<HTMLDivElement>();
+  const clipId = useId();
   const rsiAll = useMemo(() => rsiSeries(all.map((c) => c.c), 14), [all]);
   const SHOW = Math.max(30, Math.min(110, Math.floor(W / 9)));
-  const candles = all.slice(-SHOW);
-  const rsi = rsiAll.slice(-SHOW);
+  /*
+   * ZOOM AND SCROLL (owner, 2026-10-25: "allow for pinch actions for zoom and scroll"). `count` is how many
+   * candles fit the width (0: the default for this width), `offset` how many sit to the right of the view
+   * (0: the latest). Pinch or Ctrl+wheel zooms; dragging or a sideways scroll moves through time; an
+   * ordinary vertical scroll still scrolls the page, so the chart never traps it.
+   */
+  const [view, setView] = useState({ count: 0, offset: 0 });
+  const total = all.length;
+  const count = Math.max(Math.min(20, total), Math.min(total, view.count || SHOW));
+  const offset = Math.max(0, Math.min(total - count, view.offset));
+  const candles = all.slice(total - offset - count, total - offset);
+  const rsi = rsiAll.slice(total - offset - count, total - offset);
+  const geometry = useRef({ step: 1, count, offset, total });
+  useEffect(() => {
+    geometry.current = { step: (W - 64) / Math.max(1, count), count, offset, total };
+  });
+  useEffect(() => {
+    if (!node) return;
+    const set = (nextCount: number, nextOffset: number) => {
+      const g = geometry.current;
+      const c = Math.round(Math.max(Math.min(20, g.total), Math.min(g.total, nextCount)));
+      setView({ count: c, offset: Math.round(Math.max(0, Math.min(g.total - c, nextOffset))) });
+    };
+    const onWheel = (event: WheelEvent) => {
+      const g = geometry.current;
+      if (event.ctrlKey) {
+        event.preventDefault();
+        set(g.count * Math.exp(event.deltaY * 0.01), g.offset);
+      } else if (Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey) {
+        event.preventDefault();
+        // Scrolling right (a positive delta) moves toward now, as on any horizontal scroller.
+        set(g.count, g.offset - (event.shiftKey ? event.deltaY : event.deltaX) / g.step);
+      }
+    };
+    const pointers = new Map<number, number>();
+    let start: { x: number; dist: number; count: number; offset: number } | null = null;
+    const spread = () => {
+      const xs = [...pointers.values()];
+      return xs.length > 1 ? Math.abs(xs[0]! - xs[1]!) : 0;
+    };
+    const begin = () => {
+      const g = geometry.current;
+      const xs = [...pointers.values()];
+      start = { x: xs[0] ?? 0, dist: spread(), count: g.count, offset: g.offset };
+    };
+    const down = (event: PointerEvent) => {
+      pointers.set(event.pointerId, event.clientX);
+      node.setPointerCapture(event.pointerId);
+      begin();
+    };
+    const move = (event: PointerEvent) => {
+      if (!pointers.has(event.pointerId) || !start) return;
+      pointers.set(event.pointerId, event.clientX);
+      const g = geometry.current;
+      if (pointers.size > 1 && start.dist > 10) set((start.count * start.dist) / Math.max(10, spread()), start.offset);
+      else if (pointers.size === 1) set(start.count, start.offset + (event.clientX - start.x) / g.step);
+    };
+    const up = (event: PointerEvent) => {
+      pointers.delete(event.pointerId);
+      begin();
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    node.addEventListener("pointerdown", down);
+    node.addEventListener("pointermove", move);
+    node.addEventListener("pointerup", up);
+    node.addEventListener("pointercancel", up);
+    return () => {
+      node.removeEventListener("wheel", onWheel);
+      node.removeEventListener("pointerdown", down);
+      node.removeEventListener("pointermove", move);
+      node.removeEventListener("pointerup", up);
+      node.removeEventListener("pointercancel", up);
+    };
+  }, [node]);
   if (all.length === 0 || W === 0 || H === 0) return <div className="absolute inset-0 animate-pulse bg-white/[0.02]" ref={ref} />;
 
   const AXIS = 64;
@@ -1049,12 +1150,33 @@ function CandleChart({
   const step = (W - AXIS) / candles.length;
   const width = Math.max(2, step * 0.62);
   const interval = candles.length > 1 ? candles[1]!.t - candles[0]!.t : 60_000;
+  // Where a moment falls on the view, as a candle index - left of 0 or past the end when scrolled off.
+  const slot = (at: number) => Math.floor((at - candles[0]!.t) / interval);
+  const xAt = (at: number) => slot(at) * step + step / 2;
   const marks = trades
     .map((trade) => {
-      const index = candles.findIndex((c) => trade.at >= c.t && trade.at < c.t + interval);
-      return index < 0 ? null : { index, buy: trade.kind === "enter" && trade.side === "long", price: trade.price, candle: candles[index]! };
+      const index = slot(trade.at);
+      return index < 0 || index >= candles.length ? null : { index, buy: trade.kind === "enter" && trade.side === "long", price: trade.price, candle: candles[index]! };
     })
     .filter((m): m is { index: number; buy: boolean; price: number; candle: Candle } => m !== null);
+  /*
+   * EACH BUY JOINED TO ITS SELL (owner, 2026-10-25: "the in and out need a connecting line"). A rule holds one
+   * position at a time, so a sell closes the latest unmatched buy of the same side; green when it made money.
+   */
+  const pairs: { inAt: number; inPrice: number; outAt: number; outPrice: number; won: boolean; pct: number }[] = [];
+  const opened: { at: number; price: number; side: "long" | "short" }[] = [];
+  for (const trade of [...trades].sort((a, b) => a.at - b.at)) {
+    if (trade.kind === "enter") opened.push({ at: trade.at, price: trade.price, side: trade.side });
+    else {
+      const i = opened.map((o) => o.side).lastIndexOf(trade.side);
+      if (i < 0) continue;
+      const entry = opened.splice(i, 1)[0]!;
+      const move = ((trade.price - entry.price) / entry.price) * 100 * (entry.side === "short" ? -1 : 1);
+      const pct = trade.pnlPct ?? move;
+      pairs.push({ inAt: entry.at, inPrice: entry.price, outAt: trade.at, outPrice: trade.price, won: pct >= 0, pct });
+    }
+  }
+  const stillOpen = opened[opened.length - 1] ?? null;
   const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => lo + span * f);
   const lastC = candles[candles.length - 1]!.c;
   const rsiPath = rsi
@@ -1065,7 +1187,17 @@ function CandleChart({
   const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div className="absolute inset-0" ref={ref}>
+    <div className="absolute inset-0 cursor-grab select-none active:cursor-grabbing" ref={ref} style={{ touchAction: "pan-y" }}>
+      {offset > 0 || view.count ? (
+        <button
+          className="absolute right-[72px] top-2 z-10 rounded-md bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
+          onClick={() => setView({ count: 0, offset: 0 })}
+          onPointerDown={(event) => event.stopPropagation()}
+          type="button"
+        >
+          Latest
+        </button>
+      ) : null}
       <svg height={H} width={W}>
         {grid.map((v) => (
           <g key={v}>
@@ -1105,7 +1237,7 @@ function CandleChart({
         {position
           ? levels.map((level, i) => {
               const label = i === 0 ? "ENTRY" : level < position.entry === (position.side === "long") ? "STOP" : "TARGET";
-              const color = label === "ENTRY" ? GOLD : label === "STOP" ? DOWN : UP;
+              const color = label === "ENTRY" ? ENTRY : label === "STOP" ? DOWN : UP;
               return (
                 <g key={label}>
                   <line stroke={color} strokeDasharray="2 4" strokeOpacity="0.8" x1="0" x2={W - AXIS} y1={y(level)} y2={y(level)} />
@@ -1123,24 +1255,51 @@ function CandleChart({
             {price(lastC)}
           </text>
         </g>
+        <defs>
+          <clipPath id={clipId}>
+            <rect height={priceH} width={W - AXIS} x="0" y="0" />
+          </clipPath>
+        </defs>
+        <g clipPath={`url(#${clipId})`}>
+          {pairs.map((pair) => {
+            const color = pair.won ? UP : DOWN;
+            const x1 = xAt(pair.inAt);
+            const x2 = xAt(pair.outAt);
+            const sign = pair.pct >= 0 ? "+" : "";
+            return (
+              <g key={`${pair.inAt}-${pair.outAt}`}>
+                <title>{`In at ${price(pair.inPrice)}, out at ${price(pair.outPrice)}: ${sign}${pair.pct.toFixed(2)}%`}</title>
+                <line stroke={color} strokeDasharray="5 4" strokeOpacity="0.9" strokeWidth="1.5" x1={x1} x2={x2} y1={y(pair.inPrice)} y2={y(pair.outPrice)} />
+                {/* Beside the sell, so it stays readable when the buy has scrolled off the left. */}
+                <text fill={color} fontSize="10" fontWeight="700" paintOrder="stroke" stroke="#0e0f0d" strokeWidth="3" textAnchor="end" x={x2 - 8} y={y(pair.outPrice) + 14}>
+                  {`${sign}${pair.pct.toFixed(2)}%`}
+                </text>
+              </g>
+            );
+          })}
+          {stillOpen ? (
+            <line stroke={ENTRY} strokeDasharray="5 4" strokeOpacity="0.7" strokeWidth="1.5" x1={xAt(stillOpen.at)} x2={(candles.length - 1) * step + step / 2} y1={y(stillOpen.price)} y2={y(lastC)} />
+          ) : null}
+        </g>
         {marks.map((m, i) => {
           const cx = m.index * step + step / 2;
+          // The arrow's tip sits on the exact fill price, where the connecting line starts or ends (owner, 2026-10-25).
           if (m.buy) {
-            const tip = y(m.candle.l) + 4;
+            const tip = y(m.price);
             return (
               <g key={i}>
                 <title>{`Bought at ${price(m.price)} on PancakeSwap`}</title>
                 <path d={`M${cx},${tip} l6,10 l-12,0 z`} fill={GOLD} />
-                <text fill={GOLD} fontSize="9.5" fontWeight="700" textAnchor="middle" x={cx} y={tip + 21}>B</text>
+                <text fill={GOLD} fontSize="9.5" fontWeight="700" paintOrder="stroke" stroke="#0e0f0d" strokeWidth="3" textAnchor="middle" x={cx} y={tip + 21}>B</text>
               </g>
             );
           }
-          const tip = y(m.candle.h) - 4;
+          const tip = y(m.price);
           return (
             <g key={i}>
               <title>{`Sold at ${price(m.price)} on PancakeSwap`}</title>
               <path d={`M${cx},${tip} l6,-10 l-12,0 z`} fill={DOWN} />
-              <text fill={DOWN} fontSize="9.5" fontWeight="700" textAnchor="middle" x={cx} y={tip - 13}>S</text>
+              <text fill={DOWN} fontSize="9.5" fontWeight="700" paintOrder="stroke" stroke="#0e0f0d" strokeWidth="3" textAnchor="middle" x={cx} y={tip - 13}>S</text>
             </g>
           );
         })}

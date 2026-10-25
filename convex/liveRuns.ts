@@ -313,7 +313,21 @@ export const get = query({
     // The engine's minute clock: the next run it has booked. It looks at the market every minute, but
     // writes a decision only once per closed candle, so this - not lastCheckedAt - is its pulse.
     const clock = await ctx.db.query("strategyClock").withIndex("by_key", (q) => q.eq("key", "main")).unique();
+    /*
+     * WHEN THE TRADE KEY RUNS OUT (owner, 2026-10-25: "a 'when key expires' place"). The agent trades
+     * from its Dolphin Wallet only while its limited trade key lives; past that it cannot buy, and an
+     * open position cannot be sold by it. Only the expiry and a status leave this query - never the key.
+     */
+    const keys = await ctx.db.query("agentTradeKeys").withIndex("by_draft", (q) => q.eq("draftId", run.draftId)).order("desc").take(5);
+    const nowSec = Date.now() / 1000;
+    const liveKey = keys.find((key) => key.status === "active" && key.expiry > nowSec) ?? null;
+    const lastKey = liveKey ?? keys.find((key) => key.status === "active") ?? null;
+    const tradeKey = {
+      status: liveKey ? ("active" as const) : lastKey ? ("expired" as const) : ("none" as const),
+      expiresAt: lastKey ? lastKey.expiry * 1000 : null,
+    };
     return {
+      tradeKey,
       ...summary(run, rules[0]?.market ?? null),
       timeframe: rules[0]?.timeframe ?? null,
       watching: Boolean(draft?.autopilot?.on),

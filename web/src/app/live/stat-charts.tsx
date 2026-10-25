@@ -48,7 +48,7 @@ export function ValueArea({ points, start }: { points: { t: number; usd: number 
           formatter={(value) => [`$${Number(value).toFixed(2)}`, "Wallet"]}
           labelFormatter={(t) => (Number(t) > 0 ? new Date(Number(t)).toLocaleString() : "Start")}
         />
-        <Area activeDot={{ r: 4, fill: color, stroke: "#191a15", strokeWidth: 2 }} dataKey="usd" fill="url(#valueFill)" isAnimationActive stroke={color} strokeWidth={2} type="monotone" />
+        <Area activeDot={{ r: 4, fill: color, stroke: "#191a15", strokeWidth: 2 }} dataKey="usd" fill="url(#valueFill)" isAnimationActive={false} stroke={color} strokeWidth={2} type="monotone" />
       </AreaChart>
     </ResponsiveContainer>
   );

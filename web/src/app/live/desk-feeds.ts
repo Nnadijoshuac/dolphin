@@ -159,6 +159,20 @@ export function useChainPulse() {
 /** Candles for a rule's own timeframe: the 200 closed ones the engine judges, plus the one forming. */
 export type RuleCandles = { closed: Candle[]; forming: Candle | null };
 
+/**
+ * HISTORY vs THE ENGINE'S WINDOW (owner, 2026-10-25: a losing BTC trade lasted longer than the 200 candles the
+ * chart held, so its buy could not be scrolled to). The chart keeps CHART_CANDLES of history to scroll through;
+ * anything that reads a condition the way the engine does uses only the last ENGINE_CANDLES (engineCloses),
+ * so the page's RSI still matches the engine's to the decimal.
+ */
+export const CHART_CANDLES = 999;
+export const ENGINE_CANDLES = 200;
+
+/** The closes the engine judges: its last 200 closed candles. */
+export function engineCloses(data: RuleCandles | undefined): number[] {
+  return (data?.closed ?? []).slice(-ENGINE_CANDLES).map((c) => c.c);
+}
+
 /** One kline-stream message applied to the candles: a tick moves the forming candle, a close appends it. */
 export function applyKline(current: RuleCandles | undefined, k: Record<string, unknown>): RuleCandles | undefined {
   if (!current) return current;
@@ -167,7 +181,7 @@ export function applyKline(current: RuleCandles | undefined, k: Record<string, u
   const lastClosed = current.closed[current.closed.length - 1];
   // Already closed and counted (a late or repeated message): nothing changes.
   if (lastClosed && candle.t <= lastClosed.t) return current;
-  if (k.x === true) return { closed: [...current.closed, candle].slice(-200), forming: null };
+  if (k.x === true) return { closed: [...current.closed, candle].slice(-CHART_CANDLES), forming: null };
   return { ...current, forming: candle };
 }
 
@@ -185,12 +199,12 @@ export function useRuleCandles(symbol: string | null, timeframe: string | null) 
     staleTime: Infinity,
     placeholderData: (previous) => previous,
     queryFn: async (): Promise<RuleCandles> => {
-      const response = await fetch(`${REST}/klines?symbol=${symbol}&interval=${timeframe}&limit=201`);
+      const response = await fetch(`${REST}/klines?symbol=${symbol}&interval=${timeframe}&limit=${CHART_CANDLES + 1}`);
       if (!response.ok) throw new Error(`Binance ${response.status}`);
       const rows = (await response.json()) as unknown[][];
       const all = rows.map((row) => ({ t: Number(row[0]), o: +row[1]!, h: +row[2]!, l: +row[3]!, c: +row[4]!, v: +row[5]!, closeTime: Number(row[6]) }));
       const now = Date.now();
-      const closed = all.filter((c) => c.closeTime < now).slice(-200);
+      const closed = all.filter((c) => c.closeTime < now).slice(-CHART_CANDLES);
       const forming = all.find((c) => c.closeTime >= now) ?? null;
       return { closed, forming };
     },

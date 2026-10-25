@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyKline, type RuleCandles } from "@/app/live/desk-feeds";
+import { applyKline, CHART_CANDLES, engineCloses, type RuleCandles } from "@/app/live/desk-feeds";
 
 const candle = (t: number, c: number) => ({ t, o: c, h: c, l: c, c, v: 1, closeTime: t + 899_999 });
 const k = (t: number, c: number, closed: boolean) => ({ t, T: t + 899_999, o: String(c), h: String(c), l: String(c), c: String(c), v: "1", x: closed });
@@ -20,11 +20,14 @@ describe("applyKline (candles pushed by Binance's kline stream)", () => {
   it("a repeated or late message for a closed candle changes nothing", () => {
     expect(applyKline(base, k(900_000, 999, true))).toBe(base);
   });
-  it("keeps the engine's 200-candle window", () => {
-    const full: RuleCandles = { closed: Array.from({ length: 200 }, (_, i) => candle(i * 900_000, i)), forming: null };
-    const next = applyKline(full, k(200 * 900_000, 500, true))!;
-    expect(next.closed).toHaveLength(200);
-    expect(next.closed[199]!.c).toBe(500);
+  it("keeps the chart's history window, and reads conditions on the engine's last 200", () => {
+    const full: RuleCandles = { closed: Array.from({ length: CHART_CANDLES }, (_, i) => candle(i * 900_000, i)), forming: null };
+    const next = applyKline(full, k(CHART_CANDLES * 900_000, 5000, true))!;
+    expect(next.closed).toHaveLength(CHART_CANDLES);
+    expect(next.closed[CHART_CANDLES - 1]!.c).toBe(5000);
+    const closes = engineCloses(next);
+    expect(closes).toHaveLength(200);
+    expect(closes[199]).toBe(5000);
   });
   it("before the history loads there is nothing to patch", () => {
     expect(applyKline(undefined, k(0, 1, true))).toBeUndefined();

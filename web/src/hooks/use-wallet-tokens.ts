@@ -33,6 +33,12 @@ export const WALLET_TOKENS: readonly WalletToken[] = [
   { address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", symbol: "ETH", decimals: 18 },
   { address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", symbol: "CAKE", decimals: 18 },
   { address: "0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63", symbol: "XVS", decimals: 18 },
+  // bStocks (2026-10-26), mirroring convex/lib/bstocks.ts: an agent can now buy them, so a wallet must show them.
+  { address: "0x5b1910eAaD6450E50f816082Aa078C41F10C292f", symbol: "TSLAB", decimals: 18 },
+  { address: "0x02Fca66C1D1aFB4E2A7884261eB00F63598a7436", symbol: "NVDAB", decimals: 18 },
+  { address: "0x80f3D493EBCe97e343c53D29a137942416B4ffC0", symbol: "CRCLB", decimals: 18 },
+  { address: "0xcdf2f3e0fa43C47A6662a91C9E4a7C5f69762699", symbol: "MUB", decimals: 18 },
+  { address: "0x3eE4dF61bd4F867E349BEaE8bFE07bc31b4850fb", symbol: "SNDKB", decimals: 18 },
 ];
 
 const client = createPublicClient({ chain: bsc, transport: http(BSC_RPC_URL) });

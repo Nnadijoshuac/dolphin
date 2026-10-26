@@ -81,7 +81,11 @@ export const PANCAKE_V3_FACTORY = "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865" a
  * tier with a pool AND non-zero liquidity wins — a deployed-but-empty pool
  * returns a nonsense spot price, and there are plenty of those.
  */
-export const FEE_TIERS = [100, 500, 2500] as const;
+/*
+ * 10000 (1%) added 2026-10-26: bStocks keep real liquidity there too (TSLAB/USDT holds $82K at 1%), and a
+ * tier left out can't be the deepest. Callers now choose the DEEPEST pool across all tiers, never the first.
+ */
+export const FEE_TIERS = [100, 500, 2500, 10000] as const;
 
 /**
  * USD per ONE WHOLE token, as an exact fraction.

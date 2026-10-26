@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, erc20Abi, http, type Address } from "viem";
 import { bsc } from "viem/chains";
 
 import { BSC_RPC_URL } from "@/constants/agents";
@@ -171,14 +171,21 @@ async function readFeed(feed: Address, nowSeconds: number): Promise<UsdRate> {
  * empty pool is skipped rather than read.
  */
 async function readPoolRate(token: Address, tokenDecimals: number): Promise<UsdRate | null> {
+  /*
+   * THE DEEPEST POOL, NOT THE FIRST (2026-10-26). This took the first tier with any liquidity: NVDAB's 0.01%
+   * USDT pool holds $2 and its 0.25% pool $1.05M, so a held Nvidia bStock would have been valued from the $2
+   * pool. "Deepest" is measured as the USDT the pool actually holds - a figure a near-empty pool can't fake.
+   */
+  let deepest: { pool: Address; usdt: bigint } | null = null;
   for (const fee of FEE_TIERS) {
-    const pool = await client.readContract({
-      abi: FACTORY_ABI,
-      address: PANCAKE_V3_FACTORY,
-      functionName: "getPool",
-      args: [token, USDT_BSC, fee],
-    });
-    if (pool === ZERO_ADDRESS) continue;
+    const candidate = await client.readContract({ abi: FACTORY_ABI, address: PANCAKE_V3_FACTORY, functionName: "getPool", args: [token, USDT_BSC, fee] });
+    if (candidate === ZERO_ADDRESS) continue;
+    const usdt = await client.readContract({ abi: erc20Abi, address: USDT_BSC, functionName: "balanceOf", args: [candidate] });
+    if (usdt > BigInt(0) && (!deepest || usdt > deepest.usdt)) deepest = { pool: candidate, usdt };
+  }
+  {
+    if (!deepest) return null;
+    const pool = deepest.pool;
 
     const [slot0, token0, liquidity] = await Promise.all([
       client.readContract({ abi: POOL_ABI, address: pool, functionName: "slot0" }),
@@ -186,9 +193,9 @@ async function readPoolRate(token: Address, tokenDecimals: number): Promise<UsdR
       client.readContract({ abi: POOL_ABI, address: pool, functionName: "liquidity" }),
     ]);
 
-    if (liquidity === BigInt(0)) continue;
+    if (liquidity === BigInt(0)) return null;
     const sqrtPriceX96 = slot0[0];
-    if (sqrtPriceX96 === BigInt(0)) continue;
+    if (sqrtPriceX96 === BigInt(0)) return null;
 
     return rateFromPool({
       sqrtPriceX96,

@@ -93,14 +93,18 @@ export function PaperTradingCard({
       .catch(() => toast.error("Could not switch to Live."));
   const setMode = useMutation(paperTradingApi.paperTrading.setMode);
   const reset = useMutation(paperTradingApi.paperTrading.reset);
+  const move = useMutation(paperTradingApi.paperTrading.move);
+  const [moving, setMoving] = useState<"deposit" | "withdraw" | null>(null);
+  const [moveUsd, setMoveUsd] = useState("");
   const valuation = useAction(paperTradingApi.paperTrading.valuation);
   const [value, setValue] = useState<{ valueUsd: number | null; startUsd: number } | "loading" | null>(null);
   const [version, setVersion] = useState(0);
   const tradeCount = state?.trades.length ?? 0;
+  const moveCount = state?.moves.length ?? 0;
 
   // Valued at live prices when the account changes or on Refresh - never polled.
   useEffect(() => {
-    if (!hasSwap || !state?.paperMode) return;
+    if (!state?.paperMode) return;
     let live = true;
     valuation({ conversationKey })
       .then((result) => {
@@ -112,7 +116,7 @@ export function PaperTradingCard({
     return () => {
       live = false;
     };
-  }, [conversationKey, hasSwap, state?.paperMode, tradeCount, valuation, version]);
+  }, [conversationKey, state?.paperMode, tradeCount, moveCount, valuation, version]);
 
   if (!trades || !state) return null;
   const change = typeof value === "object" && value?.valueUsd != null ? value.valueUsd - value.startUsd : null;
@@ -146,12 +150,12 @@ export function PaperTradingCard({
         </div>
       </div>
 
-      {state.paperMode && !hasSwap ? (
-        <p className="mt-1 text-[0.7rem] leading-snug text-muted">Paper: pretend money at live prices. Live: real funds.</p>
-      ) : state.paperMode ? (
+      {state.paperMode ? (
         <>
           <p className="mt-1 text-[0.7rem] leading-snug text-muted">
-            Practice with pretend money at real PancakeSwap prices - fees, price impact and gas included. No real funds move.
+            {hasSwap
+              ? "Practice with demo money at real PancakeSwap prices - fees, price impact and gas included. No real funds move."
+              : "Practice with demo money at live prices. No real funds move."}
           </p>
           <div className="mt-2 flex items-baseline gap-2">
             <p className="text-[1rem] font-semibold text-ink">
@@ -160,17 +164,76 @@ export function PaperTradingCard({
             {change !== null ? (
               <p className={`text-[0.74rem] font-semibold ${change >= 0 ? "text-success" : "text-danger"}`}>
                 {change >= 0 ? "+" : ""}
-                {change.toFixed(2)} since the ${state.startUsd.toLocaleString()} start
+                {change.toFixed(2)} on ${value !== "loading" && value ? value.startUsd.toLocaleString("en", { maximumFractionDigits: 2 }) : ""} put in
               </p>
             ) : null}
             <button className="ml-auto !text-[0.7rem] font-semibold text-muted hover:text-ink" onClick={() => { setValue("loading"); setVersion((n) => n + 1); }} type="button">
               Refresh
             </button>
           </div>
-          <p className="mt-1 truncate font-mono text-[0.7rem] text-ink-soft">
-            {state.holdings.map((holding) => `${amount(holding.amount)} ${holding.symbol}`).join(" · ")}
-          </p>
-          {state.trades.length > 0 ? (
+          {hasSwap ? (
+            <p className="mt-1 truncate font-mono text-[0.7rem] text-ink-soft">
+              {state.holdings.map((holding) => `${amount(holding.amount)} ${holding.symbol}`).join(" · ")}
+            </p>
+          ) : null}
+
+          {/* DEMO MONEY (owner, 2026-10-26): add it from nowhere, withdraw it to nowhere - like a broker's demo account. */}
+          {moving ? (
+            <form
+              className="mt-2 flex items-center gap-1.5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const usd = Number(moveUsd);
+                if (!(usd > 0)) return;
+                const kind = moving;
+                void move({ conversationKey, kind, usd })
+                  .then(() => {
+                    toast.success(kind === "deposit" ? `Added $${usd.toLocaleString("en")} demo money.` : `Withdrew $${usd.toLocaleString("en")} demo money.`);
+                    setMoving(null);
+                    setMoveUsd("");
+                  })
+                  .catch((error: unknown) => toast.error(error instanceof Error ? error.message.replace(/^.*ConvexError:\s*/, "").split("\n")[0] : "Could not move demo money."));
+              }}
+            >
+              <span className="text-[0.74rem] text-muted">$</span>
+              <input
+                aria-label={moving === "deposit" ? "Demo money to add" : "Demo money to withdraw"}
+                autoFocus
+                className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-paper px-2 text-[0.8rem] text-ink"
+                inputMode="decimal"
+                onChange={(event) => setMoveUsd(event.target.value.replace(/[^0-9.]/g, ""))}
+                placeholder="1000"
+                value={moveUsd}
+              />
+              <button className="h-8 rounded-lg bg-ink px-3 !text-[0.72rem] font-semibold" type="submit">
+                <span className="text-canvas">{moving === "deposit" ? "Add" : "Withdraw"}</span>
+              </button>
+              <button className="h-8 px-1.5 !text-[0.72rem] font-semibold text-muted hover:text-ink" onClick={() => setMoving(null)} type="button">
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <div className="mt-2 flex gap-1.5">
+              <button className="h-8 flex-1 rounded-lg border border-line !text-[0.72rem] font-semibold text-ink hover:border-line-strong" onClick={() => setMoving("deposit")} type="button">
+                Add demo money
+              </button>
+              <button className="h-8 flex-1 rounded-lg border border-line !text-[0.72rem] font-semibold text-ink hover:border-line-strong" onClick={() => setMoving("withdraw")} type="button">
+                Withdraw
+              </button>
+            </div>
+          )}
+          {state.moves.length > 0 ? (
+            <ul className="mt-2 space-y-0.5">
+              {state.moves.slice(0, 3).map((entry) => (
+                <li className="truncate text-[0.68rem] text-muted" key={entry.at}>
+                  {new Date(entry.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })} ·{" "}
+                  {entry.kind === "deposit" ? "added" : "withdrew"} ${entry.usd.toLocaleString("en", { maximumFractionDigits: 2 })} demo
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {!hasSwap ? null : state.trades.length > 0 ? (
             <ul className="mt-2 space-y-0.5">
               {state.trades.slice(0, 4).map((trade) => (
                 <li className="truncate text-[0.68rem] text-muted" key={trade.at}>
@@ -180,7 +243,7 @@ export function PaperTradingCard({
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-[0.68rem] text-muted">No paper trades yet. Run the agent to see what it would do.</p>
+            <p className="mt-2 text-[0.68rem] text-muted">No paper swaps yet. Run the agent to see what it would do.</p>
           )}
           <button
             className="mt-2 !text-[0.7rem] font-semibold text-muted hover:text-ink"

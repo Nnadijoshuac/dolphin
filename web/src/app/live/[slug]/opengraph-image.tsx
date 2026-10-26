@@ -86,7 +86,7 @@ export default async function OpengraphImage({ params }: { params: Promise<{ slu
         {/* the candles fade into the black at the very foot */}
         <div style={{ position: "absolute", left: 0, top: 520, width: 1200, height: 110, display: "flex", background: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.85) 100%)" }} />
 
-        <span style={{ position: "absolute", left: 66, top: 156, display: "flex", fontFamily: "Instrument Serif", fontStyle: "italic", fontSize: 48, color: MUTED }}>An AI agent trading real money</span>
+        <span style={{ position: "absolute", left: 66, top: 156, display: "flex", fontFamily: "Instrument Serif", fontStyle: "italic", fontSize: 48, color: MUTED }}>{run?.paper ? "An AI agent paper trading" : "An AI agent trading real money"}</span>
         <span style={{ position: "absolute", left: 58, top: 216, display: "flex", maxWidth: 1100, fontFamily: "Unbounded", fontSize: nameSize(name), lineHeight: 1, color: INK }}>{name}</span>
 
         {/* the dolphin leaps in front of the name */}

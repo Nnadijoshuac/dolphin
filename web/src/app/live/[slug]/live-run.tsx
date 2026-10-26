@@ -69,10 +69,11 @@ const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
 function RunView({ run, now }: { run: LiveRunDetail; now: number }) {
   const running = run.status === "running";
   const desk = run.desk ?? [];
-  const addresses = useMemo(() => [run.walletAddress], [run.walletAddress]);
+  // A paper run has no wallet to read: its value is the demo account's, valued every five minutes.
+  const addresses = useMemo(() => (run.paper ? [] : [run.walletAddress]), [run.paper, run.walletAddress]);
   const held = useWalletHoldings(addresses, "USD", false);
-  const liveFigure = typeof held.headline === "object" ? held.headline.figure : usd(run.lastUsd);
-  const liveUsd = typeof held.headline === "object" ? Number(held.headline.figure.replace(/[^0-9.]/g, "")) : run.lastUsd;
+  const liveFigure = !run.paper && typeof held.headline === "object" ? held.headline.figure : usd(run.lastUsd);
+  const liveUsd = !run.paper && typeof held.headline === "object" ? Number(held.headline.figure.replace(/[^0-9.]/g, "")) : run.lastUsd;
   // A run can watch several coins (The Dip: BNB, ETH, BTC). The watchlist picks which one the market panels show.
   const coins = [...new Set(desk.map((rule) => rule.market ?? run.market).filter((m): m is string => Boolean(m)))];
   const [picked, setPicked] = useState<string | null>(null);
@@ -258,6 +259,7 @@ function MobileRunView({
           <p className={`${styles.tCaption} flex items-center gap-1.5`}>
             {running ? <span className={styles.blip} /> : null}
             {running ? `Live · day ${now ? dayOf(run.startedAt, now) : 1}` : run.status === "lost" ? "Ran out" : "Ended"}
+            {run.paper ? " · Paper trade" : ""}
             {(() => {
               const key = running ? keyLeft(ownerKey, now) : null;
               return key ? <span style={key.soon ? { color: DOWN } : undefined}>{` · key ${key.text === "Expired" ? "expired" : `${key.text} left`}`}</span> : null;
@@ -421,10 +423,16 @@ function MobileRunView({
             })
           )}
           <p className={`${styles.tCaption} px-4 py-4`}>
-            Wallet{" "}
-            <a className="text-[#c9cbc3]" href={`https://bscscan.com/address/${run.walletAddress}`} rel="noreferrer" target="_blank">
-              {run.walletAddress.slice(0, 6)}…{run.walletAddress.slice(-4)} ↗
-            </a>{" "}
+            {run.paper ? (
+              "Paper trade: demo money at live prices. Nothing here moves real funds."
+            ) : (
+              <>
+                Wallet{" "}
+                <a className="text-[#c9cbc3]" href={`https://bscscan.com/address/${run.walletAddress}`} rel="noreferrer" target="_blank">
+                  {run.walletAddress.slice(0, 6)}…{run.walletAddress.slice(-4)} ↗
+                </a>
+              </>
+            )}{" "}
             · Not financial advice.
           </p>
           <div className="px-4">
@@ -540,10 +548,16 @@ function ShareSheet({ run, liveFigure, change, onClose }: { run: LiveRunDetail; 
   const coins = [...new Set((run.desk ?? []).map((rule) => (rule.market ?? run.market ?? "").replace("USDT", "")).filter(Boolean))];
   const coinWords = coins.length > 1 ? `${coins.slice(0, -1).join(", ")} and ${coins[coins.length - 1]}` : (coins[0] ?? "crypto");
   const running = run.status === "running";
-  const post = running
-    ? `An AI agent is trading real money in public. ${run.name}: ${liveFigure} (${change}) on ${coinWords}. Every trade on BNB Chain.`
-    : `An AI agent traded real money in public. ${run.name} finished at ${liveFigure} (${change}) on ${coinWords}. Every trade is on BNB Chain.`;
-  const redditTitle = `${run.name}: an AI agent trading ${liveFigure} of real money live on ${coinWords} - every trade verifiable on BNB Chain`;
+  const post = run.paper
+    ? running
+      ? `An AI agent is paper trading in public. ${run.name}: ${liveFigure} of demo money (${change}) on ${coinWords}, at live prices.`
+      : `An AI agent paper traded in public. ${run.name} finished at ${liveFigure} of demo money (${change}) on ${coinWords}.`
+    : running
+      ? `An AI agent is trading real money in public. ${run.name}: ${liveFigure} (${change}) on ${coinWords}. Every trade on BNB Chain.`
+      : `An AI agent traded real money in public. ${run.name} finished at ${liveFigure} (${change}) on ${coinWords}. Every trade is on BNB Chain.`;
+  const redditTitle = run.paper
+    ? `${run.name}: an AI agent paper trading ${coinWords} live, in public - demo money, live prices`
+    : `${run.name}: an AI agent trading ${liveFigure} of real money live on ${coinWords} - every trade verifiable on BNB Chain`;
   const enc = encodeURIComponent;
   // Public social platforms only (owner, 2026-10-19: "remove WhatsApp - what we need is social media, public").
   const targets = [
@@ -704,7 +718,9 @@ function TopBar({
         <LiveBadge running={run.status === "running"} />
         <div className="min-w-0">
           <p className="truncate text-[15px] font-semibold leading-tight">{run.name}</p>
-          <p className={`text-[11px] ${styles.muted}`}>Day {now ? dayOf(run.startedAt, now) : 1} · real money on BNB Chain</p>
+          <p className={`text-[11px] ${styles.muted}`}>
+            Day {now ? dayOf(run.startedAt, now) : 1} · {run.paper ? "Paper trade, demo money at live prices" : "real money on BNB Chain"}
+          </p>
         </div>
       </div>
 
@@ -724,7 +740,7 @@ function TopBar({
 
       <div className="ml-auto flex items-center gap-6">
         <div className="text-right">
-          <p className={`text-[11px] ${styles.muted}`}>Wallet</p>
+          <p className={`text-[11px] ${styles.muted}`}>{run.paper ? "Demo account" : "Wallet"}</p>
           <p className={`${styles.mono} text-[20px] font-semibold leading-none`}>
             <RollingFigure value={liveFigure} />
           </p>
@@ -802,7 +818,7 @@ function Treasury({ run, liveFigure, liveUsd, now }: { run: LiveRunDetail; liveF
   const low = Math.min(liveUsd, ...run.history.map((point) => point.usd));
   const up = liveUsd >= run.startUsd;
   return (
-    <Panel live meta="on BNB Chain" title="Treasury">
+    <Panel live meta={run.paper ? "paper trade" : "on BNB Chain"} title="Treasury">
       <div className="px-3 pb-2 pt-3">
         <div className="flex items-baseline justify-between gap-3">
           <span className={`${styles.mono} text-[30px] font-semibold leading-none`}>
@@ -817,7 +833,9 @@ function Treasury({ run, liveFigure, liveUsd, now }: { run: LiveRunDetail; liveF
             <ValueArea points={[...run.history, ...(now ? [{ t: now, usd: liveUsd }] : [])]} start={run.startUsd} />
           </div>
         ) : (
-          <p className={`mt-3 text-[11.5px] ${styles.muted}`}>The value curve draws itself as the wallet moves - read from the chain every 5 minutes.</p>
+          <p className={`mt-3 text-[11.5px] ${styles.muted}`}>{run.paper
+              ? "The value curve draws itself as the demo account moves - valued at live prices every 5 minutes."
+              : "The value curve draws itself as the wallet moves - read from the chain every 5 minutes."}</p>
         )}
         <div className={`mt-1 grid grid-cols-3 gap-2 text-[11px] ${styles.muted}`}>
           <span>
@@ -1013,6 +1031,8 @@ function Decisions({ run, now, onOpen, onPick, bare }: { run: LiveRunDetail; now
                     <a className="text-[#8a8c85] no-underline hover:text-white" href={`https://bscscan.com/tx/${trade.txHash}`} rel="noreferrer" target="_blank">
                       BscScan ↗
                     </a>
+                  ) : trade.paper ? (
+                    <span className="text-[#8a8c85]">Paper trade</span>
                   ) : null}
                 </div>
               </div>
@@ -1660,7 +1680,7 @@ function TradesTable({ run, now, onOpen }: { run: LiveRunDetail; now: number; on
     <section className={`${styles.dpanel}`}>
       <header className={styles.dhead}>
         <span>Every trade since it went live</span>
-        <span className={styles.dmeta}>{run.tradeCount} trades · each one on BNB Chain</span>
+        <span className={styles.dmeta}>{run.tradeCount} trades · {run.paper ? "paper trades at live prices" : "each one on BNB Chain"}</span>
       </header>
       <div className="p-3">
         {run.trades.length === 0 ? (
@@ -1707,7 +1727,7 @@ function TradesTable({ run, now, onOpen }: { run: LiveRunDetail; now: number; on
                             BscScan ↗
                           </a>
                         ) : (
-                          <span className={styles.muted}>{trade.paper ? "practice" : "—"}</span>
+                          <span className={styles.muted}>{trade.paper ? "Paper trade" : "—"}</span>
                         )}
                       </td>
                     </tr>
@@ -1718,10 +1738,16 @@ function TradesTable({ run, now, onOpen }: { run: LiveRunDetail; now: number; on
           </div>
         )}
         <p className={`mt-4 text-xs ${styles.muted}`}>
-          Wallet{" "}
-          <a className="text-[#c9cbc3]" href={`https://bscscan.com/address/${run.walletAddress}`} rel="noreferrer" target="_blank">
-            {run.walletAddress.slice(0, 6)}…{run.walletAddress.slice(-4)} ↗
-          </a>{" "}
+          {run.paper ? (
+            "Paper trade: demo money at live prices. Nothing here moves real funds."
+          ) : (
+            <>
+              Wallet{" "}
+              <a className="text-[#c9cbc3]" href={`https://bscscan.com/address/${run.walletAddress}`} rel="noreferrer" target="_blank">
+                {run.walletAddress.slice(0, 6)}…{run.walletAddress.slice(-4)} ↗
+              </a>
+            </>
+          )}{" "}
           · Not financial advice.
         </p>
         <OwnerEnd run={run} />
@@ -1755,7 +1781,7 @@ function tradeDetail(trade: LiveRunDetail["trades"][number], run: LiveRunDetail)
       ["Size", usd(trade.sizeUsd)],
       ["Price", price(trade.price)],
       ...(trade.pnlPct !== null ? ([["Result", `${trade.pnlPct >= 0 ? "+" : ""}${trade.pnlPct.toFixed(2)}%`]] as [string, string][]) : []),
-      ["Money", trade.paper ? "practice" : "real, on BNB Chain"],
+      ["Money", trade.paper ? "Paper trade, demo money" : "real, on BNB Chain"],
       ...(trade.route ? ([["Pool", trade.route]] as [string, string][]) : []),
       ...(trade.marketPrice ? ([["Market price then", price(trade.marketPrice)], ["Cost vs market", fillCost(trade) ?? "—"]] as [string, string][]) : []),
       ...(trade.measured !== undefined && trade.measured !== null ? ([["Amount", trade.measured ? "read from the chain receipt" : "the swap's quote"]] as [string, string][]) : []),

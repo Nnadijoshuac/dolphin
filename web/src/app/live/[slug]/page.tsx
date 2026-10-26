@@ -13,8 +13,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const run = await fetchLiveRun(decodeURIComponent(slug));
   const coins = [...new Set((run?.desk ?? []).map((rule) => (rule.market ?? run?.market ?? "").replace("USDT", "")).filter(Boolean))];
   const name = run?.name ?? "Live run";
-  const title = `${name} - an AI agent trading real money, live`;
-  const description = `${name} trades ${coins.length ? coins.join(", ") : "crypto"} with real money on BNB Chain. Watch every decision as it happens - every trade links to its proof.`;
+  const coinWords = coins.length ? coins.join(", ") : "crypto";
+  const title = run?.paper ? `${name} - an AI agent paper trading, live` : `${name} - an AI agent trading real money, live`;
+  const description = run?.paper
+    ? `${name} paper trades ${coinWords} with demo money at live prices. Watch every decision as it happens.`
+    : `${name} trades ${coinWords} with real money on BNB Chain. Watch every decision as it happens - every trade links to its proof.`;
   return {
     title,
     description,

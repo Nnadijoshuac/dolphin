@@ -290,6 +290,8 @@ export type MyBuiltAgent = {
   lastTradeAt: string | null;
   /** Its public run on /live while one is running, else null. Absent on a backend before 2026-10-26. */
   liveSlug?: string | null;
+  hasRules?: boolean;
+  autopilotOn?: boolean;
 };
 export const myAgentsApi = anyApi as unknown as {
   myAgents: {
@@ -1070,10 +1072,15 @@ export const paperTradingApi = anyApi as unknown as {
         startUsd: number;
         holdings: PaperHolding[];
         trades: { at: string; sellSymbol: string; sellAmount: string; buySymbol: string; buyAmount: string; route: string; gasBnb: string }[];
+        /** Demo deposits and withdrawals, newest first. */
+        moves: { at: number; kind: "deposit" | "withdraw"; usd: number }[];
+        /** The starting money plus deposits, less withdrawals. */
+        putInUsd: number;
       } | null
     >;
     setMode: Mutation<{ conversationKey: string; paperMode: boolean; acknowledge?: boolean }, null>;
     reset: Mutation<{ conversationKey: string }, null>;
+    move: Mutation<{ conversationKey: string; kind: "deposit" | "withdraw"; usd: number }, null>;
     valuation: Action<{ conversationKey: string }, { valueUsd: number | null; startUsd: number; checkedAt: number } | null>;
   };
 };
@@ -1993,6 +2000,8 @@ export type LiveRunSummary = {
   startedAt: number;
   endedAt: number | null;
   status: "running" | "lost" | "ended";
+  /** A paper run: demo money at live prices, no wallet (walletAddress is ""). */
+  paper: boolean;
   /** On the /live list only (2026-10-19): every coin, each rule in brief, the latest decision, recent value. */
   card?: {
     markets: string[];
@@ -2073,7 +2082,7 @@ export const liveRunsApi = anyApi as unknown as {
     get: Query<{ slug: string }, LiveRunDetail | null>;
     /** The run's trade-key expiry, for its signed-in owner only; null for anyone else. */
     ownerKey: Query<{ slug: string; sessionToken: string }, LiveTradeKey | null>;
-    start: Action<{ sessionToken: string; conversationKey: string }, { slug: string; startUsd: number }>;
+    start: Action<{ sessionToken: string; conversationKey: string }, { slug: string; startUsd: number; paper: boolean }>;
     end: Mutation<{ sessionToken: string; slug: string }, null>;
   };
 };

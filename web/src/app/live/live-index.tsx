@@ -28,8 +28,8 @@ export function LiveIndex() {
       <div className={`${styles.desk} mx-auto w-full max-w-[2000px] px-4 pt-8 sm:px-6 xl:px-10`}>
         <header>
           {data?.running.length ? <LiveBadge running /> : null}
-          <h1 className={`${styles.title} ${data?.running.length ? "mt-4" : ""}`}>Agents trading real money</h1>
-          <p className={`mt-2 text-sm ${styles.muted}`}>Every trade on BNB Chain. Tap one to watch it.</p>
+          <h1 className={`${styles.title} ${data?.running.length ? "mt-4" : ""}`}>Agents trading live</h1>
+          <p className={`mt-2 text-sm ${styles.muted}`}>Real money on BNB Chain, or paper trades at live prices - each says which. Tap one to watch it.</p>
         </header>
 
         <section className="mt-8">
@@ -112,9 +112,10 @@ function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
    * The card showed the value the backend saves every five minutes; the page reads the wallet live from BNB
    * Chain. A running card now reads it live too, the same way; the saved value is only the fallback.
    */
-  const addresses = useMemo(() => (run.status === "running" ? [run.walletAddress] : []), [run.status, run.walletAddress]);
+  const addresses = useMemo(() => (run.status === "running" && !run.paper ? [run.walletAddress] : []), [run.status, run.paper, run.walletAddress]);
   const held = useWalletHoldings(addresses, "USD", false);
-  const value = typeof held.headline === "object" ? Number(held.headline.figure.replace(/[^0-9.]/g, "")) : run.lastUsd;
+  // A paper run has no wallet: its value is the demo account's, saved every five minutes.
+  const value = !run.paper && typeof held.headline === "object" ? Number(held.headline.figure.replace(/[^0-9.]/g, "")) : run.lastUsd;
   const up = value >= run.startUsd;
   const markets = run.card?.markets.length ? run.card.markets : run.market ? [run.market] : [];
   const live = run.status === "running";
@@ -132,6 +133,7 @@ function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
       </div>
       <p className="mt-4 truncate text-[18px] font-semibold text-white">{run.name}</p>
       <p className={`text-[12px] ${styles.muted}`}>
+        {run.paper ? "Paper trade · " : ""}
         {markets.map((m) => m.replace("USDT", "")).join(" · ")} · Day {now ? dayOf(run.startedAt, now) : 1}
       </p>
       <div className="mt-4 flex items-baseline justify-between gap-3">
@@ -159,7 +161,10 @@ function FinishedRow({ run, now }: { run: LiveRunSummary; now: number }) {
           </span>
         ))}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-white">{run.name}</span>
+      <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-white">
+        {run.name}
+        {run.paper ? <span className={`ml-2 text-[12px] font-normal ${styles.muted}`}>Paper</span> : null}
+      </span>
       <span className={`${styles.mono} text-[13px] text-[#c9cbc3]`}>
         {usd(run.startUsd)} → {usd(run.lastUsd)}
       </span>
@@ -183,24 +188,30 @@ function GoLive() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const ready = (built ?? []).filter((agent) => agent.conversationKey && !agent.paperMode && agent.trading?.status === "active");
+  // Paper agents too (owner, 2026-10-26: "even somebody that is paper trading can get to go live"): no key, no funding.
+  const ready = (built ?? []).filter(
+    (agent) => agent.conversationKey && agent.hasRules && agent.autopilotOn && (agent.paperMode || agent.trading?.status === "active"),
+  );
   if (!wallet.isConnected || !built || built.length === 0) return null;
 
   return (
     <section className={`${styles.panel} mt-3 p-5`}>
       <h2 className={styles.cardTitle}>Make your run public</h2>
       <p className={`mt-1 text-sm ${styles.muted}`}>
-        Pick an agent trading real money. Anyone with the link watches it live until its wallet runs out or you stop it.
+        Pick an agent. Anyone with the link watches it trade, live. On Paper it trades demo money and says so; on Live, real money.
       </p>
       {ready.length === 0 ? (
         <p className={`mt-4 text-sm ${styles.muted}`}>
-          None of your agents can go live yet. An agent needs Trading mode set to Live, Autopilot on, and an active trade key.
+          None of your agents can go live yet. An agent needs a trading rule and Autopilot on. On Live it also needs an active trade key.
         </p>
       ) : (
         <ul className="mt-4 flex flex-col gap-2">
           {ready.map((agent) => (
             <li className={`${styles.panel2} flex items-center justify-between gap-3 px-4 py-3`} key={agent.conversationKey}>
-              <span className="truncate text-sm font-medium">{agent.name}</span>
+              <span className="min-w-0 truncate text-sm font-medium">
+                {agent.name}
+                <span className={`ml-2 text-[12px] ${styles.muted}`}>{agent.paperMode ? "Paper" : "Real money"}</span>
+              </span>
               {/* Already public (owner, 2026-10-26: The Dip was live and still offered "go live"): link to it. */}
               {agent.liveSlug ? (
                 <Link className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-white/5" href={`/live/${agent.liveSlug}`}>
@@ -224,7 +235,7 @@ function GoLive() {
                 }}
                 type="button"
               >
-                {busy === agent.conversationKey ? "Reading the wallet…" : "Go live"}
+                {busy === agent.conversationKey ? (agent.paperMode ? "Reading the demo account…" : "Reading the wallet…") : "Go live"}
               </button>
               )}
             </li>

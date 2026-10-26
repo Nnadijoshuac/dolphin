@@ -295,6 +295,12 @@ function bestKeywordMatch(text: string): { slug: string; score: number } | null 
   return best;
 }
 
+/** Whether an agent's own words use any of a category's terms. */
+function textSupports(text: string, slug: string): boolean {
+  const definition = CATEGORY_DEFINITIONS.find((d) => d.slug === slug);
+  return definition ? definition.terms.some((term) => text.includes(term)) : false;
+}
+
 /**
  * The four categories Set and Earn grades, and the ones a user hires by job.
  * A precise match on one of these outranks a vague publisher label.
@@ -319,6 +325,15 @@ export function categorize(input: CategorizeInput): CategoryAssignment {
     for (const value of registryCategoryValues(raw)) {
       const slug = slugify(value);
       if (slug.length === 0) continue;
+      /*
+       * A CLAIM TO ONE OF THE GRADED FOUR NEEDS THE AGENT'S OWN WORDS BEHIND IT (2026-10-26). These are the
+       * categories Set and Earn grades, so they are the ones worth claiming falsely: a memecoin launcher
+       * ("BORT COIN DEPLOYER AGENT", 338558) registered itself as health-factor, and an agent named
+       * "claude.ai" described only as "An AI agent on .AI Pad" (378561) as yield. Both were filed as claimed.
+       * The claim now counts only when the name, description or tags use that category's own terms;
+       * otherwise the agent is filed by its own words, like any agent without a label.
+       */
+      if (SPECIFIC_CATEGORIES.has(slug) && !textSupports(text, slug)) continue;
       if (!SPECIFIC_CATEGORIES.has(slug) && own && SPECIFIC_CATEGORIES.has(own.slug)) {
         return { slug: own.slug, label: categoryLabel(own.slug), source: "keyword" };
       }

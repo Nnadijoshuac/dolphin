@@ -35,3 +35,20 @@ test("a graded claim the agent's words support still wins", () => {
   const sluice = categorize({ ...base, registryCategories: ["yield"], name: "Sluicegate", description: "Net-APR-at-size yield routing across BNB Chain venues." });
   assert.equal(sluice.slug, "yield");
 });
+
+test("a shared card's skills never file an agent under a graded category on their own (2026-10-26)", () => {
+  const onPad = categorize({
+    ...base,
+    name: "claude.ai",
+    description: "An AI agent on .AI Pad (BNB Chain).",
+    skills: [{ name: "yield optimizer", description: "Finds the best APY and yield farming routes" }],
+  });
+  assert.notEqual(onPad.slug, "yield");
+  const ownWords = categorize({
+    ...base,
+    name: "Sluicegate",
+    description: "Net-APR-at-size yield routing across BNB Chain venues.",
+    skills: [{ name: "route", description: "Routes deposits" }],
+  });
+  assert.equal(ownWords.slug, "yield");
+});

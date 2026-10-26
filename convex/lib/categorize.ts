@@ -285,9 +285,10 @@ export interface CategoryAssignment {
  * ruleset version, all in service of a decision that was being used to REJECT
  * agents. Used only to pick a drawer, it does not need to be that machine.
  */
-function bestKeywordMatch(text: string): { slug: string; score: number } | null {
+function bestKeywordMatch(text: string, skip: ReadonlySet<string> = new Set()): { slug: string; score: number } | null {
   let best: { slug: string; score: number } | null = null;
   for (const definition of CATEGORY_DEFINITIONS) {
+    if (skip.has(definition.slug)) continue;
     let score = 0;
     for (const term of definition.terms) {
       if (text.includes(term)) score += term.split(/\s+/).length;
@@ -368,8 +369,15 @@ export function categorize(input: CategorizeInput): CategoryAssignment {
     .map((skill) => `${skill.name} ${skill.description ?? ""}`)
     .join(" ")
     .toLowerCase();
+  /*
+   * Never one of the graded four from the card alone (2026-10-26). Reaching here means the agent's own name,
+   * description and tags said nothing about any category - and four agents sharing platform cards (BORT COIN
+   * DEPLOYER AGENT, Aster powered by HeyAnon, Pretium, claude.ai / korea.ai on .AI Pad) were filed under
+   * Health Factor or Yield by their platform's skill list. A Set and Earn category must come from the agent's
+   * own words; the card may still choose any other drawer.
+   */
   if (skillText.trim().length > 0) {
-    const match = bestKeywordMatch(skillText);
+    const match = bestKeywordMatch(skillText, SPECIFIC_CATEGORIES);
     if (match) return { slug: match.slug, label: categoryLabel(match.slug), source: "skills" };
   }
 

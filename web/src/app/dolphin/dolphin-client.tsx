@@ -1,5 +1,6 @@
 "use client";
 
+import { takeAskIntent } from "@/lib/ask-intent";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -755,12 +756,17 @@ export function DolphinClient({
       hasAutoAskedRef.current = true;
       const agentDisplayName = seedAgentName ? seedAgentName.trim() : "this agent";
       const prompt = `Can you analyze ${agentDisplayName}? What strategy does it run, what are its live on-chain metrics, and is it safe to use?`;
+      // Sent on its own only after a real click on "Ask Dolphin" moments ago; otherwise it waits in the box.
+      if (!takeAskIntent(seedAgentKey)) {
+        setComposerText(prompt);
+        return;
+      }
       const timer = setTimeout(() => {
         void submit(prompt);
       }, 120);
       return () => clearTimeout(timer);
     }
-  }, [seedAgentKey, seedAgentName, autoAsk, submit]);
+  }, [seedAgentKey, seedAgentName, autoAsk, submit, setComposerText]);
 
 
   const startNew = useCallback(() => {

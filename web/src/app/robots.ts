@@ -23,7 +23,9 @@ export default function robots(): MetadataRoute.Robots {
     return { rules: [{ userAgent: "*", disallow: "/" }] };
   }
 
-  const disallow = ["/my-agents", "/wallet", "/onboarding", "/account", "/admin", "/manage"];
+  // "/dolphin?": a chat link (?agent=, ?c=) is an action, not a page - a crawler rendering one ran a chat
+  // (2026-10-26). The plain /dolphin page stays crawlable.
+  const disallow = ["/my-agents", "/wallet", "/onboarding", "/account", "/admin", "/manage", "/dolphin?"];
   return {
     rules: [
       { userAgent: "*", allow: "/", disallow },

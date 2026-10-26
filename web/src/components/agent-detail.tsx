@@ -1,5 +1,6 @@
 "use client";
 
+import { markAskIntent } from "@/lib/ask-intent";
 import { ByDolphin } from "@/components/by-dolphin";
 import Link from "next/link";
 import { useState } from "react";
@@ -501,6 +502,9 @@ export function AgentDetail({ agent }: { agent: Agent }) {
           <Link
             className="flex items-center justify-center gap-2 rounded-xl border border-line bg-paper-strong px-4 py-3 text-sm font-semibold text-ink transition-colors hover:border-line-strong hover:bg-paper-muted"
             href={`/dolphin?agent=${encodeURIComponent(agent.id)}&name=${encodeURIComponent(agent.name)}&ask=1`}
+            // Only a real click lets the chat send on its own (lib/ask-intent.ts); crawlers are told not to follow.
+            onClick={() => markAskIntent(agent.id)}
+            rel="nofollow"
           >
             <CategoryGlyph name="sparkle" size={16} />
             Ask Dolphin about this agent

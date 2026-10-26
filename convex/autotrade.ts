@@ -67,6 +67,7 @@ import {
   type TradeSide,
 } from "./lib/pancakeswapTrade";
 import { open, seal } from "./lib/secretBox";
+import { BSTOCK_SYMBOLS, bstockOfMarket } from "./lib/bstocks";
 import { verifiedTokens } from "./lib/tradeTokens";
 import { SELL_HEADROOM, tradeKeyPolicy } from "./lib/tradeKeyPolicy";
 import { requireWalletAddress } from "./lib/walletAuth";
@@ -123,7 +124,7 @@ export const ownedDraft = internalQuery({
       walletAddress,
       name: draft.name ?? "Agent",
       blocks: (draft.blocks ?? []) as AgentBlock[],
-      rules: ((draft.rules ?? []) as { venue?: string; sizeUsd?: number; maxTradesPerDay?: number }[]).filter((rule) => rule && typeof rule === "object"),
+      rules: ((draft.rules ?? []) as { venue?: string; market?: string; sizeUsd?: number; maxTradesPerDay?: number }[]).filter((rule) => rule && typeof rule === "object"),
     };
   },
 });
@@ -156,7 +157,7 @@ export const prepare = action({
     /** Said before granting: the most a stolen key could move per token, and in BNB per day. */
     worstCaseUsdPerToken: number;
   }> => {
-    const owned: { draftId: Id<"agentDrafts">; walletAddress: string; name: string; blocks: AgentBlock[]; rules: { venue?: string; sizeUsd?: number; maxTradesPerDay?: number }[] } = await ctx.runQuery(
+    const owned: { draftId: Id<"agentDrafts">; walletAddress: string; name: string; blocks: AgentBlock[]; rules: { venue?: string; market?: string; sizeUsd?: number; maxTradesPerDay?: number }[] } = await ctx.runQuery(
       internal.autotrade.ownedDraft,
       {
         sessionToken: args.sessionToken,
@@ -185,8 +186,16 @@ export const prepare = action({
 
     const bnb = await bscPairFor(WBNB_BSC).catch(() => null);
     if (!bnb?.priceUsd) throw new ConvexError("BNB's live price could not be read, so no safe cap can be set. Try again shortly.");
+    /*
+     * bStocks only when this agent trades them (2026-10-26). A grant approves every token it lists, so adding
+     * five stocks to the verified list would have put five more allowances on every key - wider than any
+     * crypto-only agent needs. A rule's own market, or a Swap block (which may trade any verified token),
+     * brings them in; otherwise the key is exactly what it was before bStocks.
+     */
+    const tradesStocks = swaps || owned.rules.some((rule) => rule.venue === "dolphin-wallet" && bstockOfMarket(String(rule.market ?? "")) !== null);
+    const keyTokens = verifiedTokens().filter((token) => tradesStocks || !BSTOCK_SYMBOLS.has(token.symbol));
     const prices = new Map<string, number | null>();
-    for (const token of verifiedTokens()) {
+    for (const token of keyTokens) {
       if (!token.address || getAddress(token.address) === WBNB_BSC) continue;
       prices.set(token.symbol, STABLE_SYMBOLS.has(token.symbol) ? 1 : ((await bscPairFor(token.address).catch(() => null))?.priceUsd ?? null));
     }
@@ -195,7 +204,7 @@ export const prepare = action({
       dailyUsd,
       durationDays: args.durationDays,
       bnbPriceUsd: bnb.priceUsd,
-      tokens: verifiedTokens(),
+      tokens: keyTokens,
       priceOf: (token) => prices.get(token.symbol) ?? null,
     });
 

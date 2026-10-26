@@ -1,5 +1,6 @@
 import { getAddress, isAddress, parseAbi, type Address } from "viem";
 
+import { BSTOCKS } from "./bstocks";
 import { bscPublicClient } from "./bscClient";
 
 /**
@@ -59,6 +60,8 @@ const VERIFIED: ReadonlyArray<TradeToken & { aliases: readonly string[] }> = [
   { address: "0xcF6BB5389c92Bdda8a3747Ddb454cB7a64626C63", symbol: "XVS", decimals: 18, verified: true, aliases: ["xvs", "venus"] },
   /* "First Digital USD" */
   { address: "0xc5f0f7b66764F6ec8C8Dff7BA683102295E16409", symbol: "FDUSD", decimals: 18, verified: true, aliases: ["fdusd"] },
+  /* bStocks: tokenized US shares, verified in ./bstocks.ts. */
+  ...BSTOCKS.map((stock) => ({ address: stock.address, symbol: stock.symbol, decimals: 18, verified: true, aliases: stock.aliases })),
 ];
 
 /** The verified symbols, for telling a person what they can type. */

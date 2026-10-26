@@ -1296,7 +1296,7 @@ async function execute(ctx: ActionCtx, draft: ArmedDraft, rule: Rule, decision: 
     }
     const token = verifiedTokenBySymbol(rule.market.replace(STABLES, ""));
     const usdt = verifiedTokenBySymbol("USDT");
-    if (!token || !usdt || token.symbol === "USDT") return { error: `Paused: the Dolphin Wallet trades verified tokens (BNB, CAKE, BTCB, ETH, XVS) against USDT; ${rule.market} is not one of them.` };
+    if (!token || !usdt || token.symbol === "USDT") return { error: `Paused: the Dolphin Wallet trades verified tokens (BNB, CAKE, BTCB, ETH, XVS and the bStocks TSLAB, NVDAB, CRCLB, MUB, SNDKB) against USDT; ${rule.market} is not one of them.` };
     const ticket =
       decision.type === "enter"
         ? { kind: "swap" as const, amountIn: String(rule.sizeUsd), tokenIn: usdt, tokenOut: token, safety: null }

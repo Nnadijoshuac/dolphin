@@ -16,6 +16,7 @@ export const BUILDER_GUIDE = {
     "Trading rules. Each rule: a market, a timeframe, entry conditions, exits, a size, a daily cap. An agent can have several rules; each trades on its own.",
     "venue: dolphin-wallet (default - swaps on PancakeSwap from the person's Dolphin Wallet on BNB Chain; BNBUSDT, ETHUSDT and BTCUSDT are proven there), binance-spot, binance-futures (the only venue that shorts or uses leverage), binance-wallet (the person's Binance Agentic Wallet). Binance venues need the Binance block on the canvas.",
     `timeframe: ${TIMEFRAMES.join(", ")}.`,
+    "Tokenized US stocks (bStocks) trade from the Dolphin Wallet like any coin: Tesla TSLABUSDT, Nvidia NVDABUSDT, Circle CRCLBUSDT, Micron MUBUSDT, Sandisk SNDKBUSDT. Not offered to people in the US, UK or EU; they trade 24/7 while the real shares do not.",
     `Entry: up to ${LIMITS.maxConditions} conditions, ALL must hold on the same closed candle. Kinds: RSI above/below a level (any period, 14 by default); price above/below a moving average (SMA or EMA, any length); a moving-average cross up/down (fast, slow); a MACD cross up/down (12/26/9); a trend of N higher or lower closes in a row (N up to ${LIMITS.maxTrendCandles}); price above/below a fixed level; % change over N candles; near/above/below a Fibonacci level of the last N-candle swing.`,
     `Exits, whichever comes first: a stop-loss %, a take-profit %, and/or exit conditions (same kinds, up to ${LIMITS.maxConditions}, ALL must hold). So "sell when RSI rises above 55, or at a 3% loss" works.`,
     "One position per rule: a rule never buys again while it holds. Do not write 'only if no position is open' - it is built in.",
@@ -36,6 +37,7 @@ export const BUILDER_GUIDE = {
     "OR between entry conditions -> write each alternative as its own rule.",
     "Bollinger bands or volume in a rule -> not in the rule language; use the condition kinds above.",
     "Stablecoins or tokens Binance does not list -> a market must be a Binance pair.",
+    "Any stock other than the five bStocks (Apple, Amazon...) -> not available yet.",
     "Profit guarantees -> never promise one.",
   ],
   howToWrite: [

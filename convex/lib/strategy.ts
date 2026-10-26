@@ -1,3 +1,4 @@
+import { BSTOCK_WARNING, bstockOfMarket } from "./bstocks";
 import { cleanKeyName } from "./keyNames";
 import type { BinanceConfig } from "./agentBlocks";
 import type { GridTag } from "./grid";
@@ -708,6 +709,7 @@ export function cleanRule(raw: unknown, id: string): { rule: Rule; warnings: str
 
   if (problems.length > 0) return { problems };
   const warnings: string[] = droppedExits.map((why) => `I left out an exit condition I could not read (${why}); it exits on its own target and stop.`);
+  if (bstockOfMarket(market)) warnings.push(BSTOCK_WARNING);
   if ((leverage as number) > LIMITS.comfortableLeverage) {
     warnings.push(
       `${leverage}x is above the usual 1-3x. A move of about ${liquidationMovePct(leverage as number)}% against the position would liquidate it, and everything in it would be lost.`,

@@ -22,6 +22,7 @@ import {
 } from "@/components/backend-status";
 import { HeroFinder } from "@/components/hero-finder";
 import { HomeStory } from "@/components/home-story";
+import { QuestStrip } from "@/components/quest-strip";
 import { MobileAgentRow } from "@/components/mobile-agent-row";
 import { OnboardingPrompt } from "@/components/onboarding-prompt";
 import { categoryDescription, categoryLabel } from "@/constants/agents";
@@ -444,6 +445,7 @@ export function DiscoverPage() {
         </div>
       </section>
 
+      <QuestStrip />
       <HomeStory />
       {/*
         Phones: four agents for hire from the "Ready to hire" shelf the page already loads (owner, 2026-10-14:

@@ -3,6 +3,11 @@
  * Wallet's real money and the whole thing is watchable at /live/<slug> until the wallet runs out or its
  * owner ends the run. No finish line and no time limit (owner, 2026-10-18: the global $100 target is gone).
  *
+ * PAPER RUNS (owner, 2026-10-26: "I want paper trading to be as big as live trading"). An agent still on
+ * Paper can go live too: the same page, the same decisions, valued from its demo account
+ * (paperTrading.ts) instead of a wallet, and labelled Paper everywhere a real run shows a transaction. It
+ * needs no trade key and no funding - which is the point: a strategy proves itself in public first.
+ *
  * Every number is read from the chain, never typed in: `start` values the wallet before anything is
  * written, and `tick` (every 5 minutes, crons.ts) values it again, keeps a small history, copies the
  * engine's latest decisions, and ends the run - switching the agent's autopilot off - when the wallet falls
@@ -72,7 +77,7 @@ async function draftForKey(ctx: QueryCtx, conversationKey: string) {
   return ctx.db.query("agentDrafts").withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id)).unique();
 }
 
-/** Who may start a run of this agent, and with which wallet. Throws the reason in plain words. */
+/** Who may start a run of this agent, and with which wallet (none on paper). Throws the reason in plain words. */
 export const prepare = internalQuery({
   args: { sessionToken: v.string(), conversationKey: v.string() },
   handler: async (ctx, { sessionToken, conversationKey }) => {
@@ -81,14 +86,15 @@ export const prepare = internalQuery({
     if (!draft) throw new ConvexError("That agent was not found.");
     if ((draft.ownerAddress ?? "").toLowerCase() !== owner.toLowerCase()) throw new ConvexError("Only the agent's owner can make its run public.");
     if (!(draft.rules ?? []).length) throw new ConvexError("This agent has no trading rule yet.");
-    if (draft.paperMode !== false) throw new ConvexError("Switch the agent's Trading mode to Live first: a public run trades real money.");
     if (!draft.autopilot?.on) throw new ConvexError("Switch the agent's Autopilot on first.");
     const running = await ctx.db.query("liveRuns").withIndex("by_draft", (q) => q.eq("draftId", draft._id)).collect();
     if (running.some((run) => run.status === "running")) throw new ConvexError("This agent is already live.");
+    const name = draft.name ?? "Untitled agent";
+    if (draft.paperMode !== false) return { draftId: draft._id, owner, walletAddress: null, name, paper: true };
     const keys = await ctx.db.query("agentTradeKeys").withIndex("by_draft", (q) => q.eq("draftId", draft._id)).order("desc").take(5);
     const key = keys.find((row) => row.status === "active" && row.expiry * 1000 > Date.now());
     if (!key) throw new ConvexError("The agent has no active trade key, so it cannot trade. Grant one in its panel first.");
-    return { draftId: draft._id, owner, walletAddress: key.altanaWalletAddress, name: draft.name ?? "Untitled agent" };
+    return { draftId: draft._id, owner, walletAddress: key.altanaWalletAddress, name, paper: false };
   },
 });
 
@@ -101,6 +107,7 @@ export const create = internalMutation({
     walletAddress: v.string(),
     name: v.string(),
     startUsd: v.number(),
+    paper: v.boolean(),
   },
   handler: async (ctx, args) => {
     // One public run per agent at a time (owner, 2026-10-26: The Dip was live and could be started again).
@@ -123,28 +130,36 @@ export const create = internalMutation({
   },
 });
 
-/** Makes an agent's run public, starting from the wallet's value read now. */
+/** Makes an agent's run public, starting from the value of its wallet - or its demo account - read now. */
 export const start = action({
   args: { sessionToken: v.string(), conversationKey: v.string() },
-  handler: async (ctx, { sessionToken, conversationKey }): Promise<{ slug: string; startUsd: number }> => {
-    const prep: { draftId: Id<"agentDrafts">; owner: string; walletAddress: string; name: string } = await ctx.runQuery(internal.liveRuns.prepare, {
-      sessionToken,
-      conversationKey,
-    });
-    if (!isAddress(prep.walletAddress, { strict: false })) throw new ConvexError("The agent's wallet address is not valid.");
-    const startUsd = await walletUsd(prep.walletAddress);
-    if (startUsd <= DUST_USD) throw new ConvexError(`The wallet holds $${startUsd.toFixed(2)}. Fund it first.`);
+  handler: async (ctx, { sessionToken, conversationKey }): Promise<{ slug: string; startUsd: number; paper: boolean }> => {
+    const prep: { draftId: Id<"agentDrafts">; owner: string; walletAddress: string | null; name: string; paper: boolean } = await ctx.runQuery(
+      internal.liveRuns.prepare,
+      { sessionToken, conversationKey },
+    );
+    let startUsd: number;
+    if (prep.paper) {
+      startUsd = await ctx.runAction(internal.paperTrading.value, { draftId: prep.draftId });
+      if (startUsd <= DUST_USD) throw new ConvexError(`The demo account holds $${startUsd.toFixed(2)}. Add demo money first.`);
+    } else {
+      if (!prep.walletAddress || !isAddress(prep.walletAddress, { strict: false })) throw new ConvexError("The agent's wallet address is not valid.");
+      startUsd = await walletUsd(prep.walletAddress);
+      if (startUsd <= DUST_USD) throw new ConvexError(`The wallet holds $${startUsd.toFixed(2)}. Fund it first.`);
+    }
     const slug = Array.from({ length: 8 }, () => "abcdefghjkmnpqrstuvwxyz23456789"[Math.floor(Math.random() * 31)]).join("");
     await ctx.runMutation(internal.liveRuns.create, {
       slug,
       draftId: prep.draftId,
       conversationKey,
       ownerAddress: prep.owner,
-      walletAddress: prep.walletAddress,
+      // A paper run has no wallet; the field stays a string so every older row and reader is unchanged.
+      walletAddress: prep.walletAddress ?? "",
       name: prep.name,
       startUsd,
+      paper: prep.paper,
     });
-    return { slug, startUsd };
+    return { slug, startUsd, paper: prep.paper };
   },
 });
 
@@ -206,7 +221,7 @@ export const tick = internalAction({
     const runs: Doc<"liveRuns">[] = await ctx.runQuery(internal.liveRuns.runningRuns, {});
     for (const run of runs) {
       try {
-        const usd = await walletUsd(run.walletAddress);
+        const usd = run.paper ? await ctx.runAction(internal.paperTrading.value, { draftId: run.draftId }) : await walletUsd(run.walletAddress);
         const engine: { lastCheckedAt: number; reason: string | null }[] = await ctx.runQuery(internal.liveRuns.engineState, { draftId: run.draftId });
         const reasons = engine.filter((row) => row.lastCheckedAt > run.lastValuedAt - 300_000 && row.reason).map((row) => row.reason as string);
         await ctx.runMutation(internal.liveRuns.record, { runId: run._id, usd, at: Date.now(), reasons });
@@ -234,6 +249,7 @@ function summary(run: Doc<"liveRuns">, market: string | null) {
     startedAt: run.startedAt,
     endedAt: run.endedAt,
     status: run.status,
+    paper: run.paper === true,
   };
 }
 

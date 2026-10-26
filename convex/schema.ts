@@ -798,6 +798,12 @@ export default defineSchema({
     holdings: v.array(v.object({ symbol: v.string(), address: v.union(v.string(), v.null()), decimals: v.number(), amount: v.string() })),
     createdAt: v.string(),
     updatedAt: v.string(),
+    /** Rule trades count toward this account from here (ms); absent counts every paper rule trade. */
+    resetAt: v.optional(v.number()),
+    /** Demo money withdrawn beyond the USDT it held - taken from rule profits, which are not a holding. */
+    drawnUsd: v.optional(v.number()),
+    /** Demo deposits and withdrawals, newest last, capped. */
+    moves: v.optional(v.array(v.object({ at: v.number(), kind: v.union(v.literal("deposit"), v.literal("withdraw")), usd: v.number() }))),
   }).index("by_draft", ["draftId"]),
   paperTrades: defineTable({
     draftId: v.id("agentDrafts"),
@@ -2027,6 +2033,8 @@ export default defineSchema({
     lastValuedAt: v.number(),
     history: v.array(v.object({ t: v.number(), usd: v.number() })),
     thoughts: v.array(v.object({ t: v.number(), text: v.string() })),
+    /** A paper run: valued from the agent's demo account (convex/paperTrading.ts), no wallet behind it. */
+    paper: v.optional(v.boolean()),
   })
     .index("by_slug", ["slug"])
     .index("by_draft", ["draftId"])

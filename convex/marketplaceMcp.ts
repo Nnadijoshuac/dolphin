@@ -182,15 +182,15 @@ const TRADER_TOOLS = [
   },
   {
     name: "list_live_runs",
-    title: "Agents trading real money right now",
-    description: "Public runs on dolphinamp.xyz/live: an agent trading its own wallet's real money until its wallet runs out or its owner ends the run. Each has its start, current value (read from BNB Chain) and status.",
+    title: "Agents trading live right now",
+    description: "Public runs on dolphinamp.xyz/live: an agent trading in public until its money runs out or its owner ends the run. paper: false trades its own wallet's real money (value read from BNB Chain); paper: true trades demo money at live prices (value from its demo account). Each has its start, current value and status.",
     inputSchema: { type: "object", properties: {} },
     annotations: READ_ONLY,
   },
   {
     name: "get_live_run",
     title: "One live run in full",
-    description: "One public run: its wallet value over time, its rules, what its engine last decided, and every trade since it went live with BscScan links. slug comes from list_live_runs.",
+    description: "One public run: its value over time, its rules, what its engine last decided, and every trade since it went live - with BscScan links on a real-money run, marked paper on a paper run. slug comes from list_live_runs.",
     inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] },
     annotations: READ_ONLY,
   },

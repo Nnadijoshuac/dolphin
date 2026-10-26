@@ -117,6 +117,9 @@ export const built = query({
           practiceTradesCapped: trades.length >= TRADE_COUNT_CAP,
           lastTradeAt: trades[0]?.at ?? null,
           liveSlug: liveRun?.slug ?? null,
+          // What /live needs to offer a public run: rules to trade and Autopilot on (a key too, on Live).
+          hasRules: (draft.rules ?? []).length > 0,
+          autopilotOn: Boolean(draft.autopilot?.on),
         };
       }),
     );

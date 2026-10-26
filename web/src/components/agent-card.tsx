@@ -151,6 +151,13 @@ export function AgentCard({
                   {offer.kind}
                 </span>
                 <span className="truncate">{label}</span>
+                {/*
+                  TRY IT FREE (2026-10-26, after Marque's "try an agent free"): an agent whose own tools need no
+                  input can be run on its page before anything is connected or paid (agent-trial-panel.tsx).
+                */}
+                {agent.mcpEndpoint && agent.previewableTools.length > 0 ? (
+                  <span className="shrink-0 rounded-full border border-[#3ddc84]/40 px-1.5 py-px text-[0.68rem] font-semibold text-[#3ddc84]">Try free</span>
+                ) : null}
               </p>
             </div>
           </div>

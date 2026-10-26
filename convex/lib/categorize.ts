@@ -98,6 +98,8 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
       // Added 2026-09-25 from the live catalog: the 4LPHA grid agents say "grid
       // market making", Brain on BNB's planner "sizes a grid".
       "grid market making", "grid agent", "grid planner", "grid planning", "sizes a grid",
+      // 2026-10-26: Lattice (341554) says "constrained grid plans".
+      "grid plan",
     ],
   },
   {
@@ -107,6 +109,8 @@ export const CATEGORY_DEFINITIONS: readonly CategoryDefinition[] = [
       "health factor", "liquidation risk", "liquidation protection",
       "collateral ratio", "loan to value", "borrow limit", "lending position",
       "liquidation", "collateral",
+      // 2026-10-26: Ballast Risk Desk (368122) "keeps bStock-backed loans on Lista and Venus" survivable.
+      "backed loans", "loans on",
     ],
   },
   {

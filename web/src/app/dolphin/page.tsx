@@ -10,17 +10,22 @@ import { fetchAgent } from "@/server/convex";
  * `"use client"` module cannot. The screen itself is a client component and
  * always will be - it is a live Convex subscription driven by an input.
  */
+/*
+ * The builder is the link shared most (2026-10-26: the owner's build post on X unfurled as a grey box - this
+ * page's own openGraph replaced the inherited one and named no image). Titled for what people come to do.
+ */
 export const metadata: Metadata = {
-  title: "Dolphin — ask the marketplace",
+  title: { absolute: "Build an AI agent in one sentence | Dolphin" },
   description:
-    "Ask a question and Dolphin answers it by calling the ERC-8004 agents listed on BNB Smart Chain, showing which agents it consulted, what it asked them, and what each one returned.",
+    "Describe the agent you want in plain words and Dolphin builds it: trading rules that run on every closed candle, practice money first, live on BNB Chain when you are ready.",
   alternates: { canonical: "/dolphin" },
   openGraph: {
-    title: "Dolphin — ask the marketplace",
-    description:
-      "An agent that consults other agents. Ask a question and see exactly which ERC-8004 agents on BNB Smart Chain were called to answer it.",
+    title: "Build an AI agent in one sentence | Dolphin",
+    description: "Describe the agent you want in plain words and Dolphin builds it. Practice money first, live on BNB Chain when you are ready.",
     url: "/dolphin",
+    images: ["/opengraph-image"],
   },
+  twitter: { card: "summary_large_image", images: ["/opengraph-image"] },
 };
 
 /**

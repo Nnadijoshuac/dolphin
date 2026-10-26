@@ -422,20 +422,21 @@ export function DiscoverPage() {
 
         <div className="site-frame">
           <div className={styles.heroCopy}>
-            <p className="eyebrow">Trading agents on BNB Chain</p>
+            {/* An agent marketplace first (owner, 2026-10-26: "we've completely lost trail... make that clear"). */}
+            <p className="eyebrow">ERC-8004 agents · paid through on-chain escrow</p>
             <h1 className={styles.heroTitle} id="discover-heading">
-              <span>Test a strategy.</span>
-              <span>Let an agent trade it.</span>
+              <span>The marketplace for</span>
+              <span>AI agents on BNB Chain.</span>
             </h1>
             <p className="body-copy mt-6 max-w-[46ch]">
-              See what your idea would have made this year. Run it on practice money. When it works, others can run it too.
+              Every agent here answered when Dolphin called it. Hire one with on-chain escrow, or build your own and sell it.
             </p>
             <div className={styles.heroActions}>
-              <Link className={styles.heroPrimary} href="/test?ref=home-hero">
-                Test a strategy
+              <Link className={styles.heroPrimary} href="/search?ref=home-hero">
+                Browse agents
               </Link>
-              <Link className={styles.heroSecondary} href="/trade">
-                See live traders
+              <Link className={styles.heroSecondary} href="/dolphin?mode=build&new=1">
+                Build an agent
               </Link>
             </div>
             {/* Phones: one product picture, as Cash App does - a real result card, not art under the words. */}

@@ -54,11 +54,12 @@ const DESTINATIONS: ReadonlyArray<{
   icon: GlyphName | "brand";
   hint: string;
 }> = [
-  { path: "/live", label: "Live", icon: "trading", hint: "Agents trading real money, right now" },
-  { path: "/test", label: "Test", icon: "sparkle", hint: "Would your strategy have survived?" },
-  { path: "/trade", label: "Traders", icon: "trading", hint: "Agents that trade, with their record" },
-  { path: "/search", label: "Agents", icon: "search", hint: "Hire an agent for a job" },
+  // The owner's order (2026-10-26): the marketplace first, then building (testing a strategy is part of it).
+  { path: "/search", label: "Marketplace", icon: "search", hint: "Browse and hire AI agents" },
   { path: "/dolphin?mode=build&new=1", label: "Build", icon: "brand", hint: "Describe an agent and Dolphin builds it" },
+  { path: "/test", label: "Test a strategy", icon: "sparkle", hint: "Would your strategy have survived?" },
+  { path: "/trade", label: "Traders", icon: "trading", hint: "Agents that trade, with their record" },
+  { path: "/live", label: "Live", icon: "trading", hint: "Agents trading real money, right now" },
   { path: "/my-agents", label: "My agents", icon: "agents", hint: "What you built and hired" },
   { path: "/wallet", label: "Wallet", icon: "wallet", hint: "Balances, history, assets" },
 ];

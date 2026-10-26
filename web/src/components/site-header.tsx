@@ -20,13 +20,18 @@ import { useWallet } from "@/wallet/wallet-provider";
 // bar is a mess... a list in two lines, who does that"): logo and a few short links on the LEFT, one wallet
 // button on the RIGHT. Wallet and My agents live in the wallet button's menu; the network is in its tooltip
 // and the footer. Every label stays on one line.
+/*
+ * DOLPHIN IS AN AGENT MARKETPLACE, AND THE BAR SAYS SO FIRST (owner, 2026-10-26: "we've completely lost trail...
+ * make that clear, even down to the nav bar"). The order the owner set: Marketplace, Build, Traders, Set and
+ * Quest, Live. Marketplace opens to browsing and the agents you have hired; Build to building and testing a
+ * strategy (Test lives here now - testing is a step of building a trader).
+ */
 const navigation = [
-  { path: "/live", label: "Live", icon: "trading" as const },
-  { path: "/trade", label: "Traders", icon: "trading" as const },
-  { path: "/test", label: "Test", icon: "sparkle" as const },
-  { path: "/search", label: "Agents", icon: "search" as const },
+  { path: "/search", label: "Marketplace", icon: "search" as const },
   { path: "/dolphin?mode=build&new=1", label: "Build", icon: "sparkle" as const },
+  { path: "/trade", label: "Traders", icon: "trading" as const },
   { path: SET_AND_QUEST_URL, label: "Set and Quest", icon: "sparkle" as const, quest: true },
+  { path: "/live", label: "Live", icon: "trading" as const },
 ] as const;
 
 type Places = ReturnType<typeof useMyPlaces>;
@@ -38,6 +43,22 @@ type SubLink = { href: string; label: string; count?: number };
  * stays a plain link with no menu.
  */
 function subLinks(path: string, places: Places): SubLink[] {
+  // The marketplace and the builder always open a menu: what you can do there, then what is yours.
+  if (path === "/search") {
+    return [
+      { href: "/search", label: "Browse agents" },
+      { href: "/agents", label: "Every agent, A to Z" },
+      { href: "/my-agents#mine-hired", label: "Agents you've hired", count: places.hired || undefined },
+    ];
+  }
+  if (path.startsWith("/dolphin")) {
+    return [
+      { href: "/dolphin?mode=build&new=1", label: "Build an agent" },
+      { href: "/test", label: "Test a strategy" },
+      { href: "/setups", label: "Trading setups" },
+      { href: "/my-agents#mine-built", label: "Agents you've built", count: places.built || undefined },
+    ];
+  }
   const mine: SubLink[] =
     path === "/trade"
       ? [{ href: "/trade#my-traders", label: "Your traders", count: places.traders }]
@@ -59,6 +80,8 @@ function isActiveRoute(pathname: string, path: string) {
   if (path === "/") {
     return pathname === "/" || pathname.startsWith("/agent/");
   }
+  if (path === "/search") return ["/search", "/agents", "/agent/", "/my-agents"].some((p) => pathname.startsWith(p));
+  if (path.startsWith("/dolphin")) return ["/dolphin", "/test", "/setups"].some((p) => pathname.startsWith(p));
 
   return pathname.startsWith(path.split("?")[0]);
 }
@@ -96,7 +119,10 @@ export function SiteHeader() {
             href="/"
           >
             <BrandMark size={31} />
-            <span className="text-lg font-semibold tracking-[-0.035em]">Dolphin</span>
+            <span className="flex flex-col leading-none">
+              <span className="text-lg font-semibold tracking-[-0.035em]">Dolphin</span>
+              <span className="mt-1 text-[11px] font-medium text-muted">Agent marketplace</span>
+            </span>
           </Link>
 
           <nav aria-label="Primary navigation" className="hidden h-full items-center md:flex">

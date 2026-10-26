@@ -288,6 +288,8 @@ export type MyBuiltAgent = {
   practiceTrades: number;
   practiceTradesCapped: boolean;
   lastTradeAt: string | null;
+  /** Its public run on /live while one is running, else null. Absent on a backend before 2026-10-26. */
+  liveSlug?: string | null;
 };
 export const myAgentsApi = anyApi as unknown as {
   myAgents: {

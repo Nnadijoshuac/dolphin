@@ -86,6 +86,9 @@ export const built = query({
           .withIndex("by_draft", (q) => q.eq("draftId", draft._id))
           .order("desc")
           .take(TRADE_COUNT_CAP);
+        // Its public run, if one is running: /live offers "make it public" only to agents that aren't already.
+        const runs = await ctx.db.query("liveRuns").withIndex("by_draft", (q) => q.eq("draftId", draft._id)).take(10);
+        const liveRun = runs.find((run) => run.status === "running") ?? null;
 
         return {
           conversationKey: conversation?.conversationKey ?? null,
@@ -113,6 +116,7 @@ export const built = query({
           practiceTrades: trades.length,
           practiceTradesCapped: trades.length >= TRADE_COUNT_CAP,
           lastTradeAt: trades[0]?.at ?? null,
+          liveSlug: liveRun?.slug ?? null,
         };
       }),
     );

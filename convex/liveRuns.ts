@@ -103,6 +103,11 @@ export const create = internalMutation({
     startUsd: v.number(),
   },
   handler: async (ctx, args) => {
+    // One public run per agent at a time (owner, 2026-10-26: The Dip was live and could be started again).
+    // Checked here, in the transaction that inserts, so two clicks can never both get through.
+    const runs = await ctx.db.query("liveRuns").withIndex("by_draft", (q) => q.eq("draftId", args.draftId)).take(10);
+    const running = runs.find((run) => run.status === "running");
+    if (running) throw new ConvexError(`This agent is already live at /live/${running.slug}.`);
     const now = Date.now();
     await ctx.db.insert("liveRuns", {
       ...args,

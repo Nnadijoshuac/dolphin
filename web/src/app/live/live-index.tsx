@@ -3,11 +3,12 @@
 import { useAction, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { LiveBadge, Ticker, ago, dayOf, pct, usd, useSecond } from "@/app/live/live-bits";
 import styles from "@/app/live/live.module.css";
 import { TokenLogo } from "@/components/brand-mark";
+import { useWalletHoldings } from "@/hooks/use-wallet-holdings";
 import { liveRunsApi, myAgentsApi, type LiveRunSummary } from "@/convex/api";
 import { useWallet } from "@/wallet/wallet-provider";
 import { useWalletSession } from "@/wallet/wallet-session";
@@ -106,7 +107,15 @@ function Empty() {
  * which coins it trades, who it is, what its money is doing, and that it is live. The detail is one tap away.
  */
 function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
-  const up = run.lastUsd >= run.startUsd;
+  /*
+   * THE SAME NUMBER AS THE RUN'S OWN PAGE (owner, 2026-10-26: the card said -1.7% while the page said -2.0%).
+   * The card showed the value the backend saves every five minutes; the page reads the wallet live from BNB
+   * Chain. A running card now reads it live too, the same way; the saved value is only the fallback.
+   */
+  const addresses = useMemo(() => (run.status === "running" ? [run.walletAddress] : []), [run.status, run.walletAddress]);
+  const held = useWalletHoldings(addresses, "USD", false);
+  const value = typeof held.headline === "object" ? Number(held.headline.figure.replace(/[^0-9.]/g, "")) : run.lastUsd;
+  const up = value >= run.startUsd;
   const markets = run.card?.markets.length ? run.card.markets : run.market ? [run.market] : [];
   const live = run.status === "running";
   return (
@@ -126,9 +135,9 @@ function RunCard({ run, now }: { run: LiveRunSummary; now: number }) {
         {markets.map((m) => m.replace("USDT", "")).join(" · ")} · Day {now ? dayOf(run.startedAt, now) : 1}
       </p>
       <div className="mt-4 flex items-baseline justify-between gap-3">
-        <span className={`${styles.mono} text-[26px] font-semibold leading-none text-white`}>{usd(run.lastUsd)}</span>
+        <span className={`${styles.mono} text-[26px] font-semibold leading-none text-white`}>{usd(value)}</span>
         <span className={`${styles.mono} text-[13px] font-semibold`} style={{ color: up ? "#3ddc84" : "#ff5c5c" }}>
-          {pct(run.startUsd, run.lastUsd)}
+          {pct(run.startUsd, value)}
         </span>
       </div>
       <p className={`mt-1 text-[11.5px] ${styles.muted}`}>from {usd(run.startUsd)}</p>
@@ -192,6 +201,12 @@ function GoLive() {
           {ready.map((agent) => (
             <li className={`${styles.panel2} flex items-center justify-between gap-3 px-4 py-3`} key={agent.conversationKey}>
               <span className="truncate text-sm font-medium">{agent.name}</span>
+              {/* Already public (owner, 2026-10-26: The Dip was live and still offered "go live"): link to it. */}
+              {agent.liveSlug ? (
+                <Link className="shrink-0 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white no-underline hover:bg-white/5" href={`/live/${agent.liveSlug}`}>
+                  Live now ↗
+                </Link>
+              ) : (
               <button
                 className="shrink-0 rounded-full bg-[#f3c13a] px-4 py-2 text-sm font-semibold text-[#171813] disabled:opacity-50"
                 disabled={busy !== null || !session.sessionToken}
@@ -211,6 +226,7 @@ function GoLive() {
               >
                 {busy === agent.conversationKey ? "Reading the wallet…" : "Go live"}
               </button>
+              )}
             </li>
           ))}
         </ul>

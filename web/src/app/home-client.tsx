@@ -20,6 +20,7 @@ import {
   useBackendStatus,
   useReportBackendStatus,
 } from "@/components/backend-status";
+import { HeroFinder } from "@/components/hero-finder";
 import { HomeStory } from "@/components/home-story";
 import { MobileAgentRow } from "@/components/mobile-agent-row";
 import { OnboardingPrompt } from "@/components/onboarding-prompt";
@@ -431,14 +432,7 @@ export function DiscoverPage() {
             <p className="body-copy mt-6 max-w-[46ch]">
               Every agent here answered when Dolphin called it. Hire one with on-chain escrow, or build your own and sell it.
             </p>
-            <div className={styles.heroActions}>
-              <Link className={styles.heroPrimary} href="/search?ref=home-hero">
-                Browse agents
-              </Link>
-              <Link className={styles.heroSecondary} href="/dolphin?mode=build&new=1">
-                Build an agent
-              </Link>
-            </div>
+            <HeroFinder />
             {/* Phones: one product picture, as Cash App does - a real result card, not art under the words. */}
             {/* eslint-disable-next-line @next/next/no-img-element -- the cached share card itself */}
             <img

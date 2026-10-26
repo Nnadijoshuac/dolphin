@@ -119,10 +119,7 @@ export function SiteHeader() {
             href="/"
           >
             <BrandMark size={31} />
-            <span className="flex flex-col leading-none">
-              <span className="text-lg font-semibold tracking-[-0.035em]">Dolphin</span>
-              <span className="mt-1 text-[11px] font-medium text-muted">Agent marketplace</span>
-            </span>
+            <span className="text-lg font-semibold tracking-[-0.035em]">Dolphin</span>
           </Link>
 
           <nav aria-label="Primary navigation" className="hidden h-full items-center md:flex">
